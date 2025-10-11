@@ -46,8 +46,10 @@ cd backend && go run cmd/migrate/main.go up
 go run cmd/server/main.go
 
 # Start frontend (new terminal)
-cd frontend && npm install && npm start
+cd frontend && pnpm install && pnpm start
 ```
+
+**Note:** This project uses `pnpm` exclusively for frontend dependency management.
 
 ### Environment Variables
 ```bash
@@ -100,4 +102,11 @@ Business Source License (BSL) - see [LICENSE](LICENSE)
 API documentation available at `/api/docs` when running locally.
 
 ## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
+- Development setup and workflow
+- Code style and architecture patterns
+- Testing requirements
+- Pull request process
+- Commit message conventions
 
