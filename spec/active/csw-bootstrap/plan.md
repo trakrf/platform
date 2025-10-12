@@ -226,7 +226,46 @@ TimescaleDB validation happens via backend tests. No separate validation command
 test -f spec/stack.md && wc -l spec/stack.md
 ```
 
-### Task 5: Verify Directory Structure
+### Task 5: Document Just in README.md
+**Files**: `README.md`
+**Action**: MODIFY
+
+**Implementation**:
+Add Just to Prerequisites section (after line 31):
+```markdown
+### Prerequisites
+- Go 1.21+
+- Node.js 18+
+- Docker & Docker Compose
+- TimescaleDB (via Docker or TigerData cloud)
+- Just (command runner) - https://just.systems/
+```
+
+Also add a new section after Quick Start explaining validation:
+```markdown
+### Validation
+
+Run validation checks:
+```bash
+# Full validation (lint, test, build)
+just validate
+
+# Individual checks
+just lint        # Lint backend + frontend
+just test        # Test backend + frontend
+just build       # Build backend + frontend
+```
+
+See `justfile` for all available commands.
+```
+
+**Validation**:
+```bash
+# Verify Just is documented
+grep -q "Just" README.md && grep -q "just validate" README.md
+```
+
+### Task 6: Verify Directory Structure
 **Action**: VERIFY
 
 **Implementation**:
@@ -246,7 +285,8 @@ platform/
 │       └── csw-bootstrap/
 │           ├── spec.md   ✓
 │           └── plan.md   ✓
-└── justfile          ✓ (new)
+├── justfile          ✓ (new)
+└── README.md         ✓ (updated)
 ```
 
 **Validation**:
@@ -257,6 +297,8 @@ test -d frontend && \
 test -d spec/active && \
 test -f spec/stack.md && \
 test -f justfile && \
+test -f README.md && \
+grep -q "Just" README.md && \
 echo "✓ Structure verified"
 ```
 
@@ -321,7 +363,7 @@ grep "Go + React" spec/stack.md
 ## Plan Quality Assessment
 
 **Complexity Score**: 2/10 (LOW)
-- Creating 4 files (2 READMEs, 1 justfile, updating 1 stack.md)
+- Creating 4 files (2 READMEs, 1 justfile), updating 2 files (stack.md, README.md)
 - No code logic, just structure and documentation
 - Clear, simple tasks
 
