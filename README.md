@@ -26,16 +26,25 @@ platform/
 
 ### Prerequisites
 - Go 1.21+
-- Node.js 18+
+- Node.js 24+ (we recommend [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm))
+- [pnpm](https://pnpm.io/) (package manager for frontend)
 - Docker & Docker Compose
 - TimescaleDB (via Docker or TigerData cloud)
 - Just (command runner) - https://just.systems/
+- [direnv](https://direnv.net/) (optional, for auto-loading `.env.local`)
 
 ### Quick Start
 ```bash
 # Clone the repo
 git clone https://github.com/trakrf/platform
 cd platform
+
+# Set up Node version (if using nvm/fnm)
+nvm use  # or: fnm use
+
+# Set up environment (if using direnv)
+cp .env.local.example .env.local
+direnv allow  # auto-loads .env.local when cd'ing into directory
 
 # Start dependencies
 docker-compose up -d timescaledb
