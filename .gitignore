@@ -157,3 +157,6 @@ timescaledb-data/
 docker-compose.override.yml
 .docker/
 
+
+# Spec workflow logs
+spec/active/*/log.md
