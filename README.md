@@ -29,6 +29,7 @@ platform/
 - Node.js 18+
 - Docker & Docker Compose
 - TimescaleDB (via Docker or TigerData cloud)
+- Just (command runner) - https://just.systems/
 
 ### Quick Start
 ```bash
@@ -50,6 +51,21 @@ cd frontend && pnpm install && pnpm start
 ```
 
 **Note:** This project uses `pnpm` exclusively for frontend dependency management.
+
+### Validation
+
+Run validation checks:
+```bash
+# Full validation (lint, test, build)
+just validate
+
+# Individual checks
+just lint        # Lint backend + frontend
+just test        # Test backend + frontend
+just build       # Build backend + frontend
+```
+
+See `justfile` for all available commands.
 
 ### Environment Variables
 ```bash
