@@ -1,88 +1,31 @@
-# Stack: Go + React + TimescaleDB (Monorepo)
+# Stack: TypeScript + React + Vite
 
-> **Package Manager**: pnpm (frontend only)
-> **Task Runner**: Just (https://just.systems/)
-> **Backend**: Go 1.21+
-> **Frontend**: React + TypeScript + Vite
-> **Database**: TimescaleDB (PostgreSQL extension)
+> **Package Manager**: npm
+> **Test Runner**: Vitest
+> **Build Tool**: Vite
 
-## Quick Validation
-
-From project root:
+## Lint
 ```bash
-just validate
+npm run lint --fix
 ```
 
-## Backend (Go)
-
-### From backend/ directory:
+## Typecheck
 ```bash
-# Lint
-go fmt ./...
-go vet ./...
-
-# Test
-go test ./...
-
-# Build
-go build ./...
+npm run typecheck
 ```
 
-### From project root (via Just):
+## Test
 ```bash
-just backend-lint
-just backend-test
-just backend-build
-just backend  # All backend checks
+npm test
 ```
 
-## Frontend (React + TypeScript)
-
-**IMPORTANT**: This project uses pnpm EXCLUSIVELY. Never use npm or npx.
-
-### From frontend/ directory:
+## Build
 ```bash
-# Lint
-pnpm run lint --fix
-
-# Typecheck
-pnpm run typecheck
-
-# Test
-pnpm test
-
-# Build
-pnpm run build
+npm run build
 ```
 
-### From project root (via Just):
+## E2E Tests (Optional)
 ```bash
-just frontend-lint
-just frontend-typecheck
-just frontend-test
-just frontend-build
-just frontend  # All frontend checks
+# If playwright.config.ts exists
+npm run test:e2e
 ```
-
-## Full Stack Validation
-
-From project root:
-```bash
-just lint        # Lint backend + frontend
-just test        # Test backend + frontend
-just build       # Build backend + frontend
-just validate    # All checks (used by /check)
-```
-
-## CSW Integration
-
-The `/check` command runs:
-```bash
-just check
-```
-
-This validates the entire stack is ready to ship.
-
-## Database
-
-TimescaleDB validation happens via backend tests. No separate validation commands needed.

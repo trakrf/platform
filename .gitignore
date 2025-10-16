@@ -160,3 +160,6 @@ docker-compose.override.yml
 
 # Spec workflow logs
 spec/active/*/log.md
+
+# CSW symlink (local installation)
+spec/csw

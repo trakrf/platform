@@ -4,21 +4,38 @@ This system combines the best practices from Context Engineering (Cole Medin), 3
 
 ## Quick Start
 
+### First Time: Ship the Bootstrap Spec
+
+After installation, you'll find a bootstrap spec at `spec/bootstrap/`. This validates your setup:
+
+```
+/plan bootstrap
+/build
+/check
+/ship
+```
+
+This proves CSW works and commits the infrastructure cleanly. You'll experience the full workflow and create your first SHIPPED.md entry.
+
+### Creating New Features
+
 1. **Create a specification**
    ```bash
-   mkdir -p spec/active/my-feature
-   cp spec/template.md spec/active/my-feature/spec.md
+   mkdir -p spec/my-feature
+   cp spec/template.md spec/my-feature/spec.md
    # Edit spec.md with your requirements
    ```
 
 2. **Generate implementation plan**
    ```
-   /plan spec/active/my-feature/spec.md
+   /plan my-feature
+   # or just: /plan (auto-detects if only one spec)
    ```
 
 3. **Build the feature**
    ```
-   /build spec/active/my-feature/
+   /build
+   # Auto-detects the spec with plan.md
    ```
 
 4. **Validate readiness**
@@ -28,7 +45,8 @@ This system combines the best practices from Context Engineering (Cole Medin), 3
 
 5. **Ship it**
    ```
-   /ship spec/active/my-feature/
+   /ship
+   # Auto-detects the spec ready to ship
    ```
 
 ## Directory Structure
