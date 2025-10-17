@@ -18,3 +18,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    container_name: backend
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      PG_URL: postgres://postgres:${DATABASE_PASSWORD}@timescaledb:5432/${DATABASE_NAME:-postgres}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
