@@ -15,12 +15,16 @@ RFID/BLE asset tracking platform for manufacturing and logistics.
 **Structure:**
 ```
 platform/
-├── backend/         # Go API server
-├── frontend/        # React web app
+├── backend/         # Go API server (placeholder)
+├── frontend/        # React web app (@trakrf/frontend - handheld RFID app)
 ├── database/        # SQL migrations
+├── docs/            # Documentation
+│   └── frontend/    # Frontend docs (architecture, vendor specs)
 ├── marketing/       # Marketing website
 └── docker-compose.yml
 ```
+
+**Frontend**: Full-featured React + TypeScript app for CS108 RFID handheld readers with Web Bluetooth integration, comprehensive test suite (Vitest + Playwright), and mock testing support. See [docs/frontend/](docs/frontend/) for architecture and vendor specs.
 
 ## Development
 
@@ -56,7 +60,10 @@ cd backend && go run cmd/migrate/main.go up
 go run cmd/server/main.go
 
 # Start frontend (new terminal)
-cd frontend && pnpm install && pnpm start
+cd frontend
+pnpm install  # Already done if you've run validate
+pnpm dev      # Dev server with hot reload
+# OR: pnpm dev:mock  # Dev server with BLE mock (no hardware needed)
 ```
 
 **Note:** This project uses `pnpm` exclusively for frontend dependency management.
@@ -72,6 +79,13 @@ just validate
 just lint        # Lint backend + frontend
 just test        # Test backend + frontend
 just build       # Build backend + frontend
+
+# Frontend-only validation
+just frontend           # Lint + typecheck + test + build
+just frontend-lint      # ESLint
+just frontend-typecheck # TypeScript
+just frontend-test      # Vitest unit tests
+just frontend-build     # Vite production build
 ```
 
 See `justfile` for all available commands.

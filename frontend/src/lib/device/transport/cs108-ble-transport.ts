@@ -360,7 +360,8 @@ export class CS108BLETransport implements Transport {
       }
 
       // Writing to BLE characteristic
-      await this.writeCharacteristic!.writeValue(command.data);
+      // Create a new Uint8Array to ensure proper ArrayBuffer type
+      await this.writeCharacteristic!.writeValue(new Uint8Array(command.data));
       // BLE write completed successfully
       command.resolve(true);
       

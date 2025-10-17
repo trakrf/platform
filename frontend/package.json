@@ -1,5 +1,5 @@
 {
-  "name": "trakrf-handheld",
+  "name": "@trakrf/frontend",
   "version": "1.0.17",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -7,9 +7,6 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "dev": "vite",
     "dev:https": "VITE_BLE_MOCK_ENABLED=false VITE_HTTPS=true vite",
