@@ -12,7 +12,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
     volumes:
       - timescale_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -32,6 +31,7 @@ services:
       PG_URL: ${PG_URL}
     volumes:
       - ./backend:/app
+      - ./database/migrations:/app/database/migrations
     depends_on:
       timescaledb:
         condition: service_healthy
