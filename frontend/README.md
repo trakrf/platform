@@ -1,98 +1,205 @@
-# Frontend (React)
+# TrakRF Handheld
 
-React web application for TrakRF platform.
+A standalone React application for CS108 RFID handheld readers using Web Bluetooth technology.
 
-## Structure
+## 🚨 Hardware Troubleshooting - START HERE
 
-```
-frontend/
-├── src/
-│   ├── components/  # Reusable UI components
-│   ├── pages/       # Page-level components
-│   ├── services/    # API clients
-│   ├── store/       # State management
-│   ├── types/       # TypeScript type definitions
-│   └── utils/       # Helper functions
-├── public/          # Static assets
-└── tests/           # Test files
-```
+**Before assuming hardware issues, ALWAYS run this test first:**
 
-## Development
-
-### Prerequisites
-- Node.js 18+
-- pnpm (REQUIRED - do not use npm or npx)
-
-### Setup
 ```bash
-cd frontend
+pnpm test:hardware
+```
 
-# Install dependencies (use pnpm ONLY)
+This test bypasses ALL application code and directly verifies:
+- ✅ Bridge server is running and accessible
+- ✅ CS108 hardware is connected and powered on  
+- ✅ BLE connection is working
+- ✅ Commands and responses are flowing
+
+**If this test passes, the hardware is fine.** The issue is in your code, not the hardware.
+
+To see the actual hardware communication:
+```bash
+# 1. Run the hardware test
+pnpm test:hardware
+
+# 2. Check the bridge logs (requires MCP tools)
+mcp__ble-mcp-test__get_logs --since=30s
+```
+
+You'll see the actual command/response exchange:
+```
+RX: A7 B3 02 D9 82 37 00 00 A0 01     ← Command sent to CS108
+TX: A7 B3 03 D9 82 9E 74 37 A0 01 00  ← CS108 responded
+```
+
+**Remember: If `pnpm test:hardware` passes, stop blaming the hardware.**
+
+## Features
+
+- **Device Connection**: Connect to CS108 RFID readers via Bluetooth
+- **Tag Inventory**: Read and display RFID tags in real-time
+- **Tag Search/Locate**: Find specific tags with signal strength indicator
+- **Barcode Scanning**: Scan barcodes using the reader's built-in scanner
+- **Settings Management**: Configure reader power, session, and other parameters
+- **Export**: Export tag data to CSV format
+
+> **Note**: USB HID support was investigated but found to provide read-only access on CS108 hardware. 
+> See the [`feature/TRA-16-usb-transport`](https://github.com/trakrf/trakrf-handheld/tree/feature/TRA-16-usb-transport) branch for the experimental implementation.
+> We are not pursuing USB support at this time as it does not meet our requirements for device control.
+
+## Requirements
+
+- Modern browser with Web Bluetooth API support (Chrome, Edge, Opera)
+- HTTPS connection (required for Web Bluetooth)
+- CS108 RFID reader
+
+## Installation
+
+```bash
+# Install dependencies using pnpm
 pnpm install
 
-# Start dev server
-pnpm dev
+# (Optional) Set up trusted HTTPS certificates for local development
+# This avoids browser security warnings
+./setup-https.sh
 
-# Run tests
-pnpm test
+# Start development server
+pnpm dev          # Standard development
+pnpm dev:https    # With HTTPS for real device testing
+pnpm dev:mock     # With BLE mock server (no HTTPS needed, see docs/MOCK_USAGE_GUIDE.md)
 
 # Build for production
 pnpm build
 ```
 
-## Package Manager
+## Development
 
-**IMPORTANT**: This project uses `pnpm` EXCLUSIVELY.
-
-✅ Correct:
 ```bash
-pnpm install
-pnpm run lint
-pnpm test
+# Run type checking
+pnpm typecheck
+
+# Run linting
+pnpm lint
+
+# Run tests
+pnpm test              # Run unit tests once
+pnpm test:watch        # Unit tests in watch mode
+pnpm test:integration  # Integration tests with real CS108
+pnpm test:e2e          # Run all E2E tests
+pnpm test:ui           # Interactive Playwright UI
+
+# Run validation (typecheck + lint + tests)
+pnpm validate
 ```
 
-❌ Incorrect (never use):
+## Testing
+
+The project uses a comprehensive tag-based testing strategy for selective execution:
+
+### Test Categories
+
+- **@ui-only**: UI tests with BLE mocks (no hardware required)
+- **@hardware**: Integration tests requiring CS108 device  
+- **@smoke**: Critical path validation (< 2 minutes)
+- **@critical**: Production-blocking functionality
+
+### Quick Commands
+
 ```bash
-npm install    # NO
-npx vite       # Use: pnpm dlx vite
+pnpm test              # Run unit tests once
+pnpm test:watch        # Watch mode for development
+pnpm test:integration  # TDD with real CS108 hardware
+pnpm test:e2e          # Full E2E test suite
 ```
 
-## Validation
+### Unit Tests (Vitest)
+- **Inline/colocated pattern**: Test files live next to the code they test
+- **Naming**: Use `.test.ts` or `.test.tsx` suffix
+- **Structure**:
+  ```
+  components/
+    DeviceList.tsx
+    DeviceList.test.tsx     ← Unit test colocated with component
+  stores/
+    deviceStore.ts
+    deviceStore.test.ts     ← Unit test next to store
+  ```
+- Run with: `pnpm test:unit`
 
-### From frontend/ directory:
+### E2E Tests (Playwright)
+- Located in `tests/e2e/` with tag-based organization
+- Automatic mock vs hardware mode detection
+- Selective execution based on test requirements
+- Physical test tags: 10018-10023, test barcode: 10021
+
+### Development Workflows
+
 ```bash
-# Lint
-pnpm run lint --fix
+# During development
+pnpm dev                    # Development server
+pnpm test:watch            # Auto-run tests on changes
 
-# Typecheck
-pnpm run typecheck
+# TDD for worker code
+pnpm test:integration      # Test against real CS108
 
-# Test
-pnpm test
-
-# Build
-pnpm run build
+# Before committing
+pnpm validate              # Full validation suite
 ```
 
-### From project root (via Just):
-```bash
-just frontend-lint
-just frontend-typecheck
-just frontend-test
-just frontend-build
-just frontend  # All frontend checks
-```
+## Technology Stack
 
-## Tech Stack
-
-- **Framework**: React + TypeScript
-- **Build Tool**: Vite
-- **Test Runner**: Vitest
-- **Styling**: (TBD - likely Tailwind CSS)
-- **State**: (TBD - likely Zustand or React Context)
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- Zustand (state management)
+- Web Bluetooth API
 
 ## Architecture
 
-- **Component-driven** - Modular, reusable UI components
-- **Type-safe** - Full TypeScript coverage
-- **Test coverage** - Unit and integration tests for business logic
+The application follows a modular architecture:
+
+- **Components**: UI components for different screens and functionality
+- **Stores**: Zustand stores for state management
+- **RFID Library**: CS108 protocol implementation with BLE transport
+- **Types**: TypeScript type definitions
+
+See `docs/ARCHITECTURE.md` for detailed architecture documentation.
+
+## Documentation Structure
+
+Project documentation is organized in the `docs/` directory:
+
+- **`docs/ARCHITECTURE.md`**: System architecture and design patterns
+- **`docs/WORKER-ARCHITECTURE.md`**: Web Worker implementation details
+- **`docs/cs108/`**: CS108 protocol-specific documentation
+  - `README.md`: Protocol overview and quick reference
+  - `CS108_and_CS463_*.md/.pdf`: Complete vendor specifications
+  - `inventory-parsing.md`: Tag parsing quick reference
+- **`docs/MOCK_USAGE_GUIDE.md`**: BLE mock development setup
+- **`docs/README.md`**: Complete documentation index
+
+For CS108 protocol details, start with `docs/cs108/README.md`.
+
+## Browser Support
+
+Web Bluetooth API is currently supported in:
+- Chrome/Chromium (desktop & Android)
+- Edge (desktop)
+- Opera (desktop & Android)
+
+Not supported in Firefox or Safari.
+
+## Development Notes
+
+- HTTPS is required for Web Bluetooth API (Vite dev server configured for HTTPS)
+- All protocol values use hex format to match vendor specifications
+- State management follows Zustand patterns with persistence for settings
+- BLE packet fragmentation is handled automatically
+
+## License
+
+Licensed under the Business Source License 1.1. See [LICENSE](./LICENSE) for full terms.
+
+**Summary:** Source-available for non-production use. Automatically converts to MIT License four years after public distribution.

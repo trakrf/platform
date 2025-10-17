@@ -1,0 +1,43 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './styles/globals.css';
+
+// Function to initialize the app - only called in non-test environments
+function initializeApp() {
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  }
+}
+
+// Expose stores for testing in development
+if (import.meta.env.DEV) {
+  import('./stores').then((stores) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as unknown as { __ZUSTAND_STORES__: any }).__ZUSTAND_STORES__ = {
+      deviceStore: stores.useDeviceStore,
+      tagStore: stores.useTagStore,
+      uiStore: stores.useUIStore,
+      settingsStore: stores.useSettingsStore,
+      packetStore: stores.usePacketStore,
+      barcodeStore: stores.useBarcodeStore
+    };
+  });
+
+  // Expose DeviceManager for testing
+  import('./lib/device/device-manager').then(({ DeviceManager }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as unknown as { DeviceManager: any }).DeviceManager = DeviceManager;
+  });
+
+  // Create a global worker reference for testing
+  (window as unknown as { __WORKER_DEVICE__: null }).__WORKER_DEVICE__ = null;
+}
+
+// Initialize the app - moved back to direct call
+initializeApp();
