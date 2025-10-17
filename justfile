@@ -19,6 +19,22 @@ backend-build:
 backend-run:
     cd backend && go run .
 
+# Docker development commands
+backend-dev:
+    docker-compose up -d backend
+    @echo "🚀 Backend running at http://localhost:8080"
+    @echo "📊 Health check: curl localhost:8080/health"
+    @echo "📋 View logs: just dev-logs"
+
+backend-stop:
+    docker-compose stop backend
+
+backend-restart:
+    docker-compose restart backend
+
+backend-shell:
+    docker-compose exec backend sh
+
 # Run all backend checks
 backend: backend-lint backend-test backend-build
 
@@ -85,3 +101,11 @@ db-reset:
 db-status:
     @docker-compose ps timescaledb
     @docker-compose exec timescaledb pg_isready -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
+
+# Full stack development
+dev: db-up backend-dev
+
+dev-stop: backend-stop db-down
+
+dev-logs:
+    docker-compose logs -f
