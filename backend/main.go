@@ -10,9 +10,13 @@ import (
 	"time"
 )
 
-var version = "dev" // Overridden at build time via -ldflags
+var (
+	version   = "dev" // Overridden at build time via -ldflags
+	startTime time.Time
+)
 
 func main() {
+	startTime = time.Now()
 	// Setup structured JSON logging to stdout (12-factor)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
