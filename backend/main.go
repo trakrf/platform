@@ -24,7 +24,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	// Config from environment (12-factor)
-	port := os.Getenv("PORT")
+	port := os.Getenv("BACKEND_PORT")
 	if port == "" {
 		port = "8080"
 	}

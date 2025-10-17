@@ -27,7 +27,7 @@ backend/
 ### Production Features
 - ✅ Graceful shutdown (SIGTERM/SIGINT handling)
 - ✅ Structured JSON logging (slog)
-- ✅ Environment-based configuration (PORT)
+- ✅ Environment-based configuration (BACKEND_PORT)
 - ✅ HTTP timeouts (read, write, idle)
 - ✅ Request logging middleware
 - ✅ Version injection via build flags
@@ -36,7 +36,7 @@ backend/
 ## Development
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.25+ (required for Air hot-reload)
 - Just (task runner)
 
 ### Quick Start
@@ -57,7 +57,9 @@ curl localhost:8080/health    # JSON response
 ```
 
 ### Environment Variables
-- `PORT` - HTTP server port (default: 8080)
+- `BACKEND_PORT` - HTTP server port (default: 8080)
+- `BACKEND_LOG_LEVEL` - Log level: debug, info, warn, error (default: info, currently hard-coded)
+- `PG_URL` - PostgreSQL connection string with URL-encoded password
 
 ## Validation
 
@@ -86,7 +88,7 @@ go build -ldflags "-X main.version=0.1.0-dev" -o server .
 
 # Run
 ./server
-PORT=9000 ./server  # Custom port
+BACKEND_PORT=9000 ./server  # Custom port
 ```
 
 ## Testing
@@ -175,7 +177,7 @@ Default version in code: `"dev"`
 - Server starts successfully
 - All 3 health endpoints respond correctly
 - Graceful shutdown works
-- Custom PORT works
+- Custom BACKEND_PORT works
 - Version injection works
 - All tests pass
 - Clean code quality (no debug statements)

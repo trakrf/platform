@@ -3,7 +3,7 @@ FROM golang:1.25-alpine AS development
 WORKDIR /app
 
 # Install Air for hot-reload
-RUN go install github.com/air-verse/air@latest
+RUN go install github.com/air-verse/air@v1.63.0
 
 # Copy go.mod only (no go.sum yet - stdlib only project)
 COPY go.mod ./
@@ -28,7 +28,7 @@ COPY . .
 RUN go build -ldflags "-X main.version=0.1.0-dev" -o server .
 
 # Final production image
-FROM alpine:latest AS production
+FROM alpine:3.20 AS production
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 COPY --from=builder /app/server .
