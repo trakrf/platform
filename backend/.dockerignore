@@ -1,0 +1,24 @@
+# Binaries (build artifacts)
+server
+backend
+tmp/
+
+# Test artifacts
+*.test
+*.out
+
+# Development files
+.air.toml.local
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
