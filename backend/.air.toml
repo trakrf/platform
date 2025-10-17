@@ -1,0 +1,33 @@
+# Air hot-reload configuration for Go backend
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Build command (creates binary in tmp/)
+  cmd = "go build -o ./tmp/server ."
+
+  # Binary to execute
+  bin = "./tmp/server"
+
+  # Delay before rebuilding (milliseconds)
+  delay = 1000
+
+  # Directories to exclude from watching
+  exclude_dir = ["tmp", "vendor"]
+
+  # File extensions to watch
+  include_ext = ["go", "tpl", "tmpl", "html"]
+
+  # Stop on build error (don't run broken binary)
+  stop_on_error = true
+
+[log]
+  # Show timestamps in Air logs
+  time = true
+
+[color]
+  # Color-coded log output
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
