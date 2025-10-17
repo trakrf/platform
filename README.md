@@ -29,91 +29,107 @@ platform/
 ## Development
 
 ### Prerequisites
-- Go 1.21+
-- Node.js 24+ (we recommend [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm))
-- [pnpm](https://pnpm.io/) (package manager for frontend)
 - Docker & Docker Compose
-- TimescaleDB (via Docker or TigerData cloud)
-- Just (command runner) - https://just.systems/
-- [direnv](https://direnv.net/) (optional, for auto-loading `.env.local`)
-
-## Local Development
-
-### Prerequisites
-- Docker & Docker Compose
-- direnv (optional but recommended - auto-loads `.env.local`)
 - Just (task runner) - https://just.systems/
+- direnv (optional but recommended - auto-loads `.env.local`)
 
-### Setup
+**Note:** Go and Node.js are NOT required for Docker-based development. Install them only if you want to run services natively.
 
-**1. Configure environment variables**
+### Quick Start (Docker-First)
+
+**1. Configure environment**
 ```bash
 # Copy template
 cp .env.local.example .env.local
 
-# Edit .env.local and fill in real values from ../trakrf-web/.env.local:
+# Edit .env.local and set:
 #   - DATABASE_PASSWORD (and URL-encode it in PG_URL)
-#   - MQTT_HOST, MQTT_USER, MQTT_PASS, MQTT_TOPIC (from EMQX Cloud)
-#   - CLOUD_PG_URL (if using Timescale Cloud)
+#   - MQTT credentials from EMQX Cloud
+#   - Other backend/frontend vars as needed
 
-# Enable direnv (auto-loads .env.local when cd'ing into directory)
+# Enable direnv (auto-loads .env.local)
 direnv allow
 ```
 
-**2. Start database**
+**2. Start full stack**
 ```bash
-# Start TimescaleDB
-just db-up
+# Start database + backend with hot-reload
+just dev
 
-# Verify database is ready
-just db-status
+# Backend will be available at http://localhost:8080
+# Logs are streaming to terminal
 
-# View logs (optional)
-just db-logs
-
-# Connect to database (optional)
-just db-shell
+# In another terminal, test endpoints:
+curl localhost:8080/healthz   # Liveness check
+curl localhost:8080/readyz    # Readiness check
+curl localhost:8080/health    # Detailed health (JSON)
 ```
 
-**3. Verify schema**
+**3. Develop with hot-reload**
 ```bash
-# Inside psql (from 'just db-shell'):
-\dn                    # List schemas - should show 'trakrf'
-\dt trakrf.*           # List tables in trakrf schema
-SELECT * FROM trakrf.accounts;  # Should show sample data
-\q                     # Quit
-```
-
-### Database Management
-
-```bash
-# Start database
-just db-up
-
-# Stop database
-just db-down
+# Edit backend/main.go or backend/health.go
+# Air automatically rebuilds and restarts (< 5 seconds)
 
 # View logs
-just db-logs
+just dev-logs
 
-# Connect to psql
-just db-shell
-
-# Check database status
-just db-status
-
-# Reset database (⚠️  DELETES ALL DATA)
-just db-reset
+# Access container shell for debugging
+just backend-shell
 ```
 
-### External Services
+**4. Stop services**
+```bash
+# Stop all services
+just dev-stop
 
-**MQTT Broker (EMQX Cloud):**
-- Readers publish tag data to cloud broker
-- Backend subscribes from cloud (configured in `.env.local`)
-- Enables remote developer access to live tag stream
-- Cost: ~$1-2/month
-- Alternative: Run local EMQX on Portainer for isolated testing
+# Or stop individual services
+just backend-stop
+just db-down
+```
+
+### Docker Commands
+
+**Backend:**
+```bash
+just backend-dev       # Start backend (requires db)
+just backend-stop      # Stop backend
+just backend-restart   # Restart backend
+just backend-shell     # Shell into backend container
+```
+
+**Full Stack:**
+```bash
+just dev          # Start database + backend
+just dev-stop     # Stop all services
+just dev-logs     # Follow logs (all services)
+```
+
+**Database:**
+```bash
+just db-up        # Start TimescaleDB
+just db-down      # Stop TimescaleDB
+just db-logs      # View database logs
+just db-shell     # Connect to psql
+just db-status    # Check database health
+just db-reset     # ⚠️  Reset database (deletes all data)
+```
+
+### Native Development (Optional)
+
+If you have Go 1.21+ installed, you can run backend natively:
+
+```bash
+# Run backend natively (outside Docker)
+just backend-run      # Starts at localhost:8080
+
+# Run validation
+just backend-lint     # Format + lint
+just backend-test     # Run tests
+just backend-build    # Build binary
+just backend          # All checks
+```
+
+**Note:** Docker is the recommended workflow. Native commands are available for those who prefer it.
 
 ### Validation
 
@@ -127,6 +143,12 @@ just lint        # Lint backend + frontend
 just test        # Test backend + frontend
 just build       # Build backend + frontend
 
+# Backend-only validation (native)
+just backend           # Lint + test + build
+just backend-lint      # go fmt + go vet
+just backend-test      # go test
+just backend-build     # go build
+
 # Frontend-only validation
 just frontend           # Lint + typecheck + test + build
 just frontend-lint      # ESLint
@@ -136,17 +158,6 @@ just frontend-build     # Vite production build
 ```
 
 See `justfile` for all available commands.
-
-### Environment Variables
-```bash
-# Backend (.env)
-DATABASE_URL=postgres://user:pass@localhost/trakrf
-JWT_SECRET=your-secret-key
-MQTT_BROKER=tcp://localhost:1883
-
-# Frontend (.env)
-REACT_APP_API_URL=http://localhost:8080
-```
 
 ## Features
 
