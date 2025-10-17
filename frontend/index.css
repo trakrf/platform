@@ -1,0 +1,221 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Variables for the new design system */
+:root {
+  /* Color palette based on the new design */
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-secondary: #10b981;
+  --color-secondary-hover: #059669;
+  --color-accent: #8b5cf6;
+  --color-accent-hover: #7c3aed;
+  
+  /* Background gradients */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-accent: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  
+  /* Surface colors */
+  --color-surface: #ffffff;
+  --color-surface-hover: #f8fafc;
+  --color-surface-dark: #1e293b;
+  --color-surface-dark-hover: #334155;
+  
+  /* Text colors */
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+  --color-text-dark-primary: #f8fafc;
+  --color-text-dark-secondary: #cbd5e1;
+  --color-text-dark-muted: #94a3b8;
+  
+  /* Border and shadow */
+  --color-border: #e2e8f0;
+  --color-border-dark: #334155;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  
+  /* Spacing scale */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
+  
+  /* Border radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+/* Reset and base styles */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: 'Geist Sans', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
+  font-variation-settings: 'opsz' 32;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Ensure full height for the app */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Disable user select on buttons and interactive elements */
+button,
+.select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Focus visible styles for accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Remove default focus outline */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Component base styles for the new design system */
+.card {
+  @apply bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700;
+  transition: all 0.2s ease-in-out;
+}
+
+.card:hover {
+  @apply shadow-lg;
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  @apply bg-blue-500 hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-lg;
+  @apply transition-all duration-200 ease-in-out;
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+.btn-secondary {
+  @apply bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600;
+  @apply text-slate-700 dark:text-slate-200 font-medium px-4 py-2 rounded-lg;
+  @apply transition-all duration-200 ease-in-out;
+  @apply focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2;
+}
+
+.btn-success {
+  @apply bg-green-500 hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg;
+  @apply transition-all duration-200 ease-in-out;
+  @apply focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2;
+}
+
+.btn-danger {
+  @apply bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg;
+  @apply transition-all duration-200 ease-in-out;
+  @apply focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2;
+}
+
+.input-field {
+  @apply w-full px-3 py-2 border border-slate-300 dark:border-slate-600;
+  @apply rounded-lg bg-white dark:bg-slate-800;
+  @apply text-slate-900 dark:text-slate-100;
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  @apply transition-all duration-200 ease-in-out;
+}
+
+.gradient-bg {
+  background: var(--gradient-primary);
+}
+
+.gradient-text {
+  @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
+}
+
+/* Improved table styles */
+.table-modern {
+  @apply w-full border-collapse;
+}
+
+.table-modern th {
+  @apply bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100;
+  @apply font-semibold text-left px-4 py-3 border-b border-slate-200 dark:border-slate-700;
+}
+
+.table-modern td {
+  @apply px-4 py-3 border-b border-slate-100 dark:border-slate-800;
+  @apply text-slate-700 dark:text-slate-300;
+}
+
+.table-modern tr:hover {
+  @apply bg-slate-50 dark:bg-slate-800/50;
+}
+
+/* Sidebar styles */
+.sidebar {
+  @apply bg-gradient-to-b from-slate-50 to-slate-100;
+  @apply dark:from-slate-900 dark:to-slate-800;
+  @apply border-r border-slate-200 dark:border-slate-700;
+}
+
+/* Loading states */
+.loading-shimmer {
+  @apply animate-pulse bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200;
+  @apply dark:from-slate-700 dark:via-slate-600 dark:to-slate-700;
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Range slider styling */
+.slider::-webkit-slider-thumb {
+  @apply appearance-none w-4 h-4 bg-blue-500 rounded-full cursor-pointer;
+  @apply hover:bg-blue-600 transition-colors duration-200;
+}
+
+.slider::-moz-range-thumb {
+  @apply w-4 h-4 bg-blue-500 rounded-full cursor-pointer border-0;
+  @apply hover:bg-blue-600 transition-colors duration-200;
+}

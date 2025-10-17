@@ -1,0 +1,27 @@
+# Build outputs
+dist/
+build/
+*.min.js
+
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Certificates
+*.pem
+*.crt
+*.key
+
+# Bundled files
+public/web-ble-mock.bundle.js
