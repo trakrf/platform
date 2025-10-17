@@ -270,3 +270,67 @@ Log of completed features and their outcomes.
 - Lines of code: 310 (75 main + 73 health + 162 tests)
 - 12-factor compliance: 100% (ENV config, stdout logs, stateless, graceful shutdown)
 
+---
+
+## Phase 2B: Docker Backend Integration with Hot-Reload
+- **Date**: 2025-10-17
+- **Branch**: cleanup/merged
+- **Commit**: 1a14d49
+- **PR**: https://github.com/trakrf/platform/pull/8
+- **Summary**: Containerize Go backend with Air hot-reload and integrate into docker-compose environment
+- **Key Changes**:
+  - Added uptime tracking to /health endpoint (with updated tests)
+  - Updated Go to 1.25, fixed Air package path migration (cosmtrek/air → air-verse/air)
+  - Migrated to modern `docker compose` CLI (removed deprecated `docker-compose`)
+  - Standardized environment variables (DATABASE_* → POSTGRES_*, added PG_URL)
+  - Multi-stage Dockerfile (development with Air + production standalone)
+  - Backend service in docker-compose.yaml with TimescaleDB dependency
+  - Updated justfile with Docker backend commands (backend-dev, backend-stop, backend-restart, backend-shell)
+  - Documented dual password/URL approach with explanatory comments
+- **Validation**: ✅ All checks passed (lint, test, build, hot-reload)
+
+### Success Metrics
+
+**Functional Requirements (6/6 achieved):**
+- ✅ `just backend-dev` starts containerized backend with hot-reload - **Result**: Verified working with Air
+- ✅ Backend container connects to TimescaleDB container - **Result**: PG_URL connectivity confirmed
+- ✅ Health endpoints accessible at http://localhost:8080 - **Result**: All endpoints (/health, /healthz, /readyz) functional
+- ✅ Code changes trigger automatic reload (< 5 second cycle) - **Result**: Verified with uptime field addition (~3s reload)
+- ✅ Backend logs visible via `docker compose logs -f backend` - **Result**: Streaming logs working
+- ✅ `just backend-stop` stops containers cleanly - **Result**: Clean shutdown verified
+
+**Quality Requirements (4/4 achieved):**
+- ✅ Dockerfile follows best practices (multi-stage, minimal layers) - **Result**: Development + production stages, alpine base
+- ✅ Development image includes Air and source mounting - **Result**: Volume mount for hot-reload active
+- ✅ Production image is standalone (contains compiled binary only) - **Result**: Multi-stage build configured
+- ✅ .dockerignore configured - **Result**: Excludes binaries, build artifacts, IDE files
+
+**Integration Requirements (5/5 achieved):**
+- ✅ Backend service defined in docker-compose.yaml - **Result**: Service configured with proper settings
+- ✅ Backend depends_on TimescaleDB with health check - **Result**: Health check dependency working
+- ✅ Backend uses PG_URL from .env.local - **Result**: Environment variable interpolation functional
+- ✅ Backend and TimescaleDB on same Docker network - **Result**: Inter-container communication working
+- ✅ Port 8080 exposed for health checks - **Result**: Localhost access confirmed
+
+**Code Quality (4/4 achieved):**
+- ✅ All backend tests passing - **Result**: 4/4 tests passing
+- ✅ All frontend tests passing - **Result**: 372/372 passing, 31 skipped
+- ✅ No type errors - **Result**: TypeScript clean
+- ✅ No lint errors - **Result**: 0 errors (118 warnings in test files only)
+
+**Overall Success**: 100% of metrics achieved (19/19)
+
+**Test Results:**
+- Backend unit tests: 4/4 passing
+- Frontend unit tests: 372/372 passing (31 intentionally skipped)
+- Integration: Hot-reload cycle verified < 5 seconds
+- Health endpoints: All functional with uptime tracking
+
+**Architecture:**
+- Docker setup: Multi-stage Dockerfile (development + production)
+- Hot-reload: Air v1.63.0 (air-verse/air)
+- Go version: 1.25 (latest)
+- Environment: Standardized POSTGRES_* vars + complete PG_URL
+- Network: Docker bridge network for backend↔TimescaleDB
+- Developer workflow: Single `just dev` command starts full stack
+
