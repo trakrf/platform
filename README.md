@@ -43,8 +43,9 @@ platform/
 cp .env.local.example .env.local
 
 # Edit .env.local and set:
-#   - DATABASE_PASSWORD (and URL-encode it in PG_URL)
+#   - POSTGRES_PASSWORD, POSTGRES_DB (and URL-encode password in PG_URL)
 #   - MQTT credentials from EMQX Cloud
+#   - BACKEND_PORT, BACKEND_LOG_LEVEL (optional, have defaults)
 #   - Other backend/frontend vars as needed
 
 # Enable direnv (auto-loads .env.local)
@@ -116,7 +117,7 @@ just db-reset     # ⚠️  Reset database (deletes all data)
 
 ### Native Development (Optional)
 
-If you have Go 1.21+ installed, you can run backend natively:
+If you have Go 1.25+ installed, you can run backend natively:
 
 ```bash
 # Run backend natively (outside Docker)

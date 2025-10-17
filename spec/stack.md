@@ -2,7 +2,7 @@
 
 > **Package Manager**: pnpm (frontend only)
 > **Task Runner**: Just (https://just.systems/)
-> **Backend**: Go 1.21+
+> **Backend**: Go 1.25+
 > **Frontend**: React + TypeScript + Vite
 > **Database**: TimescaleDB (PostgreSQL extension)
 

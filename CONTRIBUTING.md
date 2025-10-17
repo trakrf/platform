@@ -9,7 +9,7 @@ TrakRF Platform is an RFID/BLE asset tracking system for manufacturing and logis
 ## Before You Start
 
 ### Required Tools
-- **Go 1.21+** - For backend development
+- **Go 1.25+** - For backend development (required for Air hot-reload)
 - **Node.js 18+** - For frontend development
 - **Docker & Docker Compose** - For running dependencies
 - **Git** - For version control
