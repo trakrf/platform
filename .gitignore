@@ -152,6 +152,9 @@ tmp/
 data/
 postgres-data/
 timescaledb-data/
+# Docker volumes (defensive - named volumes don't create local directories,
+# but this protects against someone switching to bind mounts)
+timescale_data/
 
 # Docker volumes
 docker-compose.override.yml

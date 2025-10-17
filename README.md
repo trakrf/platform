@@ -37,36 +37,83 @@ platform/
 - Just (command runner) - https://just.systems/
 - [direnv](https://direnv.net/) (optional, for auto-loading `.env.local`)
 
-### Quick Start
+## Local Development
+
+### Prerequisites
+- Docker & Docker Compose
+- direnv (optional but recommended - auto-loads `.env.local`)
+- Just (task runner) - https://just.systems/
+
+### Setup
+
+**1. Configure environment variables**
 ```bash
-# Clone the repo
-git clone https://github.com/trakrf/platform
-cd platform
-
-# Set up Node version (if using nvm/fnm)
-nvm use  # or: fnm use
-
-# Set up environment (if using direnv)
+# Copy template
 cp .env.local.example .env.local
-direnv allow  # auto-loads .env.local when cd'ing into directory
 
-# Start dependencies
-docker-compose up -d timescaledb
+# Edit .env.local and fill in real values from ../trakrf-web/.env.local:
+#   - DATABASE_PASSWORD (and URL-encode it in PG_URL)
+#   - MQTT_HOST, MQTT_USER, MQTT_PASS, MQTT_TOPIC (from EMQX Cloud)
+#   - CLOUD_PG_URL (if using Timescale Cloud)
 
-# Run migrations
-cd backend && go run cmd/migrate/main.go up
-
-# Start backend
-go run cmd/server/main.go
-
-# Start frontend (new terminal)
-cd frontend
-pnpm install  # Already done if you've run validate
-pnpm dev      # Dev server with hot reload
-# OR: pnpm dev:mock  # Dev server with BLE mock (no hardware needed)
+# Enable direnv (auto-loads .env.local when cd'ing into directory)
+direnv allow
 ```
 
-**Note:** This project uses `pnpm` exclusively for frontend dependency management.
+**2. Start database**
+```bash
+# Start TimescaleDB
+just db-up
+
+# Verify database is ready
+just db-status
+
+# View logs (optional)
+just db-logs
+
+# Connect to database (optional)
+just db-shell
+```
+
+**3. Verify schema**
+```bash
+# Inside psql (from 'just db-shell'):
+\dn                    # List schemas - should show 'trakrf'
+\dt trakrf.*           # List tables in trakrf schema
+SELECT * FROM trakrf.accounts;  # Should show sample data
+\q                     # Quit
+```
+
+### Database Management
+
+```bash
+# Start database
+just db-up
+
+# Stop database
+just db-down
+
+# View logs
+just db-logs
+
+# Connect to psql
+just db-shell
+
+# Check database status
+just db-status
+
+# Reset database (⚠️  DELETES ALL DATA)
+just db-reset
+```
+
+### External Services
+
+**MQTT Broker (EMQX Cloud):**
+- Readers publish tag data to cloud broker
+- Backend subscribes from cloud (configured in `.env.local`)
+- Enables remote developer access to live tag stream
+- Cost: ~$1-2/month
+- Alternative: Run local EMQX on Portainer for isolated testing
 
 ### Validation
 
