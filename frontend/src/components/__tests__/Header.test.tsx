@@ -46,21 +46,22 @@ describe('Header', () => {
     useUIStore.setState({ activeTab: 'home' });
   });
 
-  it('should show Disconnected button on home page', () => {
+  it('should not show connection button on home page', () => {
     useUIStore.setState({ activeTab: 'home' });
     render(<Header />);
-    
-    expect(screen.getByText('Disconnected')).toBeInTheDocument();
-    expect(screen.getByTestId('connect-button')).toBeInTheDocument();
+
+    // Connection button should be hidden on home page
+    expect(screen.queryByTestId('connect-button')).not.toBeInTheDocument();
+    expect(screen.queryByText('Disconnected')).not.toBeInTheDocument();
   });
 
-  it('should show Disconnected button on all other tabs', () => {
-    const tabs: Array<'inventory' | 'locate' | 'barcode' | 'settings' | 'help'> = ['inventory', 'locate', 'barcode', 'settings', 'help'];
-    
+  it('should show Disconnected button on tabs other than home and help', () => {
+    const tabs: Array<'inventory' | 'locate' | 'barcode' | 'settings'> = ['inventory', 'locate', 'barcode', 'settings'];
+
     tabs.forEach(tab => {
       useUIStore.setState({ activeTab: tab });
       const { container } = render(<Header />);
-      
+
       expect(screen.getByText('Disconnected')).toBeInTheDocument();
       container.remove();
     });
@@ -99,11 +100,12 @@ describe('Header', () => {
     ];
 
     testCases.forEach(({ percentage, expectedClass }) => {
-      useDeviceStore.setState({ 
+      useUIStore.setState({ activeTab: 'inventory' }); // Use a tab that shows the button
+      useDeviceStore.setState({
         readerState: ReaderState.CONNECTED,
         batteryPercentage: percentage
       });
-      
+
       const { container } = render(<Header />);
       const batteryText = screen.getByText(`${percentage}%`);
       expect(batteryText).toHaveClass(expectedClass);
@@ -112,30 +114,32 @@ describe('Header', () => {
   });
 
   it('should handle connect button click', async () => {
+    useUIStore.setState({ activeTab: 'inventory' }); // Use a tab that shows the button
     useDeviceStore.setState({ readerState: ReaderState.DISCONNECTED });
     render(<Header />);
-    
+
     // Wait for component to initialize with browser support
     await waitFor(() => {
       const button = screen.getByTestId('connect-button');
       expect(button).not.toHaveClass('opacity-50');
     });
-    
+
     const connectButton = screen.getByTestId('connect-button');
     fireEvent.click(connectButton);
-    
+
     await waitFor(() => {
       expect(mockConnect).toHaveBeenCalledTimes(1);
     });
   });
 
   it('should show disconnect confirmation modal', async () => {
+    useUIStore.setState({ activeTab: 'inventory' }); // Use a tab that shows the button
     useDeviceStore.setState({ readerState: ReaderState.CONNECTED });
     render(<Header />);
-    
+
     const disconnectButton = screen.getByTestId('disconnect-button');
     fireEvent.click(disconnectButton);
-    
+
     await waitFor(() => {
       expect(screen.getByText('Disconnect Reader')).toBeInTheDocument();
       expect(screen.getByText('Are you sure you want to disconnect the reader?')).toBeInTheDocument();
@@ -152,15 +156,17 @@ describe('Header', () => {
     ];
 
     testStates.forEach(({ state, text }) => {
+      useUIStore.setState({ activeTab: 'inventory' }); // Use a tab that shows the button
       useDeviceStore.setState({ readerState: state });
       const { container } = render(<Header />);
-      
+
       expect(screen.getByText(text)).toBeInTheDocument();
       container.remove();
     });
   });
 
   it('should show Scanning when reader state is SCANNING', () => {
+    useUIStore.setState({ activeTab: 'inventory' }); // Use a tab that shows the button
     useDeviceStore.setState({ readerState: ReaderState.SCANNING });
 
     render(<Header />);
@@ -190,9 +196,17 @@ describe('Header', () => {
     pages.forEach(({ tab, title, subtitle }) => {
       useUIStore.setState({ activeTab: tab });
       const { container } = render(<Header />);
-      
+
+      // Check title is shown
       expect(screen.getByText(title)).toBeInTheDocument();
+
+      // Click the info button to show the subtitle tooltip
+      const infoButton = screen.getByLabelText('Show page info');
+      fireEvent.click(infoButton);
+
+      // Check subtitle appears in tooltip
       expect(screen.getByText(subtitle)).toBeInTheDocument();
+
       container.remove();
     });
   });
@@ -203,26 +217,27 @@ describe('Header', () => {
       writable: true,
       value: {},
     });
-    
-    // Set disconnected state
+
+    // Set disconnected state and use a tab that shows the button
+    useUIStore.setState({ activeTab: 'inventory' });
     useDeviceStore.setState({
       readerState: ReaderState.DISCONNECTED,
       batteryPercentage: null,
       isConnected: false,
       firmwareVersion: '',
     });
-    
+
     const { container } = render(<Header />);
-    
+
     // Check that Disconnected button is shown
     expect(screen.getByText('Disconnected')).toBeInTheDocument();
-    
+
     const connectButton = screen.getByText('Disconnected').closest('button');
-    
+
     // When disconnected and browser supported, button should have blue background
     // The exact blinking state timing is difficult to test reliably
     expect(connectButton).toHaveClass('bg-blue-600');
-    
+
     container.remove();
   });
 });

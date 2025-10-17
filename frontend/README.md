@@ -1,6 +1,8 @@
 # TrakRF Handheld
 
-A standalone React application for CS108 RFID handheld readers using Web Bluetooth technology.
+React application for CS108 RFID handheld readers using Web Bluetooth technology.
+
+**Note**: This is the `@trakrf/frontend` package within the TrakRF platform monorepo. For monorepo-wide commands, see the root README.md.
 
 ## 🚨 Hardware Troubleshooting - START HERE
 
@@ -56,6 +58,7 @@ TX: A7 B3 03 D9 82 9E 74 37 A0 01 00  ← CS108 responded
 
 ## Installation
 
+**From frontend/ directory:**
 ```bash
 # Install dependencies using pnpm
 pnpm install
@@ -67,10 +70,23 @@ pnpm install
 # Start development server
 pnpm dev          # Standard development
 pnpm dev:https    # With HTTPS for real device testing
-pnpm dev:mock     # With BLE mock server (no HTTPS needed, see docs/MOCK_USAGE_GUIDE.md)
+pnpm dev:mock     # With BLE mock server (no HTTPS needed, see ../docs/frontend/MOCK_USAGE_GUIDE.md)
 
 # Build for production
 pnpm build
+```
+
+**From project root (using Just task runner):**
+```bash
+# Install all dependencies
+pnpm install
+
+# Validation commands
+just frontend           # Lint + typecheck + test + build
+just frontend-lint      # ESLint
+just frontend-typecheck # TypeScript
+just frontend-test      # Vitest unit tests
+just frontend-build     # Vite production build
 ```
 
 ## Development
@@ -165,22 +181,23 @@ The application follows a modular architecture:
 - **RFID Library**: CS108 protocol implementation with BLE transport
 - **Types**: TypeScript type definitions
 
-See `docs/ARCHITECTURE.md` for detailed architecture documentation.
+See `../docs/frontend/ARCHITECTURE.md` for detailed architecture documentation.
 
 ## Documentation Structure
 
-Project documentation is organized in the `docs/` directory:
+Frontend documentation is organized in the monorepo at `docs/frontend/` (relative to project root):
 
-- **`docs/ARCHITECTURE.md`**: System architecture and design patterns
-- **`docs/WORKER-ARCHITECTURE.md`**: Web Worker implementation details
-- **`docs/cs108/`**: CS108 protocol-specific documentation
+- **`docs/frontend/ARCHITECTURE.md`**: System architecture and design patterns
+- **`docs/frontend/cs108/`**: CS108 protocol-specific documentation
   - `README.md`: Protocol overview and quick reference
-  - `CS108_and_CS463_*.md/.pdf`: Complete vendor specifications
+  - `CS108_and_CS463_*.md/.pdf`: Complete vendor specifications (6,708 lines)
   - `inventory-parsing.md`: Tag parsing quick reference
-- **`docs/MOCK_USAGE_GUIDE.md`**: BLE mock development setup
-- **`docs/README.md`**: Complete documentation index
+  - `CS108-PROTOCOL-QUIRKS.md`: Protocol quirks and gotchas
+- **`docs/frontend/MOCK_USAGE_GUIDE.md`**: BLE mock development setup
+- **`docs/frontend/TROUBLESHOOTING.md`**: Operational troubleshooting guide
+- **`docs/frontend/README.md`**: Complete documentation index
 
-For CS108 protocol details, start with `docs/cs108/README.md`.
+For CS108 protocol details, start with `docs/frontend/cs108/README.md` from the project root.
 
 ## Browser Support
 

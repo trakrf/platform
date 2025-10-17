@@ -133,8 +133,7 @@ export default function App() {
       const hasBluetoothAPI = typeof navigator !== 'undefined' && navigator.bluetooth;
       const isMocked = typeof window !== 'undefined' && !!(window as unknown as { __webBluetoothMocked?: boolean }).__webBluetoothMocked;
 
-      if (hasBluetoothAPI || isMocked) {
-      } else if (typeof window !== 'undefined') {
+      if (!hasBluetoothAPI && !isMocked && typeof window !== 'undefined') {
         console.warn('Web Bluetooth is not supported in this browser.');
         const bluetoothMessage = document.createElement('div');
         bluetoothMessage.className = 'p-4 bg-amber-100 border border-amber-300 rounded-md text-amber-800 mb-4';
