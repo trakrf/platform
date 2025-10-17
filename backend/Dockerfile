@@ -35,14 +35,11 @@ RUN go build -ldflags "-X main.version=0.1.0-dev" -o server .
 
 # Final production image
 FROM alpine:3.20 AS production
-RUN apk --no-cache add ca-certificates wget
+RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 
-# Install migrate CLI (needed for production self-migration)
-RUN wget -qO- https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | \
-    tar xvz && \
-    mv migrate /usr/local/bin/migrate && \
-    chmod +x /usr/local/bin/migrate
+# Copy migrate CLI from development stage (avoid downloading twice)
+COPY --from=development /usr/local/bin/migrate /usr/local/bin/migrate
 
 COPY --from=builder /app/server .
 EXPOSE 8080
