@@ -11,10 +11,13 @@ backend-lint:
     cd backend && go vet ./...
 
 backend-test:
-    cd backend && go test ./...
+    cd backend && go test -v ./...
 
 backend-build:
-    cd backend && go build ./...
+    cd backend && go build -ldflags "-X main.version=0.1.0-dev" -o server .
+
+backend-run:
+    cd backend && go run .
 
 # Run all backend checks
 backend: backend-lint backend-test backend-build
