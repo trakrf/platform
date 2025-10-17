@@ -8,8 +8,8 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_DB: ${DATABASE_NAME:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     volumes:
       - timescale_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
@@ -28,7 +28,7 @@ services:
       - "8080:8080"
     environment:
       PORT: ${PORT:-8080}
-      PG_URL: postgres://postgres:${DATABASE_PASSWORD}@timescaledb:5432/${DATABASE_NAME:-postgres}
+      PG_URL: ${PG_URL}
     volumes:
       - ./backend:/app
     depends_on:

@@ -48,13 +48,13 @@ type HealthResponse struct {
 	Status    string    `json:"status"`
 	Version   string    `json:"version"`
 	Timestamp time.Time `json:"timestamp"`
+	Uptime    string    `json:"uptime"`
 	// Phase 3 additions:
 	// Database string `json:"database,omitempty"`
-	// Uptime   string `json:"uptime,omitempty"`
 }
 
 // healthHandler - Human-friendly health check with details
-// Returns JSON with status, version, timestamp
+// Returns JSON with status, version, timestamp, uptime
 // Used by humans, dashboards, monitoring tools
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -62,10 +62,13 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uptime := time.Since(startTime).Round(time.Second)
+
 	resp := HealthResponse{
 		Status:    "ok",
 		Version:   version,
 		Timestamp: time.Now().UTC(),
+		Uptime:    uptime.String(),
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

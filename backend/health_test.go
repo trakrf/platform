@@ -130,6 +130,11 @@ func TestHealthHandler(t *testing.T) {
 }
 
 func TestHealthResponse(t *testing.T) {
+	// Initialize startTime for the test
+	if startTime.IsZero() {
+		startTime = time.Now()
+	}
+
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
 
@@ -159,5 +164,10 @@ func TestHealthResponse(t *testing.T) {
 	// Verify timestamp is recent (within 1 second)
 	if time.Since(resp.Timestamp) > time.Second {
 		t.Errorf("timestamp too old: %v", resp.Timestamp)
+	}
+
+	// Verify uptime is present and non-empty
+	if resp.Uptime == "" {
+		t.Error("uptime is empty")
 	}
 }
