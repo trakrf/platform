@@ -128,6 +128,8 @@ tests/old-worker-tests/
 bin/
 cmd/server/server
 cmd/migrate/migrate
+backend/server
+backend/backend
 
 # Go build cache
 go.work
