@@ -275,17 +275,20 @@ Log of completed features and their outcomes.
 ## Phase 2B: Docker Backend Integration with Hot-Reload
 - **Date**: 2025-10-17
 - **Branch**: cleanup/merged
-- **Commit**: 1a14d49
+- **Commit**: e5b1051
 - **PR**: https://github.com/trakrf/platform/pull/8
 - **Summary**: Containerize Go backend with Air hot-reload and integrate into docker-compose environment
 - **Key Changes**:
   - Added uptime tracking to /health endpoint (with updated tests)
   - Updated Go to 1.25, fixed Air package path migration (cosmtrek/air → air-verse/air)
   - Migrated to modern `docker compose` CLI (removed deprecated `docker-compose`)
-  - Standardized environment variables (DATABASE_* → POSTGRES_*, added PG_URL)
+  - Standardized environment variables (PORT → BACKEND_PORT, LOG_LEVEL → BACKEND_LOG_LEVEL/VITE_LOG_LEVEL, DATABASE_* → POSTGRES_*)
+  - Added search path to PG_URL (?options=-c%20search_path%3Dtrakrf,public)
+  - Pinned versions for reproducibility (Alpine 3.20, Air v1.63.0)
   - Multi-stage Dockerfile (development with Air + production standalone)
   - Backend service in docker-compose.yaml with TimescaleDB dependency
   - Updated justfile with Docker backend commands (backend-dev, backend-stop, backend-restart, backend-shell)
+  - Updated Go requirement to 1.25+ across all documentation (README.md, backend/README.md, CONTRIBUTING.md, spec/stack.md)
   - Documented dual password/URL approach with explanatory comments
 - **Validation**: ✅ All checks passed (lint, test, build, hot-reload)
 
