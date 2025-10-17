@@ -102,8 +102,38 @@ db-status:
     @docker compose ps timescaledb
     @docker compose exec timescaledb pg_isready -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
 
+# Database migrations
+db-migrate-up:
+    @echo "🔄 Running database migrations..."
+    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" up'
+    @echo "✅ Migrations complete"
+
+db-migrate-down:
+    @echo "⏪ Rolling back last migration..."
+    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" down 1'
+    @echo "✅ Rollback complete"
+
+db-migrate-status:
+    @echo "📊 Migration status:"
+    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" version'
+
+db-migrate-create name:
+    @echo "📝 Creating new migration: {{name}}"
+    docker compose exec backend sh -c 'migrate create -ext sql -dir /app/database/migrations -seq {{name}}'
+
+db-migrate-force version:
+    @echo "⚠️  Forcing migration version to {{version}}"
+    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" force {{version}}'
+
 # Full stack development
-dev: db-up backend-dev
+dev: db-up
+    @echo "⏳ Waiting for database to be ready..."
+    @sleep 3
+    @echo "🔄 Running migrations..."
+    @just db-migrate-up
+    @echo "🚀 Starting backend..."
+    @just backend-dev
+    @echo "✅ Development environment ready"
 
 dev-stop: backend-stop db-down
 

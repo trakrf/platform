@@ -15,12 +15,13 @@ RFID/BLE asset tracking platform for manufacturing and logistics.
 **Structure:**
 ```
 platform/
-├── backend/         # Go API server (placeholder)
-├── frontend/        # React web app (@trakrf/frontend - handheld RFID app)
-├── database/        # SQL migrations
-├── docs/            # Documentation
-│   └── frontend/    # Frontend docs (architecture, vendor specs)
-├── marketing/       # Marketing website
+├── backend/            # Go API server (placeholder)
+├── frontend/           # React web app (@trakrf/frontend - handheld RFID app)
+├── database/
+│   └── migrations/     # Versioned SQL migrations (golang-migrate)
+├── docs/               # Documentation
+│   └── frontend/       # Frontend docs (architecture, vendor specs)
+├── marketing/          # Marketing website
 └── docker-compose.yml
 ```
 
@@ -39,14 +40,18 @@ platform/
 
 **1. Configure environment**
 ```bash
-# Copy template
-cp .env.local.example .env.local
+# Create .env file (required for Docker Compose)
+cat > .env << EOF
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=postgres
+PG_URL=postgresql://postgres:postgres@timescaledb:5432/postgres?sslmode=disable
+BACKEND_PORT=8080
+BACKEND_LOG_LEVEL=info
+EOF
 
-# Edit .env.local and set:
-#   - POSTGRES_PASSWORD, POSTGRES_DB (and URL-encode password in PG_URL)
-#   - MQTT credentials from EMQX Cloud
-#   - BACKEND_PORT, BACKEND_LOG_LEVEL (optional, have defaults)
-#   - Other backend/frontend vars as needed
+# For additional configuration, use .env.local (optional)
+# cp .env.local.example .env.local
+# Edit .env.local for MQTT credentials, etc.
 
 # Enable direnv (auto-loads .env.local)
 direnv allow
@@ -55,6 +60,10 @@ direnv allow
 **2. Start full stack**
 ```bash
 # Start database + backend with hot-reload
+# This will:
+#   1. Start TimescaleDB
+#   2. Run database migrations automatically
+#   3. Start backend with Air hot-reload
 just dev
 
 # Backend will be available at http://localhost:8080
@@ -114,6 +123,21 @@ just db-shell     # Connect to psql
 just db-status    # Check database health
 just db-reset     # ⚠️  Reset database (deletes all data)
 ```
+
+**Database Migrations:**
+```bash
+just db-migrate-up         # Apply all pending migrations
+just db-migrate-down       # Rollback last migration
+just db-migrate-status     # Show current migration version
+just db-migrate-create foo # Create new migration pair (000XXX_foo.up/down.sql)
+just db-migrate-force 5    # Force version to 5 (recovery only)
+```
+
+Migrations run automatically on `just dev` startup. Manual migration commands are useful for:
+- Production deployments
+- Testing migration rollback
+- Creating new migrations
+- Recovery from failed migrations
 
 ### Native Development (Optional)
 

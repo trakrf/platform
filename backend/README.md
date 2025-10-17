@@ -2,9 +2,9 @@
 
 Go HTTP server for TrakRF platform.
 
-## Current Status: Phase 2A Complete
+## Current Status: Phase 3 Complete
 
-Minimal production-ready HTTP server with Kubernetes-ready health endpoints. Stdlib only, fully tested, 12-factor compliant.
+Production-ready HTTP server with Docker integration and database migrations. Stdlib only, fully tested, 12-factor compliant, TimescaleDB backend with golang-migrate.
 
 ## Structure
 
@@ -14,7 +14,14 @@ backend/
 ├── health.go       # Health check handlers (/healthz, /readyz, /health)
 ├── health_test.go  # Comprehensive test suite
 ├── go.mod          # Go module definition
+├── Dockerfile      # Multi-stage build (dev with Air, prod standalone)
+├── .air.toml       # Air hot-reload configuration
 └── server          # Compiled binary (created by build)
+
+../database/migrations/  # SQL migrations (golang-migrate)
+├── 000001_prereqs.up.sql
+├── 000001_prereqs.down.sql
+└── ... (24 total migration files)
 ```
 
 ## Features
@@ -23,6 +30,21 @@ backend/
 - **GET /healthz** - Liveness probe (returns "ok" if process alive)
 - **GET /readyz** - Readiness probe (returns "ok" if ready for traffic)
 - **GET /health** - Detailed JSON health status (version, timestamp)
+
+### Database Migrations (golang-migrate)
+- **12 migrations** - Complete schema from TimescaleDB extensions to sample data
+- **Versioned** - Sequential 6-digit numbering (000001-000012)
+- **Reversible** - Up/down pairs with CASCADE cleanup
+- **Auto-migration** - Runs automatically on `just dev` startup
+- **CLI included** - migrate v4.17.0 installed in Docker image
+
+**Schema includes:**
+- Accounts, users, RBAC (multi-tenant foundation)
+- Locations, devices, antennas (hardware topology)
+- Assets and tags (tracking entities)
+- Events hypertable (time-series location events)
+- Messages hypertable (MQTT ingestion with auto-processing trigger)
+- Sample data (development fixtures)
 
 ### Production Features
 - ✅ Graceful shutdown (SIGTERM/SIGINT handling)
@@ -120,11 +142,48 @@ cd backend && go test -cover ./...
 - **HTTP handlers** - Standard net/http patterns
 - **Table-driven tests** - Go community best practice
 
+### Completed Phases
+- **Phase 2A**: ✅ HTTP server with health endpoints
+- **Phase 2B**: ✅ Docker integration (multi-stage Dockerfile, docker-compose, Air hot-reload)
+- **Phase 3**: ✅ Database migrations (golang-migrate, TimescaleDB schema, Just commands)
+
 ### Future Phases
-- **Phase 2B**: Docker integration (Dockerfile, compose)
-- **Phase 3**: Database migrations (go-migrate)
-- **Phase 4**: REST API framework (chi/echo/gorilla)
+- **Phase 4**: REST API framework (chi/fiber/echo)
 - **Phase 5**: Authentication (JWT, session management)
+- **Phase 6**: MQTT ingestion pipeline
+
+## Database Migrations
+
+Managed via golang-migrate CLI (included in Docker image).
+
+### Commands (from project root)
+```bash
+just db-migrate-up         # Apply all pending migrations
+just db-migrate-down       # Rollback last migration
+just db-migrate-status     # Show current migration version
+just db-migrate-create foo # Create new migration pair
+just db-migrate-force 5    # Force version to 5 (recovery)
+```
+
+### Creating New Migrations
+```bash
+# From project root
+just db-migrate-create add_widgets
+
+# Creates:
+# database/migrations/000013_add_widgets.up.sql
+# database/migrations/000013_add_widgets.down.sql
+
+# Edit both files, then apply:
+just db-migrate-up
+```
+
+### Migration Design Principles
+- **Up migrations** create/alter schema, add data
+- **Down migrations** use CASCADE drops for clean rollback
+- **Sample data** down migration is no-op (cleanup via table drops)
+- **Search path** set to `trakrf,public` in all migrations
+- **TimescaleDB** hypertables created with retention policies
 
 ## Deployment
 
