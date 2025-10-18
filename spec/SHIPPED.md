@@ -481,3 +481,140 @@ Phase 7: Railway/GKE deployment pipeline
 - Database migration automation
 - Health check configuration
 - Monitoring and logging setup
+
+## Phase 6A: Justfile Monorepo Delegation Pattern
+- **Date**: 2025-10-18
+- **Branch**: feature/phase-6a-justfile-monorepo
+- **Commit**: 40b3e3f
+- **PR**: https://github.com/trakrf/platform/pull/15
+- **Summary**: Refactor justfile structure from flat 145-line file to delegation pattern with workspace-specific justfiles
+- **Key Changes**:
+  - Root justfile (129 lines): Orchestration + delegation to workspaces
+  - backend/justfile (43 lines): Backend-specific commands with fallback to root
+  - frontend/justfile (43 lines): Frontend-specific commands with fallback to root
+  - Breaking change: Old `just backend-lint` → New `just backend lint` (space-separated)
+  - Updated CLAUDE.md with comprehensive delegation pattern guide
+  - Updated README.md, backend/README.md, spec/stack.md with delegation syntax
+- **Validation**: ✅ All checks passed (lint: 0 errors/118 warnings, tests: 372 passing)
+
+### Success Metrics
+(From spec.md - Phase 6A delegation pattern)
+
+✅ **Functional Requirements** (6/6 achieved):
+- ✅ `cd backend && just dev` starts Go server - **Result**: Workspace commands work via direct execution
+- ✅ `cd frontend && just dev` starts Vite dev server - **Result**: Workspace commands work via direct execution
+- ✅ `just dev` (from root) starts full stack - **Result**: Docker orchestration unchanged
+- ✅ `cd backend && just --list` shows backend-relevant commands - **Result**: 10 backend recipes + fallback to root
+- ✅ `cd frontend && just --list` shows frontend-relevant commands - **Result**: 10 frontend recipes + fallback to root
+- ✅ All existing `just` commands continue to work from root - **Result**: Delegation syntax provides same functionality
+
+✅ **Developer Experience** (4/4 achieved):
+- ✅ Commands are discoverable from workspace directories - **Result**: `just --list` shows context-aware recipes
+- ✅ Consistent naming across workspaces - **Result**: `dev`, `lint`, `test`, `build`, `validate` in all workspaces
+- ✅ No workflow regressions - **Result**: Docker commands, db migrations all functional
+- ✅ Documentation updated - **Result**: README.md, backend/README.md, CLAUDE.md, spec/stack.md all updated
+
+✅ **Code Quality** (3/3 achieved):
+- ✅ No duplication of recipe logic - **Result**: Single source of truth for workspace commands
+- ✅ Fallback pattern working correctly - **Result**: Workspace justfiles can call root recipes
+- ✅ Comments explain delegation pattern - **Result**: CLAUDE.md has comprehensive guide
+
+**Overall Success**: 100% of metrics achieved (13/13)
+
+### Technical Highlights
+- **Delegation Pattern**: `just <workspace> <command>` from root → `cd <workspace> && just <command>`
+- **Fallback Pattern**: `set fallback := true` allows workspace justfiles to call root recipes
+- **Context-Aware**: `just dev` does different things based on current directory
+- **Breaking Change**: Command syntax changed from `just backend-lint` to `just backend lint`
+- **Line Reduction**: Root justfile reduced from 145 to 129 lines (11% reduction)
+- **Single Source of Truth**: Workspace commands only defined in workspace justfiles
+
+### Delegation + Fallback Pattern
+
+**Root justfile (conductor):**
+```just
+# Delegation to workspaces
+backend *args:
+    cd backend && just {{args}}
+
+frontend *args:
+    cd frontend && just {{args}}
+
+# Combined commands using delegation
+lint: (frontend "lint") (backend "lint")
+test: (frontend "test") (backend "test")
+build: (frontend "build") (backend "build")
+validate: lint test build
+```
+
+**Workspace justfiles (musicians):**
+```just
+# backend/justfile, frontend/justfile
+set fallback := true
+
+# Unqualified commands (dev, lint, test, build, validate)
+dev:
+    go run .  # or: pnpm dev
+
+lint:
+    go fmt ./... && go vet ./...  # or: pnpm run lint --fix
+
+# ... etc
+```
+
+### Command Matrix Tested
+| Context | Command | Result |
+|---------|---------|--------|
+| Root | `just --list` | Shows orchestration + delegation recipes |
+| Root | `just backend lint` | Delegates to: `cd backend && just lint` |
+| Root | `just frontend dev` | Delegates to: `cd frontend && just dev` |
+| Root | `just lint` | Runs both frontend and backend lint |
+| Root | `just validate` | Full validation (lint + test + build) |
+| backend/ | `just dev` | Runs: `go run .` |
+| backend/ | `just db-up` | Falls back to root recipe |
+| frontend/ | `just dev` | Runs: `pnpm dev` |
+| frontend/ | `just db-up` | Falls back to root recipe |
+
+### Breaking Changes
+
+**Old syntax (removed):**
+```bash
+just frontend-dev        # ❌ No longer exists
+just backend-lint        # ❌ No longer exists
+just backend-test        # ❌ No longer exists
+```
+
+**New syntax (delegation):**
+```bash
+just frontend dev        # ✅ Space instead of hyphen
+just backend lint        # ✅ Space instead of hyphen
+just backend test        # ✅ Space instead of hyphen
+```
+
+Same character count, just `s/-/ /` (hyphen → space).
+
+### Files Created
+- backend/justfile (43 lines) - Backend-specific commands with fallback
+- frontend/justfile (43 lines) - Frontend-specific commands with fallback
+
+### Files Modified
+- justfile (reduced from 145 to 129 lines) - Delegation + orchestration only
+- CLAUDE.md (+235 lines) - Comprehensive delegation pattern documentation
+- README.md (updated Quick Start + Development Workflow + Validation sections)
+- backend/README.md (updated Quick Start + Validation sections)
+- spec/stack.md (updated Backend + Frontend sections with delegation syntax)
+
+### References
+- Stuart Ellis - Just Monorepo: https://www.stuartellis.name/articles/just-task-runner/#multiple-justfiles-in-a-directory-structure
+- Just Manual - Fallback: https://just.systems/man/en/chapter_46.html
+- Just Manual - Parameters: https://just.systems/man/en/chapter_21.html
+
+### Why This Pattern?
+1. **Single Source of Truth**: Workspace commands only in workspace justfiles
+2. **Smaller Root**: ~60 lines goal (achieved 129 lines with comprehensive orchestration)
+3. **Clearer Separation**: Root = conductor, workspaces = musicians
+4. **More Maintainable**: Add workspace command = edit workspace file only
+5. **Scalable**: Add third workspace = one delegation line in root
+
+### Next Phase
+Phase 7: Railway/GKE deployment pipeline with single binary artifact
