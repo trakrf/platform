@@ -1,0 +1,42 @@
+# Backend Task Runner (TrakRF Platform)
+# Uses fallback to inherit shared recipes from root justfile
+set fallback := true
+
+# List all available recipes
+default:
+    @just --list
+
+# Start Go development server
+dev:
+    go run .
+
+# Alias for consistency
+run: dev
+
+# Lint Go code (formatting + static analysis)
+lint:
+    go fmt ./...
+    go vet ./...
+
+# Run backend tests with verbose output
+test:
+    go test -v ./...
+
+# Run tests with race detection
+test-race:
+    go test -race ./...
+
+# Run tests with coverage report
+test-coverage:
+    go test -cover ./...
+
+# Build backend binary with version injection
+build:
+    go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
+
+# Run all backend validation checks
+validate: lint test build
+
+# Shell access
+shell:
+    docker compose exec backend sh

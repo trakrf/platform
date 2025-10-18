@@ -5,72 +5,69 @@
 default:
     @just --list
 
-# Backend validation commands
-backend-lint:
-    cd backend && go fmt ./...
-    cd backend && go vet ./...
+# ============================================================================
+# Workspace Delegation
+# ============================================================================
+# Delegate commands to workspace justfiles
+# Usage: just <workspace> <command> [args...]
+# Example: just frontend dev, just backend test
 
-backend-test:
-    cd backend && go test -v ./...
+frontend *args:
+    cd frontend && just {{args}}
 
-backend-build:
-    cd backend && go build -ldflags "-X main.version=0.1.0-dev" -o server .
+backend *args:
+    cd backend && just {{args}}
 
-backend-run:
-    cd backend && go run .
+# ============================================================================
+# Combined Validation Commands
+# ============================================================================
+# Run checks across all workspaces
 
-# Docker development commands
-backend-dev:
-    docker compose up -d backend
-    @echo "🚀 Backend running at http://localhost:8080"
-    @echo "📊 Health check: curl localhost:8080/health"
-    @echo "📋 View logs: just dev-logs"
+lint: (frontend "lint") (backend "lint")
 
-backend-stop:
-    docker compose stop backend
+test: (frontend "test") (backend "test")
 
-backend-restart:
-    docker compose restart backend
+build: (frontend "build") (backend "build")
 
-backend-shell:
-    docker compose exec backend sh
-
-# Run all backend checks
-backend: backend-lint backend-test backend-build
-
-# Frontend validation commands
-frontend-lint:
-    cd frontend && pnpm run lint --fix
-
-frontend-typecheck:
-    cd frontend && pnpm run typecheck
-
-frontend-test:
-    cd frontend && pnpm test
-
-frontend-build:
-    cd frontend && pnpm run build
-
-frontend-dev:
-    cd frontend && pnpm dev
-
-# Run all frontend checks
-frontend: frontend-lint frontend-typecheck frontend-test frontend-build
-
-# Combined validation commands
-lint: backend-lint frontend-lint
-
-test: backend-test frontend-test
-
-build: backend-build frontend-build
-
-# Full validation (used by CSW /check command)
 validate: lint test build
 
 # Alias for CSW integration
 check: validate
 
-# Docker Compose orchestration
+# ============================================================================
+# Full Stack Development
+# ============================================================================
+
+# Docker-based development (database + backend container)
+dev: db-up
+    @echo "⏳ Waiting for database to be ready..."
+    @sleep 3
+    @echo "🔄 Running migrations..."
+    @just db-migrate-up
+    @echo "🚀 Starting backend..."
+    @docker compose up -d backend
+    @echo "✅ Development environment ready"
+
+# Local development (parallel frontend + backend)
+dev-local:
+    @echo "🚀 Starting local development servers..."
+    @echo "📱 Frontend: http://localhost:5173"
+    @echo "🔧 Backend: http://localhost:8080"
+    @echo ""
+    @echo "Press Ctrl+C to stop both servers"
+    @just frontend dev & just backend dev & wait
+
+dev-stop:
+    docker compose stop backend
+    docker compose down
+
+dev-logs:
+    docker compose logs -f
+
+# ============================================================================
+# Docker Compose Orchestration
+# ============================================================================
+
 db-up:
     docker compose up -d timescaledb
     @echo "⏳ Waiting for database to be ready..."
@@ -105,7 +102,10 @@ db-status:
     @docker compose ps timescaledb
     @docker compose exec timescaledb pg_isready -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
 
-# Database migrations
+# ============================================================================
+# Database Migrations
+# ============================================================================
+
 db-migrate-up:
     @echo "🔄 Running database migrations..."
     docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" up'
@@ -127,18 +127,3 @@ db-migrate-create name:
 db-migrate-force version:
     @echo "⚠️  Forcing migration version to {{version}}"
     docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" force {{version}}'
-
-# Full stack development
-dev: db-up
-    @echo "⏳ Waiting for database to be ready..."
-    @sleep 3
-    @echo "🔄 Running migrations..."
-    @just db-migrate-up
-    @echo "🚀 Starting backend..."
-    @just backend-dev
-    @echo "✅ Development environment ready"
-
-dev-stop: backend-stop db-down
-
-dev-logs:
-    docker compose logs -f

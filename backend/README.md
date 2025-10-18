@@ -65,42 +65,46 @@ backend/
 
 #### Development Mode (with hot reload)
 
-**Option 1: Using Just (recommended)**
+**Option 1: From workspace directory (recommended)**
 ```bash
-# Terminal 1: Frontend dev server (from project root)
-just frontend-dev        # http://localhost:5173
+# Terminal 1: Frontend
+cd frontend && just dev  # http://localhost:5173
 
-# Terminal 2: Backend server (from project root)
-just backend-run         # http://localhost:8080
+# Terminal 2: Backend
+cd backend && just dev   # http://localhost:8080
 # CORS enabled automatically for frontend dev
 ```
 
-**Option 2: Manual**
+**Option 2: From root with delegation**
 ```bash
-# Terminal 1: Frontend dev server
-cd frontend && pnpm dev  # http://localhost:5173
+# Terminal 1: Frontend
+just frontend dev        # http://localhost:5173
 
-# Terminal 2: Backend server
-cd backend && go run .   # http://localhost:8080
-# CORS enabled automatically for frontend dev
+# Terminal 2: Backend
+just backend dev         # http://localhost:8080
+```
+
+**Option 3: Parallel local development**
+```bash
+just dev-local           # Starts both in parallel
+# Frontend: http://localhost:5173
+# Backend: http://localhost:8080
+# Press Ctrl+C to stop both
+```
+
+**Option 4: Docker orchestration**
+```bash
+just dev                 # Full stack with database
 ```
 
 #### Production Mode (integrated)
 
-**Option 1: Using build script (recommended)**
 ```bash
 # Build everything (frontend + backend)
 ./scripts/build.sh
 
-# Run integrated server
-cd backend && ./bin/trakrf
-# Full app on http://localhost:8080
-```
-
-**Option 2: Using Just**
-```bash
-# Build and validate everything
-just build
+# Or via Just
+just build              # Builds both workspaces
 
 # Run integrated server
 cd backend && ./bin/trakrf
@@ -130,32 +134,35 @@ curl localhost:8080/                  # React frontend
 
 ## Validation
 
-### From project root (via Just):
+### From project root (delegation pattern):
 ```bash
-just backend-lint   # Format (go fmt) + Lint (go vet)
-just backend-test   # Run tests with verbose output
-just backend-build  # Build binary with version injection
-just backend-run    # Start development server
-just backend        # Run all checks
+just backend validate  # All backend checks (lint + test + build)
+just backend lint      # Format (go fmt) + Lint (go vet)
+just backend test      # Run tests with verbose output
+just backend build     # Build binary with version injection
+just backend dev       # Start development server
 ```
 
 ### From backend/ directory:
 ```bash
-# Lint
+# All checks
+just validate          # Lint + test + build
+
+# Individual checks
+just lint              # go fmt + go vet
+just test              # go test -v
+just build             # go build with version injection
+just dev               # go run .
+
+# Manual commands (without Just)
 go fmt ./...
 go vet ./...
-
-# Test
 go test -v ./...
-go test -race ./...   # Race detection
-go test -cover ./...  # Coverage report
-
-# Build
-go build -ldflags "-X main.version=0.1.0-dev" -o server .
-
-# Run
-./server
-BACKEND_PORT=9000 ./server  # Custom port
+go test -race ./...    # Race detection
+go test -cover ./...   # Coverage report
+go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
+./bin/trakrf
+BACKEND_PORT=9000 ./bin/trakrf  # Custom port
 ```
 
 ## Testing
@@ -169,14 +176,22 @@ BACKEND_PORT=9000 ./server  # Custom port
 - No race conditions
 
 ```bash
-# Run tests
-just backend-test
+# Run tests (from root)
+just backend test
+
+# Run tests (from backend/)
+just test
 
 # With race detection
-cd backend && go test -race ./...
+just test-race
 
 # With coverage
-cd backend && go test -cover ./...
+just test-coverage
+
+# Manual (without Just)
+go test -v ./...
+go test -race ./...
+go test -cover ./...
 ```
 
 ## Architecture
