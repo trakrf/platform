@@ -219,9 +219,52 @@ docker-compose -f docker-compose.prod.yml up
 
 Business Source License (BSL) - see [LICENSE](LICENSE)
 
-## API Documentation
+## REST API
 
-API documentation available at `/api/docs` when running locally.
+**Phase 4A - Foundation + User Management** (v1)
+
+The backend exposes RESTful JSON APIs under `/api/v1`:
+
+### Health Checks
+```bash
+GET /healthz   # K8s liveness probe
+GET /readyz    # K8s readiness probe (with DB check)
+GET /health    # Human-friendly health status (JSON)
+```
+
+### Accounts
+```bash
+GET    /api/v1/accounts         # List all accounts (paginated)
+GET    /api/v1/accounts/:id     # Get account by ID
+POST   /api/v1/accounts         # Create new account
+PUT    /api/v1/accounts/:id     # Update account
+DELETE /api/v1/accounts/:id     # Soft delete account
+```
+
+### Users
+```bash
+GET    /api/v1/users            # List all users (paginated)
+GET    /api/v1/users/:id        # Get user by ID
+POST   /api/v1/users            # Create new user
+PUT    /api/v1/users/:id        # Update user
+DELETE /api/v1/users/:id        # Soft delete user
+```
+
+### Account Users (RBAC Junction)
+```bash
+GET    /api/v1/accounts/:account_id/users                # List users in account
+POST   /api/v1/accounts/:account_id/users                # Add user to account
+PUT    /api/v1/accounts/:account_id/users/:user_id       # Update user role/status
+DELETE /api/v1/accounts/:account_id/users/:user_id       # Remove user from account
+```
+
+**Response Format:**
+- Success: `{"data": {...}}` or `{"data": [...], "pagination": {...}}`
+- Error: RFC 7807 Problem Details with request ID for tracing
+
+**Pagination:** `?page=1&per_page=20` (default: page 1, 20 items, max 100)
+
+Full API documentation coming soon at `/api/docs`.
 
 ## Contributing
 
