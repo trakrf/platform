@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 type contextKey string
 
 const requestIDKey contextKey = "requestID"
+const UserClaimsKey contextKey = "user_claims"
 
 // requestIDMiddleware generates or extracts request ID
 func requestIDMiddleware(next http.Handler) http.Handler {
@@ -90,4 +92,67 @@ func getRequestID(ctx context.Context) string {
 		return reqID
 	}
 	return ""
+}
+
+// authMiddleware validates JWT token and injects claims into context
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 1. Extract Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			slog.Info("Missing authorization header",
+				"request_id", getRequestID(r.Context()),
+				"path", r.URL.Path)
+			writeJSONError(w, r, http.StatusUnauthorized, ErrUnauthorized,
+				"Missing authorization header", "")
+			return
+		}
+
+		// 2. Parse "Bearer {token}" format
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			slog.Info("Invalid authorization header format",
+				"request_id", getRequestID(r.Context()),
+				"path", r.URL.Path)
+			writeJSONError(w, r, http.StatusUnauthorized, ErrUnauthorized,
+				"Invalid authorization header format", "")
+			return
+		}
+		token := parts[1]
+
+		// 3. Validate JWT using Phase 5A ValidateJWT()
+		claims, err := ValidateJWT(token)
+		if err != nil {
+			slog.Info("JWT validation failed",
+				"error", err,
+				"request_id", getRequestID(r.Context()),
+				"path", r.URL.Path)
+			writeJSONError(w, r, http.StatusUnauthorized, ErrUnauthorized,
+				"Invalid or expired token", "")
+			return
+		}
+
+		// 4. Defensive nil check (idiomatic Go)
+		if claims == nil {
+			slog.Error("ValidateJWT returned nil claims without error",
+				"request_id", getRequestID(r.Context()),
+				"path", r.URL.Path)
+			writeJSONError(w, r, http.StatusUnauthorized, ErrUnauthorized,
+				"Invalid or expired token", "")
+			return
+		}
+
+		// 5. Inject claims into context and proceed
+		ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// GetUserClaims extracts JWT claims from request context
+// Returns nil if claims not found (handlers should validate defensively)
+func GetUserClaims(r *http.Request) *JWTClaims {
+	if claims, ok := r.Context().Value(UserClaimsKey).(*JWTClaims); ok {
+		return claims
+	}
+	return nil
 }

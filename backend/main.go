@@ -64,10 +64,17 @@ func main() {
 	r.Get("/health", healthHandler)
 
 	// Register API routes
-	registerAuthRoutes(r)
-	registerAccountRoutes(r)
-	registerUserRoutes(r)
-	registerAccountUserRoutes(r)
+	// Public endpoints (no auth required)
+	registerAuthRoutes(r) // POST /api/v1/auth/signup, /api/v1/auth/login
+
+	// Protected endpoints (require valid JWT)
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware) // Apply auth middleware to this group
+
+		registerAccountRoutes(r)     // All /api/v1/accounts/* routes
+		registerUserRoutes(r)        // All /api/v1/users/* routes
+		registerAccountUserRoutes(r) // All /api/v1/account_users/* routes
+	})
 
 	slog.Info("Routes registered")
 
