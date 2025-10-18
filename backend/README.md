@@ -2,9 +2,9 @@
 
 Go HTTP server for TrakRF platform.
 
-## Current Status: Phase 3 Complete
+## Current Status: Phase 6 Complete
 
-Production-ready HTTP server with Docker integration and database migrations. Stdlib only, fully tested, 12-factor compliant, TimescaleDB backend with golang-migrate.
+Production-ready HTTP server with embedded React frontend, database migrations, and authentication. Single binary deployment with integrated frontend serving.
 
 ## Structure
 
@@ -62,26 +62,49 @@ backend/
 - Just (task runner)
 
 ### Quick Start
+
+#### Development Mode (with hot reload)
+
 ```bash
-# Run all checks (lint, test, build)
-just backend
+# Terminal 1: Frontend dev server
+cd frontend && pnpm dev  # http://localhost:5173
 
-# Start dev server
-just backend-run
+# Terminal 2: Backend server
+cd backend && go run .   # http://localhost:8080
+# CORS enabled automatically for frontend dev
+```
 
-# Or run directly
-cd backend && go run .
+#### Production Mode (integrated)
 
-# Test endpoints
-curl localhost:8080/healthz   # "ok"
-curl localhost:8080/readyz    # "ok"
-curl localhost:8080/health    # JSON response
+```bash
+# Build everything
+./scripts/build.sh
+
+# Run integrated server
+cd backend && ./bin/trakrf
+# Full app on http://localhost:8080
+```
+
+#### Test Endpoints
+
+```bash
+curl localhost:8080/healthz           # Health check
+curl localhost:8080/api/v1/health     # API health
+curl localhost:8080/                  # React frontend
 ```
 
 ### Environment Variables
-- `BACKEND_PORT` - HTTP server port (default: 8080)
-- `BACKEND_LOG_LEVEL` - Log level: debug, info, warn, error (default: info, currently hard-coded)
-- `PG_URL` - PostgreSQL connection string with URL-encoded password
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BACKEND_PORT` | HTTP server port | `8080` |
+| `BACKEND_CORS_ORIGIN` | CORS allowed origin | `*` (dev mode) |
+| `JWT_SECRET` | JWT signing secret | `dev-secret-change-in-production` |
+| `DATABASE_URL` | PostgreSQL connection string | Required |
+
+**Phase 6 Notes**:
+- Set `BACKEND_CORS_ORIGIN=disabled` when using embedded frontend (production)
+- Default `*` allows frontend dev server to access API during development
 
 ## Validation
 
@@ -136,21 +159,59 @@ cd backend && go test -cover ./...
 
 ## Architecture
 
-### Current (Phase 2A)
-- **Stdlib only** - No external dependencies
-- **Single package** - Flat structure for simplicity
-- **HTTP handlers** - Standard net/http patterns
-- **Table-driven tests** - Go community best practice
+### Current (Phase 6)
+- **Chi router** - Production-grade HTTP router
+- **Embedded frontend** - React app served from Go binary via `embed` package
+- **JWT authentication** - Secure API with token-based auth
+- **TimescaleDB** - PostgreSQL with time-series extensions
+- **Multi-tenant** - Account-based data isolation
+- **Cache headers** - Optimized frontend asset caching
+
+### Frontend Integration (Phase 6)
+
+The backend embeds the built React frontend as a single deployable artifact:
+
+```
+backend/
+├── frontend.go           # Frontend serving logic
+├── frontend_test.go      # Cache header tests
+├── frontend/dist/        # Embedded React build (copied from ../frontend/dist)
+└── bin/trakrf           # Single binary with embedded frontend
+```
+
+**Routing Order**:
+1. Health checks (`/healthz`, `/readyz`, `/health`)
+2. Static assets (`/assets/*`, `/favicon.ico`, icons, manifest)
+3. API routes (`/api/v1/*` - protected by JWT)
+4. SPA catch-all (`/*` - serves index.html for React Router)
+
+**Cache Strategy**:
+- `index.html`: `no-cache, no-store, must-revalidate` (always fresh)
+- Hashed assets (`/assets/*`): `max-age=31536000, immutable` (1 year)
+- Other static files: `max-age=3600` (1 hour)
+
+**Build Process**:
+```bash
+# Automated (recommended)
+./scripts/build.sh
+
+# Manual
+cd frontend && pnpm build
+cp -r dist ../backend/frontend/
+cd ../backend && go build -o bin/trakrf .
+```
 
 ### Completed Phases
 - **Phase 2A**: ✅ HTTP server with health endpoints
 - **Phase 2B**: ✅ Docker integration (multi-stage Dockerfile, docker-compose, Air hot-reload)
 - **Phase 3**: ✅ Database migrations (golang-migrate, TimescaleDB schema, Just commands)
+- **Phase 4**: ✅ REST API framework (chi router, Phase 4A endpoints)
+- **Phase 5**: ✅ Authentication (JWT, auth middleware, signup/login)
+- **Phase 6**: ✅ Frontend integration (embedded React, SPA routing, cache headers)
 
 ### Future Phases
-- **Phase 4**: REST API framework (chi/fiber/echo)
-- **Phase 5**: Authentication (JWT, session management)
-- **Phase 6**: MQTT ingestion pipeline
+- **Phase 7**: Railway/GKE deployment
+- **Phase 8**: MQTT ingestion pipeline
 
 ## Database Migrations
 

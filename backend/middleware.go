@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -55,13 +56,26 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 }
 
 // corsMiddleware handles CORS headers
+// Configurable via BACKEND_CORS_ORIGIN env var (12-factor)
+// If not set, defaults to "*" for development compatibility
+// In production with same-origin frontend serving, CORS is not needed
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Make origin configurable via BACKEND_CORS_ORIGIN env var
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
-		w.Header().Set("Access-Control-Max-Age", "3600")
+		origin := os.Getenv("BACKEND_CORS_ORIGIN")
+		if origin == "" {
+			// Default to allow all origins (development mode)
+			origin = "*"
+		}
+
+		// Only apply CORS headers if configured
+		// In production serving frontend from same origin, this can be disabled
+		// by not setting BACKEND_CORS_ORIGIN
+		if origin != "disabled" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
+			w.Header().Set("Access-Control-Max-Age", "3600")
+		}
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)
