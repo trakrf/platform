@@ -58,7 +58,26 @@ func main() {
 	r.Use(corsMiddleware)
 	r.Use(contentTypeMiddleware)
 
-	// Register health check routes (K8s liveness/readiness)
+	// ============================================================================
+	// Frontend & Static Asset Routes
+	// ============================================================================
+	// IMPORTANT: Static assets must be registered BEFORE API routes to prevent
+	// the catch-all SPA handler from intercepting API requests
+
+	frontendHandler := serveFrontend()
+
+	// Static assets (public, no auth required)
+	// These are served directly from the embedded filesystem with long cache TTLs
+	r.Handle("/assets/*", frontendHandler)
+	r.Handle("/favicon.ico", frontendHandler)
+	r.Handle("/icon-*.png", frontendHandler) // All icon sizes
+	r.Handle("/logo.png", frontendHandler)
+	r.Handle("/manifest.json", frontendHandler)
+	r.Handle("/og-image.png", frontendHandler)
+
+	// ============================================================================
+	// Health Check Routes (K8s liveness/readiness)
+	// ============================================================================
 	r.Get("/healthz", healthzHandler)
 	r.Get("/readyz", readyzHandler)
 	r.Get("/health", healthHandler)
@@ -77,6 +96,15 @@ func main() {
 	})
 
 	slog.Info("Routes registered")
+
+	// ============================================================================
+	// SPA Catch-All Handler (must be LAST)
+	// ============================================================================
+	// Serve index.html for all remaining routes to enable React Router
+	// React will handle:
+	//   - Public routes: /, /login, /register (inventory without auth)
+	//   - Protected routes: /dashboard, /assets, /settings (redirects to login)
+	r.HandleFunc("/*", spaHandler)
 
 	// HTTP server with timeouts
 	server := &http.Server{

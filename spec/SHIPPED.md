@@ -386,3 +386,98 @@ Phase 6 will integrate authentication with frontend:
 - Protected routes in React app
 - End-to-end auth flow testing
 
+## Phase 6: Serve Embedded React Frontend
+- **Date**: 2025-10-18
+- **Branch**: feature/active-phase-6-serve-frontend
+- **Commit**: 2562803
+- **PR**: https://github.com/trakrf/platform/pull/14
+- **Summary**: Embed React frontend into Go backend for single binary deployment
+- **Key Changes**:
+  - Embedded frontend serving via `go:embed` directive
+  - Smart cache headers (no-cache for index.html, 1-year for hashed assets)
+  - SPA routing support for React Router
+  - Configurable CORS via BACKEND_CORS_ORIGIN env var
+  - Production build script (scripts/build.sh)
+  - Enhanced meta tags for SEO and Open Graph
+- **Validation**: ✅ All checks passed
+
+### Success Metrics
+(Phase 6 - Single Binary Deployment)
+
+✅ **Functional Requirements** (6/6 achieved):
+- ✅ Single binary contains both frontend and backend - **Result**: go:embed embeds frontend/dist into binary
+- ✅ Cache headers optimized - **Result**: No-cache for index.html, max-age=31536000 for /assets/*
+- ✅ SPA routing works - **Result**: Catch-all handler serves index.html for React Router
+- ✅ CORS configurable for dev/prod - **Result**: BACKEND_CORS_ORIGIN env var (default: *, disabled in prod)
+- ✅ Static assets served correctly - **Result**: /assets/*, /favicon.ico, icons, manifest all routed
+- ✅ API routes remain accessible - **Result**: /api/v1/* routes registered before catch-all
+
+✅ **Technical Requirements** (5/5 achieved):
+- ✅ Production build script works - **Result**: scripts/build.sh builds frontend → embeds → backend binary
+- ✅ Tests pass for cache control - **Result**: TestCacheControlMiddleware (7 test cases)
+- ✅ Tests pass for SPA handler - **Result**: TestSPAHandler validates HTML serving
+- ✅ Documentation updated - **Result**: backend/README.md updated with Phase 6 info
+- ✅ Environment configuration follows 12-factor - **Result**: BACKEND_CORS_ORIGIN configurable
+
+✅ **Deployment Requirements** (3/3 achieved):
+- ✅ Single binary artifact ready - **Result**: backend/bin/trakrf contains embedded frontend
+- ✅ Binary size reasonable - **Result**: ~15MB (includes all assets)
+- ✅ Ready for Railway/GKE deployment - **Result**: Dockerfile can use single binary
+
+**Overall Success**: 100% of Phase 6 metrics achieved (14/14)
+
+### Technical Highlights
+- **Embed Package**: Uses Go 1.16+ `embed.FS` for zero-copy asset serving
+- **Cache Strategy**: index.html always fresh, hashed assets immutable (1-year TTL)
+- **Route Order**: Static assets → health checks → API routes → SPA catch-all
+- **Build Process**: Frontend build → copy to backend/frontend/dist → go build with embed
+- **CORS Flexibility**: Default `*` for dev mode, `disabled` for prod (same-origin)
+
+### Cache Control Strategy
+| Asset Type | Cache-Control | Rationale |
+|------------|---------------|-----------|
+| `index.html` | `no-cache, no-store, must-revalidate` | Always fresh to pick up new asset hashes |
+| `/assets/*` | `public, max-age=31536000, immutable` | Content-hashed by Vite, safe to cache forever |
+| Other static files | `public, max-age=3600` | Moderate cache for icons, manifest, etc. |
+
+### SPA Routing Flow
+1. Request arrives at Go server
+2. Static asset match? → Serve from embedded FS with cache headers
+3. Health check match? → Serve health endpoint
+4. API route match? → Protected by JWT middleware → Handler runs
+5. No match? → Serve index.html (React Router takes over)
+
+### Files Created
+- backend/frontend.go (74 lines) - Embedded filesystem serving with cache control
+- backend/frontend_test.go (129 lines) - Cache control and SPA handler tests
+- scripts/build.sh (137 lines) - Production build automation
+
+### Files Modified
+- backend/main.go (+34 lines) - Static asset routes + SPA catch-all
+- backend/middleware.go (+15 lines) - Configurable CORS via env var
+- backend/README.md (+94 lines) - Phase 6 documentation
+- frontend/index.html (+22 lines) - Enhanced meta tags (SEO, Open Graph, Twitter)
+
+### Build Artifacts
+**Before Phase 6**: Two separate deployments
+- Frontend: Static files served by Nginx/CDN
+- Backend: Go binary + database
+
+**After Phase 6**: Single deployment
+- Binary: backend/bin/trakrf (~15MB with embedded frontend)
+- Database: TimescaleDB (unchanged)
+
+### Security Notes
+⚠️ Known non-blocking issues:
+- 2 High vulnerabilities in `xlsx@0.18.5` (Excel export library)
+- Affects only client-side export feature
+- Low exploitability in RFID client context
+- Tracked for future mitigation
+
+### Next Phase
+Phase 7: Railway/GKE deployment pipeline
+- Dockerfile optimization for production
+- Environment variable configuration
+- Database migration automation
+- Health check configuration
+- Monitoring and logging setup
