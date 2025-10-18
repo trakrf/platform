@@ -51,6 +51,9 @@ frontend-test:
 frontend-build:
     cd frontend && pnpm run build
 
+frontend-dev:
+    cd frontend && pnpm dev
+
 # Run all frontend checks
 frontend: frontend-lint frontend-typecheck frontend-test frontend-build
 

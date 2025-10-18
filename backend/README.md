@@ -67,8 +67,8 @@ backend/
 
 **Option 1: Using Just (recommended)**
 ```bash
-# Terminal 1: Frontend dev server
-cd frontend && pnpm dev  # http://localhost:5173
+# Terminal 1: Frontend dev server (from project root)
+just frontend-dev        # http://localhost:5173
 
 # Terminal 2: Backend server (from project root)
 just backend-run         # http://localhost:8080
