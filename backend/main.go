@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 var (
@@ -29,16 +31,45 @@ func main() {
 		port = "8080"
 	}
 
-	// Setup routes
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthzHandler) // K8s liveness
-	mux.HandleFunc("/readyz", readyzHandler)   // K8s readiness
-	mux.HandleFunc("/health", healthHandler)   // Human-friendly
+	// Initialize database connection pool
+	ctx := context.Background()
+	if err := initDB(ctx); err != nil {
+		slog.Error("Failed to initialize database", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("Database connection pool initialized")
+
+	// Initialize repositories
+	initAccountRepo()
+	initUserRepo()
+	initAccountUserRepo()
+	slog.Info("Repositories initialized")
+
+	// Setup chi router
+	r := chi.NewRouter()
+
+	// Apply middleware stack
+	r.Use(requestIDMiddleware)
+	r.Use(recoveryMiddleware)
+	r.Use(corsMiddleware)
+	r.Use(contentTypeMiddleware)
+
+	// Register health check routes (K8s liveness/readiness)
+	r.Get("/healthz", healthzHandler)
+	r.Get("/readyz", readyzHandler)
+	r.Get("/health", healthHandler)
+
+	// Register API routes
+	registerAccountRoutes(r)
+	registerUserRoutes(r)
+	registerAccountUserRoutes(r)
+
+	slog.Info("Routes registered")
 
 	// HTTP server with timeouts
 	server := &http.Server{
 		Addr:         ":" + port,
-		Handler:      loggingMiddleware(mux),
+		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -60,25 +91,16 @@ func main() {
 
 	// Graceful shutdown (Railway/K8s requirement)
 	slog.Info("Shutting down gracefully...")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Shutdown error", "error", err)
 	}
 
-	slog.Info("Server stopped")
-}
+	// Close database connection pool
+	closeDB()
+	slog.Info("Database connection pool closed")
 
-// loggingMiddleware wraps handler with request logging
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		slog.Info("Request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"duration", time.Since(start),
-		)
-	})
+	slog.Info("Server stopped")
 }
