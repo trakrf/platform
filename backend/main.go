@@ -45,6 +45,10 @@ func main() {
 	initAccountUserRepo()
 	slog.Info("Repositories initialized")
 
+	// Initialize authentication service
+	initAuthService()
+	slog.Info("Auth service initialized")
+
 	// Setup chi router
 	r := chi.NewRouter()
 
@@ -60,6 +64,7 @@ func main() {
 	r.Get("/health", healthHandler)
 
 	// Register API routes
+	registerAuthRoutes(r)
 	registerAccountRoutes(r)
 	registerUserRoutes(r)
 	registerAccountUserRoutes(r)
