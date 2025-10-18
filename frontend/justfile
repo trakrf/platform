@@ -1,0 +1,42 @@
+# Frontend Task Runner (TrakRF Platform)
+# Uses fallback to inherit shared recipes from root justfile
+set fallback := true
+
+# List all available recipes
+default:
+    @just --list
+
+# Start Vite development server
+dev:
+    pnpm dev
+
+# Lint frontend code (auto-fix enabled)
+lint:
+    pnpm run lint --fix
+
+# Run TypeScript type checking
+typecheck:
+    pnpm run typecheck
+
+# Run frontend unit tests
+test:
+    pnpm test
+
+# Run E2E tests (headless only)
+test-e2e:
+    pnpm test:e2e
+
+# Build frontend for production
+build:
+    pnpm run build
+
+# Run all frontend validation checks
+validate: lint typecheck test build
+
+# Install dependencies
+install:
+    pnpm install
+
+# Clean build artifacts
+clean:
+    rm -rf dist node_modules/.vite

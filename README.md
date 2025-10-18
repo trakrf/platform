@@ -82,9 +82,6 @@ curl localhost:8080/health    # Detailed health (JSON)
 
 # View logs
 just dev-logs
-
-# Access container shell for debugging
-just backend-shell
 ```
 
 **4. Stop services**
@@ -92,20 +89,56 @@ just backend-shell
 # Stop all services
 just dev-stop
 
-# Or stop individual services
-just backend-stop
+# Or stop database
 just db-down
 ```
 
-### Docker Commands
+### Development Workflow
 
-**Backend:**
+This project uses Just's delegation pattern for monorepo task management.
+
+**From project root (delegation syntax):**
 ```bash
-just backend-dev       # Start backend (requires db)
-just backend-stop      # Stop backend
-just backend-restart   # Restart backend
-just backend-shell     # Shell into backend container
+# Full stack
+just dev           # Docker-based (db + backend container + migrations)
+just dev-local     # Local parallel (frontend + backend dev servers)
+
+# Workspace-specific
+just frontend dev        # Start Vite dev server
+just backend dev         # Start Go server
+just frontend typecheck  # TypeScript type checking
+just backend test        # Run Go tests
+
+# Combined validation
+just lint        # Lint both workspaces
+just test        # Test both workspaces
+just build       # Build both workspaces
+just validate    # Full validation (lint + test + build)
 ```
+
+**From workspace directories (direct commands):**
+```bash
+# Backend development
+cd backend
+just dev           # Start Go server
+just test          # Run backend tests
+just validate      # Backend-only validation
+just db-up         # Database commands work via fallback
+
+# Frontend development
+cd frontend
+just dev           # Start Vite dev server
+just test          # Run frontend tests
+just typecheck     # TypeScript checking
+just validate      # Frontend-only validation
+```
+
+**How it works:**
+- **Delegation**: `just <workspace> <command>` from root → `cd <workspace> && just <command>`
+- **Fallback**: Workspace justfiles can call root recipes (db commands, etc.)
+- **Context-aware**: `just dev` does the right thing based on current directory
+
+### Docker Commands
 
 **Full Stack:**
 ```bash
@@ -144,42 +177,49 @@ Migrations run automatically on `just dev` startup. Manual migration commands ar
 If you have Go 1.25+ installed, you can run backend natively:
 
 ```bash
-# Run backend natively (outside Docker)
-just backend-run      # Starts at localhost:8080
+# Run backend natively (from backend/ directory)
+cd backend && just dev       # Starts at localhost:8080
 
-# Run validation
-just backend-lint     # Format + lint
-just backend-test     # Run tests
-just backend-build    # Build binary
-just backend          # All checks
+# Or use delegation from root
+just backend dev             # Starts at localhost:8080
+
+# Run validation (from root with delegation)
+just backend lint            # Format + lint
+just backend test            # Run tests
+just backend build           # Build binary
+just backend validate        # All checks
 ```
 
 **Note:** Docker is the recommended workflow. Native commands are available for those who prefer it.
 
 ### Validation
 
-Run validation checks:
+Run validation checks using the delegation pattern:
 ```bash
 # Full validation (lint, test, build)
 just validate
 
-# Individual checks
+# Combined checks across all workspaces
 just lint        # Lint backend + frontend
 just test        # Test backend + frontend
 just build       # Build backend + frontend
 
-# Backend-only validation (native)
-just backend           # Lint + test + build
-just backend-lint      # go fmt + go vet
-just backend-test      # go test
-just backend-build     # go build
+# Backend validation (delegation from root)
+just backend validate     # All backend checks
+just backend lint         # go fmt + go vet
+just backend test         # go test
+just backend build        # go build
 
-# Frontend-only validation
-just frontend           # Lint + typecheck + test + build
-just frontend-lint      # ESLint
-just frontend-typecheck # TypeScript
-just frontend-test      # Vitest unit tests
-just frontend-build     # Vite production build
+# Frontend validation (delegation from root)
+just frontend validate    # All frontend checks
+just frontend lint        # ESLint
+just frontend typecheck   # TypeScript
+just frontend test        # Vitest unit tests
+just frontend build       # Vite production build
+
+# Workspace-specific (from workspace directory)
+cd backend && just validate   # Backend-only validation
+cd frontend && just validate  # Frontend-only validation
 ```
 
 See `justfile` for all available commands.

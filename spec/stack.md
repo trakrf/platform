@@ -18,22 +18,24 @@ just validate
 ### From backend/ directory:
 ```bash
 # Lint
-go fmt ./...
-go vet ./...
+just lint      # or: go fmt ./... && go vet ./...
 
 # Test
-go test ./...
+just test      # or: go test ./...
 
 # Build
-go build ./...
+just build     # or: go build ./...
+
+# All checks
+just validate
 ```
 
-### From project root (via Just):
+### From project root (via Just delegation):
 ```bash
-just backend-lint
-just backend-test
-just backend-build
-just backend  # All backend checks
+just backend lint
+just backend test
+just backend build
+just backend validate  # All backend checks
 ```
 
 ## Frontend (React + TypeScript)
@@ -43,25 +45,28 @@ just backend  # All backend checks
 ### From frontend/ directory:
 ```bash
 # Lint
-pnpm run lint --fix
+just lint       # or: pnpm run lint --fix
 
 # Typecheck
-pnpm run typecheck
+just typecheck  # or: pnpm run typecheck
 
 # Test
-pnpm test
+just test       # or: pnpm test
 
 # Build
-pnpm run build
+just build      # or: pnpm run build
+
+# All checks
+just validate
 ```
 
-### From project root (via Just):
+### From project root (via Just delegation):
 ```bash
-just frontend-lint
-just frontend-typecheck
-just frontend-test
-just frontend-build
-just frontend  # All frontend checks
+just frontend lint
+just frontend typecheck
+just frontend test
+just frontend build
+just frontend validate  # All frontend checks
 ```
 
 ## Full Stack Validation

@@ -13,6 +13,144 @@ This file provides guidance to Claude when working with code in this repository.
 - Replace ALL instances of `npm` with `pnpm`
 - Replace ALL instances of `npx` with `pnpm dlx`
 
+## 🔧 CRITICAL: Justfile Structure (Delegation + Fallback Pattern)
+
+**Just Task Runner with Delegation Pattern**
+
+This project uses Just's delegation pattern for monorepo task management:
+
+### Structure
+```
+platform/
+├── justfile                 # Root orchestration (~60 lines)
+│                           # - Delegation: frontend *args, backend *args
+│                           # - Orchestration: dev, db-*, docker commands
+│                           # - Combined: lint, test, build, validate
+├── backend/justfile         # Backend-specific (~35 lines)
+│                           # - set fallback := true
+│                           # - Unqualified: dev, lint, test, build
+└── frontend/justfile        # Frontend-specific (~40 lines)
+                            # - set fallback := true
+                            # - Unqualified: dev, lint, typecheck, test, build
+```
+
+### How It Works: Delegation + Fallback
+
+**Delegation** (root → workspace):
+```just
+# Root justfile
+frontend *args:
+    cd frontend && just {{args}}
+
+backend *args:
+    cd backend && just {{args}}
+```
+
+**Fallback** (workspace → root):
+```just
+# frontend/justfile
+set fallback := true
+
+# This enables calling root recipes like:
+# just db-up (falls back to root justfile)
+```
+
+### Command Patterns
+
+**From project root (delegation syntax):**
+```bash
+just frontend dev        # Delegates to: cd frontend && just dev
+just backend lint        # Delegates to: cd backend && just lint
+just backend test        # Delegates to: cd backend && just test
+```
+
+**From workspace directory (direct + fallback):**
+```bash
+cd backend
+just dev                 # Runs local backend/justfile recipe
+just db-up               # Falls back to root justfile recipe
+just validate            # Runs local backend/justfile recipe
+```
+
+**Combined commands (orchestration):**
+```bash
+just lint                # Runs: just frontend lint && just backend lint
+just test                # Runs: just frontend test && just backend test
+just validate            # Runs: lint + test + build for both workspaces
+```
+
+### Mental Model
+
+**Root justfile** = Orchestra conductor
+- Delegates to workspaces: `just <workspace> <command>`
+- Orchestrates Docker/database: `just dev`, `just db-up`
+- Combines workspace commands: `just lint`, `just validate`
+
+**Workspace justfiles** = Musicians
+- Define unqualified commands: `dev`, `lint`, `test`, `build`
+- Can call root recipes via fallback: `db-up`, `validate`
+- Override root recipes if same name exists locally
+
+### When Modifying Justfiles
+
+**Adding workspace-specific command**:
+1. Add to `backend/justfile` or `frontend/justfile` with unqualified name
+2. Test from workspace: `cd backend && just new-command`
+3. Test from root: `just backend new-command`
+
+**Adding orchestration command**:
+1. Add to root `justfile`
+2. Automatically available from all directories
+3. If needs workspace commands, use delegation: `(frontend "cmd")`
+
+**Adding combined command**:
+1. Add to root `justfile` using delegation syntax
+2. Example: `my-check: (frontend "typecheck") (backend "test")`
+
+### Command Syntax Summary
+
+| Location | Syntax | Result |
+|----------|--------|--------|
+| Root | `just frontend dev` | Delegates to frontend workspace |
+| Root | `just backend lint` | Delegates to backend workspace |
+| Root | `just lint` | Runs both frontend and backend lint |
+| Root | `just dev` | Docker orchestration |
+| Root | `just dev-local` | Parallel local dev servers |
+| Workspace | `just dev` | Runs local dev command |
+| Workspace | `just db-up` | Falls back to root recipe |
+| Workspace | `just validate` | Runs local validate command |
+
+### Breaking Changes from Old Pattern
+
+**Old syntax** (removed):
+```bash
+just frontend-dev        # ❌ No longer exists
+just backend-lint        # ❌ No longer exists
+just backend-test        # ❌ No longer exists
+```
+
+**New syntax** (delegation):
+```bash
+just frontend dev        # ✅ Space instead of hyphen
+just backend lint        # ✅ Space instead of hyphen
+just backend test        # ✅ Space instead of hyphen
+```
+
+**Same character count, just s/-/ /**
+
+### Why This Pattern?
+
+1. **Single Source of Truth**: Workspace commands only in workspace justfiles
+2. **Smaller Root**: ~60 lines (down from 145) - orchestration only
+3. **Clearer Separation**: Root = conductor, workspaces = musicians
+4. **More Maintainable**: Add workspace command = edit workspace file only
+5. **Scalable**: Add third workspace = one delegation line in root
+
+**References**:
+- Stuart Ellis - Just Monorepo: https://www.stuartellis.name/articles/just-task-runner/#multiple-justfiles-in-a-directory-structure
+- Just Manual - Fallback: https://just.systems/man/en/chapter_46.html
+- Just Manual - Parameters: https://just.systems/man/en/chapter_21.html
+
 ## 🚨 CRITICAL: Git Workflow Rules
 
 **NEVER PUSH DIRECTLY TO MAIN BRANCH**
