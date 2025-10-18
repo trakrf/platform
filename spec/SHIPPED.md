@@ -187,3 +187,89 @@ Phase 5B will build on these utilities:
 - Auth middleware (Protect existing REST API routes with JWT validation)
 - UserRepository.GetByEmail() method
 - Integration testing of full auth flow
+
+## Phase 5B: Authentication Endpoints
+- **Date**: 2025-10-18
+- **Branch**: feature/active-phase-5b-auth-endpoints
+- **Commit**: 8ba074e
+- **PR**: https://github.com/trakrf/platform/pull/12
+- **Summary**: Add signup and login endpoints using Phase 5A utilities
+- **Key Changes**:
+  - Auth service (auth_service.go) - Business logic for signup and login
+  - Auth handlers (auth.go) - HTTP endpoints for POST /api/v1/auth/signup and /api/v1/auth/login
+  - Auth tests (auth_test.go) - Unit tests for validation and slugification
+  - UserRepository.GetByEmail() method for login authentication
+  - Service layer pattern (first service in codebase)
+  - pgx transaction pattern for atomic multi-table operations
+  - Account domain slugification for MQTT topic routing
+- **Validation**: ✅ All checks passed (35 tests passing, 10 skipped integration)
+
+### Success Metrics
+(From spec.md - Phase 5B endpoints only, middleware deferred to Phase 5C)
+
+✅ **Functional** (7/7 achieved):
+- ✅ Users can signup via POST /api/v1/auth/signup - **Result**: Implemented with atomic transaction
+- ✅ Users can login via POST /api/v1/auth/login - **Result**: Implemented with credential validation
+- ✅ Both endpoints return JWT tokens - **Result**: Using Phase 5A GenerateJWT() with account context
+- ✅ Duplicate email returns 409 Conflict - **Result**: Database constraint handling implemented
+- ✅ Invalid credentials return 401 Unauthorized - **Result**: Generic error messages prevent enumeration
+- ✅ Account created atomically with user - **Result**: pgx transaction across 3 tables (users, accounts, account_users)
+- ✅ Account domain slug generated from name - **Result**: "My Company" → "my-company" for MQTT routing
+
+✅ **Technical** (6/6 achieved):
+- ✅ Password hashed with bcrypt - **Result**: Using Phase 5A HashPassword (cost 10)
+- ✅ Password hash never exposed in JSON - **Result**: User struct has `json:"-"` tag verified
+- ✅ JWT includes current_account_id - **Result**: Lookup from account_users table (1:1 for MVP)
+- ✅ Transaction rollback safety - **Result**: defer tx.Rollback() pattern implemented
+- ✅ Generic error messages for security - **Result**: "Invalid email or password" prevents enumeration
+- ✅ All validation gates passing - **Result**: go fmt, go vet, go test, go build all clean
+
+✅ **Testing** (4/4 achieved):
+- ✅ Slug generation tested (6 edge cases) - **Result**: TestSlugifyAccountName covers special chars, spaces, etc.
+- ✅ Signup validation tested (5 scenarios) - **Result**: TestSignup_ValidationErrors covers all failure modes
+- ✅ Login validation tested (4 scenarios) - **Result**: TestLogin_ValidationErrors covers all failure modes
+- ✅ Password hashing integration verified - **Result**: TestPasswordHashing verifies correct/incorrect passwords
+
+**Overall Success**: 100% of Phase 5B metrics achieved (17/17)
+
+### Technical Highlights
+- Service layer pattern introduced for business logic separation
+- pgx transactions for atomic 3-table insert (user + account + account_users)
+- Account domain slugification uses regex to sanitize names for MQTT topics
+- Generic error messages prevent email enumeration attacks
+- Table-driven tests follow Go best practices
+- No breaking changes (endpoints are additive)
+- Existing API still unprotected (by design - Phase 5C adds middleware)
+
+### New Patterns Introduced
+- **Service Layer**: First service in codebase (AuthService separates business logic from handlers)
+- **pgx Transactions**: `db.Begin(ctx)` → `tx.Commit()` with `defer tx.Rollback()` safety
+- **Account Slugification**: Converts display names to URL-safe slugs for MQTT routing
+
+### Security Features
+- bcrypt password hashing (cost 10, matches Next.js implementation)
+- Password hash excluded from JSON responses (`json:"-"` tag on User.PasswordHash)
+- Generic login errors ("Invalid email or password") prevent email enumeration
+- Input validation on all request fields (go-playground/validator)
+- JWT tokens signed with HS256 (Phase 5A utilities)
+
+### API Endpoints Added
+**Total: 2 new endpoints**
+- POST /api/v1/auth/signup - Create user + account, return JWT
+- POST /api/v1/auth/login - Authenticate user, return JWT
+
+### Files Created
+- backend/auth_service.go (200 lines) - Service layer with Signup/Login business logic
+- backend/auth.go (82 lines) - HTTP handlers for signup/login endpoints
+- backend/auth_test.go (108 lines) - Unit tests for validation and slugification
+
+### Files Modified
+- backend/users.go (+22 lines) - Added GetByEmail() method for login
+- backend/main.go (+5 lines) - Wired auth service and routes
+
+### Next Phase
+Phase 5C will complete authentication system:
+- Auth middleware (extract and validate JWT from Authorization header)
+- Protected routes (apply middleware to all Phase 4A endpoints)
+- Integration tests (full signup → login → access protected endpoint flow)
+- Context injection (make authenticated user available to handlers)
