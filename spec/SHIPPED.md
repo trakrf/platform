@@ -131,3 +131,59 @@ Phase 5 will add authentication layer:
 - Protected routes with auth middleware
 - User login/logout endpoints
 - Token refresh mechanism
+
+## Phase 5A: Authentication Utilities (Foundation)
+- **Date**: 2025-10-18
+- **Branch**: feature/active-phase-5-authentication
+- **Commit**: 0ae42ea
+- **PR**: https://github.com/trakrf/platform/pull/11
+- **Summary**: Add foundational authentication utilities (JWT generation/validation and bcrypt password hashing)
+- **Key Changes**:
+  - JWT utilities (jwt.go) - Token generation with 1-hour expiration
+  - JWT unit tests (jwt_test.go) - 8 test cases for generation/validation/expiration
+  - Password utilities (password.go) - bcrypt hashing with cost factor 10
+  - Password unit tests (password_test.go) - 3 test cases for hashing/comparison
+  - Dependencies added: github.com/golang-jwt/jwt/v5 and golang.org/x/crypto/bcrypt
+  - Environment configuration: JWT_SECRET in .env.example
+  - Docker integration: JWT_SECRET passed to backend container
+- **Validation**: ✅ All checks passed (lint, test, build)
+
+### Success Metrics
+(From spec.md - Phase 5A foundational utilities only)
+
+✅ **Foundational Utilities** (7/7 achieved):
+- ✅ Password hashing with bcrypt (cost factor 10) - **Result**: HashPassword() and ComparePassword() implemented
+- ✅ JWT generation works - **Result**: GenerateJWT() creates signed tokens with user claims
+- ✅ JWT validation works - **Result**: ValidateJWT() verifies signature and expiration
+- ✅ JWT includes user_id, email, current_account_id in claims - **Result**: JWTClaims struct with all fields
+- ✅ JWT expiration enforced (1 hour) - **Result**: RegisteredClaims with ExpiresAt set to 1 hour
+- ✅ JWT signed with secret from environment - **Result**: getJWTSecret() reads JWT_SECRET env var
+- ✅ All utility tests passing - **Result**: 11/11 tests passing (8 JWT + 3 password)
+
+**Overall Success**: 100% of foundational metrics achieved
+
+### Technical Highlights
+- Pure utility functions with no side effects (safe to merge without runtime impact)
+- JWT claims structure: UserID (int), Email (string), CurrentAccountID (*int)
+- Password cost factor matches Next.js implementation (bcrypt cost 10)
+- Development default for JWT_SECRET warns to change in production
+- No breaking changes - no modifications to existing endpoints
+
+### Files Created
+- backend/jwt.go (59 lines) - JWT generation and validation
+- backend/jwt_test.go (95 lines) - JWT unit tests
+- backend/password.go (18 lines) - bcrypt password utilities
+- backend/password_test.go (39 lines) - password unit tests
+
+### Files Modified
+- backend/go.mod, backend/go.sum - Added jwt and bcrypt dependencies
+- .env.example - Added JWT_SECRET configuration
+- docker-compose.yaml - Pass JWT_SECRET to backend container
+
+### Next Phase
+Phase 5B will build on these utilities:
+- Auth service (Login and Signup business logic)
+- Auth handlers (HTTP endpoints for /api/v1/auth/login and /api/v1/auth/signup)
+- Auth middleware (Protect existing REST API routes with JWT validation)
+- UserRepository.GetByEmail() method
+- Integration testing of full auth flow
