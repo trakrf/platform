@@ -65,6 +65,17 @@ backend/
 
 #### Development Mode (with hot reload)
 
+**Option 1: Using Just (recommended)**
+```bash
+# Terminal 1: Frontend dev server
+cd frontend && pnpm dev  # http://localhost:5173
+
+# Terminal 2: Backend server (from project root)
+just backend-run         # http://localhost:8080
+# CORS enabled automatically for frontend dev
+```
+
+**Option 2: Manual**
 ```bash
 # Terminal 1: Frontend dev server
 cd frontend && pnpm dev  # http://localhost:5173
@@ -76,9 +87,20 @@ cd backend && go run .   # http://localhost:8080
 
 #### Production Mode (integrated)
 
+**Option 1: Using build script (recommended)**
 ```bash
-# Build everything
+# Build everything (frontend + backend)
 ./scripts/build.sh
+
+# Run integrated server
+cd backend && ./bin/trakrf
+# Full app on http://localhost:8080
+```
+
+**Option 2: Using Just**
+```bash
+# Build and validate everything
+just build
 
 # Run integrated server
 cd backend && ./bin/trakrf
