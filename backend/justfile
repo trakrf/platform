@@ -51,19 +51,26 @@ build:
 
 # Smoke test - verifies binary starts without panic (uses PG_URL_LOCAL for host → docker)
 smoke-test:
-    @echo "🔥 Running smoke test..."
-    @just build
-    @echo "Starting server with 5s timeout..."
-    @if [ -n "$$PG_URL_LOCAL" ]; then \
-        PG_URL="$$PG_URL_LOCAL" timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$$! ; \
-    else \
-        timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$$! ; \
-    fi ; \
-    sleep 2 ; \
-    echo "Testing /healthz endpoint..." ; \
-    curl -f http://localhost:8080/healthz > /dev/null 2>&1 || (echo "❌ Smoke test failed" && cat /tmp/trakrf-smoke.log && exit 1) ; \
-    kill $$SERVER_PID 2>/dev/null || true ; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🔥 Running smoke test..."
+    just build
+    echo "Starting server with 5s timeout..."
+    if [ -n "${PG_URL_LOCAL:-}" ]; then
+    export PG_URL="$PG_URL_LOCAL"
+    fi
+    timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$!
+    sleep 2
+    echo "Testing /healthz endpoint..."
+    if curl -f http://localhost:8080/healthz > /dev/null 2>&1; then
     echo "✅ Smoke test passed"
+    kill $SERVER_PID 2>/dev/null || true
+    else
+    echo "❌ Smoke test failed"
+    cat /tmp/trakrf-smoke.log
+    kill $SERVER_PID 2>/dev/null || true
+    exit 1
+    fi
 
 # Run all backend validation checks
 validate: lint test build smoke-test
