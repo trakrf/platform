@@ -89,6 +89,10 @@ db-logs:
 db-shell:
     docker compose exec timescaledb psql -U postgres -d postgres
 
+# Interactive psql shell
+psql:
+    docker compose exec -it timescaledb psql -U postgres
+
 db-reset:
     @echo "⚠️  This will delete all data. Press Ctrl+C to cancel."
     @sleep 3

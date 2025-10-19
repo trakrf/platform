@@ -166,3 +166,4 @@ spec/active/*/log.md
 
 # CSW symlink (local installation)
 spec/csw
+tmp-pg/

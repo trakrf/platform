@@ -6,9 +6,24 @@ set fallback := true
 default:
     @just --list
 
-# Start Go development server
+# Start Go development server (local mode: backend on host → postgres in docker)
 dev:
-    go run .
+    @echo "🚀 Backend on host → postgres in docker (localhost:5432)"
+    @if [ -z "$$PG_URL_LOCAL" ]; then \
+        echo "⚠️  PG_URL_LOCAL not set - using PG_URL"; \
+        go run .; \
+    else \
+        PG_URL="$$PG_URL_LOCAL" go run .; \
+    fi
+
+# Cloud development (backend on host → postgres in cloud)
+dev-cloud:
+    @echo "☁️  Backend on host → cloud postgres"
+    @if [ -z "$$PG_URL_CLOUD" ]; then \
+        echo "❌ PG_URL_CLOUD not set in .env.local"; \
+        exit 1; \
+    fi
+    PG_URL="$$PG_URL_CLOUD" go run .
 
 # Alias for consistency
 run: dev
@@ -34,8 +49,20 @@ test-coverage:
 build:
     go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
 
+# Smoke test - verifies binary starts without panic
+smoke-test:
+    @echo "🔥 Running smoke test..."
+    @just build
+    @echo "Starting server with 5s timeout..."
+    @timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$$! ; \
+    sleep 2 ; \
+    echo "Testing /healthz endpoint..." ; \
+    curl -f http://localhost:8080/healthz > /dev/null 2>&1 || (echo "❌ Smoke test failed" && cat /tmp/trakrf-smoke.log && exit 1) ; \
+    kill $$SERVER_PID 2>/dev/null || true ; \
+    echo "✅ Smoke test passed"
+
 # Run all backend validation checks
-validate: lint test build
+validate: lint test build smoke-test
 
 # Shell access
 shell:
