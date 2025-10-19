@@ -6,6 +6,23 @@
 > **Frontend**: React + TypeScript + Vite
 > **Database**: TimescaleDB (PostgreSQL extension)
 
+## ⚠️ DEVELOPMENT MODE - NO BACKWARD COMPATIBILITY
+
+**This project is in active development with ZERO production deployments.**
+
+**Critical rules for AI agents and developers:**
+- ❌ **NO backward compatibility required** - We have no users, no deployments, no legacy data
+- ❌ **NO migration paths needed** - Breaking changes are acceptable and encouraged if they improve the codebase
+- ❌ **NO deprecation warnings** - Just delete old code and move forward
+- ✅ **DO break things to make them better** - Refactor aggressively, change APIs freely
+- ✅ **DO simplify without guilt** - If a feature is speculative or unused, delete it
+- ✅ **DO focus on getting it right** - Not on maintaining compatibility with nothing
+
+**When this changes:**
+- First production deployment → Update this section
+- Real users → Start thinking about migrations
+- Until then → Move fast and break things
+
 ## Quick Validation
 
 From project root:
