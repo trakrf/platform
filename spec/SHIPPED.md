@@ -618,3 +618,77 @@ Same character count, just `s/-/ /` (hyphen → space).
 
 ### Next Phase
 Phase 7: Railway/GKE deployment pipeline with single binary artifact
+
+## Testable Router Setup with Dev Workflow Commands
+- **Date**: 2025-10-19
+- **Branch**: feat/testable-startup-optional-db
+- **Commit**: 3cd0188
+- **PR**: https://github.com/trakrf/platform/pull/16
+- **Summary**: Extract router setup into testable function and add development workflow commands for multiple deployment modes (Phase 1 of 2)
+- **Key Changes**:
+  - Extracted `setupRouter()` from `main()` for unit testing
+  - Added router unit tests (TestRouterSetup, TestRouterRegistration)
+  - Fixed route registration bug: invalid wildcard pattern `/icon-*.png` → `/icon-*`
+  - Added `just backend dev`, `just backend dev-cloud`, `just backend smoke-test` commands
+  - Updated `validate` recipe to include smoke-test
+  - Added `sslmode=disable` to local database connection strings
+  - Made PG_URL_LOCAL explicit (no bash substitution magic)
+  - Added `tmp-pg/` to `.gitignore`
+  - Added `psql` command to root justfile for quick database access
+- **Validation**: ✅ All checks passed (lint, test, build)
+
+### Success Metrics
+(From spec.md - Phase 1: Testable Router + Dev Workflow)
+
+✅ **Unit Tests** (3/3 achieved):
+- ✅ `TestRouterSetup` passes without panic - **Result**: Test catches route registration panics before deployment
+- ✅ `TestRouterRegistration` verifies all critical routes exist - **Result**: 10 critical routes verified (health, auth, API, frontend)
+- ✅ Tests run in < 1 second (fast feedback) - **Result**: Tests complete in 0.004s
+
+✅ **CI Pipeline** (3/3 achieved):
+- ✅ `just backend validate` includes smoke test - **Result**: Validate recipe updated to include smoke-test
+- ✅ Smoke test catches route panics before merge - **Result**: Binary starts successfully without panic
+- ✅ Build succeeds, binary runs without panic - **Result**: 21MB binary builds and runs cleanly
+
+✅ **Backend Justfile** (3/3 achieved):
+- ✅ `just backend dev` runs with `PG_URL_LOCAL` (host → docker) - **Result**: Fallback to PG_URL if PG_URL_LOCAL not set
+- ✅ `just backend dev-cloud` runs with `PG_URL_CLOUD` (host → cloud) - **Result**: Validates PG_URL_CLOUD exists, fails gracefully if missing
+- ✅ Commands are self-documenting with echo statements - **Result**: Clear emoji-prefixed messages explain each mode
+
+✅ **Environment Configuration** (4/4 achieved):
+- ✅ `.env.local` updated with explicit `PG_URL_LOCAL` - **Result**: No bash substitution, explicit connection string
+- ✅ `.env.local.example` updated to match - **Result**: Developer onboarding clear with explicit values
+- ✅ Three deployment modes documented - **Result**: Comments explain container/host-docker/host-cloud modes
+- ✅ SSL mode configured correctly - **Result**: `sslmode=disable` for local, `sslmode=require` for cloud
+
+**Overall Success**: 100% of Phase 1 metrics achieved (13/13)
+
+### Technical Highlights
+- **Test-Driven Bug Fix**: New tests caught a real production bug! Invalid wildcard route `/icon-*.png` would have caused runtime panic
+- **Testable Architecture**: Router setup extracted into pure function, separated from `main()` lifecycle
+- **Development Flexibility**: Explicit deployment modes support docker, localhost, and cloud databases
+- **No Magic**: Removed bash parameter expansion attempt, made PG_URL_LOCAL explicit for developer clarity
+- **CI Integration**: Smoke test validates binary starts without panic (requires database in CI environment)
+
+### Files Created
+- backend/main_test.go (64 lines) - Router setup and registration tests
+
+### Files Modified
+- backend/main.go (+59 lines, -56 lines) - Extracted `setupRouter()`, fixed `/icon-*` route
+- backend/justfile (+27 lines) - Added dev, dev-cloud, smoke-test commands
+- justfile (+4 lines) - Added `psql` command for quick database access
+- .env.local (+1 line) - Added explicit `PG_URL_LOCAL` with `sslmode=disable`
+- .env.local.example (+1 line) - Added `PG_URL_LOCAL` with developer instructions
+- .envrc (removed bash substitution attempt)
+- .gitignore (+1 line) - Added `tmp-pg/`
+
+### Phase Status
+**Phase 1 Complete**: ✅ Testable Router + Dev Workflow
+**Phase 2 Pending**: Self-healing database connection (start HTTP first, background DB retry)
+
+### Next Phase
+Phase 2 will add self-healing connection:
+- HTTP server starts immediately (frontend always accessible)
+- Database connection with automatic retry (exponential backoff)
+- Natural DB errors for API calls during connection (acceptable for dev/exception case)
+- No degraded mode complexity (HTTP works, DB errors are natural)
