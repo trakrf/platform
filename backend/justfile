@@ -54,7 +54,11 @@ smoke-test:
     @echo "🔥 Running smoke test..."
     @just build
     @echo "Starting server with 5s timeout..."
-    @PG_URL=$${PG_URL_LOCAL:-$$PG_URL} timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$$! ; \
+    @if [ -n "$$PG_URL_LOCAL" ]; then \
+        PG_URL="$$PG_URL_LOCAL" timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$$! ; \
+    else \
+        timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$$! ; \
+    fi ; \
     sleep 2 ; \
     echo "Testing /healthz endpoint..." ; \
     curl -f http://localhost:8080/healthz > /dev/null 2>&1 || (echo "❌ Smoke test failed" && cat /tmp/trakrf-smoke.log && exit 1) ; \
