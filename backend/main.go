@@ -17,6 +17,66 @@ var (
 	startTime time.Time
 )
 
+// setupRouter creates and configures the chi router with all middleware and routes
+// Extracted for testability - panics during route registration are caught by tests
+func setupRouter() *chi.Mux {
+	r := chi.NewRouter()
+
+	// Apply middleware stack
+	r.Use(requestIDMiddleware)
+	r.Use(recoveryMiddleware)
+	r.Use(corsMiddleware)
+	r.Use(contentTypeMiddleware)
+
+	// ========================================================================
+	// Frontend & Static Asset Routes
+	// ========================================================================
+	// IMPORTANT: Static assets must be registered BEFORE API routes to prevent
+	// the catch-all SPA handler from intercepting API requests
+
+	frontendHandler := serveFrontend()
+
+	// Static assets (public, no auth required)
+	// These are served directly from the embedded filesystem with long cache TTLs
+	r.Handle("/assets/*", frontendHandler)
+	r.Handle("/favicon.ico", frontendHandler)
+	r.Handle("/icon-*", frontendHandler) // All icon sizes (icon-192x192.png, icon-512x512.png, etc.)
+	r.Handle("/logo.png", frontendHandler)
+	r.Handle("/manifest.json", frontendHandler)
+	r.Handle("/og-image.png", frontendHandler)
+
+	// ========================================================================
+	// Health Check Routes (K8s liveness/readiness)
+	// ========================================================================
+	r.Get("/healthz", healthzHandler)
+	r.Get("/readyz", readyzHandler)
+	r.Get("/health", healthHandler)
+
+	// Register API routes
+	// Public endpoints (no auth required)
+	registerAuthRoutes(r) // POST /api/v1/auth/signup, /api/v1/auth/login
+
+	// Protected endpoints (require valid JWT)
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware) // Apply auth middleware to this group
+
+		registerAccountRoutes(r)     // All /api/v1/accounts/* routes
+		registerUserRoutes(r)        // All /api/v1/users/* routes
+		registerAccountUserRoutes(r) // All /api/v1/account_users/* routes
+	})
+
+	// ========================================================================
+	// SPA Catch-All Handler (must be LAST)
+	// ========================================================================
+	// Serve index.html for all remaining routes to enable React Router
+	// React will handle:
+	//   - Public routes: /, /login, /register (inventory without auth)
+	//   - Protected routes: /dashboard, /assets, /settings (redirects to login)
+	r.HandleFunc("/*", spaHandler)
+
+	return r
+}
+
 func main() {
 	startTime = time.Now()
 	// Setup structured JSON logging to stdout (12-factor)
@@ -49,62 +109,9 @@ func main() {
 	initAuthService()
 	slog.Info("Auth service initialized")
 
-	// Setup chi router
-	r := chi.NewRouter()
-
-	// Apply middleware stack
-	r.Use(requestIDMiddleware)
-	r.Use(recoveryMiddleware)
-	r.Use(corsMiddleware)
-	r.Use(contentTypeMiddleware)
-
-	// ============================================================================
-	// Frontend & Static Asset Routes
-	// ============================================================================
-	// IMPORTANT: Static assets must be registered BEFORE API routes to prevent
-	// the catch-all SPA handler from intercepting API requests
-
-	frontendHandler := serveFrontend()
-
-	// Static assets (public, no auth required)
-	// These are served directly from the embedded filesystem with long cache TTLs
-	r.Handle("/assets/*", frontendHandler)
-	r.Handle("/favicon.ico", frontendHandler)
-	r.Handle("/icon-*.png", frontendHandler) // All icon sizes
-	r.Handle("/logo.png", frontendHandler)
-	r.Handle("/manifest.json", frontendHandler)
-	r.Handle("/og-image.png", frontendHandler)
-
-	// ============================================================================
-	// Health Check Routes (K8s liveness/readiness)
-	// ============================================================================
-	r.Get("/healthz", healthzHandler)
-	r.Get("/readyz", readyzHandler)
-	r.Get("/health", healthHandler)
-
-	// Register API routes
-	// Public endpoints (no auth required)
-	registerAuthRoutes(r) // POST /api/v1/auth/signup, /api/v1/auth/login
-
-	// Protected endpoints (require valid JWT)
-	r.Group(func(r chi.Router) {
-		r.Use(authMiddleware) // Apply auth middleware to this group
-
-		registerAccountRoutes(r)     // All /api/v1/accounts/* routes
-		registerUserRoutes(r)        // All /api/v1/users/* routes
-		registerAccountUserRoutes(r) // All /api/v1/account_users/* routes
-	})
-
+	// Setup chi router (extracted for testability)
+	r := setupRouter()
 	slog.Info("Routes registered")
-
-	// ============================================================================
-	// SPA Catch-All Handler (must be LAST)
-	// ============================================================================
-	// Serve index.html for all remaining routes to enable React Router
-	// React will handle:
-	//   - Public routes: /, /login, /register (inventory without auth)
-	//   - Protected routes: /dashboard, /assets, /settings (redirects to login)
-	r.HandleFunc("/*", spaHandler)
 
 	// HTTP server with timeouts
 	server := &http.Server{
