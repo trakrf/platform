@@ -535,18 +535,8 @@ backend/
 ```
 
 ### Migration Strategy
-1. **Phase 1**: Extract and test router setup + dev commands (non-breaking)
+1. **Phase 1**: Extract and test router setup + dev commands
 2. **Phase 2**: Add self-healing connection (start HTTP first, background DB retry)
-
-### Backwards Compatibility
-- **Breaking**: Service no longer exits on database failure
-- **Migration path**: Update deployment checks to use `/readyz` not `/healthz`
-- **Kubernetes**: Update readinessProbe to tolerate 503 during startup
-
-### Performance Considerations
-- Reconnection loop uses minimal resources (sleep-based)
-- `atomic.Bool` for lock-free status checks
-- No performance impact on hot path
 
 ## Conversation References
 
