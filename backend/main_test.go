@@ -2,51 +2,63 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
+	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
+	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
+	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
+	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
+	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	authservice "github.com/trakrf/platform/backend/internal/services/auth"
+	"github.com/trakrf/platform/backend/internal/storage"
 )
 
-// TestRouterSetup verifies router can be created without panic
-// This catches route registration errors (e.g., invalid wildcard patterns)
-// before they reach production
+func setupTestRouter(t *testing.T) *chi.Mux {
+	t.Helper()
+
+	store := &storage.Storage{}
+	authSvc := authservice.NewService(nil, store)
+
+	authHandler := authhandler.NewHandler(authSvc)
+	accountsHandler := accountshandler.NewHandler(store)
+	usersHandler := usershandler.NewHandler(store)
+	accountUsersHandler := accountusershandler.NewHandler(store)
+	healthHandler := healthhandler.NewHandler(nil, "test", time.Now())
+	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
+
+	return setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, healthHandler, frontendHandler)
+}
+
 func TestRouterSetup(t *testing.T) {
-	// This will panic if route registration fails
-	// (e.g., "wildcard '*' must be the last value in a route")
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("setupRouter panicked: %v", r)
 		}
 	}()
 
-	r := setupRouter()
+	r := setupTestRouter(t)
 
 	if r == nil {
 		t.Fatal("setupRouter returned nil")
 	}
 }
 
-// TestRouterRegistration verifies critical routes are registered
 func TestRouterRegistration(t *testing.T) {
-	r := setupRouter()
+	r := setupTestRouter(t)
 
 	tests := []struct {
 		method string
 		path   string
 	}{
-		// Health endpoints
 		{"GET", "/healthz"},
 		{"GET", "/readyz"},
 		{"GET", "/health"},
-
-		// Auth endpoints
 		{"POST", "/api/v1/auth/signup"},
 		{"POST", "/api/v1/auth/login"},
-
-		// Protected endpoints (will fail auth, but route should exist)
 		{"GET", "/api/v1/accounts"},
 		{"GET", "/api/v1/users"},
-
-		// Frontend routes
 		{"GET", "/assets/index.js"},
 		{"GET", "/favicon.ico"},
 		{"GET", "/"},

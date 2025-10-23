@@ -22,6 +22,7 @@ services:
     build:
       context: ./backend
       target: development
+      network: host
     container_name: backend
     ports:
       - "8080:8080"

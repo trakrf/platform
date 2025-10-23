@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,110 +11,101 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
+	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
+	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
+	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
+	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
+	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	"github.com/trakrf/platform/backend/internal/middleware"
+	authservice "github.com/trakrf/platform/backend/internal/services/auth"
+	"github.com/trakrf/platform/backend/internal/storage"
 )
 
+//go:embed frontend/dist
+var frontendFS embed.FS
+
 var (
-	version   = "dev" // Overridden at build time via -ldflags
+	version   = "dev"
 	startTime time.Time
 )
 
-// setupRouter creates and configures the chi router with all middleware and routes
-// Extracted for testability - panics during route registration are caught by tests
-func setupRouter() *chi.Mux {
+func setupRouter(
+	authHandler *authhandler.Handler,
+	accountsHandler *accountshandler.Handler,
+	usersHandler *usershandler.Handler,
+	accountUsersHandler *accountusershandler.Handler,
+	healthHandler *healthhandler.Handler,
+	frontendHandler *frontendhandler.Handler,
+) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Apply middleware stack
-	r.Use(requestIDMiddleware)
-	r.Use(recoveryMiddleware)
-	r.Use(corsMiddleware)
-	r.Use(contentTypeMiddleware)
+	r.Use(middleware.RequestID)
+	r.Use(middleware.Recovery)
+	r.Use(middleware.CORS)
+	r.Use(middleware.ContentType)
 
-	// ========================================================================
-	// Frontend & Static Asset Routes
-	// ========================================================================
-	// IMPORTANT: Static assets must be registered BEFORE API routes to prevent
-	// the catch-all SPA handler from intercepting API requests
+	r.Handle("/assets/*", http.HandlerFunc(frontendHandler.ServeFrontend))
+	r.Handle("/favicon.ico", http.HandlerFunc(frontendHandler.ServeFrontend))
+	r.Handle("/icon-*", http.HandlerFunc(frontendHandler.ServeFrontend))
+	r.Handle("/logo.png", http.HandlerFunc(frontendHandler.ServeFrontend))
+	r.Handle("/manifest.json", http.HandlerFunc(frontendHandler.ServeFrontend))
+	r.Handle("/og-image.png", http.HandlerFunc(frontendHandler.ServeFrontend))
 
-	frontendHandler := serveFrontend()
+	healthHandler.RegisterRoutes(r)
 
-	// Static assets (public, no auth required)
-	// These are served directly from the embedded filesystem with long cache TTLs
-	r.Handle("/assets/*", frontendHandler)
-	r.Handle("/favicon.ico", frontendHandler)
-	r.Handle("/icon-*", frontendHandler) // All icon sizes (icon-192x192.png, icon-512x512.png, etc.)
-	r.Handle("/logo.png", frontendHandler)
-	r.Handle("/manifest.json", frontendHandler)
-	r.Handle("/og-image.png", frontendHandler)
+	authHandler.RegisterRoutes(r)
 
-	// ========================================================================
-	// Health Check Routes (K8s liveness/readiness)
-	// ========================================================================
-	r.Get("/healthz", healthzHandler)
-	r.Get("/readyz", readyzHandler)
-	r.Get("/health", healthHandler)
-
-	// Register API routes
-	// Public endpoints (no auth required)
-	registerAuthRoutes(r) // POST /api/v1/auth/signup, /api/v1/auth/login
-
-	// Protected endpoints (require valid JWT)
 	r.Group(func(r chi.Router) {
-		r.Use(authMiddleware) // Apply auth middleware to this group
+		r.Use(middleware.Auth)
 
-		registerAccountRoutes(r)     // All /api/v1/accounts/* routes
-		registerUserRoutes(r)        // All /api/v1/users/* routes
-		registerAccountUserRoutes(r) // All /api/v1/account_users/* routes
+		accountsHandler.RegisterRoutes(r)
+		usersHandler.RegisterRoutes(r)
+		accountUsersHandler.RegisterRoutes(r)
 	})
 
-	// ========================================================================
-	// SPA Catch-All Handler (must be LAST)
-	// ========================================================================
-	// Serve index.html for all remaining routes to enable React Router
-	// React will handle:
-	//   - Public routes: /, /login, /register (inventory without auth)
-	//   - Protected routes: /dashboard, /assets, /settings (redirects to login)
-	r.HandleFunc("/*", spaHandler)
+	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+		frontendHandler.ServeSPA(w, r, "frontend/dist/index.html")
+	})
 
 	return r
 }
 
 func main() {
 	startTime = time.Now()
-	// Setup structured JSON logging to stdout (12-factor)
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
 
-	// Config from environment (12-factor)
 	port := os.Getenv("BACKEND_PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// Initialize database connection pool
 	ctx := context.Background()
-	if err := initDB(ctx); err != nil {
-		slog.Error("Failed to initialize database", "error", err)
+	store, err := storage.New(ctx)
+	if err != nil {
+		slog.Error("Failed to initialize storage", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("Database connection pool initialized")
+	slog.Info("Storage initialized")
 
-	// Initialize repositories
-	initAccountRepo()
-	initUserRepo()
-	initAccountUserRepo()
-	slog.Info("Repositories initialized")
-
-	// Initialize authentication service
-	initAuthService()
+	authSvc := authservice.NewService(store.Pool(), store)
 	slog.Info("Auth service initialized")
 
-	// Setup chi router (extracted for testability)
-	r := setupRouter()
+	authHandler := authhandler.NewHandler(authSvc)
+	accountsHandler := accountshandler.NewHandler(store)
+	usersHandler := usershandler.NewHandler(store)
+	accountUsersHandler := accountusershandler.NewHandler(store)
+	healthHandler := healthhandler.NewHandler(store.Pool(), version, startTime)
+	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
+	slog.Info("Handlers initialized")
+
+	r := setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, healthHandler, frontendHandler)
 	slog.Info("Routes registered")
 
-	// HTTP server with timeouts
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      r,
@@ -122,7 +114,6 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Start server in goroutine
 	go func() {
 		slog.Info("Server starting", "port", port, "version", version)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -131,12 +122,10 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	// Graceful shutdown (Railway/K8s requirement)
 	slog.Info("Shutting down gracefully...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -145,9 +134,6 @@ func main() {
 		slog.Error("Shutdown error", "error", err)
 	}
 
-	// Close database connection pool
-	closeDB()
-	slog.Info("Database connection pool closed")
-
+	store.Close()
 	slog.Info("Server stopped")
 }
