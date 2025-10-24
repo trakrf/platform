@@ -22,12 +22,21 @@ type Handler struct {
 	service *authservice.Service
 }
 
-// NewHandler creates a new auth handler instance.
 func NewHandler(service *authservice.Service) *Handler {
 	return &Handler{service: service}
 }
 
-// Signup handles POST /api/v1/auth/signup
+// @Summary User signup
+// @Description Register new user and account
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body auth.SignupRequest true "Signup request"
+// @Success 201 {object} map[string]any "data: auth.SignupResponse"
+// @Failure 400 {object} errors.ErrorResponse "Validation error"
+// @Failure 409 {object} errors.ErrorResponse "Email or account name already exists"
+// @Failure 500 {object} errors.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/signup [post]
 func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	var request auth.SignupRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -63,7 +72,17 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": response})
 }
 
-// Login handles POST /api/v1/auth/login
+// @Summary User login
+// @Description Authenticate and receive JWT token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body auth.LoginRequest true "Login credentials"
+// @Success 200 {object} map[string]any "data: auth.LoginResponse"
+// @Failure 400 {object} errors.ErrorResponse "Validation error"
+// @Failure 401 {object} errors.ErrorResponse "Invalid credentials"
+// @Failure 500 {object} errors.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/login [post]
 func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var request auth.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -93,7 +112,6 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": response})
 }
 
-// RegisterRoutes registers authentication endpoints on the given router.
 func (handler *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/v1/auth/signup", handler.Signup)
 	r.Post("/api/v1/auth/login", handler.Login)
