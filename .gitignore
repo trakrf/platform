@@ -129,6 +129,9 @@ cmd/migrate/migrate
 backend/server
 backend/backend
 
+# Swagger generated docs
+backend/docs/
+
 # Go build cache
 go.work
 go.work.sum

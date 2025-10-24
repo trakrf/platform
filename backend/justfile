@@ -49,6 +49,13 @@ test-coverage:
 build:
     go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
 
+# Generate Swagger API documentation
+swagger:
+    @echo "📚 Generating Swagger documentation..."
+    swag init -g main.go --parseDependency --parseInternal
+    @echo "✅ Swagger docs generated at docs/"
+    @echo "📖 View at: http://localhost:8080/swagger/index.html"
+
 # Smoke test - verifies binary starts without panic (uses PG_URL_LOCAL for host → docker)
 smoke-test:
     #!/usr/bin/env bash

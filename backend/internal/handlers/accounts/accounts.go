@@ -28,12 +28,22 @@ type Handler struct {
 	storage *storage.Storage
 }
 
-// NewHandler creates a new accounts handler instance.
 func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{storage: storage}
 }
 
-// List handles GET /api/v1/accounts
+// @Summary List accounts
+// @Description Get paginated accounts
+// @Tags accounts
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} accounts.ListResponse
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/accounts [get]
 func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
@@ -66,7 +76,19 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }
 
-// Get handles GET /api/v1/accounts/:id
+// @Summary Get account
+// @Description Get account by ID
+// @Tags accounts
+// @Accept json
+// @Produce json
+// @Param id path int true "Account ID"
+// @Success 200 {object} map[string]any "data: account.Account"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "Account not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/accounts/{id} [get]
 func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -91,7 +113,19 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": acct})
 }
 
-// Create handles POST /api/v1/accounts
+// @Summary Create account
+// @Description Create new account
+// @Tags accounts
+// @Accept json
+// @Produce json
+// @Param request body account.CreateAccountRequest true "Account data"
+// @Success 201 {object} map[string]any "data: account.Account"
+// @Failure 400 {object} modelerrors.ErrorResponse "Validation error"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 409 {object} modelerrors.ErrorResponse "Domain already exists"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/accounts [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request account.CreateAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -122,7 +156,20 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": acct})
 }
 
-// Update handles PUT /api/v1/accounts/:id
+// @Summary Update account
+// @Description Update existing account
+// @Tags accounts
+// @Accept json
+// @Produce json
+// @Param id path int true "Account ID"
+// @Param request body account.UpdateAccountRequest true "Account data"
+// @Success 200 {object} map[string]any "data: account.Account"
+// @Failure 400 {object} modelerrors.ErrorResponse "Validation error"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "Account not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/accounts/{id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -160,7 +207,19 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": acct})
 }
 
-// Delete handles DELETE /api/v1/accounts/:id
+// @Summary Delete account
+// @Description Soft delete account
+// @Tags accounts
+// @Accept json
+// @Produce json
+// @Param id path int true "Account ID"
+// @Success 204 "No content"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "Account not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/accounts/{id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -183,7 +242,6 @@ func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// RegisterRoutes registers account endpoints on the given router.
 func (handler *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/v1/accounts", handler.List)
 	r.Get("/api/v1/accounts/{id}", handler.Get)

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
+	_ "github.com/trakrf/platform/backend/docs"
 	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
 	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
@@ -29,6 +31,15 @@ var (
 	version   = "dev"
 	startTime time.Time
 )
+
+// @title Platform API
+// @version 1.0
+// @description Multi-tenant platform API with authentication and account management
+// @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token
 
 func setupRouter(
 	authHandler *authhandler.Handler,
@@ -51,6 +62,8 @@ func setupRouter(
 	r.Handle("/logo.png", http.HandlerFunc(frontendHandler.ServeFrontend))
 	r.Handle("/manifest.json", http.HandlerFunc(frontendHandler.ServeFrontend))
 	r.Handle("/og-image.png", http.HandlerFunc(frontendHandler.ServeFrontend))
+
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	healthHandler.RegisterRoutes(r)
 

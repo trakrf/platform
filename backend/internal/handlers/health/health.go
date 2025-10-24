@@ -25,7 +25,6 @@ type Handler struct {
 	startTime time.Time
 }
 
-// NewHandler creates a new health handler instance.
 func NewHandler(db *pgxpool.Pool, version string, startTime time.Time) *Handler {
 	return &Handler{
 		db:        db,
@@ -34,7 +33,7 @@ func NewHandler(db *pgxpool.Pool, version string, startTime time.Time) *Handler 
 	}
 }
 
-// Healthz is the K8s liveness probe endpoint.
+// Healthz is the liveness probe endpoint.
 func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -46,7 +45,7 @@ func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-// Readyz is the K8s readiness probe endpoint.
+// Readyz is the readiness probe endpoint.
 func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -68,7 +67,12 @@ func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-// Health provides a human-friendly health check with detailed status information.
+// @Summary Health check
+// @Description Get API health status
+// @Tags health
+// @Produce json
+// @Success 200 {object} health.Response
+// @Router /health [get]
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -97,7 +101,6 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// RegisterRoutes registers health check endpoints on the given router.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/healthz", h.Healthz)
 	r.Get("/readyz", h.Readyz)
