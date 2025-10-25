@@ -90,7 +90,8 @@ just dev-logs
 just dev-stop
 
 # Or stop database
-just db-down
+just database down    # New delegation syntax
+just db down          # Lazy alias (same result)
 ```
 
 ### Development Workflow
@@ -101,13 +102,17 @@ This project uses Just's delegation pattern for monorepo task management.
 ```bash
 # Full stack
 just dev           # Docker-based (db + backend container + migrations)
-just dev-local     # Local parallel (frontend + backend dev servers)
 
-# Workspace-specific
+# Workspace-specific (delegation)
 just frontend dev        # Start Vite dev server
-just backend dev         # Start Go server
+just backend dev         # Start Go server locally
 just frontend typecheck  # TypeScript type checking
 just backend test        # Run Go tests
+
+# Lazy dev aliases (shorter syntax)
+just fe dev        # Same as: just frontend dev
+just be test       # Same as: just backend test
+just db up         # Same as: just database up
 
 # Combined validation
 just lint        # Lint both workspaces
@@ -120,10 +125,10 @@ just validate    # Full validation (lint + test + build)
 ```bash
 # Backend development
 cd backend
-just dev           # Start Go server
+just dev           # Start Go server locally
 just test          # Run backend tests
 just validate      # Backend-only validation
-just db-up         # Database commands work via fallback
+just migrate       # Run database migrations
 
 # Frontend development
 cd frontend
@@ -131,11 +136,18 @@ just dev           # Start Vite dev server
 just test          # Run frontend tests
 just typecheck     # TypeScript checking
 just validate      # Frontend-only validation
+
+# Database operations
+cd database
+just up            # Start TimescaleDB
+just logs          # View database logs
+just psql          # Connect to psql
 ```
 
 **How it works:**
 - **Delegation**: `just <workspace> <command>` from root → `cd <workspace> && just <command>`
-- **Fallback**: Workspace justfiles can call root recipes (db commands, etc.)
+- **Lazy aliases**: `just db`, `just fe`, `just be` for shorter commands
+- **Fallback**: Workspace justfiles can call root recipes
 - **Context-aware**: `just dev` does the right thing based on current directory
 
 ### Docker Commands
@@ -147,23 +159,32 @@ just dev-stop     # Stop all services
 just dev-logs     # Follow logs (all services)
 ```
 
-**Database:**
+**Database (infrastructure commands):**
 ```bash
-just db-up        # Start TimescaleDB
-just db-down      # Stop TimescaleDB
-just db-logs      # View database logs
-just db-shell     # Connect to psql
-just db-status    # Check database health
-just db-reset     # ⚠️  Reset database (deletes all data)
+just database up        # Start TimescaleDB
+just database down      # Stop TimescaleDB
+just database logs      # View database logs
+just database psql      # Connect to psql (or: just database shell)
+just database status    # Check database health
+just database reset     # ⚠️  Reset database (deletes all data)
+
+# Lazy aliases (shorter):
+just db up         # Same as: just database up
+just db logs       # Same as: just database logs
+just db psql       # Same as: just database psql
 ```
 
-**Database Migrations:**
+**Database Migrations (application commands):**
 ```bash
-just db-migrate-up         # Apply all pending migrations
-just db-migrate-down       # Rollback last migration
-just db-migrate-status     # Show current migration version
-just db-migrate-create foo # Create new migration pair (000XXX_foo.up/down.sql)
-just db-migrate-force 5    # Force version to 5 (recovery only)
+just backend migrate              # Apply all pending migrations
+just backend migrate-down         # Rollback last migration
+just backend migrate-status       # Show current migration version
+just backend migrate-create foo   # Create new migration (000XXX_foo.up/down.sql)
+just backend migrate-force 5      # Force version to 5 (recovery only)
+
+# Lazy aliases (shorter):
+just be migrate          # Same as: just backend migrate
+just be migrate-status   # Same as: just backend migrate-status
 ```
 
 Migrations run automatically on `just dev` startup. Manual migration commands are useful for:
