@@ -18,6 +18,17 @@ frontend *args:
 backend *args:
     cd backend && just {{args}}
 
+database *args:
+    cd database && just {{args}}
+
+# ============================================================================
+# Lazy Dev Aliases
+# ============================================================================
+
+alias db := database
+alias fe := frontend
+alias be := backend
+
 # ============================================================================
 # Combined Validation Commands
 # ============================================================================
@@ -39,11 +50,12 @@ check: validate
 # ============================================================================
 
 # Docker-based development (database + backend container)
-dev: db-up
+dev:
+    @just database up
     @echo "⏳ Waiting for database to be ready..."
     @sleep 3
     @echo "🔄 Running migrations..."
-    @just db-migrate-up
+    @just backend migrate
     @echo "🚀 Starting backend..."
     @docker compose up -d backend
     @echo "✅ Development environment ready"
@@ -63,71 +75,3 @@ dev-stop:
 
 dev-logs:
     docker compose logs -f
-
-# ============================================================================
-# Docker Compose Orchestration
-# ============================================================================
-
-db-up:
-    docker compose up -d timescaledb
-    @echo "⏳ Waiting for database to be ready..."
-    @for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
-        if docker compose exec timescaledb pg_isready -U postgres > /dev/null 2>&1; then \
-            echo "✅ Database is ready"; \
-            exit 0; \
-        fi; \
-        sleep 2; \
-    done; \
-    echo "⚠️  Database is starting but not ready yet. Run 'just db-status' to check."
-
-db-down:
-    docker compose down
-
-db-logs:
-    docker compose logs -f timescaledb
-
-db-shell:
-    docker compose exec timescaledb psql -U postgres -d postgres
-
-# Interactive psql shell
-psql:
-    docker compose exec -it timescaledb psql -U postgres
-
-db-reset:
-    @echo "⚠️  This will delete all data. Press Ctrl+C to cancel."
-    @sleep 3
-    docker compose down -v
-    docker compose up -d timescaledb
-    @echo "⏳ Waiting for database to initialize..."
-    @sleep 10
-    @echo "✅ Database reset complete"
-
-db-status:
-    @docker compose ps timescaledb
-    @docker compose exec timescaledb pg_isready -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
-
-# ============================================================================
-# Database Migrations
-# ============================================================================
-
-db-migrate-up:
-    @echo "🔄 Running database migrations..."
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" up'
-    @echo "✅ Migrations complete"
-
-db-migrate-down:
-    @echo "⏪ Rolling back last migration..."
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" down 1'
-    @echo "✅ Rollback complete"
-
-db-migrate-status:
-    @echo "📊 Migration status:"
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" version'
-
-db-migrate-create name:
-    @echo "📝 Creating new migration: {{name}}"
-    docker compose exec backend sh -c 'migrate create -ext sql -dir /app/database/migrations -seq {{name}}'
-
-db-migrate-force version:
-    @echo "⚠️  Forcing migration version to {{version}}"
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" force {{version}}'
