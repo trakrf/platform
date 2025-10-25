@@ -15,7 +15,7 @@ After installation, you'll find a bootstrap spec at `spec/bootstrap/`. This vali
 /ship
 ```
 
-This proves CSW works and commits the infrastructure cleanly. You'll experience the full workflow and create your first SHIPPED.md entry.
+This proves CSW works and commits the infrastructure cleanly. You'll experience the full workflow and create your first PR.
 
 ### Creating New Features
 
@@ -61,7 +61,6 @@ spec/
 │       ├── spec.md    # Feature specification
 │       ├── plan.md    # Generated implementation plan
 │       └── log.md     # Build progress log
-└── SHIPPED.md         # Log of completed features
 ```
 
 **Note**: The slash commands (`/plan`, `/build`, `/check`, `/ship`, `/spec`) are installed globally in Claude's commands directory, not in your project.
