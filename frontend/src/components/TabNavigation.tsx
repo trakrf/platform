@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, ScanLine, HelpCircle, Home } from 'lucide-react';
+import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned } from 'lucide-react';
 import { version } from '../../package.json';
 
 interface NavItemProps {
@@ -187,7 +187,25 @@ export default function TabNavigation() {
             icon={<ScanLine className="w-5 h-5" />}
             tooltip="Use your phone camera to scan regular barcodes"
           />
-          
+
+          <NavItem
+            id="assets"
+            label="Assets"
+            isActive={activeTab === 'assets'}
+            onClick={() => handleTabClick('assets')}
+            icon={<Package className="w-5 h-5" />}
+            tooltip="Manage your assets - create, view, and track asset information"
+          />
+
+          <NavItem
+            id="locations"
+            label="Locations"
+            isActive={activeTab === 'locations'}
+            onClick={() => handleTabClick('locations')}
+            icon={<MapPinned className="w-5 h-5" />}
+            tooltip="Manage your locations - create, view, and organize location data"
+          />
+
           <NavItem
             id="settings"
             label="Settings"
