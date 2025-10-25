@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/trakrf/platform/backend/docs"
 	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
@@ -105,14 +106,14 @@ func main() {
 	}
 	slog.Info("Storage initialized")
 
-	authSvc := authservice.NewService(store.Pool(), store)
+	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store)
 	slog.Info("Auth service initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)
 	accountsHandler := accountshandler.NewHandler(store)
 	usersHandler := usershandler.NewHandler(store)
 	accountUsersHandler := accountusershandler.NewHandler(store)
-	healthHandler := healthhandler.NewHandler(store.Pool(), version, startTime)
+	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	slog.Info("Handlers initialized")
 

@@ -6,7 +6,6 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
-// Account represents an account entity
 type Account struct {
 	ID               int       `json:"id"`
 	Name             string    `json:"name"`
@@ -23,7 +22,6 @@ type Account struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// CreateAccountRequest for POST /api/v1/accounts
 type CreateAccountRequest struct {
 	Name             string  `json:"name" validate:"required,min=1,max=255"`
 	Domain           string  `json:"domain" validate:"required,hostname"`
@@ -34,7 +32,6 @@ type CreateAccountRequest struct {
 	MaxStorageGB     *int    `json:"max_storage_gb" validate:"omitempty,min=1"`
 }
 
-// UpdateAccountRequest for PUT /api/v1/accounts/:id
 type UpdateAccountRequest struct {
 	Name           *string `json:"name" validate:"omitempty,min=1,max=255"`
 	BillingEmail   *string `json:"billing_email" validate:"omitempty,email"`
@@ -44,7 +41,6 @@ type UpdateAccountRequest struct {
 	MaxStorageGB   *int    `json:"max_storage_gb" validate:"omitempty,min=1"`
 }
 
-// AccountListResponse for GET /api/v1/accounts
 type AccountListResponse struct {
 	Data       []Account         `json:"data"`
 	Pagination shared.Pagination `json:"pagination"`
