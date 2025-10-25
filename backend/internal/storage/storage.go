@@ -7,12 +7,22 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// PgxPool is an interface that both *pgxpool.Pool and pgxmock implement
+type PgxPool interface {
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	Close()
+}
+
 // Storage handles all database operations using a connection pool.
 type Storage struct {
-	pool *pgxpool.Pool
+	pool PgxPool
 }
 
 // New creates a new Storage instance with an initialized connection pool.
@@ -54,7 +64,7 @@ func New(ctx context.Context) (*Storage, error) {
 
 // NewWithPool creates a Storage instance with an existing pool.
 // This is primarily used for testing with mock or test database pools.
-func NewWithPool(pool *pgxpool.Pool) *Storage {
+func NewWithPool(pool PgxPool) *Storage {
 	return &Storage{pool: pool}
 }
 
@@ -68,6 +78,6 @@ func (s *Storage) Close() {
 
 // Pool returns the underlying connection pool for advanced use cases
 // that require direct pool access.
-func (s *Storage) Pool() *pgxpool.Pool {
+func (s *Storage) Pool() PgxPool {
 	return s.pool
 }
