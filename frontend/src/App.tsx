@@ -16,8 +16,10 @@ const BarcodeScreen = lazyWithRetry(() => import('@/components/BarcodeScreen'));
 const LocateScreen = lazyWithRetry(() => import('@/components/LocateScreen'));
 const SettingsScreen = lazyWithRetry(() => import('@/components/SettingsScreen'));
 const HelpScreen = lazyWithRetry(() => import('@/components/HelpScreen'));
+const AssetsScreen = lazyWithRetry(() => import('@/components/AssetsScreen'));
+const LocationsScreen = lazyWithRetry(() => import('@/components/LocationsScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'settings', 'help'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -168,6 +170,8 @@ export default function App() {
       inventory: InventoryScreen,
       locate: LocateScreen,
       barcode: BarcodeScreen,
+      assets: AssetsScreen,
+      locations: LocationsScreen,
       settings: SettingsScreen,
       help: HelpScreen
     };
@@ -177,6 +181,8 @@ export default function App() {
       inventory: InventoryLoadingScreen,
       locate: LocateLoadingScreen,
       barcode: BarcodeLoadingScreen,
+      assets: LoadingScreen,
+      locations: LoadingScreen,
       settings: SettingsLoadingScreen,
       help: HelpLoadingScreen
     };
