@@ -29,7 +29,7 @@ So that [benefit]
 
 ## Success Metrics
 
-Define measurable success criteria that will be tracked in SHIPPED.md:
+Define measurable success criteria:
 - [ ] [Metric 1 - e.g., "Form validation prevents 100% of invalid submissions"]
 - [ ] [Metric 2 - e.g., "API response time < 500ms"]
 - [ ] [Metric 3 - e.g., "Zero console errors during E2E tests"]
