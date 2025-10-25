@@ -4,7 +4,7 @@ Specification: spec.md
 
 ## Understanding
 
-This work is **already complete** on the `cleanup/merged` branch. This plan documents the completed work and guides PR creation.
+This work is **already complete** on the `docs/csw-04-alignment` branch. This plan documents the completed work and guides PR creation.
 
 **What was completed**:
 1. Aligned spec/README.md and spec/template.md with CSW 0.4.0
@@ -33,7 +33,7 @@ This work is **already complete** on the `cleanup/merged` branch. This plan docu
 
 ## Commits Ready for PR
 
-Branch: `cleanup/merged`
+Branch: `docs/csw-04-alignment`
 
 1. **7c5a23d** - `chore: cleanup shipped features`
 2. **35dc363** - `chore: align spec workflow with CSW 0.4.0 (remove SHIPPED.md tracking)`
@@ -47,18 +47,18 @@ Branch: `cleanup/merged`
 
 ### Task 1: Verify Branch State
 **Action**: VERIFY
-**Command**: Check we're on cleanup/merged with all commits
+**Command**: Check we're on docs/csw-04-alignment with all commits
 
 **Implementation**:
 ```bash
-git branch --show-current  # Should show: cleanup/merged
+git branch --show-current  # Should show: docs/csw-04-alignment
 git log --oneline origin/main..HEAD  # Should show 7 commits
 git status  # Should be clean
 ```
 
 **Validation**:
 ```bash
-[[ $(git branch --show-current) == "cleanup/merged" ]] && echo "✅ On cleanup/merged"
+[[ $(git branch --show-current) == "docs/csw-04-alignment" ]] && echo "✅ On docs/csw-04-alignment"
 [[ $(git log --oneline origin/main..HEAD | wc -l) -ge 6 ]] && echo "✅ Has commits"
 [[ -z $(git status --porcelain) ]] && echo "✅ Working tree clean"
 ```
@@ -73,7 +73,7 @@ git status  # Should be clean
 ```bash
 gh pr create \
   --base main \
-  --head cleanup/merged \
+  --head docs/csw-04-alignment \
   --title "docs: align spec workflow with CSW 0.4.0" \
   --body "$(cat <<'EOF'
 ## Summary
@@ -119,7 +119,7 @@ EOF
 
 **Validation**:
 ```bash
-gh pr list --state open --head cleanup/merged  # Should show the new PR
+gh pr list --state open --head docs/csw-04-alignment  # Should show the new PR
 ```
 
 ---
@@ -130,19 +130,19 @@ gh pr list --state open --head cleanup/merged  # Should show the new PR
 
 **Implementation**:
 ```bash
-gh pr view cleanup/merged
+gh pr view docs/csw-04-alignment
 ```
 
 **Expected**:
 - Title: "docs: align spec workflow with CSW 0.4.0"
 - Base: main
-- Head: cleanup/merged
+- Head: docs/csw-04-alignment
 - State: OPEN
 - No merge conflicts
 
 **Validation**:
 ```bash
-gh pr view cleanup/merged --json state,title,baseRefName | \
+gh pr view docs/csw-04-alignment --json state,title,baseRefName | \
   jq -e '.state == "OPEN" and .baseRefName == "main"' && \
   echo "✅ PR created successfully"
 ```
@@ -172,13 +172,13 @@ This is a **documentation PR** - no code validation needed.
 **After Task 2 (PR creation)**:
 ```bash
 # Gate 1: PR exists and is open
-gh pr view cleanup/merged --json state --jq '.state' | grep -q "OPEN"
+gh pr view docs/csw-04-alignment --json state --jq '.state' | grep -q "OPEN"
 
 # Gate 2: No merge conflicts
-gh pr view cleanup/merged --json mergeable --jq '.mergeable' | grep -q "MERGEABLE"
+gh pr view docs/csw-04-alignment --json mergeable --jq '.mergeable' | grep -q "MERGEABLE"
 
 # Gate 3: Commits are present
-gh pr view cleanup/merged --json commits --jq '.commits | length' | grep -qE "[6-9]|[1-9][0-9]+"
+gh pr view docs/csw-04-alignment --json commits --jq '.commits | length' | grep -qE "[6-9]|[1-9][0-9]+"
 ```
 
 **Enforcement Rules**:
@@ -191,13 +191,13 @@ gh pr view cleanup/merged --json commits --jq '.commits | length' | grep -qE "[6
 **After Task 2**:
 ```bash
 # Verify PR created
-gh pr view cleanup/merged
+gh pr view docs/csw-04-alignment
 
 # Check for conflicts
-gh pr checks cleanup/merged  # If any checks configured
+gh pr checks docs/csw-04-alignment  # If any checks configured
 
 # View diff summary
-gh pr diff cleanup/merged --stat
+gh pr diff docs/csw-04-alignment --stat
 ```
 
 **Final validation**:
