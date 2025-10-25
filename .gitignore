@@ -163,9 +163,5 @@ timescale_data/
 docker-compose.override.yml
 .docker/
 
-
-# Spec workflow logs
-spec/active/*/log.md
-
 # CSW symlink (local installation)
 spec/csw
