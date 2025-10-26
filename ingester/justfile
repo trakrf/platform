@@ -1,0 +1,37 @@
+# Ingester Task Runner (MQTT → Database)
+set dotenv-load := true
+set fallback := true
+
+# List all available commands
+default:
+    @just --list
+
+# Start ingester (MQTT → identifier_scans table)
+up:
+    @echo "🔄 Starting ingester (MQTT → database)..."
+    docker compose up -d ingester
+    @echo "✅ Ingester started - streaming MQTT data to identifier_scans table"
+
+# Stop ingester
+down:
+    @echo "🛑 Stopping ingester..."
+    docker compose stop ingester
+
+# Restart ingester
+restart:
+    @just down
+    @just up
+
+# Show ingester logs
+logs:
+    docker compose logs -f ingester
+
+# Rebuild and restart ingester
+rebuild:
+    @echo "🔨 Rebuilding ingester..."
+    docker compose build ingester
+    @just restart
+
+# Show ingester status
+status:
+    @docker compose ps ingester

@@ -11,7 +11,7 @@ CREATE TABLE messages
 );
 
 -- Indexes optimized for time-series queries
-CREATE INDEX idx_messages_account_time ON messages (message_topic, message_timestamp DESC);
+CREATE INDEX idx_messages_org_time ON messages (message_topic, message_timestamp DESC);
 
 -- Create index on common JSON fields if they exist in message_data
 CREATE INDEX idx_messages_message_type ON messages ((message_data ->> 'type'));
@@ -20,10 +20,10 @@ CREATE INDEX idx_messages_message_type ON messages ((message_data ->> 'type'));
 ALTER TABLE messages
     ENABLE ROW LEVEL SECURITY;
 
--- todo: add account_id back in populated by trigger that parses topic
+-- todo: add org_id back in populated by trigger that parses topic
 -- -- Create policies for each table
--- CREATE POLICY account_isolation_messages ON messages
---    USING (account_id = current_setting('app.current_account_id')::INT);
+-- CREATE POLICY org_isolation_messages ON messages
+--    USING (org_id = current_setting('app.current_org_id')::INT);
 
 -- Add comments for documentation
 COMMENT ON TABLE messages IS 'TimescaleDB hypertable for storing time-series message data';
@@ -47,89 +47,90 @@ CREATE OR REPLACE FUNCTION process_messages() returns trigger
 as
 $$
 DECLARE
-    topic_account_id INT;
+    topic_org_id INT;
     device_name      TEXT;
 BEGIN
 
-    SELECT a.id INTO topic_account_id FROM accounts a WHERE a.domain = split_part(NEW.message_topic, '/', 1);
+    SELECT o.id INTO topic_org_id FROM organizations o WHERE o.domain = split_part(NEW.message_topic, '/', 1);
 
-    IF topic_account_id IS NULL THEN
-        RAISE NOTICE 'Could not find account for topic: %. Be sure that topic matches account slug', NEW.message_topic;
+    IF topic_org_id IS NULL THEN
+        RAISE NOTICE 'Could not find organization for topic: %. Be sure that topic matches organization domain', NEW.message_topic;
     END IF;
 
-    INSERT INTO locations (account_id, identifier, name)
-    SELECT DISTINCT topic_account_id,
+    INSERT INTO locations (org_id, identifier, name)
+    SELECT DISTINCT topic_org_id,
                     t.tag ->> 'capturePointName',
                     t.tag ->> 'capturePointName' || ' auto added from message' as name
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
     WHERE NOT EXISTS (SELECT *
-                      FROM antennas a
-                      WHERE a.account_id = topic_account_id
-                        AND a.identifier = t.tag ->> 'capturePointName');
+                      FROM scan_points sp
+                      WHERE sp.org_id = topic_org_id
+                        AND sp.identifier = t.tag ->> 'capturePointName');
 
     IF NOT EXISTS (SELECT *
-                   FROM devices d
-                   WHERE d.account_id = topic_account_id
-                     AND d.identifier = NEW.message_data ->> 'rfidReaderName') THEN
-        INSERT INTO devices (account_id, identifier, name, type)
-        VALUES (topic_account_id,
+                   FROM scan_devices sd
+                   WHERE sd.org_id = topic_org_id
+                     AND sd.identifier = NEW.message_data ->> 'rfidReaderName') THEN
+        INSERT INTO scan_devices (org_id, identifier, name, type)
+        VALUES (topic_org_id,
                 NEW.message_data ->> 'rfidReaderName',
                 NEW.message_data ->> 'rfidReaderName' || ' auto added from message',
                 'unknown');
     END IF;
 
-    INSERT INTO antennas (account_id, device_id, location_id, identifier, name)
-    SELECT DISTINCT topic_account_id,
+    INSERT INTO scan_points (org_id, scan_device_id, location_id, identifier, name)
+    SELECT DISTINCT topic_org_id,
                     (SELECT id
-                     FROM devices
-                     WHERE account_id = topic_account_id
-                       AND identifier = NEW.message_data ->> 'rfidReaderName') AS device_id,
+                     FROM scan_devices
+                     WHERE org_id = topic_org_id
+                       AND identifier = NEW.message_data ->> 'rfidReaderName') AS scan_device_id,
                     l.id,
                     t.tag ->> 'capturePointName',
                     t.tag ->> 'capturePointName' || ' auto added from message' as name
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
-             JOIN locations l ON l.account_id = topic_account_id AND l.identifier = t.tag ->> 'capturePointName'
+             JOIN locations l ON l.org_id = topic_org_id AND l.identifier = t.tag ->> 'capturePointName'
     WHERE NOT EXISTS (SELECT *
-                      FROM antennas a
-                      WHERE a.account_id = topic_account_id
-                        AND a.identifier = t.tag ->> 'capturePointName');
+                      FROM scan_points sp
+                      WHERE sp.org_id = topic_org_id
+                        AND sp.identifier = t.tag ->> 'capturePointName');
 
-    INSERT INTO assets (account_id, identifier, name, type)
-    SELECT DISTINCT topic_account_id,
+    INSERT INTO assets (org_id, identifier, name, type)
+    SELECT DISTINCT topic_org_id,
                     t.tag ->> 'epc',
                     t.tag ->> 'epc' || ' auto added from message' as name,
                     'unknown'                                     as "type"
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
     WHERE NOT EXISTS (SELECT *
                       FROM assets
-                      WHERE account_id = topic_account_id
+                      WHERE org_id = topic_org_id
                         AND identifier = t.tag ->> 'epc')
       AND NOT EXISTS (SELECT *
-                      FROM tags
-                      WHERE account_id = topic_account_id
-                        AND identifier = t.tag ->> 'epc');
+                      FROM identifiers
+                      WHERE org_id = topic_org_id
+                        AND value = t.tag ->> 'epc');
 
-    INSERT INTO tags (account_id, asset_id, identifier, type)
-    SELECT DISTINCT topic_account_id,
-                    e.id,
+    INSERT INTO identifiers (org_id, asset_id, value, type)
+    SELECT DISTINCT topic_org_id,
+                    a.id,
                     t.tag ->> 'epc',
-                    'unknown' as "type"
+                    'rfid' as "type"
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
-             JOIN assets e ON e.account_id = topic_account_id AND e.identifier = t.tag ->> 'epc'
+             JOIN assets a ON a.org_id = topic_org_id AND a.identifier = t.tag ->> 'epc'
     WHERE NOT EXISTS (SELECT *
-                      FROM tags e
-                      WHERE e.account_id = topic_account_id
-                        AND e.identifier = t.tag ->> 'epc');
+                      FROM identifiers i
+                      WHERE i.org_id = topic_org_id
+                        AND i.value = t.tag ->> 'epc');
 
-    -- Insert the processed tags into events
-    INSERT INTO events (asset_id, location_id, signal_strength, device_timestamp)
-    SELECT e.asset_id                                                   AS asset_id,
-           a.location_id                                                 AS location_id,
-           (t.tag ->> 'rssi')::real                                      AS signal_strength,
-           to_timestamp((t.tag ->> 'timeStampOfRead')::BIGINT / 1000000)    AS device_timestamp
+    -- Insert the processed scans into asset_scans
+    INSERT INTO asset_scans (org_id, asset_id, location_id, scan_point_id, timestamp)
+    SELECT topic_org_id,
+           i.asset_id                                                    AS asset_id,
+           sp.location_id                                                AS location_id,
+           sp.id                                                         AS scan_point_id,
+           to_timestamp((t.tag ->> 'timeStampOfRead')::BIGINT / 1000000) AS timestamp
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
-             JOIN antennas a ON a.account_id = topic_account_id AND a.identifier = t.tag ->> 'capturePointName'
-             JOIN tags e ON e.account_id = topic_account_id AND e.identifier = t.tag ->> 'epc';
+             JOIN scan_points sp ON sp.org_id = topic_org_id AND sp.identifier = t.tag ->> 'capturePointName'
+             JOIN identifiers i ON i.org_id = topic_org_id AND i.value = t.tag ->> 'epc';
 
 -- Return the NEW record to complete the trigger
     RETURN NEW;

@@ -39,3 +39,22 @@ services:
       timescaledb:
         condition: service_healthy
     restart: unless-stopped
+
+  ingester:
+    build:
+      context: ./ingester
+      dockerfile: Dockerfile
+    container_name: ingester
+    volumes:
+      - ./ingester/connect.yaml:/connect.yaml
+    ports:
+      - "4195:4195"
+    environment:
+      MQTT_TOPIC: ${MQTT_TOPIC}
+      MQTT_URL: ${MQTT_URL}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-trakrf-platform-ingester}
+      PG_URL: ${PG_URL}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
