@@ -96,16 +96,16 @@ So that I can test integration with other in-flight changes and catch conflicts 
 
 ### Railway Configuration
 
-#### railway.json (Optional - start with Nixpacks auto-detection)
+#### railway.json (Optional - Railway auto-detects root Dockerfile)
 ```json
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "backend/Dockerfile"
+    "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "./server",
+    "startCommand": "/server",
     "healthcheckPath": "/healthz",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
@@ -113,6 +113,8 @@ So that I can test integration with other in-flight changes and catch conflicts 
   }
 }
 ```
+
+**Note**: Dockerfile located at repository root (not `backend/Dockerfile`) to support future omnibus self-hosting container.
 
 - **Railway Services**: 1 service (Go backend with embedded frontend)
 - **Database**: TimescaleDB Cloud (external managed service, NOT on Railway)
@@ -141,12 +143,12 @@ So that I can test integration with other in-flight changes and catch conflicts 
 
 ### Environment Variables (Railway)
 **Backend Service** (single service - serves API + frontend):
-- `PG_URL=<TimescaleDB Cloud connection string>` (Railway secret)
-- `BACKEND_PORT=8080`
-- `BACKEND_LOG_LEVEL=debug` (verbose for preview)
-- `JWT_SECRET=${{JWT_SECRET}}` (Railway secret)
-- `CORS_ALLOWED_ORIGINS=https://app.preview.trakrf.id`
-- `PORT=8080` (Railway standard)
+- `PG_URL=<TimescaleDB Cloud connection string>` (Railway secret, see credentials below)
+- `BACKEND_PORT=8080` (read by app at main.go:95)
+- `BACKEND_LOG_LEVEL=debug` (verbose for preview, optional)
+- `JWT_SECRET=<generate-random-32-char-string>` (Railway secret, read at jwt.go:67)
+- `BACKEND_CORS_ORIGIN=disabled` (same-origin deployment, read at middleware.go:59)
+- `PORT=8080` (Railway standard, optional - defaults to BACKEND_PORT)
 
 **Database:**
 - External TimescaleDB Cloud instance (preview environment)
@@ -157,6 +159,24 @@ So that I can test integration with other in-flight changes and catch conflicts 
 - Frontend built during Docker image build
 - Vite build output embedded via `go:embed frontend/dist`
 - No separate frontend service or env vars needed
+
+### TimescaleDB Preview Credentials
+**Service**: `trakrf-preview` (Timescale Cloud - Free Tier)
+
+**Connection Details**:
+- **Host**: `hxumbw51zr.lezu4cbb98.tsdb.cloud.timescale.com`
+- **Port**: `34826`
+- **Database**: `tsdb`
+- **Username**: `tsdbadmin`
+- **Password**: `<see .env.local>`
+- **Connection String**: `postgres://tsdbadmin:<password>@hxumbw51zr.lezu4cbb98.tsdb.cloud.timescale.com:34826/tsdb?sslmode=require`
+
+**Usage**:
+- Add to Railway as `PG_URL` environment variable (full connection string with password)
+- Add to local `.env.local` as `PG_URL_PREVIEW` for testing (credentials in .env.local.example)
+- SSL required (`sslmode=require`)
+
+**Security Note**: Actual password stored in `.env.local` only (gitignored), never committed to spec or git.
 
 ### Health Checks
 - **Liveness**: `GET /healthz` → 200 OK (process alive)
@@ -371,9 +391,50 @@ open https://app.preview.trakrf.id  # Verify JS/CSS loads
    - **Deploy**: Cloudflare Pages (not Railway)
    - **Source**: Migrate from `trakrf-web` or scrape live site
 
+## Implementation Decisions (January 2025)
+
+### Railway Account Strategy ✅
+- **Single Railway account** - All projects on same dashboard
+- **New project**: "TrakRF Platform Preview" (create new, don't reuse existing)
+- **Existing project**: `trakrf-web` will be refactored to production `app.trakrf.id` later
+- **No preview deployment exists yet** - This is the first preview environment
+
+### Dockerfile Location ✅
+- **Location**: Repository root (`/Dockerfile`)
+- **Rationale**: Future omnibus container for self-hosting
+- **Structure**: 4-stage build (tools → frontend → backend → production)
+- **Embedded frontend path**: `backend/frontend/dist` (relative to backend/main.go go:embed)
+- **Critical**: Must `COPY --from=frontend-builder` into backend build stage
+
+### DNS Management ✅
+- **Managed in**: `github.com/trakrf/infra` (Terraform)
+- **Status**: Terraform update ready, waiting for Railway CNAME
+- **Timeline**: Apply after Railway project created (Phase 4)
+
+### TimescaleDB Credentials ✅
+- **Service**: `trakrf-preview` (Free Tier - Timescale Cloud)
+- **Provisioned**: Yes, credentials available (see above)
+- **Local testing**: Add as `PG_URL_PREVIEW` in `.env.local`
+
+### Environment Variable Verification ✅
+All required env vars mapped to backend code:
+- `PG_URL` → `storage.go:22` (required, crashes if missing)
+- `BACKEND_PORT` → `main.go:95` (optional, defaults to "8080")
+- `JWT_SECRET` → `jwt.go:67` (required for auth endpoints)
+- `BACKEND_CORS_ORIGIN` → `middleware.go:59` (optional, defaults to "*", use "disabled" for production)
+- `BACKEND_LOG_LEVEL` → Not currently used (always JSON info level)
+
+### Dependencies Verified ✅
+- ✅ `pnpm-lock.yaml` exists (271KB)
+- ✅ 4 database migrations in `database/migrations/`
+- ✅ Reference workflow at `../trakrf-handheld/.github/workflows/sync-preview.yml`
+- ✅ Backend has `go:embed frontend/dist` at `main.go:27`
+- ✅ Frontend handler implemented at `backend/internal/handlers/frontend/`
+
 ## Open Questions
 
 1. **Marketing Timeline**: Tackle Next.js → Astro migration immediately after TRA-81 or later?
+   - **Status**: Out of scope for TRA-81, defer decision
 
 ## Success Metrics
 - Zero manual interventions required for preview updates
