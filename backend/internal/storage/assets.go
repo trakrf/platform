@@ -90,7 +90,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, erro
 	select id , account_id, identifier, name, type, description, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	from trakrf.assets
-	where id = $1
+	where id = $1 and deleted_at is null
 	`
 	var asset asset.Asset
 	err := s.pool.QueryRow(ctx, query, id).Scan(&asset.ID, &asset.AccountID,

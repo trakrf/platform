@@ -11,8 +11,8 @@ RUN wget -qO- https://github.com/golang-migrate/migrate/releases/download/v4.17.
     mv migrate /usr/local/bin/migrate && \
     chmod +x /usr/local/bin/migrate
 
-# Copy go.mod only (no go.sum yet - stdlib only project)
-COPY go.mod ./
+# Copy go.mod and go.sum for dependency management
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
@@ -25,8 +25,8 @@ CMD ["air", "-c", ".air.toml"]
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
-# Copy go.mod and download dependencies
-COPY go.mod ./
+# Copy go.mod and go.sum for dependency management
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source and build

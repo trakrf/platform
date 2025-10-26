@@ -37,6 +37,19 @@ lint:
 test:
     go test -v ./...
 
+# Run specific test package via Docker
+# Usage: just test-docker ./internal/handlers/assets
+# Usage: just test-docker ./internal/storage
+# Usage: just test-docker ./... (all tests)
+test-docker path:
+    docker compose exec backend go test -v {{path}}
+
+# Run specific test function via Docker (use -run flag)
+# Usage: just test-docker-run ./internal/handlers/assets TestCreateAsset_RealDB
+# Usage: just test-docker-run ./internal/handlers/assets "TestCreate.*"
+test-docker-run path pattern:
+    docker compose exec backend go test -v {{path}} -run {{pattern}}
+
 # Run tests with race detection
 test-race:
     go test -race ./...

@@ -1,5 +1,6 @@
 volumes:
   timescale_data:
+  go_mod_cache:
 
 services:
   timescaledb:
@@ -35,6 +36,7 @@ services:
     volumes:
       - ./backend:/app
       - ./database/migrations:/app/database/migrations
+      - go_mod_cache:/go/pkg/mod
     depends_on:
       timescaledb:
         condition: service_healthy
