@@ -73,10 +73,11 @@ function injectBleMockPlugin(env: Record<string, string>) {
 }
 
 export default defineConfig(({ mode }) => {
-  // Load env file based on mode
-  const env = loadEnv(mode, process.cwd(), '');
-  
+  // Load env file based on mode from project root (monorepo)
+  const env = loadEnv(mode, path.resolve(__dirname, '../'), '');
+
   return {
+    envDir: '../', // Read .env files from project root (monorepo)
     plugins: [
       react(),
       comlink(), // Add vite-plugin-comlink for worker proxying
