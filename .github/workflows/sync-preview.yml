@@ -1,0 +1,182 @@
+name: Sync Preview Branch
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main]
+
+concurrency:
+  group: preview-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Reset preview to main
+        run: |
+          git checkout -B preview origin/main
+
+      - name: Get all open PRs
+        id: get-prs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'created',
+              direction: 'asc'
+            });
+
+            // Filter out draft PRs if desired
+            const activePRs = prs.filter(pr => !pr.draft);
+
+            // Return PR numbers and their branch names
+            const prInfo = activePRs.map(pr => ({
+              number: pr.number,
+              branch: pr.head.ref,
+              title: pr.title
+            }));
+
+            console.log(`Found ${prInfo.length} open PRs to merge`);
+            return prInfo;
+
+      - name: Merge PRs into preview
+        id: merge-prs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = ${{ steps.get-prs.outputs.result }};
+            const { exec: executeCommand } = require('child_process');
+            const util = require('util');
+            const execPromise = util.promisify(executeCommand);
+
+            // Helper function to escape shell arguments
+            const escapeShellArg = (arg) => {
+              return arg.replace(/'/g, "'\\''");
+            };
+
+            const conflicts = [];
+            const merged = [];
+
+            for (const pr of prs) {
+              console.log(`Attempting to merge PR #${pr.number}: ${pr.title}`);
+
+              try {
+                // Fetch the PR branch - branch name is safe as it comes from GitHub
+                await execPromise(`git fetch origin ${pr.branch}:refs/remotes/origin/${pr.branch}`);
+
+                // Try to merge with properly escaped title
+                const safeTitle = escapeShellArg(pr.title);
+                const mergeResult = await execPromise(`git merge origin/${pr.branch} --no-edit -m 'Merge PR #${pr.number}: ${safeTitle}'`);
+                console.log(`Successfully merged PR #${pr.number}`);
+                merged.push(pr.number);
+              } catch (error) {
+                console.log(`Conflict detected with PR #${pr.number}`);
+                conflicts.push(pr);
+
+                // Abort the merge
+                try {
+                  await execPromise('git merge --abort');
+                } catch (e) {
+                  // Already aborted or not in merge state
+                }
+
+                // Post comment on the PR about the conflict
+                if (context.eventName === 'pull_request' && context.payload.pull_request.number === pr.number) {
+                  // This is the PR that triggered the workflow
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    body: `⚠️ **Merge Conflict Detected**\n\nThis PR has conflicts with the current preview branch (main + other open PRs).\n\nPlease resolve conflicts with the main branch or wait for conflicting PRs to be merged first.\n\nPRs merged before this one: ${merged.join(', ') || 'none'}`
+                  });
+                }
+              }
+            }
+
+            const result = { conflicts, merged };
+            core.setOutput('conflicts', JSON.stringify(conflicts));
+            core.setOutput('merged', JSON.stringify(merged));
+            core.setOutput('result', JSON.stringify(result));
+
+            return result;
+
+      - name: Push preview branch
+        id: push-preview
+        run: |
+          # Check if remote preview branch exists
+          if git ls-remote --exit-code --heads origin preview > /dev/null 2>&1; then
+            # preview branch exists, check for changes
+            if git diff --quiet origin/preview; then
+              echo "No changes to push"
+              echo "pushed=false" >> $GITHUB_OUTPUT
+            else
+              git push origin preview --force-with-lease
+              echo "pushed=true" >> $GITHUB_OUTPUT
+              echo "Preview branch updated successfully"
+            fi
+          else
+            # preview branch does not exist, push it
+            git push origin preview
+            echo "pushed=true" >> $GITHUB_OUTPUT
+            echo "Preview branch created and pushed"
+          fi
+        continue-on-error: true
+
+      - name: Handle push failure
+        if: steps.push-preview.outcome == 'failure'
+        run: |
+          # Force push if lease fails (someone else updated preview)
+          git push origin preview --force
+          echo "Preview branch force-pushed due to concurrent update"
+
+      - name: Post deployment status comment
+        if: github.event_name == 'pull_request' && steps.push-preview.outputs.pushed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const mergeResult = ${{ steps.merge-prs.outputs.result }};
+
+            let comment = '🚀 **Preview Deployment Update**\n\n';
+
+            if (mergeResult.merged.includes(prNumber)) {
+              comment += '✅ This PR has been successfully merged into the preview branch.\n\n';
+              comment += 'The preview environment will update shortly at: **https://app.preview.trakrf.id**\n\n';
+
+              if (mergeResult.conflicts.length > 0) {
+                comment += `⚠️ Note: The following PRs have conflicts and were not included in preview:\n`;
+                mergeResult.conflicts.forEach(pr => {
+                  comment += `- PR #${pr.number}: ${pr.title}\n`;
+                });
+              }
+            }
+
+            // Only post if we have something meaningful to say
+            if (mergeResult.merged.includes(prNumber) || mergeResult.conflicts.some(c => c.number === prNumber)) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: comment
+              });
+            }
