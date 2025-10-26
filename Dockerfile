@@ -34,8 +34,14 @@ RUN wget -qO- https://github.com/golang-migrate/migrate/releases/download/v4.17.
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
+# Install swag CLI for generating Swagger docs
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
 # Copy backend source
 COPY backend/ .
+
+# Generate Swagger documentation (docs directory is gitignored)
+RUN swag init -g main.go --parseDependency --parseInternal
 
 # Copy frontend dist to expected location for go:embed
 # go:embed at backend/main.go:27 expects backend/frontend/dist
