@@ -1,6 +1,7 @@
 /**
  * Central export for all Zustand stores
  */
+export { useAuthStore } from './authStore';
 export { useDeviceStore } from './deviceStore';
 export { useTagStore, type TagInfo } from './tagStore';
 export { useUIStore, type TabType } from './uiStore';
