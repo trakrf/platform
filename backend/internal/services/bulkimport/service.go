@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"mime/multipart"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
 	"github.com/trakrf/platform/backend/internal/storage"
+	csvutil "github.com/trakrf/platform/backend/internal/util/csv"
 )
+
+const ProgressUpdateInterval = 10
 
 type Service struct {
 	storage   *storage.Storage
@@ -51,10 +55,7 @@ func (s *Service) ProcessUpload(
 		Message:   fmt.Sprintf("CSV upload accepted. Processing %d rows asynchronously.", totalRows),
 	}
 
-	// TODO Phase 2B: Launch goroutine to process CSV rows
-	// go s.processCSVAsync(context.Background(), job.ID, orgID, records, headers)
-	_ = records
-	_ = headers
+	go s.processCSVAsync(context.Background(), job.ID, orgID, records, headers)
 
 	return response, nil
 }
@@ -66,5 +67,64 @@ func (s *Service) processCSVAsync(
 	records [][]string,
 	headers []string,
 ) {
-	// Phase 2B implementation
+	defer func() {
+		if r := recover(); r != nil {
+			s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+		}
+	}()
+
+	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "processing")
+
+	var processedRows int
+	var failedRows int
+	var errors []bulkimport.ErrorDetail
+
+	dataRows := records[1:]
+
+	for rowIdx, row := range dataRows {
+		rowNumber := rowIdx + 2
+
+		asset, err := csvutil.MapCSVRowToAsset(row, headers, orgID)
+		if err != nil {
+			failedRows++
+			errors = append(errors, bulkimport.ErrorDetail{
+				Row:   rowNumber,
+				Field: "",
+				Error: err.Error(),
+			})
+			continue
+		}
+
+		_, err = s.storage.CreateAsset(ctx, *asset)
+		if err != nil {
+			failedRows++
+			errorMsg := err.Error()
+			field := ""
+
+			if strings.Contains(errorMsg, "identifier") {
+				field = "identifier"
+			}
+
+			errors = append(errors, bulkimport.ErrorDetail{
+				Row:   rowNumber,
+				Field: field,
+				Error: errorMsg,
+			})
+		} else {
+			processedRows++
+		}
+
+		if (rowIdx+1)%ProgressUpdateInterval == 0 {
+			s.storage.UpdateBulkImportJobProgress(ctx, jobID, processedRows, failedRows, errors)
+		}
+	}
+
+	s.storage.UpdateBulkImportJobProgress(ctx, jobID, processedRows, failedRows, errors)
+
+	finalStatus := "completed"
+	if processedRows == 0 {
+		finalStatus = "failed"
+	}
+
+	s.storage.UpdateBulkImportJobStatus(ctx, jobID, finalStatus)
 }

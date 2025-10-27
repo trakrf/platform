@@ -297,3 +297,74 @@ func TestValidateCSVHeaders_InvalidHeaders(t *testing.T) {
 		})
 	}
 }
+
+func TestMapCSVRowToAsset_ValidRow(t *testing.T) {
+	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active"}
+	row := []string{"ASSET-001", "Test Asset", "device", "Test description", "2024-01-01", "2024-12-31", "true"}
+	orgID := 1
+
+	asset, err := MapCSVRowToAsset(row, headers, orgID)
+	if err != nil {
+		t.Fatalf("MapCSVRowToAsset failed: %v", err)
+	}
+
+	if asset.Identifier != "ASSET-001" {
+		t.Errorf("Expected identifier ASSET-001, got %s", asset.Identifier)
+	}
+	if asset.Name != "Test Asset" {
+		t.Errorf("Expected name 'Test Asset', got %s", asset.Name)
+	}
+	if asset.Type != "device" {
+		t.Errorf("Expected type 'device', got %s", asset.Type)
+	}
+	if !asset.IsActive {
+		t.Errorf("Expected is_active true, got false")
+	}
+	if asset.OrgID != orgID {
+		t.Errorf("Expected org_id %d, got %d", orgID, asset.OrgID)
+	}
+	if asset.Description != "Test description" {
+		t.Errorf("Expected description 'Test description', got %s", asset.Description)
+	}
+}
+
+func TestMapCSVRowToAsset_MissingRequired(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers []string
+		row     []string
+	}{
+		{
+			name:    "missing identifier",
+			headers: []string{"name", "type", "valid_from", "valid_to", "is_active"},
+			row:     []string{"Test", "device", "2024-01-01", "2024-12-31", "true"},
+		},
+		{
+			name:    "missing name",
+			headers: []string{"identifier", "type", "valid_from", "valid_to", "is_active"},
+			row:     []string{"ASSET-001", "device", "2024-01-01", "2024-12-31", "true"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := MapCSVRowToAsset(tt.row, tt.headers, 1)
+			if err == nil {
+				t.Errorf("Expected error for %s, got nil", tt.name)
+			}
+		})
+	}
+}
+
+func TestMapCSVRowToAsset_InvalidDates(t *testing.T) {
+	headers := []string{"identifier", "name", "type", "valid_from", "valid_to", "is_active"}
+	row := []string{"ASSET-001", "Test", "device", "2024-12-31", "2024-01-01", "true"}
+
+	_, err := MapCSVRowToAsset(row, headers, 1)
+	if err == nil {
+		t.Error("Expected error for valid_to before valid_from")
+	}
+	if !strings.Contains(err.Error(), "valid_to must be after valid_from") {
+		t.Errorf("Expected date validation error, got: %v", err)
+	}
+}

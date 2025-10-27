@@ -36,7 +36,6 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	return &asset, nil
 }
 
-
 func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateAssetRequest) (*asset.Asset, error) {
 	updates := []string{}
 	args := []any{id}
@@ -84,7 +83,6 @@ func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateA
 	return &asset, nil
 }
 
-
 func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, error) {
 	query := `
 	select id, org_id, identifier, name, type, description, valid_from, valid_to,
@@ -106,7 +104,6 @@ func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, erro
 	}
 	return &asset, nil
 }
-
 
 func (s *Storage) ListAllAssets(ctx context.Context, limit int, offset int) ([]asset.Asset, error) {
 	query := `
@@ -143,7 +140,6 @@ func (s *Storage) ListAllAssets(ctx context.Context, limit int, offset int) ([]a
 	return assets, nil
 }
 
-
 func (s *Storage) DeleteAsset(ctx context.Context, id *int) (bool, error) {
 	query := `update trakrf.assets set deleted_at = now() where id = $1 and deleted_at is null`
 	result, err := s.pool.Exec(ctx, query, id)
@@ -152,7 +148,6 @@ func (s *Storage) DeleteAsset(ctx context.Context, id *int) (bool, error) {
 	}
 	return result.RowsAffected() > 0, nil
 }
-
 
 func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	fields := make(map[string]any)
