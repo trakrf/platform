@@ -107,9 +107,9 @@ export default defineConfig(({ mode }) => {
       'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept'
     },
     hmr: {
-      protocol: 'wss',
-      clientPort: 443,
-      host: 'localhost'
+      protocol: env.VITE_HTTPS === 'true' ? 'wss' : 'ws',
+      host: env.VITE_HMR_HOST || 'mssb.local',
+      clientPort: env.VITE_HTTPS === 'true' ? 443 : undefined
     },
     // Allow all hosts - use wildcard patterns for any ngrok subdomain
     allowedHosts: ['.ngrok-free.app', '.ngrok.io', '.localhost', 'localhost']

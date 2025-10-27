@@ -26,7 +26,7 @@ func NewService(db *pgxpool.Pool, storage *storage.Storage) *Service {
 	}
 }
 
-// Signup registers a new user with a new account in a single transaction.
+// Signup registers a new user with a new org in a single transaction.
 func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPassword func(string) (string, error), generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
 	passwordHash, err := hashPassword(request.Password)
 	if err != nil {

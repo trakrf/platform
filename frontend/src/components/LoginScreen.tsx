@@ -52,8 +52,22 @@ export default function LoginScreen() {
         window.location.hash = '#home';
       }
     } catch (err: unknown) {
-      // authStore throws with err.response?.data?.error
-      const errorMessage = (err as any).response?.data?.error || (err as Error).message || 'Login failed';
+      // Extract error message from RFC 7807 Problem Details format
+      // Handle empty strings by checking truthy AND non-empty
+      const data = (err as any).response?.data;
+      const errorObj = data?.error || data; // Handle both nested and flat structures
+      let errorMessage =
+        (typeof errorObj?.detail === 'string' && errorObj.detail.trim()) ||
+        (typeof errorObj?.title === 'string' && errorObj.title.trim()) ||
+        (typeof data?.error === 'string' && data.error.trim()) ||
+        (typeof (err as Error).message === 'string' && (err as Error).message.trim()) ||
+        'Login failed';
+
+      // Ensure it's always a string (defensive coding)
+      if (typeof errorMessage !== 'string') {
+        errorMessage = JSON.stringify(errorMessage);
+      }
+
       setErrors({ general: errorMessage });
     }
   };

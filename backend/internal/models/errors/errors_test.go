@@ -14,14 +14,14 @@ func TestErrorTypes(t *testing.T) {
 }
 
 func TestErrorVariables(t *testing.T) {
-	if ErrAccountNotFound == nil {
-		t.Error("ErrAccountNotFound should not be nil")
+	if ErrOrgNotFound == nil {
+		t.Error("ErrOrgNotFound should not be nil")
 	}
 	if ErrUserNotFound == nil {
 		t.Error("ErrUserNotFound should not be nil")
 	}
-	if ErrAccountUserNotFound == nil {
-		t.Error("ErrAccountUserNotFound should not be nil")
+	if ErrOrgUserNotFound == nil {
+		t.Error("ErrOrgUserNotFound should not be nil")
 	}
 }
 

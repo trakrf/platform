@@ -28,15 +28,15 @@ type ErrorResponse struct {
 
 // Domain-specific errors
 var (
-	// Account errors
-	ErrAccountNotFound        = errors.New("account not found")
-	ErrAccountDuplicateDomain = errors.New("domain already exists")
+	// Org errors
+	ErrOrgNotFound        = errors.New("org not found")
+	ErrOrgDuplicateDomain = errors.New("domain already exists")
 
 	// User errors
 	ErrUserNotFound       = errors.New("user not found")
 	ErrUserDuplicateEmail = errors.New("email already exists")
 
-	// AccountUser errors
-	ErrAccountUserNotFound  = errors.New("account user not found")
-	ErrAccountUserDuplicate = errors.New("user already member of account")
+	// OrgUser errors
+	ErrOrgUserNotFound  = errors.New("org user not found")
+	ErrOrgUserDuplicate = errors.New("user already member of org")
 )

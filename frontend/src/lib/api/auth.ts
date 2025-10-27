@@ -3,7 +3,7 @@ import { apiClient } from './client';
 export interface SignupRequest {
   email: string;
   password: string;
-  account_name: string;
+  org_name: string;
 }
 
 export interface LoginRequest {

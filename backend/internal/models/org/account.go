@@ -1,4 +1,4 @@
-package account
+package org
 
 import (
 	"time"
@@ -6,8 +6,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
-// Account represents an account entity
-type Account struct {
+// Org represents an org entity
+type Org struct {
 	ID               int       `json:"id"`
 	Name             string    `json:"name"`
 	Domain           string    `json:"domain"`
@@ -23,8 +23,8 @@ type Account struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// CreateAccountRequest for POST /api/v1/accounts
-type CreateAccountRequest struct {
+// CreateOrgRequest for POST /api/v1/orgs
+type CreateOrgRequest struct {
 	Name             string  `json:"name" validate:"required,min=1,max=255"`
 	Domain           string  `json:"domain" validate:"required,hostname"`
 	BillingEmail     string  `json:"billing_email" validate:"required,email"`
@@ -34,8 +34,8 @@ type CreateAccountRequest struct {
 	MaxStorageGB     *int    `json:"max_storage_gb" validate:"omitempty,min=1"`
 }
 
-// UpdateAccountRequest for PUT /api/v1/accounts/:id
-type UpdateAccountRequest struct {
+// UpdateOrgRequest for PUT /api/v1/orgs/:id
+type UpdateOrgRequest struct {
 	Name           *string `json:"name" validate:"omitempty,min=1,max=255"`
 	BillingEmail   *string `json:"billing_email" validate:"omitempty,email"`
 	TechnicalEmail *string `json:"technical_email" validate:"omitempty,email"`
@@ -44,8 +44,8 @@ type UpdateAccountRequest struct {
 	MaxStorageGB   *int    `json:"max_storage_gb" validate:"omitempty,min=1"`
 }
 
-// AccountListResponse for GET /api/v1/accounts
-type AccountListResponse struct {
-	Data       []Account         `json:"data"`
+// OrgListResponse for GET /api/v1/orgs
+type OrgListResponse struct {
+	Data       []Org         `json:"data"`
 	Pagination shared.Pagination `json:"pagination"`
 }
