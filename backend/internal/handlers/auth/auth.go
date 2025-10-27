@@ -27,14 +27,14 @@ func NewHandler(service *authservice.Service) *Handler {
 }
 
 // @Summary User signup
-// @Description Register new user and account
+// @Description Register new user with auto-created personal organization
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body auth.SignupRequest true "Signup request"
+// @Param request body auth.SignupRequest true "Signup request (email and password only)"
 // @Success 201 {object} map[string]any "data: auth.SignupResponse"
 // @Failure 400 {object} errors.ErrorResponse "Validation error"
-// @Failure 409 {object} errors.ErrorResponse "Email or account name already exists"
+// @Failure 409 {object} errors.ErrorResponse "Email already exists"
 // @Failure 500 {object} errors.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/signup [post]
 func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
@@ -59,9 +59,9 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 				"Email already exists", "", middleware.GetRequestID(r.Context()))
 			return
 		}
-		if strings.Contains(errMsg, "account name already taken") {
+		if strings.Contains(errMsg, "organization identifier already taken") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
-				"Account name already taken", "", middleware.GetRequestID(r.Context()))
+				"Organization identifier already taken", "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,

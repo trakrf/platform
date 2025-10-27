@@ -37,5 +37,5 @@ CREATE POLICY user_isolation_users ON users
     USING (id = current_setting('app.current_user_id')::INT);
 
 -- Add comments for documentation
-COMMENT ON TABLE users IS 'Stores users associated with accounts in the SaaS application';
+COMMENT ON TABLE users IS 'Stores users associated with orgs in the SaaS application';
 COMMENT ON COLUMN users.id IS 'Primary key - hashed ID';

@@ -13,9 +13,9 @@ func TestGenerate(t *testing.T) {
 
 	userID := 1
 	email := "test@example.com"
-	accountID := 5
+	orgID := 5
 
-	token, err := Generate(userID, email, &accountID)
+	token, err := Generate(userID, email, &orgID)
 
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -37,9 +37,9 @@ func TestValidate_Valid(t *testing.T) {
 
 	userID := 1
 	email := "test@example.com"
-	accountID := 5
+	orgID := 5
 
-	token, err := Generate(userID, email, &accountID)
+	token, err := Generate(userID, email, &orgID)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -57,8 +57,8 @@ func TestValidate_Valid(t *testing.T) {
 		t.Errorf("expected Email %s, got %s", email, claims.Email)
 	}
 
-	if claims.CurrentAccountID == nil || *claims.CurrentAccountID != accountID {
-		t.Errorf("expected AccountID %d, got %v", accountID, claims.CurrentAccountID)
+	if claims.CurrentOrgID == nil || *claims.CurrentOrgID != orgID {
+		t.Errorf("expected OrgID %d, got %v", orgID, claims.CurrentOrgID)
 	}
 
 	expectedExpiry := time.Now().Add(3600 * time.Second)

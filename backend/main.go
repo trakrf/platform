@@ -14,13 +14,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/trakrf/platform/backend/docs"
-	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
-	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	bulkimporthandler "github.com/trakrf/platform/backend/internal/handlers/bulkimport"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
+	orgusershandler "github.com/trakrf/platform/backend/internal/handlers/org_users"
+	organizationshandler "github.com/trakrf/platform/backend/internal/handlers/organizations"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
@@ -37,7 +37,7 @@ var (
 
 // @title Platform API
 // @version 1.0
-// @description Multi-tenant platform API with authentication and account management
+// @description Multi-tenant platform API with authentication and org management
 // @BasePath /
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -46,9 +46,9 @@ var (
 
 func setupRouter(
 	authHandler *authhandler.Handler,
-	accountsHandler *accountshandler.Handler,
+	organizationsHandler *organizationshandler.Handler,
 	usersHandler *usershandler.Handler,
-	accountUsersHandler *accountusershandler.Handler,
+	orgUsersHandler *orgusershandler.Handler,
 	assetsHandler *assetshandler.Handler,
 	bulkImportHandler *bulkimporthandler.Handler,
 	healthHandler *healthhandler.Handler,
@@ -77,9 +77,9 @@ func setupRouter(
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 
-		accountsHandler.RegisterRoutes(r)
+		organizationsHandler.RegisterRoutes(r)
 		usersHandler.RegisterRoutes(r)
-		accountUsersHandler.RegisterRoutes(r)
+		orgUsersHandler.RegisterRoutes(r)
 		assetsHandler.RegisterRoutes(r)
 		bulkImportHandler.RegisterRoutes(r)
 	})
@@ -116,16 +116,16 @@ func main() {
 	slog.Info("Auth service initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)
-	accountsHandler := accountshandler.NewHandler(store)
+	organizationsHandler := organizationshandler.NewHandler(store)
 	usersHandler := usershandler.NewHandler(store)
-	accountUsersHandler := accountusershandler.NewHandler(store)
+	orgUsersHandler := orgusershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	bulkImportHandler := bulkimporthandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	slog.Info("Handlers initialized")
 
-	r := setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, assetsHandler, bulkImportHandler, healthHandler, frontendHandler)
+	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, bulkImportHandler, healthHandler, frontendHandler)
 	slog.Info("Routes registered")
 
 	server := &http.Server{

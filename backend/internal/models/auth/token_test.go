@@ -5,11 +5,11 @@ import (
 )
 
 func TestJWTClaims(t *testing.T) {
-	accountID := 1
+	orgID := 1
 	claims := JWTClaims{
-		UserID:           123,
-		Email:            "test@example.com",
-		CurrentAccountID: &accountID,
+		UserID:       123,
+		Email:        "test@example.com",
+		CurrentOrgID: &orgID,
 	}
 
 	if claims.UserID != 123 {
@@ -18,7 +18,7 @@ func TestJWTClaims(t *testing.T) {
 	if claims.Email != "test@example.com" {
 		t.Errorf("expected email 'test@example.com', got %s", claims.Email)
 	}
-	if *claims.CurrentAccountID != 1 {
-		t.Errorf("expected CurrentAccountID 1, got %d", *claims.CurrentAccountID)
+	if *claims.CurrentOrgID != 1 {
+		t.Errorf("expected CurrentOrgID 1, got %d", *claims.CurrentOrgID)
 	}
 }

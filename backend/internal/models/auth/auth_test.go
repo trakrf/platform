@@ -6,9 +6,9 @@ import (
 
 func TestSignupRequest(t *testing.T) {
 	req := SignupRequest{
-		Email:       "test@example.com",
-		Password:    "password123",
-		AccountName: "Test Account",
+		Email:    "test@example.com",
+		Password: "password123",
+		// OrgName removed - auto-generated from email
 	}
 
 	if req.Email == "" {

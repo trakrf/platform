@@ -10,21 +10,21 @@ import (
 )
 
 type Claims struct {
-	UserID           int    `json:"user_id"`
-	Email            string `json:"email"`
-	CurrentAccountID *int   `json:"current_account_id,omitempty"`
+	UserID       int    `json:"user_id"`
+	Email        string `json:"email"`
+	CurrentOrgID *int   `json:"current_org_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // Generate creates a signed JWT token for an authenticated user.
-func Generate(userID int, email string, accountID *int) (string, error) {
+func Generate(userID int, email string, orgID *int) (string, error) {
 	expiration := getExpiration()
 	expirationTime := time.Now().Add(time.Duration(expiration) * time.Second)
 
 	claims := &Claims{
-		UserID:           userID,
-		Email:            email,
-		CurrentAccountID: accountID,
+		UserID:       userID,
+		Email:        email,
+		CurrentOrgID: orgID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

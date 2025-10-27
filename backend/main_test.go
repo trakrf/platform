@@ -5,13 +5,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
-	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	bulkimporthandler "github.com/trakrf/platform/backend/internal/handlers/bulkimport"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
+	orgusershandler "github.com/trakrf/platform/backend/internal/handlers/org_users"
+	organizationshandler "github.com/trakrf/platform/backend/internal/handlers/organizations"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -24,15 +24,15 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	authSvc := authservice.NewService(nil, store)
 
 	authHandler := authhandler.NewHandler(authSvc)
-	accountsHandler := accountshandler.NewHandler(store)
+	organizationsHandler := organizationshandler.NewHandler(store)
 	usersHandler := usershandler.NewHandler(store)
-	accountUsersHandler := accountusershandler.NewHandler(store)
+	orgUsersHandler := orgusershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	bulkImportHandler := bulkimporthandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, "test", time.Now())
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 
-	return setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, assetsHandler, bulkImportHandler, healthHandler, frontendHandler)
+	return setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, bulkImportHandler, healthHandler, frontendHandler)
 }
 
 func TestRouterSetup(t *testing.T) {
@@ -61,7 +61,7 @@ func TestRouterRegistration(t *testing.T) {
 		{"GET", "/health"},
 		{"POST", "/api/v1/auth/signup"},
 		{"POST", "/api/v1/auth/login"},
-		{"GET", "/api/v1/accounts"},
+		{"GET", "/api/v1/organizations"},
 		{"GET", "/api/v1/users"},
 		{"GET", "/assets/index.js"},
 		{"GET", "/favicon.ico"},

@@ -4,24 +4,26 @@ SET search_path=trakrf,public;
 CREATE SEQUENCE location_seq;
 
 CREATE TABLE locations (
-                           id INT PRIMARY KEY,
-                           account_id INT NOT NULL REFERENCES accounts(id),
-                           identifier VARCHAR(255) NOT NULL,  -- natural key
-                           name VARCHAR(255) NOT NULL,
-                           description TEXT,
-                           valid_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                           valid_to TIMESTAMPTZ DEFAULT NULL,
-                           is_active BOOLEAN NOT NULL DEFAULT true,
-                           metadata JSONB DEFAULT '{}',
-                           created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                           updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                           deleted_at TIMESTAMPTZ,
-                           UNIQUE(account_id, identifier, valid_from)
+    id INT PRIMARY KEY,
+    org_id INT NOT NULL REFERENCES organizations(id),
+    identifier VARCHAR(255) NOT NULL,  -- natural key
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    parent_location_id INT REFERENCES locations(id),  -- NEW: hierarchy support
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    valid_to TIMESTAMPTZ DEFAULT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ,
+    UNIQUE(org_id, identifier, valid_from)
 );
 
 -- Indexes for common access patterns and foreign keys
-CREATE INDEX idx_locations_account ON locations(account_id);
+CREATE INDEX idx_locations_org ON locations(org_id);
 CREATE INDEX idx_locations_identifier ON locations(identifier);
+CREATE INDEX idx_locations_parent ON locations(parent_location_id);
 CREATE INDEX idx_locations_valid ON locations(valid_from, valid_to);
 CREATE INDEX idx_locations_active ON locations(is_active) WHERE is_active = true;
 
@@ -41,8 +43,8 @@ CREATE TRIGGER update_locations_updated_at
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for each table
-CREATE POLICY account_isolation_location ON locations
-   USING (account_id = current_setting('app.current_account_id')::INT);
+CREATE POLICY org_isolation_locations ON locations
+   USING (org_id = current_setting('app.current_org_id')::INT);
 
 -- Add comments for documentation
 COMMENT ON TABLE locations IS 'Stores location information with temporal validity';
