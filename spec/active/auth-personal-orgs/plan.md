@@ -10,7 +10,7 @@ This feature removes the organization name field from the signup form and auto-g
 
 **Breaking changes (greenfield)**:
 - Remove `org_name` from signup API request
-- Rename database column `domain` → `org_slug` for clearer semantics (used in MQTT topics like `trakrf.id/<org_slug>/reads`)
+- Rename database column `domain` → `org_slug` for clearer semantics (used in MQTT topics like `<org_slug>/reader-1/reads`)
 - Add `is_personal` boolean flag to distinguish personal vs team organizations
 
 **No backward compatibility needed** - project is in development with zero production deployments.
@@ -101,7 +101,7 @@ CREATE TABLE organizations (
 CREATE INDEX idx_organizations_org_slug ON organizations(org_slug);
 
 -- Update comments
-COMMENT ON COLUMN organizations.org_slug IS 'URL-safe slug for MQTT topics and routing (e.g., mike-example-com for trakrf.id/mike-example-com/reads)';
+COMMENT ON COLUMN organizations.org_slug IS 'URL-safe slug for MQTT topics and routing (e.g., mike-example-com for topics like mike-example-com/reader-1/reads)';
 COMMENT ON COLUMN organizations.is_personal IS 'True if auto-created personal organization (single-owner account), false for team organizations';
 ```
 
@@ -649,7 +649,7 @@ psql -d trakrf -c "SELECT org_id, user_id, role FROM trakrf.org_users;"
 
 The column comment for `org_slug` already references MQTT topic usage:
 ```sql
-COMMENT ON COLUMN organizations.org_slug IS 'URL-safe slug for MQTT topics and routing (e.g., mike-example-com for trakrf.id/mike-example-com/reads)';
+COMMENT ON COLUMN organizations.org_slug IS 'URL-safe slug for MQTT topics and routing (e.g., mike-example-com for topics like mike-example-com/reader-1/reads)';
 ```
 
 **Validation**: None needed (documentation only)
