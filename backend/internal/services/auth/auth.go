@@ -33,7 +33,9 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	domain := slugifyOrgName(request.OrgName)
+	// Auto-generate org name and identifier from email
+	orgName := request.Email
+	orgIdentifier := slugifyOrgName(orgName)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -57,19 +59,20 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	// Create personal organization with is_personal=true
 	var org organization.Organization
 	orgQuery := `
-		INSERT INTO trakrf.organizations (name, domain)
-		VALUES ($1, $2)
-		RETURNING id, name, domain, metadata, valid_from, valid_to, is_active, created_at, updated_at
+		INSERT INTO trakrf.organizations (name, identifier, is_personal)
+		VALUES ($1, $2, true)
+		RETURNING id, name, identifier, is_personal, metadata, valid_from, valid_to, is_active, created_at, updated_at
 	`
-	err = tx.QueryRow(ctx, orgQuery, request.OrgName, domain).Scan(
-		&org.ID, &org.Name, &org.Domain, &org.Metadata,
+	err = tx.QueryRow(ctx, orgQuery, orgName, orgIdentifier).Scan(
+		&org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive,
 		&org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, fmt.Errorf("organization name already taken")
+			return nil, fmt.Errorf("organization identifier already taken")
 		}
 		return nil, fmt.Errorf("failed to create organization: %w", err)
 	}
@@ -126,6 +129,20 @@ func (s *Service) Login(ctx context.Context, request auth.LoginRequest, compareP
 		orgID = 0
 	}
 
+	// Update last_login_at timestamp
+	if orgID != 0 {
+		updateLoginQuery := `
+			UPDATE trakrf.org_users
+			SET last_login_at = NOW()
+			WHERE user_id = $1 AND org_id = $2 AND deleted_at IS NULL
+		`
+		_, err = s.db.Exec(ctx, updateLoginQuery, usr.ID, orgID)
+		if err != nil {
+			// Log error but don't fail login
+			fmt.Printf("Warning: failed to update last_login_at: %v\n", err)
+		}
+	}
+
 	var orgIDPtr *int
 	if orgID != 0 {
 		orgIDPtr = &orgID
@@ -141,11 +158,22 @@ func (s *Service) Login(ctx context.Context, request auth.LoginRequest, compareP
 	}, nil
 }
 
-// slugifyOrgName converts organization name to URL-safe slug for domain field.
+// slugifyOrgName converts organization name or email to URL-safe slug for identifier field.
+// For emails, the entire email is slugified to guarantee uniqueness.
+// Examples:
+//
+//	"My Company"           -> "my-company"
+//	"mike@example.com"     -> "mike-example-com"
+//	"alice.smith@acme.io"  -> "alice-smith-acme-io"
 func slugifyOrgName(name string) string {
 	slug := strings.ToLower(name)
-	reg := regexp.MustCompile(`[^a-z0-9]+`)
+	// Replace @ and . with hyphens (for email addresses)
+	slug = strings.ReplaceAll(slug, "@", "-")
+	slug = strings.ReplaceAll(slug, ".", "-")
+	// Replace any other non-alphanumeric characters with hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]+`)
 	slug = reg.ReplaceAllString(slug, "-")
+	// Trim leading/trailing hyphens
 	slug = strings.Trim(slug, "-")
 	return slug
 }

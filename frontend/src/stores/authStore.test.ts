@@ -109,7 +109,7 @@ describe('authStore', () => {
 
       vi.mocked(authApi.signup).mockResolvedValue(mockResponse as any);
 
-      await useAuthStore.getState().signup('newuser@example.com', 'password123', 'My Account');
+      await useAuthStore.getState().signup('newuser@example.com', 'password123');
 
       const state = useAuthStore.getState();
       expect(state.token).toBe('new-user-token');
@@ -130,7 +130,7 @@ describe('authStore', () => {
       vi.mocked(authApi.signup).mockRejectedValue(mockError);
 
       await expect(
-        useAuthStore.getState().signup('existing@example.com', 'password', 'Account')
+        useAuthStore.getState().signup('existing@example.com', 'password')
       ).rejects.toEqual(mockError);
 
       const state = useAuthStore.getState();

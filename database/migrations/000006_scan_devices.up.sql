@@ -51,7 +51,7 @@ CREATE POLICY org_isolation_scan_devices ON scan_devices
 -- Add comments for documentation
 COMMENT ON TABLE scan_devices IS 'Stores scan device information with temporal validity';
 COMMENT ON COLUMN scan_devices.id IS 'Primary key - permuted ID';
-COMMENT ON COLUMN scan_devices.identifier IS 'Natural key/business identifier for the device';
+COMMENT ON COLUMN scan_devices.identifier IS 'Natural key/business identifier for the device (e.g., cs463-214). Used in MQTT topics: {org.identifier}/{device.identifier}/reads';
 COMMENT ON COLUMN scan_devices.type IS 'Device type: rfid_reader, barcode_scanner, mobile, etc.';
 COMMENT ON COLUMN scan_devices.serial_number IS 'Hardware serial number for inventory tracking';
 COMMENT ON COLUMN scan_devices.model IS 'Device model/make';

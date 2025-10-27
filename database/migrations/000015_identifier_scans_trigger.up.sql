@@ -10,10 +10,10 @@ BEGIN
     -- Parse org_id from MQTT topic (format: trakrf.id/device-name/...)
     SELECT o.id INTO topic_org_id
     FROM organizations o
-    WHERE o.domain = split_part(NEW.message_topic, '/', 1);
+    WHERE o.identifier = split_part(NEW.message_topic, '/', 1);
 
     IF topic_org_id IS NULL THEN
-        RAISE NOTICE 'Could not find organization for topic: %. Topic should match organization domain', NEW.message_topic;
+        RAISE NOTICE 'Could not find organization for topic: %. Topic should match organization identifier', NEW.message_topic;
         RETURN NEW;
     END IF;
 

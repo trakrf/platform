@@ -8,7 +8,7 @@ func TestSignupRequest(t *testing.T) {
 	req := SignupRequest{
 		Email:    "test@example.com",
 		Password: "password123",
-		OrgName:  "Test Organization",
+		// OrgName removed - auto-generated from email
 	}
 
 	if req.Email == "" {
