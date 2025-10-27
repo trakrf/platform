@@ -11,6 +11,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/services/bulkimport"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
@@ -18,11 +19,15 @@ import (
 var validate = validator.New()
 
 type Handler struct {
-	storage *storage.Storage
+	storage           *storage.Storage
+	bulkImportService *bulkimport.Service
 }
 
 func NewHandler(storage *storage.Storage) *Handler {
-	return &Handler{storage: storage}
+	return &Handler{
+		storage:           storage,
+		bulkImportService: bulkimport.NewService(storage),
+	}
 }
 
 // @Summary Create asset
