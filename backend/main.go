@@ -16,7 +16,9 @@ import (
 	_ "github.com/trakrf/platform/backend/docs"
 	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
 	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
+	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
+	bulkimporthandler "github.com/trakrf/platform/backend/internal/handlers/bulkimport"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
@@ -47,6 +49,8 @@ func setupRouter(
 	accountsHandler *accountshandler.Handler,
 	usersHandler *usershandler.Handler,
 	accountUsersHandler *accountusershandler.Handler,
+	assetsHandler *assetshandler.Handler,
+	bulkImportHandler *bulkimporthandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
 ) *chi.Mux {
@@ -76,6 +80,8 @@ func setupRouter(
 		accountsHandler.RegisterRoutes(r)
 		usersHandler.RegisterRoutes(r)
 		accountUsersHandler.RegisterRoutes(r)
+		assetsHandler.RegisterRoutes(r)
+		bulkImportHandler.RegisterRoutes(r)
 	})
 
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -113,11 +119,13 @@ func main() {
 	accountsHandler := accountshandler.NewHandler(store)
 	usersHandler := usershandler.NewHandler(store)
 	accountUsersHandler := accountusershandler.NewHandler(store)
+	assetsHandler := assetshandler.NewHandler(store)
+	bulkImportHandler := bulkimporthandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	slog.Info("Handlers initialized")
 
-	r := setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, healthHandler, frontendHandler)
+	r := setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, assetsHandler, bulkImportHandler, healthHandler, frontendHandler)
 	slog.Info("Routes registered")
 
 	server := &http.Server{

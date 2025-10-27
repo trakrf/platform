@@ -12,12 +12,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/asset"
-	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
 func setupTestRouter(handler *Handler) *chi.Mux {
@@ -100,7 +98,6 @@ func TestGetAsset(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	// First create an asset
 	now := time.Now()
 	createRequest := asset.Asset{
 		Name:        "Test Asset Get",
@@ -118,7 +115,6 @@ func TestGetAsset(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, created)
 
-	// Now get the asset
 	idStr := strconv.Itoa(created.ID)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+idStr, nil)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
@@ -192,7 +188,6 @@ func TestUpdateAsset(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	// First create an asset
 	now := time.Now()
 	createRequest := asset.Asset{
 		Name:        "Test Asset Update",
@@ -210,7 +205,6 @@ func TestUpdateAsset(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, created)
 
-	// Now update it
 	newName := "Updated Asset"
 	newDescription := "Updated description"
 	updateRequest := asset.UpdateAccountRequest{
@@ -273,7 +267,6 @@ func TestDeleteAsset(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, created)
 
-	// Now delete it
 	idStr := strconv.Itoa(created.ID)
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/"+idStr, nil)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
@@ -293,7 +286,6 @@ func TestDeleteAsset(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, response["deleted"])
 
-	// Verify it's soft deleted
 	deleted, err := store.GetAssetByID(context.Background(), &created.ID)
 	require.NoError(t, err)
 	assert.Nil(t, deleted, "Asset should be soft deleted")
@@ -330,7 +322,6 @@ func TestListAssets(t *testing.T) {
 
 	pool := store.Pool().(*pgxpool.Pool)
 
-	// Clean up any existing test data first
 	testutil.CleanupAssets(t, pool)
 	defer testutil.CleanupAssets(t, pool)
 
@@ -339,7 +330,6 @@ func TestListAssets(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	// Create multiple assets
 	now := time.Now()
 	for i := 1; i <= 3; i++ {
 		createRequest := asset.Asset{
@@ -390,7 +380,6 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 	var createdID int
 
-	// Step 1: Create an asset
 	t.Run("Create", func(t *testing.T) {
 		requestBody := asset.Asset{
 			Name:        "Workflow Test Asset",
@@ -423,7 +412,6 @@ func TestFullCRUDWorkflow(t *testing.T) {
 		createdID = response["data"].ID
 	})
 
-	// Step 2: Read the asset
 	t.Run("Read", func(t *testing.T) {
 		idStr := strconv.Itoa(createdID)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+idStr, nil)
@@ -445,7 +433,6 @@ func TestFullCRUDWorkflow(t *testing.T) {
 		assert.Equal(t, "Workflow Test Asset", response["data"].Name)
 	})
 
-	// Step 3: Update the asset
 	t.Run("Update", func(t *testing.T) {
 		newName := "Updated Workflow Asset"
 		updateRequest := asset.UpdateAccountRequest{
@@ -476,7 +463,6 @@ func TestFullCRUDWorkflow(t *testing.T) {
 		assert.Equal(t, newName, response["data"].Name)
 	})
 
-	// Step 4: Delete the asset
 	t.Run("Delete", func(t *testing.T) {
 		idStr := strconv.Itoa(createdID)
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/"+idStr, nil)
