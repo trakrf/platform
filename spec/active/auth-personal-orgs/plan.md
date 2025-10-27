@@ -10,8 +10,10 @@ This feature removes the organization name field from the signup form and auto-g
 
 **Breaking changes (greenfield)**:
 - Remove `org_name` from signup API request
-- Rename database column `domain` → `org_slug` for clearer semantics (used in MQTT topics like `<org_slug>/reader-1/reads`)
+- Rename database column `domain` → `identifier` for consistent pattern across all tables (used in MQTT topics like `{org.identifier}/{device.identifier}/reads`)
 - Add `is_personal` boolean flag to distinguish personal vs team organizations
+- Update identifier_scans trigger to reference `organizations.identifier`
+- Update scan_devices column comment to document MQTT usage
 
 **No backward compatibility needed** - project is in development with zero production deployments.
 
@@ -76,7 +78,7 @@ This feature removes the organization name field from the signup form and auto-g
 
 ## Task Breakdown
 
-### Task 1: Update Database Migration - Add is_personal and Rename domain → org_slug
+### Task 1: Update Database Migration - Add is_personal and Rename domain → identifier
 **File**: `database/migrations/000002_organizations.up.sql`
 **Action**: MODIFY
 **Pattern**: Reference existing CREATE TABLE structure
@@ -86,7 +88,7 @@ This feature removes the organization name field from the signup form and auto-g
 CREATE TABLE organizations (
     id INT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    org_slug VARCHAR(255) UNIQUE,  -- Renamed from 'domain'
+    identifier VARCHAR(255) UNIQUE,  -- Renamed from 'domain'
     is_personal BOOLEAN NOT NULL DEFAULT false,  -- NEW COLUMN
     metadata JSONB DEFAULT '{}',
     valid_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -98,10 +100,10 @@ CREATE TABLE organizations (
 );
 
 -- Update index name
-CREATE INDEX idx_organizations_org_slug ON organizations(org_slug);
+CREATE INDEX idx_organizations_identifier ON organizations(identifier);
 
 -- Update comments
-COMMENT ON COLUMN organizations.org_slug IS 'URL-safe slug for MQTT topics and routing (e.g., mike-example-com for topics like mike-example-com/reader-1/reads)';
+COMMENT ON COLUMN organizations.identifier IS 'URL-safe identifier for MQTT topics and routing (e.g., mike-example-com for topics like mike-example-com/reader-1/reads)';
 COMMENT ON COLUMN organizations.is_personal IS 'True if auto-created personal organization (single-owner account), false for team organizations';
 ```
 
@@ -118,7 +120,7 @@ psql -d trakrf -c "\d trakrf.organizations"
 
 ---
 
-### Task 2: Update Organization Model - Rename Domain → OrgSlug
+### Task 2: Update Organization Model - Rename Domain → Identifier
 **File**: `backend/internal/models/organization/organization.go`
 **Action**: MODIFY
 **Pattern**: Existing struct definition
@@ -128,7 +130,7 @@ psql -d trakrf -c "\d trakrf.organizations"
 type Organization struct {
     ID         int                    `json:"id"`
     Name       string                 `json:"name"`
-    OrgSlug    string                 `json:"org_slug"`  // Renamed from Domain
+    Identifier string                 `json:"identifier"`  // Renamed from Domain
     IsPersonal bool                   `json:"is_personal"` // NEW FIELD
     Metadata   map[string]interface{} `json:"metadata"`
     ValidFrom  time.Time              `json:"valid_from"`
@@ -210,9 +212,9 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
         return nil, fmt.Errorf("failed to hash password: %w", err)
     }
 
-    // Auto-generate org name from email
+    // Auto-generate org name and identifier from email
     orgName := request.Email
-    orgSlug := slugifyOrgName(orgName)
+    orgIdentifier := slugifyOrgName(orgName)
 
     tx, err := s.db.Begin(ctx)
     if err != nil {
@@ -240,17 +242,17 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
     // Create personal organization with is_personal=true
     var org organization.Organization
     orgQuery := `
-        INSERT INTO trakrf.organizations (name, org_slug, is_personal)
+        INSERT INTO trakrf.organizations (name, identifier, is_personal)
         VALUES ($1, $2, true)
-        RETURNING id, name, org_slug, is_personal, metadata, valid_from, valid_to, is_active, created_at, updated_at
+        RETURNING id, name, identifier, is_personal, metadata, valid_from, valid_to, is_active, created_at, updated_at
     `
-    err = tx.QueryRow(ctx, orgQuery, orgName, orgSlug).Scan(
-        &org.ID, &org.Name, &org.OrgSlug, &org.IsPersonal, &org.Metadata,
+    err = tx.QueryRow(ctx, orgQuery, orgName, orgIdentifier).Scan(
+        &org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
         &org.ValidFrom, &org.ValidTo, &org.IsActive,
         &org.CreatedAt, &org.UpdatedAt)
     if err != nil {
         if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-            return nil, fmt.Errorf("organization name already taken")
+            return nil, fmt.Errorf("organization identifier already taken")
         }
         return nil, fmt.Errorf("failed to create organization: %w", err)
     }
@@ -400,7 +402,71 @@ just lint
 
 ---
 
-### Task 7: Remove Organization Name Field from SignupScreen
+### Task 7: Update identifier_scans Trigger - Change domain → identifier
+**File**: `database/migrations/000015_identifier_scans_trigger.up.sql`
+**Action**: MODIFY
+**Pattern**: Existing trigger function
+
+**Implementation**:
+Update line 13 to reference `organizations.identifier` instead of `organizations.domain`:
+
+```sql
+-- OLD (line 13):
+WHERE o.domain = split_part(NEW.message_topic, '/', 1);
+
+-- NEW:
+WHERE o.identifier = split_part(NEW.message_topic, '/', 1);
+```
+
+Also update the RAISE NOTICE message (line 16):
+```sql
+-- OLD:
+RAISE NOTICE 'Could not find organization for topic: %. Topic should match organization domain', NEW.message_topic;
+
+-- NEW:
+RAISE NOTICE 'Could not find organization for topic: %. Topic should match organization identifier', NEW.message_topic;
+```
+
+**Validation**:
+```bash
+# Reset database to apply trigger changes
+just db-reset
+# OR: DROP SCHEMA trakrf CASCADE; then just db-migrate-up
+
+# Verify trigger exists
+psql -d trakrf -c "\df process_identifier_scans"
+```
+
+---
+
+### Task 8: Update scan_devices Column Comment - Document MQTT Usage
+**File**: `database/migrations/000006_scan_devices.up.sql`
+**Action**: MODIFY
+**Pattern**: Existing column comment
+
+**Implementation**:
+Update the comment for `scan_devices.identifier` (line 54) to mention MQTT:
+
+```sql
+-- OLD:
+COMMENT ON COLUMN scan_devices.identifier IS 'Natural key/business identifier for the device';
+
+-- NEW:
+COMMENT ON COLUMN scan_devices.identifier IS 'Natural key/business identifier for the device (e.g., cs463-214). Used in MQTT topics: {org.identifier}/{device.identifier}/reads';
+```
+
+**Validation**:
+```bash
+# Reset database to apply comment changes
+just db-reset
+
+# Verify comment
+psql -d trakrf -c "\d+ trakrf.scan_devices"
+```
+
+---
+
+### Task 9: Remove Organization Name Field from SignupScreen
 **File**: `frontend/src/components/SignupScreen.tsx`
 **Action**: MODIFY
 **Pattern**: Reference existing form structure (lines 1-194)
@@ -426,7 +492,7 @@ just typecheck
 
 ---
 
-### Task 8: Update AuthStore - Remove 3rd Parameter from signup()
+### Task 10: Update AuthStore - Remove 3rd Parameter from signup()
 **File**: `frontend/src/stores/authStore.ts` (lines 17, 74-114)
 **Action**: MODIFY
 **Pattern**: Existing store action pattern
@@ -472,7 +538,7 @@ just typecheck
 
 ---
 
-### Task 9: Update Auth API Client - Remove org_name from Signup Interface
+### Task 11: Update Auth API Client - Remove org_name from Signup Interface
 **File**: `frontend/src/lib/api/auth.ts`
 **Action**: MODIFY
 **Pattern**: Existing API interface
@@ -500,7 +566,7 @@ just typecheck
 
 ---
 
-### Task 10: Update SignupScreen Tests
+### Task 12: Update SignupScreen Tests
 **File**: `frontend/src/components/__tests__/SignupScreen.test.tsx`
 **Action**: MODIFY
 **Pattern**: Existing test structure
@@ -545,7 +611,7 @@ just test
 
 ---
 
-### Task 11: Update AuthStore Tests
+### Task 13: Update AuthStore Tests
 **File**: `frontend/src/stores/authStore.test.ts`
 **Action**: MODIFY (if exists) or CREATE
 **Pattern**: Zustand store testing pattern
@@ -582,7 +648,7 @@ just test
 
 ---
 
-### Task 12: Integration Test - Full Signup Flow
+### Task 14: Integration Test - Full Signup Flow
 **File**: `backend/internal/services/auth/auth_test.go` (add to existing file from Task 5)
 **Action**: MODIFY
 **Pattern**: Transaction-based testing with test database
@@ -614,7 +680,7 @@ just test
 
 ---
 
-### Task 13: Manual E2E Testing
+### Task 15: Manual E2E Testing
 **Action**: MANUAL TESTING
 **Pattern**: Full user signup flow
 
@@ -642,17 +708,22 @@ psql -d trakrf -c "SELECT org_id, user_id, role FROM trakrf.org_users;"
 
 ---
 
-### Task 14: Update MQTT Topic Comments/Docs (Optional)
-**File**: `database/migrations/000002_organizations.up.sql`
-**Action**: Already done in Task 1
-**Pattern**: Column comments
+### Task 16: Review Messages Table (Separate Spec Needed)
+**File**: `database/migrations/000012_messages.up.sql`
+**Action**: DEFER - Out of scope for this PR
+**Pattern**: N/A
 
-The column comment for `org_slug` already references MQTT topic usage:
-```sql
-COMMENT ON COLUMN organizations.org_slug IS 'URL-safe slug for MQTT topics and routing (e.g., mike-example-com for topics like mike-example-com/reader-1/reads)';
-```
+**Issue Identified:**
+The `messages` table (line 54) has the same `o.domain` reference that needs updating, BUT more importantly, the messages table appears to duplicate functionality already in `identifier_scans`.
 
-**Validation**: None needed (documentation only)
+**Recommendation**: Create separate spec to:
+1. Evaluate if messages table is still needed
+2. If yes: Update `o.domain` → `o.identifier` in `process_messages()` trigger (line 54)
+3. If no: Remove messages table and consolidate to identifier_scans only
+
+**For this PR**: Skip messages table changes to avoid scope creep. The identifier_scans trigger (Task 7) is the primary data pipeline.
+
+**Validation**: None (deferred to future spec)
 
 ---
 
@@ -752,9 +823,9 @@ just dev-local
 ## Plan Quality Assessment
 
 **Complexity Score**: 7/10 (MEDIUM-HIGH)
-- 6 files modified, 1 file created
+- 8 files modified, 1 file created
 - 3 subsystems (Database, Backend, Frontend)
-- ~14 subtasks
+- 16 subtasks (2 new: identifier_scans trigger + scan_devices comment)
 - 0 new dependencies
 - Existing patterns to follow
 
