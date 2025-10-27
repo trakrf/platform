@@ -13,11 +13,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/trakrf/platform/backend/docs"
-	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
-	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
+	orgusershandler "github.com/trakrf/platform/backend/internal/handlers/org_users"
+	organizationshandler "github.com/trakrf/platform/backend/internal/handlers/organizations"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
@@ -43,9 +43,9 @@ var (
 
 func setupRouter(
 	authHandler *authhandler.Handler,
-	accountsHandler *accountshandler.Handler,
+	organizationsHandler *organizationshandler.Handler,
 	usersHandler *usershandler.Handler,
-	accountUsersHandler *accountusershandler.Handler,
+	orgUsersHandler *orgusershandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
 ) *chi.Mux {
@@ -72,9 +72,9 @@ func setupRouter(
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 
-		accountsHandler.RegisterRoutes(r)
+		organizationsHandler.RegisterRoutes(r)
 		usersHandler.RegisterRoutes(r)
-		accountUsersHandler.RegisterRoutes(r)
+		orgUsersHandler.RegisterRoutes(r)
 	})
 
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -109,14 +109,14 @@ func main() {
 	slog.Info("Auth service initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)
-	accountsHandler := accountshandler.NewHandler(store)
+	organizationsHandler := organizationshandler.NewHandler(store)
 	usersHandler := usershandler.NewHandler(store)
-	accountUsersHandler := accountusershandler.NewHandler(store)
+	orgUsersHandler := orgusershandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool(), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	slog.Info("Handlers initialized")
 
-	r := setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, healthHandler, frontendHandler)
+	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, healthHandler, frontendHandler)
 	slog.Info("Routes registered")
 
 	server := &http.Server{
