@@ -28,7 +28,6 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 	jobIDParam := chi.URLParam(r, "jobId")
 
-	// Parse job ID as UUID
 	jobID, err := uuid.Parse(jobIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -36,7 +35,6 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract org_id from JWT claims for tenant isolation
 	claims := middleware.GetUserClaims(r)
 	if claims == nil || claims.CurrentOrgID == nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
@@ -45,7 +43,6 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	orgID := *claims.CurrentOrgID
 
-	// Retrieve job from storage (with tenant isolation)
 	job, err := handler.storage.GetBulkImportJobByID(r.Context(), jobID, orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -59,7 +56,6 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build response
 	response := bulkimport.JobStatusResponse{
 		JobID:         job.ID.String(),
 		Status:        job.Status,
@@ -95,7 +91,6 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	// Extract org_id from JWT claims
 	claims := middleware.GetUserClaims(r)
 	if claims == nil || claims.CurrentOrgID == nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
@@ -104,7 +99,6 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	orgID := *claims.CurrentOrgID
 
-	// Parse multipart form (max 6MB to account for overhead beyond 5MB file)
 	err := r.ParseMultipartForm(6 * 1024 * 1024)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -112,7 +106,6 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the file from form
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -121,14 +114,11 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Delegate to service for processing
 	response, err := handler.bulkImportService.ProcessUpload(r.Context(), orgID, file, header)
 	if err != nil {
-		// Map service errors to appropriate HTTP status codes
 		statusCode := http.StatusBadRequest
 		errorType := modelerrors.ErrBadRequest
 
-		// Check for specific error types
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "file too large") {
 			statusCode = http.StatusRequestEntityTooLarge
