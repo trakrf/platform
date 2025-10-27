@@ -46,6 +46,6 @@ type UpdateOrgRequest struct {
 
 // OrgListResponse for GET /api/v1/orgs
 type OrgListResponse struct {
-	Data       []Org         `json:"data"`
+	Data       []Org             `json:"data"`
 	Pagination shared.Pagination `json:"pagination"`
 }

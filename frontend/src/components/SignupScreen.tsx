@@ -1,20 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [organizationName, setOrganizationName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
-    organizationName?: string;
     general?: string;
   }>({});
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
   const { signup, isLoading } = useAuthStore();
+
+  // Auto-focus email field on mount
+  useEffect(() => {
+    emailInputRef.current?.focus();
+  }, []);
 
   // Validation functions
   const validateEmail = (email: string) => {
@@ -29,12 +33,6 @@ export default function SignupScreen() {
     return null;
   };
 
-  const validateOrganizationName = (name: string) => {
-    if (!name) return 'Organization name is required';
-    if (name.length < 2) return 'Organization name must be at least 2 characters';
-    return null;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -44,19 +42,17 @@ export default function SignupScreen() {
     // Validate all fields
     const emailError = validateEmail(email);
     const passwordError = validatePassword(password);
-    const orgError = validateOrganizationName(organizationName);
 
-    if (emailError || passwordError || orgError) {
+    if (emailError || passwordError) {
       setErrors({
         email: emailError || undefined,
         password: passwordError || undefined,
-        organizationName: orgError || undefined,
       });
       return;
     }
 
     try {
-      await signup(email, password, organizationName);
+      await signup(email, password);
 
       // After successful signup, redirect to home
       window.location.hash = '#home';
@@ -93,6 +89,7 @@ export default function SignupScreen() {
               Email
             </label>
             <input
+              ref={emailInputRef}
               id="email"
               type="email"
               value={email}
@@ -138,28 +135,6 @@ export default function SignupScreen() {
             </div>
             {errors.password && (
               <p className="text-red-400 text-sm mt-1">{errors.password}</p>
-            )}
-          </div>
-
-          {/* Organization name input */}
-          <div>
-            <label htmlFor="organizationName" className="block text-sm font-medium text-gray-300 mb-2">
-              Organization Name
-            </label>
-            <input
-              id="organizationName"
-              type="text"
-              value={organizationName}
-              onChange={(e) => setOrganizationName(e.target.value)}
-              onBlur={() => {
-                const error = validateOrganizationName(organizationName);
-                if (error) setErrors(prev => ({ ...prev, organizationName: error }));
-              }}
-              className="w-full px-4 py-2 border border-gray-600 bg-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={isLoading}
-            />
-            {errors.organizationName && (
-              <p className="text-red-400 text-sm mt-1">{errors.organizationName}</p>
             )}
           </div>
 

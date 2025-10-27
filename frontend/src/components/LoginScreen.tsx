@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -7,8 +7,14 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
   const { login, isLoading } = useAuthStore();
+
+  // Auto-focus email field on mount
+  useEffect(() => {
+    emailInputRef.current?.focus();
+  }, []);
 
   // Validation on blur
   const validateEmail = (email: string) => {
@@ -84,6 +90,7 @@ export default function LoginScreen() {
               Email
             </label>
             <input
+              ref={emailInputRef}
               id="email"
               type="email"
               value={email}

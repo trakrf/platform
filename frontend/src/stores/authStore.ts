@@ -14,7 +14,7 @@ interface AuthState {
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, orgName: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
   clearError: () => void;
   initialize: () => void;
@@ -71,13 +71,13 @@ export const useAuthStore = create<AuthState>()(
         },
 
         // Signup action
-        signup: async (email: string, password: string, orgName: string) => {
+        signup: async (email: string, password: string) => {
           set({ isLoading: true, error: null });
           try {
             const response = await authApi.signup({
               email,
               password,
-              org_name: orgName,
+              // org_name removed - backend auto-generates from email
             });
             const { token, user } = response.data.data;
 
