@@ -189,13 +189,11 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 		}
 	}
 
-	// If any errors occurred, rollback and return the errors
 	if len(errors) > 0 {
 		tx.Rollback(ctx)
 		return 0, errors
 	}
 
-	// All inserts succeeded, commit the transaction
 	if err := tx.Commit(ctx); err != nil {
 		return 0, []error{fmt.Errorf("failed to commit transaction: %w", err)}
 	}

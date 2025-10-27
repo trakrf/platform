@@ -80,7 +80,6 @@ func (s *Service) processCSVAsync(
 	assets := make([]asset.Asset, 0, len(dataRows))
 	var parseErrors []bulkimport.ErrorDetail
 
-	// First pass: parse all CSV rows into assets
 	for rowIdx, row := range dataRows {
 		rowNumber := rowIdx + 2
 
@@ -97,35 +96,29 @@ func (s *Service) processCSVAsync(
 		assets = append(assets, *parsedAsset)
 	}
 
-	// If there were parsing errors, fail the job and report them
 	if len(parseErrors) > 0 {
 		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, len(parseErrors), parseErrors)
 		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
 		return
 	}
 
-	// Second pass: insert all assets in a single transaction
 	successCount, insertErrors := s.storage.BatchCreateAssets(ctx, assets)
 
-	// If there were insert errors, transaction was rolled back
 	if len(insertErrors) > 0 {
 		var errorDetails []bulkimport.ErrorDetail
 		for _, err := range insertErrors {
 			errorMsg := err.Error()
-			// Extract row number if present in error message
 			var rowNum int
 			var field string
 
-			// Parse "row X: ..." format
 			if n, parseErr := fmt.Sscanf(errorMsg, "row %d:", &rowNum); n == 1 && parseErr == nil {
-				// Row number is in the error message
 				if strings.Contains(errorMsg, "identifier") {
 					field = "identifier"
 				}
 			}
 
 			errorDetails = append(errorDetails, bulkimport.ErrorDetail{
-				Row:   rowNum + 2, // Convert to 1-indexed + header
+				Row:   rowNum + 2,
 				Field: field,
 				Error: errorMsg,
 			})
@@ -136,7 +129,6 @@ func (s *Service) processCSVAsync(
 		return
 	}
 
-	// All inserts succeeded
 	s.storage.UpdateBulkImportJobProgress(ctx, jobID, successCount, 0, nil)
 	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "completed")
 }
