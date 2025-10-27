@@ -16,7 +16,7 @@ type ErrorDetail struct {
 // BulkImportJob represents an async bulk import operation
 type BulkImportJob struct {
 	ID            uuid.UUID     `json:"job_id"`
-	AccountID     int           `json:"account_id"`
+	OrgID         int           `json:"org_id"`
 	Status        string        `json:"status"` // pending, processing, completed, failed
 	TotalRows     int           `json:"total_rows"`
 	ProcessedRows int           `json:"processed_rows"`
@@ -28,7 +28,7 @@ type BulkImportJob struct {
 
 // CreateJobRequest is used when creating a new job (Phase 2 will use this)
 type CreateJobRequest struct {
-	AccountID int `json:"account_id" validate:"required,min=1"`
+	OrgID int `json:"org_id" validate:"required,min=1"`
 	TotalRows int `json:"total_rows" validate:"required,min=1,max=1000"`
 }
 

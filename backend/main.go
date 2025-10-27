@@ -16,7 +16,6 @@ import (
 	_ "github.com/trakrf/platform/backend/docs"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
-	bulkimporthandler "github.com/trakrf/platform/backend/internal/handlers/bulkimport"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	orgusershandler "github.com/trakrf/platform/backend/internal/handlers/org_users"
@@ -50,7 +49,6 @@ func setupRouter(
 	usersHandler *usershandler.Handler,
 	orgUsersHandler *orgusershandler.Handler,
 	assetsHandler *assetshandler.Handler,
-	bulkImportHandler *bulkimporthandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
 ) *chi.Mux {
@@ -81,7 +79,6 @@ func setupRouter(
 		usersHandler.RegisterRoutes(r)
 		orgUsersHandler.RegisterRoutes(r)
 		assetsHandler.RegisterRoutes(r)
-		bulkImportHandler.RegisterRoutes(r)
 	})
 
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -120,12 +117,11 @@ func main() {
 	usersHandler := usershandler.NewHandler(store)
 	orgUsersHandler := orgusershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
-	bulkImportHandler := bulkimporthandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	slog.Info("Handlers initialized")
 
-	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, bulkImportHandler, healthHandler, frontendHandler)
+	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, healthHandler, frontendHandler)
 	slog.Info("Routes registered")
 
 	server := &http.Server{
