@@ -21,6 +21,9 @@ backend *args:
 database *args:
     cd database && just {{args}}
 
+ingester *args:
+    cd ingester && just {{args}}
+
 # ============================================================================
 # Lazy Dev Aliases
 # ============================================================================
@@ -28,6 +31,7 @@ database *args:
 alias db := database
 alias fe := frontend
 alias be := backend
+alias ing := ingester
 
 # ============================================================================
 # Combined Validation Commands

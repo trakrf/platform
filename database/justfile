@@ -1,5 +1,10 @@
 # Database Infrastructure Task Runner
+set dotenv-load := true
 set fallback := true
+
+# List all available database commands
+default:
+    @just --list
 
 # Start TimescaleDB container
 up:
@@ -24,22 +29,81 @@ logs:
 
 # Interactive psql shell
 psql:
-    docker compose exec -it timescaledb psql -U postgres
+    docker compose exec -it -e PGOPTIONS="-c search_path=trakrf,public" timescaledb psql -U postgres
 
 # Alias for psql
 alias shell := psql
 
 # Reset database (WARNING: deletes all data)
 reset:
-    @echo "⚠️  This will delete all data. Press Ctrl+C to cancel."
-    @sleep 3
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "⚠️  WARNING: This will DELETE ALL DATA in the database!"
+    echo ""
+    read -p "Type 'yes' to confirm: " confirm
+    if [ "$confirm" != "yes" ]; then
+        echo "❌ Reset cancelled."
+        exit 1
+    fi
+    echo "🔥 Resetting database..."
     docker compose down -v
     docker compose up -d timescaledb
-    @echo "⏳ Waiting for database to initialize..."
-    @sleep 10
-    @echo "✅ Database reset complete"
+    echo "⏳ Waiting for database to initialize..."
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        if docker compose exec timescaledb pg_isready -U postgres > /dev/null 2>&1; then
+            echo "✅ Database reset complete"
+            exit 0
+        fi
+        sleep 2
+    done
+    echo "⚠️  Database is starting but not ready yet. Run 'just database status' to check."
 
 # Check database status
 status:
     @docker compose ps timescaledb
     @docker compose exec timescaledb pg_isready -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
+
+# ============================================================================
+# Migrations (host → docker postgres)
+# ============================================================================
+
+# Run migrations from host machine (requires: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest)
+migrate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🔄 Running migrations (host → docker postgres)..."
+    if [ -z "${PG_URL_LOCAL:-}" ]; then
+        echo "❌ PG_URL_LOCAL not set in .env.local"
+        echo "   Example: PG_URL_LOCAL=postgres://postgres:password@localhost:5432/trakrf?sslmode=disable"
+        exit 1
+    fi
+    migrate -path ./migrations -database "${PG_URL_LOCAL}" up
+    echo "✅ Migrations complete"
+
+# Show migration status
+migrate-status:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${PG_URL_LOCAL:-}" ]; then
+        echo "❌ PG_URL_LOCAL not set"
+        exit 1
+    fi
+    echo "📊 Migration status:"
+    migrate -path ./migrations -database "${PG_URL_LOCAL}" version
+
+# Roll back last migration
+migrate-down:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${PG_URL_LOCAL:-}" ]; then
+        echo "❌ PG_URL_LOCAL not set"
+        exit 1
+    fi
+    echo "⏪ Rolling back last migration..."
+    migrate -path ./migrations -database "${PG_URL_LOCAL}" down 1
+    echo "✅ Rollback complete"
+
+# Create new migration file
+migrate-create name:
+    @echo "📝 Creating new migration: {{name}}"
+    migrate create -ext sql -dir ./migrations -seq {{name}}

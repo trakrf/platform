@@ -1,0 +1,24 @@
+input:
+  mqtt:
+    urls:
+      - ${MQTT_URL}
+    client_id: ${MQTT_CLIENT_ID:-trakrf-local}
+    connect_timeout: 30s
+    topics:
+      - ${MQTT_TOPIC}
+
+pipeline:
+  processors: []
+#    - bloblang:
+#        mapping: 'root = "um..."'
+
+output:
+  sql_raw:
+    driver: postgres
+    dsn: ${PG_URL}
+    query: "INSERT INTO trakrf.identifier_scans (message_topic, message_data) VALUES ($1, $2)"
+    args_mapping: 'root = [ meta("mqtt_topic"), this.string() ]'
+
+#output:
+#  stdout:
+#    codec: lines
