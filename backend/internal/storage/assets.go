@@ -149,6 +149,60 @@ func (s *Storage) DeleteAsset(ctx context.Context, id *int) (bool, error) {
 	return result.RowsAffected() > 0, nil
 }
 
+// BatchCreateAssets creates multiple assets in a single transaction.
+// If any asset fails to insert, the entire transaction is rolled back and errors are returned.
+// Returns the number of successful inserts and a slice of errors (with row numbers).
+func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (int, []error) {
+	if len(assets) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, []error{fmt.Errorf("failed to begin transaction: %w", err)}
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		INSERT INTO trakrf.assets
+		(name, identifier, type, description, valid_from, valid_to, metadata, is_active, org_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	var errors []error
+	successCount := 0
+
+	for i, a := range assets {
+		_, err := tx.Exec(ctx, query,
+			a.Name, a.Identifier, a.Type, a.Description,
+			a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
+		)
+
+		if err != nil {
+			if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+				errors = append(errors, fmt.Errorf("row %d: asset with identifier %s already exists", i, a.Identifier))
+			} else {
+				errors = append(errors, fmt.Errorf("row %d: %w", i, err))
+			}
+		} else {
+			successCount++
+		}
+	}
+
+	// If any errors occurred, rollback and return the errors
+	if len(errors) > 0 {
+		tx.Rollback(ctx)
+		return 0, errors
+	}
+
+	// All inserts succeeded, commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		return 0, []error{fmt.Errorf("failed to commit transaction: %w", err)}
+	}
+
+	return successCount, nil
+}
+
 func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	fields := make(map[string]any)
 
