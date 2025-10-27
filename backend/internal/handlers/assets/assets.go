@@ -85,14 +85,13 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var request asset.UpdateAssetRequest
-	
 
-	if err:= json.NewDecoder(req.Body).Decode(&request); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest, "Invalid Request", err.Error(), ctx)
 		return
 	}
 
-	if err:= validate.Struct(request); err != nil {
+	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrValidation, "Validation Failed", err.Error(), ctx)
 		return
 	}
@@ -136,7 +135,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal, "Failed to get asset", err.Error(), ctx)
 		return
 	}
-	
+
 	if result == nil {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
 			"Asset not found", "", ctx)
@@ -163,7 +162,7 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 
 	id, err := strconv.Atoi(idParam)
 
-	if err!= nil {
+	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf("Invalid Asset ID: %s", idParam), err.Error(), ctx)
 		return
@@ -206,5 +205,6 @@ func (handler *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/v1/assets", handler.Create)
 	r.Put("/api/v1/assets/{id}", handler.UpdateAsset)
 	r.Delete("/api/v1/assets/{id}", handler.DeleteAsset)
+	r.Post("/api/v1/assets/bulk", handler.UploadCSV)
 	r.Get("/api/v1/assets/bulk/{jobId}", handler.GetJobStatus)
 }

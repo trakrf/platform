@@ -28,7 +28,7 @@ type BulkImportJob struct {
 
 // CreateJobRequest is used when creating a new job (Phase 2 will use this)
 type CreateJobRequest struct {
-	OrgID int `json:"org_id" validate:"required,min=1"`
+	OrgID     int `json:"org_id" validate:"required,min=1"`
 	TotalRows int `json:"total_rows" validate:"required,min=1,max=1000"`
 }
 
@@ -50,4 +50,12 @@ type JobStatusResponse struct {
 	CreatedAt      string        `json:"created_at"`
 	CompletedAt    string        `json:"completed_at,omitempty"`
 	Errors         []ErrorDetail `json:"errors,omitempty"`
+}
+
+// UploadResponse is returned when a CSV file is successfully accepted
+type UploadResponse struct {
+	Status    string `json:"status"`     // "accepted"
+	JobID     string `json:"job_id"`     // UUID string
+	StatusURL string `json:"status_url"` // "/api/v1/assets/bulk/{jobId}"
+	Message   string `json:"message"`    // User-friendly message
 }
