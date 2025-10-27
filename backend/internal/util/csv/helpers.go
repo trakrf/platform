@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/trakrf/platform/backend/internal/models/asset"
 )
 
 // Supported date formats for CSV import
@@ -124,4 +126,87 @@ func ValidateCSVHeaders(headers []string) error {
 	}
 
 	return nil
+}
+
+func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, error) {
+	headerIdx := make(map[string]int)
+	for i, h := range headers {
+		headerIdx[strings.ToLower(strings.TrimSpace(h))] = i
+	}
+
+	getCol := func(name string) (string, error) {
+		idx, ok := headerIdx[name]
+		if !ok {
+			return "", fmt.Errorf("missing required column: %s", name)
+		}
+		if idx >= len(row) {
+			return "", fmt.Errorf("row too short for column: %s", name)
+		}
+		return strings.TrimSpace(row[idx]), nil
+	}
+
+	identifier, err := getCol("identifier")
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := getCol("name")
+	if err != nil {
+		return nil, err
+	}
+
+	assetType, err := getCol("type")
+	if err != nil {
+		return nil, err
+	}
+
+	validFromStr, err := getCol("valid_from")
+	if err != nil {
+		return nil, err
+	}
+
+	validToStr, err := getCol("valid_to")
+	if err != nil {
+		return nil, err
+	}
+
+	isActiveStr, err := getCol("is_active")
+	if err != nil {
+		return nil, err
+	}
+
+	validFrom, err := ParseCSVDate(validFromStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid valid_from: %w", err)
+	}
+
+	validTo, err := ParseCSVDate(validToStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid valid_to: %w", err)
+	}
+
+	isActive, err := ParseCSVBool(isActiveStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid is_active: %w", err)
+	}
+
+	description := ""
+	if descIdx, ok := headerIdx["description"]; ok && descIdx < len(row) {
+		description = strings.TrimSpace(row[descIdx])
+	}
+
+	if validTo.Before(validFrom) {
+		return nil, fmt.Errorf("valid_to must be after valid_from")
+	}
+
+	return &asset.Asset{
+		OrgID:       orgID,
+		Identifier:  identifier,
+		Name:        name,
+		Type:        assetType,
+		Description: description,
+		ValidFrom:   validFrom,
+		ValidTo:     validTo,
+		IsActive:    isActive,
+	}, nil
 }

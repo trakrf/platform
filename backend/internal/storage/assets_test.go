@@ -29,7 +29,7 @@ func TestCreateAsset(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	rows := pgxmock.NewRows([]string{
@@ -78,7 +78,7 @@ func TestCreateAsset_DuplicateIdentifier(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
@@ -114,7 +114,7 @@ func TestCreateAsset_EmptyName(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
@@ -150,7 +150,7 @@ func TestCreateAsset_EmptyIdentifier(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
@@ -186,7 +186,7 @@ func TestCreateAsset_InvalidOrgID(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
-		OrgID:   99999,
+		OrgID:       99999,
 	}
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
@@ -222,7 +222,7 @@ func TestCreateAsset_NullMetadata(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    nil,
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	rows := pgxmock.NewRows([]string{
@@ -269,7 +269,7 @@ func TestCreateAsset_EmptyMetadata(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    []byte(`{}`),
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	rows := pgxmock.NewRows([]string{
@@ -320,7 +320,7 @@ func TestCreateAsset_DatabaseConnectionError(t *testing.T) {
 		ValidTo:     now.Add(24 * time.Hour),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
@@ -372,7 +372,7 @@ func TestCreateAsset_ComplexMetadata(t *testing.T) {
 		ValidTo:     now.Add(365 * 24 * time.Hour),
 		Metadata:    complexMetadata,
 		IsActive:    true,
-		OrgID:   1,
+		OrgID:       1,
 	}
 
 	rows := pgxmock.NewRows([]string{
@@ -406,7 +406,6 @@ func TestCreateAsset_ComplexMetadata(t *testing.T) {
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
-
 
 func TestUpdateAsset(t *testing.T) {
 	mock, err := pgxmock.NewPool()
@@ -529,7 +528,6 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-
 func TestGetAssetByID(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
@@ -638,7 +636,6 @@ func TestGetAssetByID_DatabaseError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to get asset by id")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
-
 
 func TestListAllAssets(t *testing.T) {
 	mock, err := pgxmock.NewPool()
@@ -799,7 +796,6 @@ func TestListAllAssets_ScanError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to scan asset")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
-
 
 func TestDeleteAsset(t *testing.T) {
 	mock, err := pgxmock.NewPool()

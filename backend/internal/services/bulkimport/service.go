@@ -4,11 +4,16 @@ import (
 	"context"
 	"fmt"
 	"mime/multipart"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/trakrf/platform/backend/internal/models/asset"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
 	"github.com/trakrf/platform/backend/internal/storage"
+	csvutil "github.com/trakrf/platform/backend/internal/util/csv"
 )
+
+const ProgressUpdateInterval = 10
 
 type Service struct {
 	storage   *storage.Storage
@@ -51,10 +56,7 @@ func (s *Service) ProcessUpload(
 		Message:   fmt.Sprintf("CSV upload accepted. Processing %d rows asynchronously.", totalRows),
 	}
 
-	// TODO Phase 2B: Launch goroutine to process CSV rows
-	// go s.processCSVAsync(context.Background(), job.ID, orgID, records, headers)
-	_ = records
-	_ = headers
+	go s.processCSVAsync(context.Background(), job.ID, orgID, records, headers)
 
 	return response, nil
 }
@@ -66,5 +68,67 @@ func (s *Service) processCSVAsync(
 	records [][]string,
 	headers []string,
 ) {
-	// Phase 2B implementation
+	defer func() {
+		if r := recover(); r != nil {
+			s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+		}
+	}()
+
+	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "processing")
+
+	dataRows := records[1:]
+	assets := make([]asset.Asset, 0, len(dataRows))
+	var parseErrors []bulkimport.ErrorDetail
+
+	for rowIdx, row := range dataRows {
+		rowNumber := rowIdx + 2
+
+		parsedAsset, err := csvutil.MapCSVRowToAsset(row, headers, orgID)
+		if err != nil {
+			parseErrors = append(parseErrors, bulkimport.ErrorDetail{
+				Row:   rowNumber,
+				Field: "",
+				Error: err.Error(),
+			})
+			continue
+		}
+
+		assets = append(assets, *parsedAsset)
+	}
+
+	if len(parseErrors) > 0 {
+		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, len(parseErrors), parseErrors)
+		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+		return
+	}
+
+	successCount, insertErrors := s.storage.BatchCreateAssets(ctx, assets)
+
+	if len(insertErrors) > 0 {
+		var errorDetails []bulkimport.ErrorDetail
+		for _, err := range insertErrors {
+			errorMsg := err.Error()
+			var rowNum int
+			var field string
+
+			if n, parseErr := fmt.Sscanf(errorMsg, "row %d:", &rowNum); n == 1 && parseErr == nil {
+				if strings.Contains(errorMsg, "identifier") {
+					field = "identifier"
+				}
+			}
+
+			errorDetails = append(errorDetails, bulkimport.ErrorDetail{
+				Row:   rowNum + 2,
+				Field: field,
+				Error: errorMsg,
+			})
+		}
+
+		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, len(insertErrors), errorDetails)
+		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+		return
+	}
+
+	s.storage.UpdateBulkImportJobProgress(ctx, jobID, successCount, 0, nil)
+	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "completed")
 }
