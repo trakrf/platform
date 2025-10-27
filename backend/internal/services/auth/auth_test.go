@@ -12,7 +12,7 @@ func TestLogin(t *testing.T) {
 	t.Skip("Requires test database and dependencies - implement in integration tests")
 }
 
-func TestSlugifyAccountName(t *testing.T) {
+func TestSlugifyOrgName(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -27,9 +27,9 @@ func TestSlugifyAccountName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := slugifyAccountName(tt.input)
+			result := slugifyOrgName(tt.input)
 			if result != tt.expected {
-				t.Errorf("slugifyAccountName(%q) = %q, want %q", tt.input, result, tt.expected)
+				t.Errorf("slugifyOrgName(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
