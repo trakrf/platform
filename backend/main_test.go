@@ -7,7 +7,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	accountusershandler "github.com/trakrf/platform/backend/internal/handlers/account_users"
 	accountshandler "github.com/trakrf/platform/backend/internal/handlers/accounts"
+	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
+	bulkimporthandler "github.com/trakrf/platform/backend/internal/handlers/bulkimport"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
@@ -25,10 +27,12 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	accountsHandler := accountshandler.NewHandler(store)
 	usersHandler := usershandler.NewHandler(store)
 	accountUsersHandler := accountusershandler.NewHandler(store)
+	assetsHandler := assetshandler.NewHandler(store)
+	bulkImportHandler := bulkimporthandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, "test", time.Now())
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 
-	return setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, healthHandler, frontendHandler)
+	return setupRouter(authHandler, accountsHandler, usersHandler, accountUsersHandler, assetsHandler, bulkImportHandler, healthHandler, frontendHandler)
 }
 
 func TestRouterSetup(t *testing.T) {
