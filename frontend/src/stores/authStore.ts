@@ -14,7 +14,7 @@ interface AuthState {
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, accountName: string) => Promise<void>;
+  signup: (email: string, password: string, orgName: string) => Promise<void>;
   logout: () => void;
   clearError: () => void;
   initialize: () => void;
@@ -46,7 +46,22 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
           } catch (err: any) {
-            const errorMessage = err.response?.data?.error || 'Login failed';
+            // Extract error message from RFC 7807 Problem Details format
+            // Handle empty strings by checking truthy AND non-empty
+            const data = err.response?.data;
+            const errorObj = data?.error || data; // Handle both nested and flat structures
+            let errorMessage =
+              (typeof errorObj?.detail === 'string' && errorObj.detail.trim()) ||
+              (typeof errorObj?.title === 'string' && errorObj.title.trim()) ||
+              (typeof data?.error === 'string' && data.error.trim()) ||
+              (typeof err.message === 'string' && err.message.trim()) ||
+              'Login failed';
+
+            // Ensure it's always a string (defensive coding)
+            if (typeof errorMessage !== 'string') {
+              errorMessage = JSON.stringify(errorMessage);
+            }
+
             set({
               error: errorMessage,
               isLoading: false,
@@ -56,13 +71,13 @@ export const useAuthStore = create<AuthState>()(
         },
 
         // Signup action
-        signup: async (email: string, password: string, accountName: string) => {
+        signup: async (email: string, password: string, orgName: string) => {
           set({ isLoading: true, error: null });
           try {
             const response = await authApi.signup({
               email,
               password,
-              account_name: accountName,
+              org_name: orgName,
             });
             const { token, user } = response.data.data;
 
@@ -74,7 +89,22 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
           } catch (err: any) {
-            const errorMessage = err.response?.data?.error || 'Signup failed';
+            // Extract error message from RFC 7807 Problem Details format
+            // Handle empty strings by checking truthy AND non-empty
+            const data = err.response?.data;
+            const errorObj = data?.error || data; // Handle both nested and flat structures
+            let errorMessage =
+              (typeof errorObj?.detail === 'string' && errorObj.detail.trim()) ||
+              (typeof errorObj?.title === 'string' && errorObj.title.trim()) ||
+              (typeof data?.error === 'string' && data.error.trim()) ||
+              (typeof err.message === 'string' && err.message.trim()) ||
+              'Signup failed';
+
+            // Ensure it's always a string (defensive coding)
+            if (typeof errorMessage !== 'string') {
+              errorMessage = JSON.stringify(errorMessage);
+            }
+
             set({
               error: errorMessage,
               isLoading: false,

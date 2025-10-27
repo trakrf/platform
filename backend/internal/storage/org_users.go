@@ -14,7 +14,7 @@ import (
 
 // ListOrgUsers retrieves a paginated list of users in an organization.
 func (s *Storage) ListOrgUsers(ctx context.Context, orgID int, limit, offset int) ([]org_user.OrgUser, int, error) {
-	// TODO: Implement with new schema (org_id instead of account_id, no status field)
+	// TODO: Implement with new schema (org_id instead of org_id, no status field)
 	return nil, 0, fmt.Errorf("not implemented: org_user list requires schema migration")
 }
 

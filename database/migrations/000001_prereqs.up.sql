@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION trakrf.generate_permuted_id()
 RETURNS TRIGGER AS $$
 DECLARE
     seq_name TEXT := TG_ARGV[0];  -- Get sequence name from trigger definition
-    account_id BIGINT := 1304140453;  -- todo: get from environment
+    org_id BIGINT := 1304140453;  -- todo: get from environment
     seq_id BIGINT;
     permuted_id BIGINT;
     max_int BIGINT := 2147483647;  -- 2^31 - 1
@@ -37,8 +37,8 @@ SELECT nextval(seq_name) INTO seq_id;
     -- Step 1: First transformation
     permuted_id := ((seq_id * 16807::bigint) % max_int);
 
-    -- Step 2: XOR with account seed
-    permuted_id := permuted_id # (account_id * 31337::bigint);
+    -- Step 2: XOR with org seed
+    permuted_id := permuted_id # (org_id * 31337::bigint);
 
     -- Step 3: Multiplication (potential overflow point)
     -- We'll take the modulo first to keep the number smaller

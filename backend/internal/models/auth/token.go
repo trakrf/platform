@@ -6,6 +6,6 @@ import "github.com/golang-jwt/jwt/v5"
 type JWTClaims struct {
 	UserID           int    `json:"user_id"`
 	Email            string `json:"email"`
-	CurrentAccountID *int   `json:"current_account_id,omitempty"`
+	CurrentOrgID *int   `json:"current_org_id,omitempty"`
 	jwt.RegisteredClaims
 }

@@ -34,7 +34,7 @@ var (
 
 // @title Platform API
 // @version 1.0
-// @description Multi-tenant platform API with authentication and account management
+// @description Multi-tenant platform API with authentication and org management
 // @BasePath /
 // @securityDefinitions.apikey BearerAuth
 // @in header

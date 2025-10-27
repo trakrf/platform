@@ -58,10 +58,11 @@ dev:
     @just database up
     @echo "⏳ Waiting for database to be ready..."
     @sleep 3
-    @echo "🔄 Running migrations..."
-    @just backend migrate
     @echo "🚀 Starting backend..."
     @docker compose up -d backend
+    @sleep 2
+    @echo "🔄 Running migrations..."
+    @just backend migrate
     @echo "✅ Development environment ready"
 
 # Local development (parallel frontend + backend)
