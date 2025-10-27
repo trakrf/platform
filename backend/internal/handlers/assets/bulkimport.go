@@ -1,4 +1,4 @@
-package bulkimport
+package assets
 
 import (
 	"net/http"
@@ -8,17 +8,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
-	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
-
-type Handler struct {
-	storage *storage.Storage
-}
-
-func NewHandler(storage *storage.Storage) *Handler {
-	return &Handler{storage: storage}
-}
 
 // @Summary Get bulk import job status
 // @Description Retrieve the status of a bulk import job by ID
@@ -32,7 +23,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security BearerAuth
 // @Router /api/v1/assets/bulk/{jobId} [get]
-func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
+func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 	jobIDParam := chi.URLParam(r, "jobId")
 
@@ -44,17 +35,17 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract account_id from JWT claims for tenant isolation
+	// Extract org_id from JWT claims for tenant isolation
 	claims := middleware.GetUserClaims(r)
 	if claims == nil || claims.CurrentOrgID == nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			"Missing account context", "", requestID)
+			"Missing org context", "", requestID)
 		return
 	}
-	accountID := *claims.CurrentOrgID
+	orgID := *claims.CurrentOrgID
 
 	// Retrieve job from storage (with tenant isolation)
-	job, err := h.storage.GetBulkImportJobByID(r.Context(), jobID, accountID)
+	job, err := handler.storage.GetBulkImportJobByID(r.Context(), jobID, orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			"Failed to retrieve job", err.Error(), requestID)
@@ -63,7 +54,7 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 
 	if job == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			"Job not found or does not belong to your account", "", requestID)
+			"Job not found or does not belong to your org", "", requestID)
 		return
 	}
 
@@ -87,9 +78,4 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, response)
-}
-
-// RegisterRoutes registers all bulk import routes
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/assets/bulk/{jobId}", h.GetJobStatus)
 }

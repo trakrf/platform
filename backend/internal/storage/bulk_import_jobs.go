@@ -11,18 +11,18 @@ import (
 )
 
 // CreateBulkImportJob creates a new job record
-func (s *Storage) CreateBulkImportJob(ctx context.Context, accountID int, totalRows int) (*bulkimport.BulkImportJob, error) {
+func (s *Storage) CreateBulkImportJob(ctx context.Context, orgID int, totalRows int) (*bulkimport.BulkImportJob, error) {
 	query := `
-		INSERT INTO trakrf.bulk_import_jobs (account_id, status, total_rows)
+		INSERT INTO trakrf.bulk_import_jobs (org_id, status, total_rows)
 		VALUES ($1, 'pending', $2)
-		RETURNING id, account_id, status, total_rows, processed_rows, failed_rows, errors, created_at, completed_at
+		RETURNING id, org_id, status, total_rows, processed_rows, failed_rows, errors, created_at, completed_at
 	`
 
 	var job bulkimport.BulkImportJob
 	var errorsJSON []byte
 
-	err := s.pool.QueryRow(ctx, query, accountID, totalRows).Scan(
-		&job.ID, &job.AccountID, &job.Status, &job.TotalRows,
+	err := s.pool.QueryRow(ctx, query, orgID, totalRows).Scan(
+		&job.ID, &job.OrgID, &job.Status, &job.TotalRows,
 		&job.ProcessedRows, &job.FailedRows, &errorsJSON,
 		&job.CreatedAt, &job.CompletedAt,
 	)
@@ -39,26 +39,26 @@ func (s *Storage) CreateBulkImportJob(ctx context.Context, accountID int, totalR
 	return &job, nil
 }
 
-// GetBulkImportJobByID retrieves a job by ID and account_id (tenant isolation)
-func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID uuid.UUID, accountID int) (*bulkimport.BulkImportJob, error) {
+// GetBulkImportJobByID retrieves a job by ID and org_id (tenant isolation)
+func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID uuid.UUID, orgID int) (*bulkimport.BulkImportJob, error) {
 	query := `
-		SELECT id, account_id, status, total_rows, processed_rows, failed_rows, errors, created_at, completed_at
+		SELECT id, org_id, status, total_rows, processed_rows, failed_rows, errors, created_at, completed_at
 		FROM trakrf.bulk_import_jobs
-		WHERE id = $1 AND account_id = $2
+		WHERE id = $1 AND org_id = $2
 	`
 
 	var job bulkimport.BulkImportJob
 	var errorsJSON []byte
 
-	err := s.pool.QueryRow(ctx, query, jobID, accountID).Scan(
-		&job.ID, &job.AccountID, &job.Status, &job.TotalRows,
+	err := s.pool.QueryRow(ctx, query, jobID, orgID).Scan(
+		&job.ID, &job.OrgID, &job.Status, &job.TotalRows,
 		&job.ProcessedRows, &job.FailedRows, &errorsJSON,
 		&job.CreatedAt, &job.CompletedAt,
 	)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, nil // Job not found or doesn't belong to account
+			return nil, nil // Job not found or doesn't belong to org
 		}
 		return nil, fmt.Errorf("failed to get bulk import job: %w", err)
 	}

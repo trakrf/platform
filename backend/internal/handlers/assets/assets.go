@@ -206,4 +206,5 @@ func (handler *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/v1/assets", handler.Create)
 	r.Put("/api/v1/assets/{id}", handler.UpdateAsset)
 	r.Delete("/api/v1/assets/{id}", handler.DeleteAsset)
+	r.Get("/api/v1/assets/bulk/{jobId}", handler.GetJobStatus)
 }
