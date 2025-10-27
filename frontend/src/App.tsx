@@ -18,8 +18,10 @@ const SettingsScreen = lazyWithRetry(() => import('@/components/SettingsScreen')
 const HelpScreen = lazyWithRetry(() => import('@/components/HelpScreen'));
 const AssetsScreen = lazyWithRetry(() => import('@/components/AssetsScreen'));
 const LocationsScreen = lazyWithRetry(() => import('@/components/LocationsScreen'));
+const LoginScreen = lazyWithRetry(() => import('@/components/LoginScreen'));
+const SignupScreen = lazyWithRetry(() => import('@/components/SignupScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -173,7 +175,9 @@ export default function App() {
       assets: AssetsScreen,
       locations: LocationsScreen,
       settings: SettingsScreen,
-      help: HelpScreen
+      help: HelpScreen,
+      login: LoginScreen,
+      signup: SignupScreen
     };
 
     const loadingScreens = {
@@ -184,7 +188,9 @@ export default function App() {
       assets: LoadingScreen,
       locations: LoadingScreen,
       settings: SettingsLoadingScreen,
-      help: HelpLoadingScreen
+      help: HelpLoadingScreen,
+      login: LoadingScreen,
+      signup: LoadingScreen
     };
 
     const Component = tabComponents[activeTab] || HomeScreen;
