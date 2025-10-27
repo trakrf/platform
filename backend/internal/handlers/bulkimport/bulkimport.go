@@ -46,12 +46,12 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 
 	// Extract account_id from JWT claims for tenant isolation
 	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentAccountID == nil {
+	if claims == nil || claims.CurrentOrgID == nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			"Missing account context", "", requestID)
 		return
 	}
-	accountID := *claims.CurrentAccountID
+	accountID := *claims.CurrentOrgID
 
 	// Retrieve job from storage (with tenant isolation)
 	job, err := h.storage.GetBulkImportJobByID(r.Context(), jobID, accountID)

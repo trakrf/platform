@@ -67,7 +67,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"
-// @Param request body asset.UpdateAccountRequest true "Asset update data"
+// @Param request body asset.UpdateAssetRequest true "Asset update data"
 // @Success 202 {object} map[string]any "data: asset.Asset"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID, JSON, or validation error"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
@@ -84,7 +84,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var request asset.UpdateAccountRequest
+	var request asset.UpdateAssetRequest
 	
 
 	if err:= json.NewDecoder(req.Body).Decode(&request); err != nil {
