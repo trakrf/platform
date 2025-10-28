@@ -208,3 +208,60 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 		}
 	}
 }
+
+// SetupTestDB sets up a test database and returns storage with cleanup function.
+// This is the preferred method for integration tests.
+func SetupTestDB(t *testing.T) (*storage.Storage, func()) {
+	t.Helper()
+	store := SetupTestDatabase(t)
+
+	cleanup := func() {
+		if pool, ok := store.Pool().(*pgxpool.Pool); ok {
+			cleanupTestData(t, pool)
+		}
+	}
+
+	return store, cleanup
+}
+
+// CleanupAssets truncates the assets table.
+func CleanupAssets(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+
+	_, err := pool.Exec(ctx, "TRUNCATE TABLE trakrf.assets RESTART IDENTITY CASCADE")
+	if err != nil {
+		t.Logf("Warning: failed to truncate assets: %v", err)
+	}
+}
+
+// CleanupTestAccounts truncates the organizations table.
+func CleanupTestAccounts(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+
+	_, err := pool.Exec(ctx, "TRUNCATE TABLE trakrf.organizations RESTART IDENTITY CASCADE")
+	if err != nil {
+		t.Logf("Warning: failed to truncate organizations: %v", err)
+	}
+}
+
+// CreateTestAccount creates a test organization and returns its ID.
+func CreateTestAccount(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+	ctx := context.Background()
+
+	var accountID int
+	err := pool.QueryRow(ctx, `
+		INSERT INTO trakrf.organizations (name, identifier, is_personal, is_active)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, "Test Organization", "test-org", false, true).Scan(&accountID)
+
+	if err != nil {
+		t.Fatalf("Failed to create test account: %v", err)
+	}
+
+	t.Logf("✅ Created test account: %d", accountID)
+	return accountID
+}

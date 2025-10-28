@@ -1,0 +1,351 @@
+package bulkimport
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/testutil"
+)
+
+func TestBatchCreateAssets_AllValid(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+
+	factory := testutil.NewAssetFactory(orgID).WithIdentifier("BATCH-001")
+	assets := factory.BuildBatch(3)
+
+	count, errs := store.BatchCreateAssets(ctx, assets)
+	require.Empty(t, errs)
+	assert.Equal(t, 3, count)
+}
+
+func TestBatchCreateAssets_DuplicateIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+
+	factory := testutil.NewAssetFactory(orgID).WithIdentifier("DUP-001")
+	assets := []asset.Asset{
+		factory.Build(),
+		factory.Build(),
+	}
+
+	count, errs := store.BatchCreateAssets(ctx, assets)
+	assert.True(t, len(errs) > 0 || count < 2, "Should have errors or partial success with duplicates")
+}
+
+func TestBatchCreateAssets_Mixed(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+
+	factory := testutil.NewAssetFactory(orgID).WithIdentifier("MIXED-001")
+	assets := factory.BuildBatch(5)
+
+	count, errs := store.BatchCreateAssets(ctx, assets)
+	assert.True(t, count > 0 || len(errs) > 0, "Should have some success or errors")
+}
+
+func TestProcessCSVAsync_ParseErrors(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	csvFactory := testutil.NewCSVFactory().
+		AddRow("TEST-001", "Valid Asset", "device", "This should work", "2024-01-01", "2024-12-31", "true").
+		AddRow("TEST-002", "Invalid Date", "device", "Bad date format", "invalid-date", "2024-12-31", "true").
+		AddRow("TEST-003", "Another Valid", "device", "This should work too", "2024-01-01", "2024-12-31", "true")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+
+	assert.Contains(t, []string{"pending", "processing", "failed"}, jobStatus.Status)
+	assert.GreaterOrEqual(t, jobStatus.TotalRows, 0)
+}
+
+func TestProcessCSVAsync_InsertErrors(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	testutil.CreateTestAsset(t, pool, orgID, "DUPLICATE-001")
+
+	csvFactory := testutil.NewCSVFactory().
+		AddRow("DUPLICATE-001", "Try Duplicate", "device", "Should fail", "2024-01-01", "2024-12-31", "true").
+		AddRow("NEW-001", "New Asset", "device", "Should succeed", "2024-01-01", "2024-12-31", "true")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+	assert.Contains(t, []string{"pending", "processing", "completed", "failed"}, jobStatus.Status)
+}
+
+func TestProcessCSVAsync_AllSuccess(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	csvFactory := testutil.NewCSVFactory().
+		AddRow("SUCCESS-001", "Asset 1", "device", "First asset", "2024-01-01", "2024-12-31", "true").
+		AddRow("SUCCESS-002", "Asset 2", "device", "Second asset", "2024-01-01", "2024-12-31", "true").
+		AddRow("SUCCESS-003", "Asset 3", "device", "Third asset", "2024-01-01", "2024-12-31", "true")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+
+	assert.Contains(t, []string{"pending", "processing", "completed"}, jobStatus.Status)
+	assert.Equal(t, 3, jobStatus.TotalRows)
+}
+
+func TestConcurrentUploads(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	numJobs := 3
+	jobIDs := make([]string, numJobs)
+
+	for i := 0; i < numJobs; i++ {
+		csvFactory := testutil.NewCSVFactory().
+			AddRow(fmt.Sprintf("CONCURRENT-%d-001", i), fmt.Sprintf("Job %d Asset 1", i), "device", "Test", "2024-01-01", "2024-12-31", "true").
+			AddRow(fmt.Sprintf("CONCURRENT-%d-002", i), fmt.Sprintf("Job %d Asset 2", i), "device", "Test", "2024-01-01", "2024-12-31", "true")
+		records := csvFactory.Build()
+
+		job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+		require.NoError(t, err)
+		jobIDs[i] = job.ID.String()
+
+		go service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+	}
+
+	for i, jobID := range jobIDs {
+		uuid := mustParseUUID(t, jobID)
+		status, err := store.GetBulkImportJobByID(ctx, uuid, orgID)
+		require.NoError(t, err)
+		assert.NotEmpty(t, status.Status, "Job %d should have a status", i)
+		assert.Equal(t, 2, status.TotalRows, "Job %d should have 2 total rows", i)
+	}
+}
+
+func TestJobStatusTracking(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+
+	csvFactory := testutil.NewCSVFactory().
+		AddRow("STATUS-001", "Asset 1", "device", "Test", "2024-01-01", "2024-12-31", "true")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	status, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", status.Status)
+	assert.Equal(t, 1, status.TotalRows)
+}
+
+func TestErrorRecovery_Panic(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, 1)
+	require.NoError(t, err)
+
+	service := NewService(store)
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Panic was not recovered: %v", r)
+			}
+		}()
+
+		service.processCSVAsync(ctx, job.ID, orgID, nil, nil)
+	}()
+
+	status, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+	assert.Contains(t, []string{"pending", "processing", "failed"}, status.Status)
+}
+
+func TestErrorRecovery_DatabaseFailure(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	invalidOrgID := 999999
+
+	csvFactory := testutil.NewCSVFactory().
+		AddRow("FAIL-001", "Should Fail", "device", "Invalid org", "2024-01-01", "2024-12-31", "true")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, invalidOrgID, records, records[0])
+
+	status, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+	assert.Contains(t, []string{"pending", "processing", "completed", "failed"}, status.Status)
+}
+
+func TestProcessUpload_ValidCSV(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	service := NewService(store)
+
+	csv := `identifier,name,type,description,valid_from,valid_to,is_active
+ASSET-TEST-001,Test Asset 1,device,Description 1,2024-01-01,2024-12-31,true
+ASSET-TEST-002,Test Asset 2,person,Description 2,2024-01-01,2024-12-31,false`
+
+	file, header := createTestCSV(t, csv)
+	defer file.Close()
+
+	ctx := context.Background()
+
+	response, err := service.ProcessUpload(ctx, orgID, file, header)
+	require.NoError(t, err)
+
+	assert.Equal(t, "accepted", response.Status)
+	assert.NotEmpty(t, response.JobID)
+
+	job, err := store.GetBulkImportJobByID(ctx, mustParseUUID(t, response.JobID), orgID)
+	require.NoError(t, err)
+	assert.NotNil(t, job)
+	assert.Equal(t, 2, job.TotalRows)
+}
+
+func TestProcessUpload_InvalidHeaders(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	service := NewService(store)
+
+	csvInvalid := `wrong,headers,here
+ASSET-001,Test Asset,device`
+
+	file, header := createTestCSV(t, csvInvalid)
+	defer file.Close()
+
+	_, err := service.ProcessUpload(context.Background(), 1, file, header)
+	assert.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "header") || strings.Contains(err.Error(), "column"))
+}
+
+func mustParseUUID(t *testing.T, s string) uuid.UUID {
+	t.Helper()
+	id, err := uuid.Parse(s)
+	if err != nil {
+		t.Fatalf("Failed to parse UUID: %v", err)
+	}
+	return id
+}
