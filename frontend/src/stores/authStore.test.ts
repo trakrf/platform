@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAuthStore } from './authStore';
 import { authApi } from '@/lib/api/auth';
+import { jwtDecode } from 'jwt-decode';
 
 // Mock the API
 vi.mock('@/lib/api/auth');
+
+// Mock jwt-decode
+vi.mock('jwt-decode');
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -165,9 +169,21 @@ describe('authStore', () => {
   });
 
   describe('initialize', () => {
-    it('should set isAuthenticated to true if token and user exist', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should set isAuthenticated to true if token is valid and not expired', () => {
+      const futureTimestamp = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+
+      vi.mocked(jwtDecode).mockReturnValue({
+        exp: futureTimestamp,
+        user_id: 1,
+        email: 'test@example.com',
+      });
+
       useAuthStore.setState({
-        token: 'persisted-token',
+        token: 'valid-token',
         user: {
           id: 1,
           email: 'test@example.com',
@@ -175,15 +191,69 @@ describe('authStore', () => {
           created_at: '2025-01-01T00:00:00Z',
           updated_at: '2025-01-01T00:00:00Z',
         },
-        isAuthenticated: false, // Simulate after reload
+        isAuthenticated: false,
       });
 
       useAuthStore.getState().initialize();
 
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(useAuthStore.getState().token).toBe('valid-token');
+      expect(jwtDecode).toHaveBeenCalledWith('valid-token');
     });
 
-    it('should set isAuthenticated to false if no token', () => {
+    it('should clear auth state if token is expired', () => {
+      const pastTimestamp = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+
+      vi.mocked(jwtDecode).mockReturnValue({
+        exp: pastTimestamp,
+        user_id: 1,
+        email: 'test@example.com',
+      });
+
+      useAuthStore.setState({
+        token: 'expired-token',
+        user: {
+          id: 1,
+          email: 'test@example.com',
+          name: 'Test',
+          created_at: '2025-01-01T00:00:00Z',
+          updated_at: '2025-01-01T00:00:00Z',
+        },
+        isAuthenticated: true,
+      });
+
+      useAuthStore.getState().initialize();
+
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState().token).toBeNull();
+      expect(useAuthStore.getState().user).toBeNull();
+    });
+
+    it('should clear auth state if JWT decode fails (malformed token)', () => {
+      vi.mocked(jwtDecode).mockImplementation(() => {
+        throw new Error('Invalid token format');
+      });
+
+      useAuthStore.setState({
+        token: 'malformed-token',
+        user: {
+          id: 1,
+          email: 'test@example.com',
+          name: 'Test',
+          created_at: '2025-01-01T00:00:00Z',
+          updated_at: '2025-01-01T00:00:00Z',
+        },
+        isAuthenticated: true,
+      });
+
+      useAuthStore.getState().initialize();
+
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState().token).toBeNull();
+      expect(useAuthStore.getState().user).toBeNull();
+    });
+
+    it('should set isAuthenticated to false if no token exists', () => {
       useAuthStore.setState({
         token: null,
         user: null,
@@ -193,6 +263,32 @@ describe('authStore', () => {
       useAuthStore.getState().initialize();
 
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(jwtDecode).not.toHaveBeenCalled();
+    });
+
+    it('should handle missing exp claim gracefully', () => {
+      vi.mocked(jwtDecode).mockReturnValue({
+        user_id: 1,
+        email: 'test@example.com',
+        // No exp claim
+      });
+
+      useAuthStore.setState({
+        token: 'token-without-exp',
+        user: {
+          id: 1,
+          email: 'test@example.com',
+          name: 'Test',
+          created_at: '2025-01-01T00:00:00Z',
+          updated_at: '2025-01-01T00:00:00Z',
+        },
+        isAuthenticated: false,
+      });
+
+      useAuthStore.getState().initialize();
+
+      // Without exp claim, token is considered valid
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
     });
   });
 

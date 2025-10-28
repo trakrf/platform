@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { createStoreWithTracking } from './createStore';
 import { authApi } from '@/lib/api/auth';
 import type { User } from '@/lib/api/auth';
+import { jwtDecode } from 'jwt-decode';
 
 interface AuthState {
   // State
@@ -126,13 +127,43 @@ export const useAuthStore = create<AuthState>()(
         // Clear error
         clearError: () => set({ error: null }),
 
-        // Initialize - restore from persisted state
+        // Initialize - restore from persisted state with JWT validation
         initialize: () => {
           const state = get();
-          if (state.token && state.user) {
+
+          // No token in persisted state → logged out
+          if (!state.token) {
+            set({ isAuthenticated: false, user: null });
+            return;
+          }
+
+          try {
+            // Decode JWT to check expiration
+            const decoded = jwtDecode<{ exp: number }>(state.token);
+
+            // Check if token is expired
+            const now = Math.floor(Date.now() / 1000); // Current time in seconds
+            if (decoded.exp && decoded.exp < now) {
+              // Token expired - clear everything
+              console.warn('AuthStore: Token expired, clearing auth state');
+              set({
+                token: null,
+                user: null,
+                isAuthenticated: false,
+              });
+              return;
+            }
+
+            // Token is valid and not expired → restore auth state
             set({ isAuthenticated: true });
-          } else {
-            set({ isAuthenticated: false });
+          } catch (error) {
+            // JWT decode failed (malformed/tampered token) → clear everything
+            console.error('AuthStore: Failed to decode JWT, clearing auth state:', error);
+            set({
+              token: null,
+              user: null,
+              isAuthenticated: false,
+            });
           }
         },
       }),
