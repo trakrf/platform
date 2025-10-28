@@ -132,3 +132,55 @@ migrate-create name:
 migrate-force version:
     @echo "⚠️  Forcing migration version to {{version}}"
     docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" force {{version}}'
+
+# Roll back N migrations
+migrate-rollback steps="1":
+    @echo "⏪ Rolling back {{steps}} migration(s)..."
+    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" down {{steps}}'
+    @echo "✅ Rollback complete"
+
+# Redo last migration (down + up)
+migrate-redo:
+    @echo "🔄 Redoing last migration..."
+    @just migrate-rollback 1
+    @just migrate
+
+# Reset all migrations (down all + up)
+migrate-reset:
+    @echo "⚠️  Resetting all migrations..."
+    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" down -all || true'
+    @just migrate
+
+# ============================================================================
+# Database Management (Rails-like commands)
+# ============================================================================
+
+# Create database (for test environments)
+db-create dbname="trakrf_test":
+    @echo "📦 Creating database: {{dbname}}"
+    docker compose exec timescaledb psql -U postgres -c "CREATE DATABASE {{dbname}};" || echo "Database {{dbname}} may already exist"
+
+# Drop database
+db-drop dbname="trakrf_test":
+    @echo "🗑️  Dropping database: {{dbname}}"
+    docker compose exec timescaledb psql -U postgres -c "DROP DATABASE IF EXISTS {{dbname}} WITH (FORCE);"
+
+# Full reset: drop, create, migrate, seed
+db-reset: (db-drop "trakrf_test") (db-create "trakrf_test")
+    @echo "✅ Database reset complete"
+
+# Seed database with development data
+seed:
+    @echo "🌱 Seeding database..."
+    docker compose exec backend sh -c 'psql "$PG_URL" -f /app/database/seeds/development.sql'
+    @echo "✅ Seeding complete"
+
+# Setup test database: create + migrate
+db-test-setup: (db-create "trakrf_test")
+    @echo "🧪 Setting up test database..."
+    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "postgresql://postgres:postgres@timescaledb:5432/trakrf_test?sslmode=disable" up'
+    @echo "✅ Test database ready"
+
+# Teardown test database
+db-test-teardown:
+    @just db-drop "trakrf_test"

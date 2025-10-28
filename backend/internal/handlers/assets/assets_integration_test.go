@@ -4,18 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
 func setupTestRouter(handler *Handler) *chi.Mux {
@@ -38,18 +38,12 @@ func TestCreateAsset(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	now := time.Now()
-	requestBody := asset.Asset{
-		Name:        "Test Asset",
-		Identifier:  "TEST-001",
-		Type:        "equipment",
-		Description: "Test description",
-		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
-		Metadata:    map[string]any{"key": "value"},
-		IsActive:    true,
-		AccountID:   accountID,
-	}
+	requestBody := testutil.NewAssetFactory(accountID).
+		WithIdentifier("TEST-001").
+		WithName("Test Asset").
+		WithType("equipment").
+		WithDescription("Test description").
+		Build()
 
 	body, err := json.Marshal(requestBody)
 	require.NoError(t, err)
@@ -60,14 +54,14 @@ func TestCreateAsset(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusCreated, w.Code, "Response body: %s", w.Body.String())
+	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var response map[string]asset.Asset
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "Test Asset", response["data"].Name)
 	assert.Equal(t, "TEST-001", response["data"].Identifier)
-	assert.Greater(t, response["data"].ID, 0, "Should have a valid ID")
+	assert.Greater(t, response["data"].ID, 0)
 }
 
 func TestCreateAsset_InvalidJSON(t *testing.T) {
@@ -98,18 +92,10 @@ func TestGetAsset(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	now := time.Now()
-	createRequest := asset.Asset{
-		Name:        "Test Asset Get",
-		Identifier:  "TEST-002",
-		Type:        "equipment",
-		Description: "Test description",
-		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
-		Metadata:    map[string]any{"key": "value"},
-		IsActive:    true,
-		AccountID:   accountID,
-	}
+	createRequest := testutil.NewAssetFactory(accountID).
+		WithIdentifier("TEST-002").
+		WithName("Test Asset Get").
+		Build()
 
 	created, err := store.CreateAsset(context.Background(), createRequest)
 	require.NoError(t, err)
@@ -127,7 +113,7 @@ func TestGetAsset(t *testing.T) {
 
 	handler.GetAsset(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code, "Response body: %s", w.Body.String())
+	assert.Equal(t, http.StatusAccepted, w.Code)
 
 	var response map[string]*asset.Asset
 	err = json.Unmarshal(w.Body.Bytes(), &response)
@@ -188,18 +174,11 @@ func TestUpdateAsset(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	now := time.Now()
-	createRequest := asset.Asset{
-		Name:        "Test Asset Update",
-		Identifier:  "TEST-003",
-		Type:        "equipment",
-		Description: "Original description",
-		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
-		Metadata:    map[string]any{"key": "value"},
-		IsActive:    true,
-		AccountID:   accountID,
-	}
+	createRequest := testutil.NewAssetFactory(accountID).
+		WithIdentifier("TEST-003").
+		WithName("Test Asset Update").
+		WithDescription("Original description").
+		Build()
 
 	created, err := store.CreateAsset(context.Background(), createRequest)
 	require.NoError(t, err)
@@ -207,7 +186,7 @@ func TestUpdateAsset(t *testing.T) {
 
 	newName := "Updated Asset"
 	newDescription := "Updated description"
-	updateRequest := asset.UpdateAccountRequest{
+	updateRequest := asset.UpdateAssetRequest{
 		Name:        &newName,
 		Description: &newDescription,
 	}
@@ -228,7 +207,7 @@ func TestUpdateAsset(t *testing.T) {
 
 	handler.UpdateAsset(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code, "Response body: %s", w.Body.String())
+	assert.Equal(t, http.StatusAccepted, w.Code)
 
 	var response map[string]*asset.Asset
 	err = json.Unmarshal(w.Body.Bytes(), &response)
@@ -249,19 +228,10 @@ func TestDeleteAsset(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	// First create an asset
-	now := time.Now()
-	createRequest := asset.Asset{
-		Name:        "Test Asset Delete",
-		Identifier:  "TEST-004",
-		Type:        "equipment",
-		Description: "Test description",
-		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
-		Metadata:    map[string]any{"key": "value"},
-		IsActive:    true,
-		AccountID:   accountID,
-	}
+	createRequest := testutil.NewAssetFactory(accountID).
+		WithIdentifier("TEST-004").
+		WithName("Test Asset Delete").
+		Build()
 
 	created, err := store.CreateAsset(context.Background(), createRequest)
 	require.NoError(t, err)
@@ -279,7 +249,7 @@ func TestDeleteAsset(t *testing.T) {
 
 	handler.DeleteAsset(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code, "Response body: %s", w.Body.String())
+	assert.Equal(t, http.StatusAccepted, w.Code)
 
 	var response map[string]bool
 	err = json.Unmarshal(w.Body.Bytes(), &response)
@@ -288,7 +258,7 @@ func TestDeleteAsset(t *testing.T) {
 
 	deleted, err := store.GetAssetByID(context.Background(), &created.ID)
 	require.NoError(t, err)
-	assert.Nil(t, deleted, "Asset should be soft deleted")
+	assert.Nil(t, deleted)
 }
 
 func TestDeleteAsset_NotFound(t *testing.T) {
@@ -330,20 +300,11 @@ func TestListAssets(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	now := time.Now()
-	for i := 1; i <= 3; i++ {
-		createRequest := asset.Asset{
-			Name:        fmt.Sprintf("Test List Asset %d", i),
-			Identifier:  fmt.Sprintf("TEST-LIST-%d", i),
-			Type:        "equipment",
-			Description: "Test description",
-			ValidFrom:   now,
-			ValidTo:     now.Add(24 * time.Hour),
-			Metadata:    map[string]any{},
-			IsActive:    true,
-			AccountID:   accountID,
-		}
-		_, err := store.CreateAsset(context.Background(), createRequest)
+	factory := testutil.NewAssetFactory(accountID).WithIdentifier("TEST-LIST-001")
+	assets := factory.BuildBatch(3)
+
+	for _, a := range assets {
+		_, err := store.CreateAsset(context.Background(), a)
 		require.NoError(t, err)
 	}
 
@@ -354,12 +315,12 @@ func TestListAssets(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code, "Response body: %s", w.Body.String())
+	assert.Equal(t, http.StatusAccepted, w.Code)
 
 	var response map[string][]asset.Asset
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(response["data"]), 3, "Should have at least 3 test assets")
+	assert.GreaterOrEqual(t, len(response["data"]), 3)
 }
 
 func TestFullCRUDWorkflow(t *testing.T) {
@@ -376,22 +337,14 @@ func TestFullCRUDWorkflow(t *testing.T) {
 	router := setupTestRouter(handler)
 
 	ctx := context.Background()
-	now := time.Now()
 
 	var createdID int
 
 	t.Run("Create", func(t *testing.T) {
-		requestBody := asset.Asset{
-			Name:        "Workflow Test Asset",
-			Identifier:  "WF-001",
-			Type:        "equipment",
-			Description: "Test workflow",
-			ValidFrom:   now,
-			ValidTo:     now.Add(24 * time.Hour),
-			Metadata:    map[string]any{"test": true},
-			IsActive:    true,
-			AccountID:   accountID,
-		}
+		requestBody := testutil.NewAssetFactory(accountID).
+			WithIdentifier("WF-001").
+			WithName("Workflow Test Asset").
+			Build()
 
 		body, err := json.Marshal(requestBody)
 		require.NoError(t, err)
@@ -403,7 +356,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusCreated, w.Code, "Response body: %s", w.Body.String())
+		assert.Equal(t, http.StatusCreated, w.Code)
 
 		var response map[string]asset.Asset
 		err = json.Unmarshal(w.Body.Bytes(), &response)
@@ -425,7 +378,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 		handler.GetAsset(w, req)
 
-		assert.Equal(t, http.StatusAccepted, w.Code, "Response body: %s", w.Body.String())
+		assert.Equal(t, http.StatusAccepted, w.Code)
 
 		var response map[string]*asset.Asset
 		err := json.Unmarshal(w.Body.Bytes(), &response)
@@ -435,7 +388,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 	t.Run("Update", func(t *testing.T) {
 		newName := "Updated Workflow Asset"
-		updateRequest := asset.UpdateAccountRequest{
+		updateRequest := asset.UpdateAssetRequest{
 			Name: &newName,
 		}
 
@@ -455,7 +408,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 		handler.UpdateAsset(w, req)
 
-		assert.Equal(t, http.StatusAccepted, w.Code, "Response body: %s", w.Body.String())
+		assert.Equal(t, http.StatusAccepted, w.Code)
 
 		var response map[string]*asset.Asset
 		err = json.Unmarshal(w.Body.Bytes(), &response)
@@ -476,7 +429,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 		handler.DeleteAsset(w, req)
 
-		assert.Equal(t, http.StatusAccepted, w.Code, "Response body: %s", w.Body.String())
+		assert.Equal(t, http.StatusAccepted, w.Code)
 
 		var response map[string]bool
 		err := json.Unmarshal(w.Body.Bytes(), &response)
