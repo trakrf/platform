@@ -8,15 +8,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/trakrf/platform/backend/internal/models/asset"
-	"github.com/trakrf/platform/backend/internal/storage"
+	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
 func createTestCSV(t *testing.T, content string) (multipart.File, *multipart.FileHeader) {
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
 
-	part, err := writer.CreateFormFile("file", "test.csv")
+	h := make(map[string][]string)
+	h["Content-Type"] = []string{"text/csv"}
+	part, err := writer.CreatePart(map[string][]string{
+		"Content-Disposition": {`form-data; name="file"; filename="test.csv"`},
+		"Content-Type":        {"text/csv"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,11 +54,83 @@ func createTestCSV(t *testing.T, content string) (multipart.File, *multipart.Fil
 }
 
 func TestProcessUpload_ValidCSV(t *testing.T) {
-	t.Skip("Requires test database - implement in integration tests")
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	store := testutil.SetupTestDatabase(t)
+	service := NewService(store)
+
+	csv := `identifier,name,type,description,valid_from,valid_to,is_active
+ASSET-TEST-001,Test Asset 1,device,Description 1,2024-01-01,2024-12-31,true
+ASSET-TEST-002,Test Asset 2,person,Description 2,2024-01-01,2024-12-31,false`
+
+	file, header := createTestCSV(t, csv)
+	defer file.Close()
+
+	ctx := context.Background()
+
+	var orgID int
+	err := store.Pool().QueryRow(ctx, "INSERT INTO trakrf.organizations (name, identifier) VALUES ('Test Org', 'test-org') RETURNING id").Scan(&orgID)
+	if err != nil {
+		t.Fatalf("Failed to create test organization: %v", err)
+	}
+
+	response, err := service.ProcessUpload(ctx, orgID, file, header)
+	if err != nil {
+		t.Fatalf("ProcessUpload failed: %v", err)
+	}
+
+	if response.Status != "accepted" {
+		t.Errorf("Expected status 'accepted', got %s", response.Status)
+	}
+
+	if response.JobID == "" {
+		t.Error("Expected non-empty JobID")
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	job, err := store.GetBulkImportJobByID(ctx, mustParseUUID(t, response.JobID), orgID)
+	if err != nil {
+		t.Fatalf("Failed to get job: %v", err)
+	}
+
+	if job == nil {
+		t.Fatal("Job not found")
+	}
+
+	if job.Status == "failed" {
+		t.Logf("Job failed with errors: %+v", job.Errors)
+	}
+
+	if job.TotalRows != 2 {
+		t.Errorf("Expected TotalRows=2, got %d", job.TotalRows)
+	}
 }
 
 func TestProcessUpload_InvalidHeaders(t *testing.T) {
-	t.Skip("Requires test database - implement in integration tests")
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	store := testutil.SetupTestDatabase(t)
+	service := NewService(store)
+
+	csvInvalid := `wrong,headers,here
+ASSET-001,Test Asset,device`
+
+	file, header := createTestCSV(t, csvInvalid)
+	defer file.Close()
+
+	_, err := service.ProcessUpload(context.Background(), 1, file, header)
+	if err == nil {
+		t.Error("Expected error for invalid headers, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "header") && !strings.Contains(err.Error(), "column") {
+		t.Errorf("Expected header/column error, got: %v", err)
+	}
 }
 
 func TestProcessUpload_FileTooLarge(t *testing.T) {
@@ -262,6 +340,11 @@ func TestErrorRecovery_DatabaseFailure(t *testing.T) {
 	t.Skip("Requires test database - implement in integration tests")
 }
 
-func mockStorage() *storage.Storage {
-	return nil
+func mustParseUUID(t *testing.T, s string) uuid.UUID {
+	t.Helper()
+	id, err := uuid.Parse(s)
+	if err != nil {
+		t.Fatalf("Failed to parse UUID: %v", err)
+	}
+	return id
 }

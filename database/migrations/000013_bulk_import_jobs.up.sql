@@ -2,7 +2,7 @@ SET search_path=trakrf,public;
 
 CREATE TABLE bulk_import_jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id INT NOT NULL REFERENCES accounts(id),
+    org_id INT NOT NULL REFERENCES organizations(id),
     status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     total_rows INT NOT NULL DEFAULT 0,
     processed_rows INT NOT NULL DEFAULT 0,
@@ -14,15 +14,15 @@ CREATE TABLE bulk_import_jobs (
 );
 
 -- Indexes for common access patterns
-CREATE INDEX idx_bulk_import_jobs_account_id ON bulk_import_jobs(account_id);
+CREATE INDEX idx_bulk_import_jobs_org_id ON bulk_import_jobs(org_id);
 CREATE INDEX idx_bulk_import_jobs_status ON bulk_import_jobs(status);
 CREATE INDEX idx_bulk_import_jobs_created_at ON bulk_import_jobs(created_at DESC);
 
 -- Row Level Security
 ALTER TABLE bulk_import_jobs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY account_isolation_bulk_import_jobs ON bulk_import_jobs
-    USING (account_id = current_setting('app.current_account_id')::INT);
+CREATE POLICY org_isolation_bulk_import_jobs ON bulk_import_jobs
+    USING (org_id = current_setting('app.current_org_id')::INT);
 
 -- Documentation
 COMMENT ON TABLE bulk_import_jobs IS 'Tracks async bulk import operations for assets';
