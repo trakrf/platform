@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -48,6 +46,11 @@ func SetupTestDatabase(t *testing.T) *storage.Storage {
 
 	dbURL := GetTestDatabaseURL()
 
+	migrationsPath := getMigrationsPath(t)
+	if err := runMigrations(dbURL, migrationsPath, t); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
+
 	config, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
 		t.Fatalf("Failed to parse database URL: %v", err)
@@ -61,12 +64,6 @@ func SetupTestDatabase(t *testing.T) *storage.Storage {
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		t.Fatalf("Failed to ping database: %v", err)
-	}
-
-	migrationsPath := getMigrationsPath(t)
-	if err := runMigrations(dbURL, migrationsPath); err != nil {
-		pool.Close()
-		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
 	store := storage.NewWithPool(pool)
@@ -138,21 +135,51 @@ func getMigrationsPath(t *testing.T) string {
 	return ""
 }
 
-func runMigrations(dbURL, migrationsPath string) error {
-	m, err := migrate.New(
-		fmt.Sprintf("file://%s", migrationsPath),
-		dbURL,
+func runMigrations(dbURL, migrationsPath string, t *testing.T) error {
+	t.Helper()
+
+	migrateBinary := findMigrateBinary()
+	if migrateBinary == "" {
+		return fmt.Errorf("migrate binary not found in PATH - install with: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest")
+	}
+
+	cmd := exec.Command(migrateBinary,
+		"-path", migrationsPath,
+		"-database", dbURL,
+		"up",
 	)
+
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to create migrate instance: %w", err)
+		if strings.Contains(string(output), "no change") {
+			t.Logf("✅ Migrations already up to date")
+			return nil
+		}
+		return fmt.Errorf("migrate command failed: %w\nOutput: %s", err, string(output))
 	}
-	defer m.Close()
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
+	t.Logf("✅ Migrations applied successfully")
 	return nil
+}
+
+func findMigrateBinary() string {
+	// Check PATH first
+	for _, name := range []string{"migrate", "golang-migrate"} {
+		if path, err := exec.LookPath(name); err == nil {
+			return path
+		}
+	}
+
+	// Check common Go binary locations
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		goBinPath := filepath.Join(homeDir, "go", "bin", "migrate")
+		if _, err := os.Stat(goBinPath); err == nil {
+			return goBinPath
+		}
+	}
+
+	return ""
 }
 
 func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
