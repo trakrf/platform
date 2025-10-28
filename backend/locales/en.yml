@@ -1,0 +1,172 @@
+en:
+  errors:
+    types:
+      validation_error: "validation_error"
+      not_found: "not_found"
+      conflict: "conflict"
+      internal_error: "internal_error"
+      bad_request: "bad_request"
+      unauthorized: "unauthorized"
+
+  common:
+    invalid_json: "Invalid JSON"
+    validation_failed: "Validation failed"
+    invalid_id: "Invalid %{resource} ID"
+    not_found: "%{resource} not found"
+    already_exists: "%{resource} already exists"
+    failed_to_create: "Failed to create %{resource}"
+    failed_to_update: "Failed to update %{resource}"
+    failed_to_delete: "Failed to delete %{resource}"
+    failed_to_get: "Failed to get %{resource}"
+    failed_to_list: "Failed to list %{resources}"
+    method_not_allowed: "Method not allowed"
+    missing_context: "Missing %{context} context"
+
+  assets:
+    create:
+      invalid_json: "Invalid JSON"
+      validation_failed: "Validation failed"
+      failed: "Failed to create asset"
+    update:
+      invalid_id: "Invalid Asset ID: %{id}"
+      invalid_request: "Invalid Request"
+      validation_failed: "Validation Failed"
+      failed: "Failed to update asset"
+    get:
+      invalid_id: "Invalid Asset ID: %{id}"
+      failed: "Failed to get asset"
+      not_found: "Asset not found"
+    delete:
+      invalid_id: "Invalid Asset ID: %{id}"
+      failed: "Failed to delete asset"
+    list:
+      failed: "Failed to list assets"
+
+  bulk_import:
+    validation:
+      file_too_large: "file too large: %{size} bytes (max %{max} bytes / 5MB)"
+      invalid_extension: "invalid file extension: must be .csv"
+      failed_to_read: "failed to read file for type detection"
+      invalid_mime_type: "invalid MIME type: %{type} (expected text/csv or application/vnd.ms-excel)"
+      failed_to_read_csv: "failed to read CSV file"
+      invalid_csv_format: "invalid CSV format"
+      empty_csv: "CSV file is empty"
+      invalid_headers: "invalid CSV headers"
+      no_data_rows: "CSV has headers but no data rows"
+      too_many_rows: "too many rows: %{count} (max %{max})"
+    job:
+      invalid_id: "Invalid job ID format"
+      missing_org: "Missing org context"
+      failed_to_retrieve: "Failed to retrieve job"
+      not_found: "Job not found or does not belong to your org"
+    upload:
+      missing_org: "Missing org context"
+      failed_to_parse: "Failed to parse multipart form"
+      missing_file: "Missing or invalid 'file' field"
+      failed: "Upload failed"
+      accepted: "accepted"
+      message: "CSV upload accepted. Processing %{rows} rows asynchronously."
+      failed_to_create_job: "failed to create import job"
+
+  csv:
+    date:
+      empty: "date cannot be empty"
+      invalid_format: "invalid date format '%{value}': could not parse as %{formats}. Expected formats: YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY"
+    boolean:
+      empty: "boolean value cannot be empty"
+      invalid_value: "invalid boolean value '%{value}': expected 'true', 'false', '1', '0', 'yes', or 'no' (case-insensitive)"
+    headers:
+      empty: "CSV headers cannot be empty"
+      missing_required: "CSV is missing required columns: %{missing}. Required columns are: %{all}. (order doesn't matter, case-insensitive)"
+      missing_column: "missing required column: %{column}"
+      row_too_short: "row too short for column: %{column}"
+    validation:
+      invalid_valid_from: "invalid valid_from"
+      invalid_valid_to: "invalid valid_to"
+      invalid_is_active: "invalid is_active"
+      invalid_date_range: "valid_to must be after valid_from"
+
+  auth:
+    signup:
+      invalid_json: "Invalid JSON"
+      validation_failed: "Validation failed"
+      email_exists: "Email already exists"
+      org_identifier_taken: "Organization identifier already taken"
+      failed: "Failed to signup"
+      failed_to_hash_password: "failed to hash password"
+      failed_to_begin_tx: "failed to begin transaction"
+      failed_to_create_user: "failed to create user"
+      failed_to_create_org: "failed to create organization"
+      failed_to_link_user: "failed to link user to organization"
+      failed_to_commit_tx: "failed to commit transaction"
+      failed_to_generate_jwt: "failed to generate JWT"
+    login:
+      invalid_json: "Invalid JSON"
+      validation_failed: "Validation failed"
+      invalid_credentials: "Invalid email or password"
+      failed: "Failed to login"
+      failed_to_lookup: "failed to lookup user"
+      failed_to_generate_jwt: "failed to generate JWT"
+
+  users:
+    list:
+      failed: "Failed to list users"
+    get:
+      invalid_id: "Invalid user ID"
+      failed: "Failed to get user"
+      not_found: "User not found"
+    create:
+      invalid_json: "Invalid JSON"
+      validation_failed: "Validation failed"
+      email_exists: "Email already exists"
+      failed: "Failed to create user"
+    update:
+      invalid_id: "Invalid user ID"
+      invalid_json: "Invalid JSON"
+      validation_failed: "Validation failed"
+      email_exists: "Email already exists"
+      failed: "Failed to update user"
+      not_found: "User not found"
+    delete:
+      invalid_id: "Invalid user ID"
+      not_found: "User not found"
+      failed: "Failed to delete user"
+
+  organizations:
+    list:
+      not_implemented: "Organization list endpoint not implemented"
+    get:
+      not_implemented: "Organization get endpoint not implemented"
+    create:
+      not_implemented: "Organization create endpoint not implemented"
+    update:
+      not_implemented: "Organization update endpoint not implemented"
+    delete:
+      not_implemented: "Organization delete endpoint not implemented"
+
+  org_users:
+    list:
+      not_implemented: "Org users list endpoint not implemented"
+    get:
+      not_implemented: "Org user get endpoint not implemented"
+    create:
+      not_implemented: "Org user create endpoint not implemented"
+    update:
+      not_implemented: "Org user update endpoint not implemented"
+    delete:
+      not_implemented: "Org user delete endpoint not implemented"
+
+  health:
+    method_not_allowed: "Method not allowed"
+    database_unavailable: "database unavailable"
+
+  frontend:
+    assets_not_found: "Frontend assets not found"
+
+  domain_errors:
+    org_not_found: "org not found"
+    domain_already_exists: "domain already exists"
+    user_not_found: "user not found"
+    email_already_exists: "email already exists"
+    org_user_not_found: "org user not found"
+    user_already_member: "user already member of org"
