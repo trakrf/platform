@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import Header from '@/components/Header';
-import { useDeviceStore, useUIStore, useTagStore } from '@/stores';
+import { useDeviceStore, useUIStore, useAuthStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 
 describe('Header', () => {
@@ -239,5 +239,163 @@ describe('Header', () => {
     expect(connectButton).toHaveClass('bg-blue-600');
 
     container.remove();
+  });
+});
+
+describe('Header - Auth Integration', () => {
+  const mockConnect = vi.fn();
+  const mockDisconnect = vi.fn();
+
+  beforeEach(() => {
+    mockConnect.mockClear();
+    mockDisconnect.mockClear();
+
+    // Mock Web Bluetooth API for browser support check
+    Object.defineProperty(window, '__webBluetoothMocked', {
+      writable: true,
+      value: true
+    });
+
+    // Mock navigator.bluetooth
+    Object.defineProperty(navigator, 'bluetooth', {
+      writable: true,
+      value: {
+        requestDevice: vi.fn()
+      }
+    });
+
+    // Set default device store state
+    useDeviceStore.setState({
+      readerState: ReaderState.DISCONNECTED,
+      batteryPercentage: null,
+      connect: mockConnect,
+      disconnect: mockDisconnect
+    });
+
+    // Set default UI store state
+    useUIStore.setState({ activeTab: 'inventory' });
+
+    // Set default auth store state (not authenticated)
+    useAuthStore.setState({
+      isAuthenticated: false,
+      user: null,
+      token: null,
+      isLoading: false,
+      error: null
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('should render "Log In" button when not authenticated', () => {
+    useAuthStore.setState({ isAuthenticated: false, user: null });
+
+    render(<Header />);
+    expect(screen.getByText('Log In')).toBeInTheDocument();
+  });
+
+  it('should render UserMenu when authenticated', () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 1,
+        email: 'test@example.com',
+        name: 'Test User',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      }
+    });
+
+    render(<Header />);
+    expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    expect(screen.getByText('TE')).toBeInTheDocument(); // Avatar initials
+  });
+
+  it('should navigate to login screen when "Log In" button clicked', () => {
+    const setActiveTab = vi.fn();
+    useAuthStore.setState({ isAuthenticated: false, user: null });
+
+    // Mock getState to return setActiveTab
+    useUIStore.getState = vi.fn(() => ({
+      activeTab: 'inventory',
+      setActiveTab
+    })) as any;
+
+    render(<Header />);
+
+    const loginButton = screen.getByText('Log In');
+    fireEvent.click(loginButton);
+
+    expect(setActiveTab).toHaveBeenCalledWith('login');
+  });
+
+  it('should call logout and navigate to home when logout clicked', async () => {
+    const logout = vi.fn();
+    const setActiveTab = vi.fn();
+
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: {
+        id: 1,
+        email: 'test@example.com',
+        name: 'Test User',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      }
+    });
+
+    // Mock getState for both stores
+    useAuthStore.getState = vi.fn(() => ({
+      logout,
+      isAuthenticated: true,
+      user: {
+        id: 1,
+        email: 'test@example.com',
+        name: 'Test User',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      }
+    })) as any;
+
+    useUIStore.getState = vi.fn(() => ({
+      activeTab: 'inventory',
+      setActiveTab
+    })) as any;
+
+    render(<Header />);
+
+    // Open dropdown
+    const menuButton = screen.getByRole('button', { name: /test@example.com/i });
+    fireEvent.click(menuButton);
+
+    // Wait for dropdown to appear
+    await waitFor(() => {
+      expect(screen.getByText('Logout')).toBeInTheDocument();
+    });
+
+    // Click logout
+    const logoutButton = screen.getByText('Logout');
+    fireEvent.click(logoutButton);
+
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(setActiveTab).toHaveBeenCalledWith('home');
+  });
+
+  it('should show auth UI on all tabs including home', () => {
+    useAuthStore.setState({ isAuthenticated: false, user: null });
+
+    // Test on home tab
+    useUIStore.setState({ activeTab: 'home' });
+    const { container: homeContainer } = render(<Header />);
+    expect(screen.getByText('Log In')).toBeInTheDocument();
+    homeContainer.remove();
+
+    // Test on inventory tab
+    useUIStore.setState({ activeTab: 'inventory' });
+    const { container: invContainer } = render(<Header />);
+    expect(screen.getByText('Log In')).toBeInTheDocument();
+    invContainer.remove();
   });
 });
