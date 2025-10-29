@@ -33,7 +33,18 @@ func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{storage: storage}
 }
 
-// List handles GET /api/v1/users
+// @Summary List users
+// @Description Get paginated list of users
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} users.ListResponse
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users [get]
 func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
@@ -66,7 +77,19 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }
 
-// Get handles GET /api/v1/users/:id
+// @Summary Get user
+// @Description Get user by ID
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} map[string]any "data: user.User"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid user ID"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "User not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users/{id} [get]
 func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -91,7 +114,19 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": u})
 }
 
-// Create handles POST /api/v1/users
+// @Summary Create user
+// @Description Create a new user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body user.CreateUserRequest true "User data"
+// @Success 201 {object} map[string]any "data: user.User"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid JSON or validation error"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request user.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -122,7 +157,21 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": u})
 }
 
-// Update handles PUT /api/v1/users/:id
+// @Summary Update user
+// @Description Update an existing user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Param request body user.UpdateUserRequest true "User update data"
+// @Success 200 {object} map[string]any "data: user.User"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID, JSON, or validation error"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "User not found"
+// @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users/{id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -165,7 +214,19 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": u})
 }
 
-// Delete handles DELETE /api/v1/users/:id
+// @Summary Delete user
+// @Description Soft delete a user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 204 "No content"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid user ID"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "User not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users/{id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {

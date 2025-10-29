@@ -34,9 +34,9 @@ var (
 	startTime time.Time
 )
 
-// @title Platform API
+// @title TrakRF Platform API
 // @version 1.0
-// @description Multi-tenant platform API with authentication and org management
+// @description Multi-tenant platform API with authentication and organization management
 // @BasePath /
 // @securityDefinitions.apikey BearerAuth
 // @in header

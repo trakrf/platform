@@ -206,7 +206,7 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 		Type:        assetType,
 		Description: description,
 		ValidFrom:   validFrom,
-		ValidTo:     validTo,
+		ValidTo:     &validTo,
 		IsActive:    isActive,
 	}, nil
 }

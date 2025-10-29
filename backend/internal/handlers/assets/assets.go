@@ -187,26 +187,67 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
 }
 
+type ListAssetsResponse struct {
+	Data       []asset.Asset `json:"data"`
+	Count      int           `json:"count" example:"10"`
+	Offset     int           `json:"offset" example:"0"`
+	TotalCount int           `json:"total_count" example:"100"`
+}
+
 // @Summary List assets
-// @Description Get a paginated list of all assets
+// @Description Get a paginated list of all assets with pagination metadata
 // @Tags assets
 // @Accept json
 // @Produce json
-// @Success 202 {object} map[string]any "data: []asset.Asset"
+// @Param limit query int false "Number of assets to return (default: 10)" minimum(1) default(10)
+// @Param offset query int false "Number of assets to skip for pagination (default: 0)" minimum(0) default(0)
+// @Success 202 {object} ListAssetsResponse "Paginated list of assets with metadata"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security BearerAuth
 // @Router /api/v1/assets [get]
 func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
-	assets, err := handler.storage.ListAllAssets(req.Context(), 10, 0)
+	limit := 10
+	offset := 0
+
+	if limitStr := req.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	if offsetStr := req.URL.Query().Get("offset"); offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Get paginated assets
+	assets, err := handler.storage.ListAllAssets(req.Context(), limit, offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			i18n.T("assets.list.failed"), err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string][]asset.Asset{"data": assets})
+	// Get total count for pagination metadata
+	totalCount, err := handler.storage.CountAllAssets(req.Context())
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			i18n.T("assets.count.failed"), err.Error(), ctx)
+		return
+	}
+
+	// Build response with pagination metadata
+	response := map[string]any{
+		"data":        assets,
+		"count":       len(assets),
+		"offset":      offset,
+		"total_count": totalCount,
+	}
+
+	httputil.WriteJSON(w, http.StatusAccepted, response)
 }
 
 // RegisterRoutes registers all asset routes

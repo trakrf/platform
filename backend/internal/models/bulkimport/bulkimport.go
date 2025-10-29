@@ -2,8 +2,6 @@ package bulkimport
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // ErrorDetail represents a single row error during bulk import
@@ -15,7 +13,7 @@ type ErrorDetail struct {
 
 // BulkImportJob represents an async bulk import operation
 type BulkImportJob struct {
-	ID            uuid.UUID     `json:"job_id"`
+	ID            int           `json:"job_id"`
 	OrgID         int           `json:"org_id"`
 	Status        string        `json:"status"` // pending, processing, completed, failed
 	TotalRows     int           `json:"total_rows"`

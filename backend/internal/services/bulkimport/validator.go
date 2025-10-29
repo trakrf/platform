@@ -17,11 +17,15 @@ const (
 	MaxRows     = 1000
 )
 
+// allowedMIMETypes defines MIME types for uploaded CSV files.
+// Note: These are file MIME types, not HTTP Content-Type headers.
+// HTTP requests use "multipart/form-data" as Content-Type,
+// while these types are detected from the file content itself.
 var allowedMIMETypes = map[string]bool{
-	"text/csv":                 true,
-	"application/vnd.ms-excel": true,
-	"application/csv":          true,
-	"text/plain":               true,
+	"text/csv":                 true, // Standard CSV MIME type
+	"application/vnd.ms-excel": true, // Excel CSV export
+	"application/csv":          true, // Alternative CSV MIME type
+	"text/plain":               true, // Plain text CSV files
 }
 
 type Validator struct{}

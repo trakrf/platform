@@ -1,11 +1,12 @@
 package assets
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/trakrf/platform/backend/internal/i18n"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
@@ -18,7 +19,7 @@ import (
 // @Tags bulk-import
 // @Accept json
 // @Produce json
-// @Param jobId path string true "Job ID (UUID)"
+// @Param jobId path int true "Job ID"
 // @Success 200 {object} bulkimport.JobStatusResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid job ID"
 // @Failure 404 {object} modelerrors.ErrorResponse "Job not found or access denied"
@@ -29,7 +30,7 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 	jobIDParam := chi.URLParam(r, "jobId")
 
-	jobID, err := uuid.Parse(jobIDParam)
+	jobID, err := strconv.Atoi(jobIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			i18n.T("bulk_import.job.invalid_id"), err.Error(), requestID)
@@ -58,7 +59,7 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := bulkimport.JobStatusResponse{
-		JobID:         job.ID.String(),
+		JobID:         fmt.Sprintf("%d", job.ID),
 		Status:        job.Status,
 		TotalRows:     job.TotalRows,
 		ProcessedRows: job.ProcessedRows,

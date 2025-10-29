@@ -31,6 +31,138 @@ backend/
 - **GET /readyz** - Readiness probe (returns "ok" if ready for traffic)
 - **GET /health** - Detailed JSON health status (version, timestamp)
 
+## API Routes
+
+> **📚 Full API Documentation:** Visit http://localhost:8080/swagger/index.html when server is running
+
+**Quick Summary:**
+- ✅ **Public:** Health checks, Auth (signup/login), Swagger docs
+- ✅ **Protected:** Assets (full CRUD + bulk import), Users (full CRUD)
+- 🚧 **TODO:** Organizations, Org Users (registered but not implemented)
+
+**Base URL:** `http://localhost:8080`
+
+### Public Routes (No Authentication Required)
+
+#### Health & Status
+| Method | Endpoint | Description | Response |
+|--------|----------|-------------|----------|
+| GET | `/healthz` | Liveness probe | `200 OK` - Plain text "ok" |
+| GET | `/readyz` | Readiness probe | `200 OK` - Plain text "ok" |
+| GET | `/health` | Detailed health check | `200 OK` - JSON with version, uptime, database status |
+
+#### Authentication
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| POST | `/api/v1/auth/signup` | Register new user | `{email, password}` | `201` - User + JWT token |
+| POST | `/api/v1/auth/login` | Authenticate user | `{email, password}` | `200` - User + JWT token |
+
+#### Documentation
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/swagger/*` | Swagger API documentation |
+
+### Protected Routes (Authentication Required)
+
+**Authentication:** All routes below require `Authorization: Bearer <token>` header
+
+#### Assets (CRUD + Bulk Import)
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| GET | `/api/v1/assets` | List all assets (paginated) | - | `202` - Array of assets |
+| GET | `/api/v1/assets/{id}` | Get asset by ID | - | `202` - Single asset |
+| POST | `/api/v1/assets` | Create new asset | Asset object | `201` - Created asset |
+| PUT | `/api/v1/assets/{id}` | Update asset | Asset update object | `202` - Updated asset |
+| DELETE | `/api/v1/assets/{id}` | Soft delete asset | - | `202` - `{deleted: true}` |
+| POST | `/api/v1/assets/bulk` | Upload CSV for bulk import | CSV file | `200` - Job ID |
+| GET | `/api/v1/assets/bulk/{jobId}` | Check bulk import job status | - | `200` - Job status |
+
+**Asset Object:**
+```json
+{
+  "org_id": 1,
+  "identifier": "ASSET-001",
+  "name": "Device Name",
+  "type": "device",
+  "description": "Description",
+  "valid_from": "2025-01-01T00:00:00Z",
+  "valid_to": "2026-01-01T00:00:00Z",
+  "is_active": true
+}
+```
+
+#### Users (CRUD)
+| Method | Endpoint | Description | Query Params | Request Body | Response |
+|--------|----------|-------------|--------------|--------------|----------|
+| GET | `/api/v1/users` | List users | `?page=1&per_page=20` | - | `200` - Users + pagination |
+| GET | `/api/v1/users/{id}` | Get user by ID | - | - | `200` - Single user |
+| POST | `/api/v1/users` | Create new user | - | User object | `201` - Created user |
+| PUT | `/api/v1/users/{id}` | Update user | - | User update object | `200` - Updated user |
+| DELETE | `/api/v1/users/{id}` | Soft delete user | - | - | `204` - No content |
+
+**User Object:**
+```json
+{
+  "email": "user@example.com",
+  "display_name": "John Doe",
+  "is_active": true
+}
+```
+
+#### Organizations (TODO - Not Implemented)
+| Method | Endpoint | Description | Status |
+|--------|----------|-------------|--------|
+| GET | `/api/v1/organizations` | List organizations | `501 Not Implemented` |
+| GET | `/api/v1/organizations/{id}` | Get organization | `501 Not Implemented` |
+| POST | `/api/v1/organizations` | Create organization | `501 Not Implemented` |
+| PUT | `/api/v1/organizations/{id}` | Update organization | `501 Not Implemented` |
+| DELETE | `/api/v1/organizations/{id}` | Delete organization | `501 Not Implemented` |
+
+> **Note:** Organization CRUD endpoints are registered but not implemented. Auth flow creates organizations via direct SQL queries.
+
+#### Organization Users (TODO - Not Implemented)
+| Method | Endpoint | Description | Status |
+|--------|----------|-------------|--------|
+| GET | `/api/v1/org_users` | List org users | `501 Not Implemented` |
+| GET | `/api/v1/org_users/{orgId}/{userId}` | Get org user | `501 Not Implemented` |
+| POST | `/api/v1/org_users` | Add user to org | `501 Not Implemented` |
+| PUT | `/api/v1/org_users/{orgId}/{userId}` | Update org user | `501 Not Implemented` |
+| DELETE | `/api/v1/org_users/{orgId}/{userId}` | Remove user from org | `501 Not Implemented` |
+
+### Frontend Routes (SPA)
+| Path | Description |
+|------|-------------|
+| `/assets/*` | Frontend static assets (JS, CSS, images) - 1 year cache |
+| `/favicon.ico` | Favicon |
+| `/icon-*` | PWA icons |
+| `/logo.png` | Logo image |
+| `/manifest.json` | PWA manifest |
+| `/og-image.png` | OpenGraph image |
+| `/*` | Catch-all for React Router (serves index.html) - no cache |
+
+### Error Responses
+
+All endpoints return consistent error format:
+
+```json
+{
+  "error": "error_code",
+  "message": "Human-readable error message",
+  "details": "Additional error details (optional)",
+  "request_id": "unique-request-id",
+  "timestamp": "2025-10-28T15:50:34Z"
+}
+```
+
+**Common Error Codes:**
+- `400 Bad Request` - Invalid JSON or validation error
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions
+- `404 Not Found` - Resource not found
+- `409 Conflict` - Duplicate resource (e.g., email already exists)
+- `500 Internal Server Error` - Server error
+- `501 Not Implemented` - Endpoint not yet implemented
+
 ### Database Migrations (golang-migrate)
 - **12 migrations** - Complete schema from TimescaleDB extensions to sample data
 - **Versioned** - Sequential 6-digit numbering (000001-000012)
@@ -114,8 +246,35 @@ cd backend && ./bin/trakrf
 #### Test Endpoints
 
 ```bash
-curl localhost:8080/healthz           # Health check
-curl localhost:8080/api/v1/health     # API health
+# Health checks
+curl localhost:8080/healthz
+curl localhost:8080/health
+
+# Authentication
+curl -X POST localhost:8080/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"SecurePass123!"}'
+
+curl -X POST localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"SecurePass123!"}'
+
+# Protected endpoints (requires JWT token)
+TOKEN="your-jwt-token-here"
+
+curl localhost:8080/api/v1/users \
+  -H "Authorization: Bearer $TOKEN"
+
+curl localhost:8080/api/v1/assets \
+  -H "Authorization: Bearer $TOKEN"
+
+# Create asset
+curl -X POST localhost:8080/api/v1/assets \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"org_id":1,"identifier":"ASSET-001","name":"Test Asset","type":"device"}'
+
+# Frontend
 curl localhost:8080/                  # React frontend
 ```
 

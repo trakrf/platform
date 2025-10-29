@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
 )
@@ -40,7 +39,7 @@ func (s *Storage) CreateBulkImportJob(ctx context.Context, orgID int, totalRows 
 }
 
 // GetBulkImportJobByID retrieves a job by ID and org_id (tenant isolation)
-func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID uuid.UUID, orgID int) (*bulkimport.BulkImportJob, error) {
+func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID int, orgID int) (*bulkimport.BulkImportJob, error) {
 	query := `
 		SELECT id, org_id, status, total_rows, processed_rows, failed_rows, errors, created_at, completed_at
 		FROM trakrf.bulk_import_jobs
@@ -72,11 +71,14 @@ func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID uuid.UUID, org
 }
 
 // UpdateBulkImportJobProgress updates job progress and errors
-func (s *Storage) UpdateBulkImportJobProgress(ctx context.Context, jobID uuid.UUID, processedRows, failedRows int, errors []bulkimport.ErrorDetail) error {
+func (s *Storage) UpdateBulkImportJobProgress(ctx context.Context, jobID int, processedRows, failedRows int, errors []bulkimport.ErrorDetail) error {
 	errorsJSON, err := json.Marshal(errors)
 	if err != nil {
 		return fmt.Errorf("failed to marshal errors: %w", err)
 	}
+
+	fmt.Printf("UpdateBulkImportJobProgress called for job %d: processedRows=%d, failedRows=%d, errors=%d, errorsJSON=%s\n",
+		jobID, processedRows, failedRows, len(errors), string(errorsJSON))
 
 	query := `
 		UPDATE trakrf.bulk_import_jobs
@@ -86,18 +88,22 @@ func (s *Storage) UpdateBulkImportJobProgress(ctx context.Context, jobID uuid.UU
 
 	result, err := s.pool.Exec(ctx, query, jobID, processedRows, failedRows, errorsJSON)
 	if err != nil {
+		fmt.Printf("UpdateBulkImportJobProgress FAILED for job %d: %v\n", jobID, err)
 		return fmt.Errorf("failed to update job progress: %w", err)
 	}
 
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("job not found: %s", jobID)
+	rowsAffected := result.RowsAffected()
+	fmt.Printf("UpdateBulkImportJobProgress affected %d rows for job %d\n", rowsAffected, jobID)
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("job not found: %d", jobID)
 	}
 
 	return nil
 }
 
 // UpdateBulkImportJobStatus updates job status and optionally sets completed_at
-func (s *Storage) UpdateBulkImportJobStatus(ctx context.Context, jobID uuid.UUID, status string) error {
+func (s *Storage) UpdateBulkImportJobStatus(ctx context.Context, jobID int, status string) error {
 	query := `
 		UPDATE trakrf.bulk_import_jobs
 		SET status = $2, completed_at = CASE WHEN $2 IN ('completed', 'failed') THEN NOW() ELSE completed_at END
@@ -110,7 +116,7 @@ func (s *Storage) UpdateBulkImportJobStatus(ctx context.Context, jobID uuid.UUID
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("job not found: %s", jobID)
+		return fmt.Errorf("job not found: %d", jobID)
 	}
 
 	return nil

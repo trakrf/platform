@@ -46,14 +46,26 @@ func TestBatchCreateAssets_DuplicateIdentifier(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Create 2 assets with duplicate identifier
 	factory := testutil.NewAssetFactory(orgID).WithIdentifier("DUP-001")
 	assets := []asset.Asset{
 		factory.Build(),
-		factory.Build(),
+		factory.Build(), // Duplicate identifier
 	}
 
+	// IMPORTANT: All-or-nothing transaction behavior
+	// If ANY asset fails, ZERO assets should be saved
 	count, errs := store.BatchCreateAssets(ctx, assets)
-	assert.True(t, len(errs) > 0 || count < 2, "Should have errors or partial success with duplicates")
+
+	// Verify transaction rolled back - NO assets saved
+	assert.Equal(t, 0, count, "Transaction should rollback: ZERO assets saved on duplicate")
+	assert.True(t, len(errs) > 0, "Should have errors for duplicate identifier")
+
+	// Verify database has ZERO assets (transaction rolled back)
+	var dbCount int
+	err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM trakrf.assets WHERE org_id = $1", orgID).Scan(&dbCount)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, dbCount, "Database should have ZERO assets after rollback")
 }
 
 func TestBatchCreateAssets_Mixed(t *testing.T) {
@@ -68,11 +80,29 @@ func TestBatchCreateAssets_Mixed(t *testing.T) {
 
 	ctx := context.Background()
 
-	factory := testutil.NewAssetFactory(orgID).WithIdentifier("MIXED-001")
-	assets := factory.BuildBatch(5)
+	// Create a mix: 3 valid assets + 1 duplicate
+	// ALL should be rolled back due to the duplicate
+	factory := testutil.NewAssetFactory(orgID)
+	assets := []asset.Asset{
+		factory.WithIdentifier("VALID-001").Build(),
+		factory.WithIdentifier("VALID-002").Build(),
+		factory.WithIdentifier("VALID-003").Build(),
+		factory.WithIdentifier("VALID-001").Build(), // Duplicate!
+	}
 
+	// IMPORTANT: All-or-nothing transaction
+	// Even though 3 assets are valid, the 1 duplicate causes full rollback
 	count, errs := store.BatchCreateAssets(ctx, assets)
-	assert.True(t, count > 0 || len(errs) > 0, "Should have some success or errors")
+
+	// Verify transaction rolled back - NO assets saved
+	assert.Equal(t, 0, count, "Transaction should rollback: ZERO assets saved when ANY fails")
+	assert.True(t, len(errs) > 0, "Should have errors for duplicate")
+
+	// Verify database has ZERO assets (even the valid ones were rolled back)
+	var dbCount int
+	err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM trakrf.assets WHERE org_id = $1", orgID).Scan(&dbCount)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, dbCount, "Database should have ZERO assets after rollback (including valid ones)")
 }
 
 func TestProcessCSVAsync_ParseErrors(t *testing.T) {

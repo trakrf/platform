@@ -1,12 +1,21 @@
 -- Development Seed Data for TrakRF Platform
--- This file is safe to run multiple times (uses ON CONFLICT)
+--
+-- NOTE: Migration 000016_sample_data.up.sql already creates sample data:
+--   - 4 organizations (TrakRF, Acme Corporation, TechStart Inc, Research Lab)
+--   - 4 users
+--   - 3 locations
+--   - 3 scan devices
+--   - 3 assets
+--
+-- This file can be used to add ADDITIONAL development data if needed.
+-- It is safe to run multiple times (uses ON CONFLICT where possible)
 
--- Sample Organization
-INSERT INTO trakrf.organizations (name, slug, created_at, updated_at)
+-- Sample Organizations (will skip if identifiers already exist)
+INSERT INTO trakrf.organizations (name, identifier, created_at, updated_at)
 VALUES
     ('ACME Corporation', 'acme-corporation', NOW(), NOW()),
     ('Test Organization', 'test-organization', NOW(), NOW())
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (identifier) DO NOTHING;
 
 -- Sample Users (password is 'password' hashed with bcrypt)
 -- You should generate real password hashes for actual use
@@ -22,37 +31,37 @@ INSERT INTO trakrf.org_users (org_id, user_id, role, created_at, updated_at)
 SELECT
     o.id,
     u.id,
-    'admin'::trakrf.org_user_role,
+    'admin',
     NOW(),
     NOW()
 FROM trakrf.organizations o
 CROSS JOIN trakrf.users u
 WHERE
-    (o.slug = 'acme-corporation' AND u.email IN ('admin@acme.com', 'user@acme.com'))
-    OR (o.slug = 'test-organization' AND u.email = 'test@test.com')
+    (o.identifier = 'acme-corporation' AND u.email IN ('admin@acme.com', 'user@acme.com'))
+    OR (o.identifier = 'test-organization' AND u.email = 'test@test.com')
 ON CONFLICT (org_id, user_id) DO NOTHING;
 
 -- Sample Locations
-INSERT INTO trakrf.locations (org_id, name, type, created_at, updated_at)
+INSERT INTO trakrf.locations (org_id, identifier, name, created_at, updated_at)
 SELECT
     o.id,
+    'warehouse-a',
     'Warehouse A',
-    'warehouse',
     NOW(),
     NOW()
 FROM trakrf.organizations o
-WHERE o.slug = 'acme-corporation'
+WHERE o.identifier = 'acme-corporation'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO trakrf.locations (org_id, name, type, created_at, updated_at)
+INSERT INTO trakrf.locations (org_id, identifier, name, created_at, updated_at)
 SELECT
     o.id,
+    'office-building',
     'Office Building',
-    'office',
     NOW(),
     NOW()
 FROM trakrf.organizations o
-WHERE o.slug = 'acme-corporation'
+WHERE o.identifier = 'acme-corporation'
 ON CONFLICT DO NOTHING;
 
 -- Sample Assets
@@ -69,7 +78,7 @@ SELECT
     NOW(),
     NOW()
 FROM trakrf.organizations o
-WHERE o.slug = 'acme-corporation'
+WHERE o.identifier = 'acme-corporation'
 ON CONFLICT (org_id, identifier) DO NOTHING;
 
 INSERT INTO trakrf.assets (org_id, identifier, name, type, description, valid_from, valid_to, is_active, created_at, updated_at)
@@ -85,7 +94,7 @@ SELECT
     NOW(),
     NOW()
 FROM trakrf.organizations o
-WHERE o.slug = 'acme-corporation'
+WHERE o.identifier = 'acme-corporation'
 ON CONFLICT (org_id, identifier) DO NOTHING;
 
 INSERT INTO trakrf.assets (org_id, identifier, name, type, description, valid_from, valid_to, is_active, created_at, updated_at)
@@ -101,22 +110,21 @@ SELECT
     NOW(),
     NOW()
 FROM trakrf.organizations o
-WHERE o.slug = 'acme-corporation'
+WHERE o.identifier = 'acme-corporation'
 ON CONFLICT (org_id, identifier) DO NOTHING;
 
 -- Sample Scan Devices
-INSERT INTO trakrf.scan_devices (org_id, name, type, location_id, is_active, created_at, updated_at)
+INSERT INTO trakrf.scan_devices (org_id, identifier, name, type, is_active, created_at, updated_at)
 SELECT
     o.id,
+    'scanner-wh-a-01',
     'Scanner-WH-A-01',
-    'fixed',
-    l.id,
+    'rfid_reader',
     true,
     NOW(),
     NOW()
 FROM trakrf.organizations o
-JOIN trakrf.locations l ON l.org_id = o.id AND l.name = 'Warehouse A'
-WHERE o.slug = 'acme-corporation'
+WHERE o.identifier = 'acme-corporation'
 ON CONFLICT DO NOTHING;
 
 -- Summary

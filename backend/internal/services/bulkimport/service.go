@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mime/multipart"
-	"strings"
 
-	"github.com/google/uuid"
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -51,8 +49,8 @@ func (s *Service) ProcessUpload(
 
 	response := &bulkimport.UploadResponse{
 		Status:    "accepted",
-		JobID:     job.ID.String(),
-		StatusURL: fmt.Sprintf("/api/v1/assets/bulk/%s", job.ID.String()),
+		JobID:     fmt.Sprintf("%d", job.ID),
+		StatusURL: fmt.Sprintf("/api/v1/assets/bulk/%d", job.ID),
 		Message:   fmt.Sprintf("CSV upload accepted. Processing %d rows asynchronously.", totalRows),
 	}
 
@@ -63,72 +61,163 @@ func (s *Service) ProcessUpload(
 
 func (s *Service) processCSVAsync(
 	ctx context.Context,
-	jobID uuid.UUID,
+	jobID int,
 	orgID int,
 	records [][]string,
 	headers []string,
 ) {
 	defer func() {
 		if r := recover(); r != nil {
+			panicErr := bulkimport.ErrorDetail{
+				Row:   0,
+				Field: "system",
+				Error: fmt.Sprintf("Panic during processing: %v", r),
+			}
+			fmt.Printf("PANIC in processCSVAsync for job %d: %v\n", jobID, r)
+			s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, 1, []bulkimport.ErrorDetail{panicErr})
 			s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
 		}
 	}()
 
-	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "processing")
+	fmt.Printf("Starting processCSVAsync for job %d, orgID %d, records: %d\n", jobID, orgID, len(records))
+
+	if err := s.storage.UpdateBulkImportJobStatus(ctx, jobID, "processing"); err != nil {
+		fmt.Printf("Failed to update job status to processing for job %d: %v\n", jobID, err)
+		panicErr := bulkimport.ErrorDetail{
+			Row:   0,
+			Field: "system",
+			Error: fmt.Sprintf("Failed to update job status: %v", err),
+		}
+		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, 1, []bulkimport.ErrorDetail{panicErr})
+		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+		return
+	}
 
 	dataRows := records[1:]
-	assets := make([]asset.Asset, 0, len(dataRows))
-	var parseErrors []bulkimport.ErrorDetail
+	totalDataRows := len(dataRows)
+	fmt.Printf("Validating %d data rows for job %d\n", totalDataRows, jobID)
+
+	// PHASE 1: Parse all rows and collect ALL parse errors (don't stop on first error)
+	type parsedRow struct {
+		rowNumber int
+		asset     *asset.Asset
+	}
+
+	var allErrors []bulkimport.ErrorDetail
+	validRows := make([]parsedRow, 0, len(dataRows))
 
 	for rowIdx, row := range dataRows {
-		rowNumber := rowIdx + 2
+		rowNumber := rowIdx + 2 // +1 for 0-index, +1 for header row
 
 		parsedAsset, err := csvutil.MapCSVRowToAsset(row, headers, orgID)
 		if err != nil {
-			parseErrors = append(parseErrors, bulkimport.ErrorDetail{
+			fmt.Printf("Parse error at row %d for job %d: %v\n", rowNumber, jobID, err)
+			allErrors = append(allErrors, bulkimport.ErrorDetail{
 				Row:   rowNumber,
 				Field: "",
 				Error: err.Error(),
 			})
-			continue
+			continue // Continue to find ALL parse errors, not just the first one
 		}
 
-		assets = append(assets, *parsedAsset)
+		validRows = append(validRows, parsedRow{
+			rowNumber: rowNumber,
+			asset:     parsedAsset,
+		})
 	}
 
-	if len(parseErrors) > 0 {
-		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, len(parseErrors), parseErrors)
+	// PHASE 2: Check for duplicate identifiers WITHIN the CSV batch itself
+	identifierToRows := make(map[string][]int) // identifier -> list of row numbers
+	for _, pr := range validRows {
+		identifier := pr.asset.Identifier
+		identifierToRows[identifier] = append(identifierToRows[identifier], pr.rowNumber)
+	}
+
+	// Report duplicates within CSV
+	for identifier, rowNumbers := range identifierToRows {
+		if len(rowNumbers) > 1 {
+			// Multiple rows have the same identifier
+			for _, rowNum := range rowNumbers {
+				fmt.Printf("Duplicate identifier '%s' at row %d in CSV for job %d\n", identifier, rowNum, jobID)
+				allErrors = append(allErrors, bulkimport.ErrorDetail{
+					Row:   rowNum,
+					Field: "identifier",
+					Error: fmt.Sprintf("duplicate identifier '%s' appears in rows %v within the CSV", identifier, rowNumbers),
+				})
+			}
+		}
+	}
+
+	// PHASE 3: Check for duplicate identifiers against existing database records
+	// Only check identifiers that aren't already flagged as duplicates within CSV
+	var identifiersToCheck []string
+	for identifier, rowNumbers := range identifierToRows {
+		if len(rowNumbers) == 1 {
+			// Only appears once in CSV, check against database
+			identifiersToCheck = append(identifiersToCheck, identifier)
+		}
+	}
+
+	if len(identifiersToCheck) > 0 {
+		existingIdentifiers, err := s.storage.CheckDuplicateIdentifiers(ctx, orgID, identifiersToCheck)
+		if err != nil {
+			fmt.Printf("Failed to check existing identifiers for job %d: %v\n", jobID, err)
+			allErrors = append(allErrors, bulkimport.ErrorDetail{
+				Row:   0,
+				Field: "system",
+				Error: fmt.Sprintf("Failed to check existing identifiers: %v", err),
+			})
+		} else {
+			// Report identifiers that already exist in database
+			for _, pr := range validRows {
+				if existingIdentifiers[pr.asset.Identifier] {
+					fmt.Printf("Identifier '%s' at row %d already exists in database for job %d\n", pr.asset.Identifier, pr.rowNumber, jobID)
+					allErrors = append(allErrors, bulkimport.ErrorDetail{
+						Row:   pr.rowNumber,
+						Field: "identifier",
+						Error: fmt.Sprintf("asset with identifier '%s' already exists in the database", pr.asset.Identifier),
+					})
+				}
+			}
+		}
+	}
+
+	// PHASE 4: If ANY errors found, report them all and fail
+	if len(allErrors) > 0 {
+		fmt.Printf("Found %d total errors for job %d, marking as failed\n", len(allErrors), jobID)
+		s.storage.UpdateBulkImportJobProgress(ctx, jobID, totalDataRows, totalDataRows, allErrors)
 		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
 		return
+	}
+
+	// PHASE 5: All validation passed - extract assets and insert
+	fmt.Printf("All validations passed. Attempting to insert %d assets for job %d\n", len(validRows), jobID)
+	assets := make([]asset.Asset, len(validRows))
+	for i, pr := range validRows {
+		assets[i] = *pr.asset
 	}
 
 	successCount, insertErrors := s.storage.BatchCreateAssets(ctx, assets)
+	fmt.Printf("BatchCreateAssets returned: successCount=%d, errors=%d for job %d\n", successCount, len(insertErrors), jobID)
 
 	if len(insertErrors) > 0 {
+		// Unexpected database errors during insert (shouldn't happen since we pre-validated)
 		var errorDetails []bulkimport.ErrorDetail
 		for _, err := range insertErrors {
-			errorMsg := err.Error()
-			var rowNum int
-			var field string
-
-			if n, parseErr := fmt.Sscanf(errorMsg, "row %d:", &rowNum); n == 1 && parseErr == nil {
-				if strings.Contains(errorMsg, "identifier") {
-					field = "identifier"
-				}
-			}
-
+			fmt.Printf("Unexpected insert error for job %d: %s\n", jobID, err.Error())
 			errorDetails = append(errorDetails, bulkimport.ErrorDetail{
-				Row:   rowNum + 2,
-				Field: field,
-				Error: errorMsg,
+				Row:   0,
+				Field: "",
+				Error: fmt.Sprintf("unexpected database error: %s", err.Error()),
 			})
 		}
 
-		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, len(insertErrors), errorDetails)
+		s.storage.UpdateBulkImportJobProgress(ctx, jobID, totalDataRows, totalDataRows, errorDetails)
 		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
 		return
 	}
 
+	fmt.Printf("Successfully completed job %s with %d assets\n", jobID, successCount)
 	s.storage.UpdateBulkImportJobProgress(ctx, jobID, successCount, 0, nil)
 	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "completed")
 }

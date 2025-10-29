@@ -17,12 +17,13 @@ type AssetFactory struct {
 	Type        string
 	Description string
 	ValidFrom   time.Time
-	ValidTo     time.Time
+	ValidTo     *time.Time
 	IsActive    bool
 }
 
 func NewAssetFactory(orgID int) *AssetFactory {
 	now := time.Now()
+	validTo := now.Add(24 * time.Hour)
 	return &AssetFactory{
 		OrgID:       orgID,
 		Identifier:  fmt.Sprintf("TEST-%d", time.Now().UnixNano()%1000000),
@@ -30,7 +31,7 @@ func NewAssetFactory(orgID int) *AssetFactory {
 		Type:        "device",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     &validTo,
 		IsActive:    true,
 	}
 }
@@ -52,6 +53,11 @@ func (f *AssetFactory) WithType(t string) *AssetFactory {
 
 func (f *AssetFactory) WithDescription(desc string) *AssetFactory {
 	f.Description = desc
+	return f
+}
+
+func (f *AssetFactory) WithValidTo(validTo *time.Time) *AssetFactory {
+	f.ValidTo = validTo
 	return f
 }
 
@@ -122,6 +128,7 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier str
 		t.Fatalf("Failed to create test asset: %v", err)
 	}
 
+	validTo := now.Add(24 * time.Hour)
 	return &asset.Asset{
 		ID:          id,
 		OrgID:       orgID,
@@ -130,7 +137,7 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier str
 		Type:        "device",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     &validTo,
 		IsActive:    true,
 	}
 }

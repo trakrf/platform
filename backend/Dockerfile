@@ -18,6 +18,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Pre-build the application to populate build cache and verify all dependencies
+RUN go build -o ./tmp/server .
+
 # Run Air (reads .air.toml config)
 CMD ["air", "-c", ".air.toml"]
 
