@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trakrf/platform/backend/internal/i18n"
+	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
@@ -33,14 +33,14 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	jobID, err := strconv.Atoi(jobIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("bulk_import.job.invalid_id"), err.Error(), requestID)
+			apierrors.BulkImportJobInvalidID, err.Error(), requestID)
 		return
 	}
 
 	claims := middleware.GetUserClaims(r)
 	if claims == nil || claims.CurrentOrgID == nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			i18n.T("bulk_import.job.missing_org"), "", requestID)
+			apierrors.BulkImportJobMissingOrg, "", requestID)
 		return
 	}
 	orgID := *claims.CurrentOrgID
@@ -48,13 +48,13 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	job, err := handler.storage.GetBulkImportJobByID(r.Context(), jobID, orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("bulk_import.job.failed_to_retrieve"), err.Error(), requestID)
+			apierrors.BulkImportJobFailedToRetrieve, err.Error(), requestID)
 		return
 	}
 
 	if job == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			i18n.T("bulk_import.job.not_found"), "", requestID)
+			apierrors.BulkImportJobNotFound, "", requestID)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
 	if claims == nil || claims.CurrentOrgID == nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			i18n.T("bulk_import.upload.missing_org"), "", requestID)
+			apierrors.BulkImportUploadMissingOrg, "", requestID)
 		return
 	}
 	orgID := *claims.CurrentOrgID
@@ -104,14 +104,14 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(6 * 1024 * 1024)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("bulk_import.upload.failed_to_parse"), err.Error(), requestID)
+			apierrors.BulkImportUploadFailedToParse, err.Error(), requestID)
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("bulk_import.upload.missing_file"), err.Error(), requestID)
+			apierrors.BulkImportUploadMissingFile, err.Error(), requestID)
 		return
 	}
 	defer file.Close()
@@ -129,7 +129,7 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 			errorType = modelerrors.ErrInternal
 		}
 
-		httputil.WriteJSONError(w, r, statusCode, errorType, i18n.T("bulk_import.upload.failed"), err.Error(), requestID)
+		httputil.WriteJSONError(w, r, statusCode, errorType, apierrors.BulkImportUploadFailed, err.Error(), requestID)
 		return
 	}
 

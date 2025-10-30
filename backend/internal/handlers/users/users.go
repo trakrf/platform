@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/trakrf/platform/backend/internal/i18n"
+	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/shared"
@@ -61,7 +61,7 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	users, total, err := handler.storage.ListUsers(r.Context(), perPage, offset)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("users.list.failed"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserListFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -94,20 +94,20 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("users.get.invalid_id"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserGetInvalidID, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	u, err := handler.storage.GetUserByID(r.Context(), id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("users.get.failed"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserGetFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if u == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			i18n.T("users.get.not_found"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserNotFound, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -131,13 +131,13 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request user.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("users.create.invalid_json"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserCreateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			i18n.T("users.create.validation_failed"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserCreateValidationFail, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -145,11 +145,11 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, modelerrors.ErrUserDuplicateEmail) {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				i18n.T("users.create.email_exists"), "", middleware.GetRequestID(r.Context()))
+				apierrors.UserCreateEmailExists, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("users.create.failed"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserCreateFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -176,20 +176,20 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("users.update.invalid_id"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateInvalidID, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	var request user.UpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("users.update.invalid_json"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			i18n.T("users.update.validation_failed"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateValidationFail, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -197,17 +197,17 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, modelerrors.ErrUserDuplicateEmail) {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				i18n.T("users.update.email_exists"), "", middleware.GetRequestID(r.Context()))
+				apierrors.UserUpdateEmailExists, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("users.update.failed"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if u == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			i18n.T("users.update.not_found"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateNotFound, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -231,18 +231,18 @@ func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("users.delete.invalid_id"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserDeleteInvalidID, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := handler.storage.SoftDeleteUser(r.Context(), id); err != nil {
 		if errors.Is(err, modelerrors.ErrUserNotFound) {
 			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				i18n.T("users.delete.not_found"), "", middleware.GetRequestID(r.Context()))
+				apierrors.UserDeleteNotFound, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("users.delete.failed"), "", middleware.GetRequestID(r.Context()))
+			apierrors.UserDeleteFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 

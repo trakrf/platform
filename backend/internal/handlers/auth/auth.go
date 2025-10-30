@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/trakrf/platform/backend/internal/i18n"
+	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/auth"
 	"github.com/trakrf/platform/backend/internal/models/errors"
@@ -42,13 +42,13 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	var request auth.SignupRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			i18n.T("auth.signup.invalid_json"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.AuthSignupInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
-			i18n.T("auth.signup.validation_failed"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.AuthSignupValidationFailed, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -57,16 +57,16 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "email already exists") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
-				i18n.T("auth.signup.email_exists"), "", middleware.GetRequestID(r.Context()))
+				apierrors.AuthSignupEmailExists, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		if strings.Contains(errMsg, "organization identifier already taken") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
-				i18n.T("auth.signup.org_identifier_taken"), "", middleware.GetRequestID(r.Context()))
+				apierrors.AuthSignupOrgIdentifierTaken, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
-			i18n.T("auth.signup.failed"), "", middleware.GetRequestID(r.Context()))
+			apierrors.AuthSignupFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -88,13 +88,13 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var request auth.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			i18n.T("auth.login.invalid_json"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.AuthLoginInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
-			i18n.T("auth.login.validation_failed"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.AuthLoginValidationFailed, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -102,11 +102,11 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid email or password") {
 			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
-				i18n.T("auth.login.invalid_credentials"), "", middleware.GetRequestID(r.Context()))
+				apierrors.AuthLoginInvalidCredentials, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
-			i18n.T("auth.login.failed"), "", middleware.GetRequestID(r.Context()))
+			apierrors.AuthLoginFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 

@@ -2,12 +2,13 @@ package assets
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/trakrf/platform/backend/internal/i18n"
+	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
@@ -45,20 +46,20 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request asset.Asset
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("assets.create.invalid_json"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.InvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			i18n.T("assets.create.validation_failed"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.ValidationFailed, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	result, err := handler.storage.CreateAsset(r.Context(), request)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("assets.create.failed"), err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.AssetCreateFailed, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -85,7 +86,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("assets.update.invalid_id", map[string]interface{}{"id": idParam}), err.Error(), ctx)
+			fmt.Sprintf(apierrors.AssetUpdateInvalidID, idParam), err.Error(), ctx)
 		return
 	}
 
@@ -93,13 +94,13 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 
 	if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("assets.update.invalid_request"), err.Error(), ctx)
+			apierrors.AssetUpdateInvalidReq, err.Error(), ctx)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			i18n.T("assets.update.validation_failed"), err.Error(), ctx)
+			apierrors.ValidationFailed, err.Error(), ctx)
 		return
 	}
 
@@ -107,7 +108,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("assets.update.failed"), err.Error(), ctx)
+			apierrors.AssetUpdateFailed, err.Error(), ctx)
 		return
 	}
 
@@ -133,7 +134,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("assets.get.invalid_id", map[string]interface{}{"id": idParam}), err.Error(), middleware.GetRequestID(req.Context()))
+			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), middleware.GetRequestID(req.Context()))
 		return
 	}
 
@@ -141,13 +142,13 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("assets.get.failed"), err.Error(), ctx)
+			apierrors.AssetGetFailed, err.Error(), ctx)
 		return
 	}
 
 	if result == nil {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			i18n.T("assets.get.not_found"), "", ctx)
+			apierrors.AssetNotFound, "", ctx)
 		return
 	}
 
@@ -173,14 +174,14 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			i18n.T("assets.delete.invalid_id", map[string]interface{}{"id": idParam}), err.Error(), ctx)
+			fmt.Sprintf(apierrors.AssetDeleteInvalidID, idParam), err.Error(), ctx)
 		return
 	}
 
 	deleted, err := handler.storage.DeleteAsset(req.Context(), &id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("assets.delete.failed"), err.Error(), ctx)
+			apierrors.AssetDeleteFailed, err.Error(), ctx)
 		return
 	}
 
@@ -227,7 +228,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	assets, err := handler.storage.ListAllAssets(req.Context(), limit, offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("assets.list.failed"), err.Error(), ctx)
+			apierrors.AssetListFailed, err.Error(), ctx)
 		return
 	}
 
@@ -235,7 +236,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	totalCount, err := handler.storage.CountAllAssets(req.Context())
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			i18n.T("assets.count.failed"), err.Error(), ctx)
+			apierrors.AssetCountFailed, err.Error(), ctx)
 		return
 	}
 
