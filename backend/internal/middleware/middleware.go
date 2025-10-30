@@ -77,14 +77,34 @@ func CORS(next http.Handler) http.Handler {
 	})
 }
 
-// ContentType enforces application/json Content-Type for write operations.
+// ContentType enforces allowed Content-Type headers for write operations.
+// Allows:
+// - application/json (standard API requests)
+// - multipart/form-data (file uploads)
+// - empty Content-Type (legacy compatibility)
 func ContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" || r.Method == "PUT" {
+		if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
 			ct := r.Header.Get("Content-Type")
-			if ct != "application/json" && ct != "application/json; charset=utf-8" && ct != "" {
+
+			// Empty Content-Type is allowed for backwards compatibility
+			if ct == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check against allowed content types
+			// Note: multipart/form-data includes boundary parameter
+			isAllowed := ct == "application/json" ||
+				ct == "application/json; charset=utf-8" ||
+				strings.HasPrefix(ct, "multipart/form-data")
+
+			if !isAllowed {
 				httputil.WriteJSONError(w, r, http.StatusUnsupportedMediaType,
-					errors.ErrBadRequest, "Content-Type must be application/json", "", GetRequestID(r.Context()))
+					errors.ErrBadRequest,
+					"Content-Type must be application/json or multipart/form-data",
+					"",
+					GetRequestID(r.Context()))
 				return
 			}
 		}

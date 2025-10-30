@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 
 [build]
   # Build command (creates binary in tmp/)
-  cmd = "go build -o ./tmp/server ."
+  cmd = "go build -mod=vendor -o ./tmp/server ."
 
   # Binary to execute
   bin = "./tmp/server"

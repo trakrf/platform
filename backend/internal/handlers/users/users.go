@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/shared"
@@ -32,7 +33,18 @@ func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{storage: storage}
 }
 
-// List handles GET /api/v1/users
+// @Summary List users
+// @Description Get paginated list of users
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} users.ListResponse
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users [get]
 func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
@@ -49,7 +61,7 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	users, total, err := handler.storage.ListUsers(r.Context(), perPage, offset)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to list users", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserListFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -65,43 +77,67 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }
 
-// Get handles GET /api/v1/users/:id
+// @Summary Get user
+// @Description Get user by ID
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} map[string]any "data: user.User"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid user ID"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "User not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users/{id} [get]
 func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid user ID", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserGetInvalidID, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	u, err := handler.storage.GetUserByID(r.Context(), id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to get user", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserGetFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if u == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			"User not found", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserNotFound, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": u})
 }
 
-// Create handles POST /api/v1/users
+// @Summary Create user
+// @Description Create a new user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body user.CreateUserRequest true "User data"
+// @Success 201 {object} map[string]any "data: user.User"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid JSON or validation error"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request user.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid JSON", err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserCreateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			"Validation failed", err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserCreateValidationFail, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -109,11 +145,11 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, modelerrors.ErrUserDuplicateEmail) {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				"Email already exists", "", middleware.GetRequestID(r.Context()))
+				apierrors.UserCreateEmailExists, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to create user", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserCreateFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -121,25 +157,39 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": u})
 }
 
-// Update handles PUT /api/v1/users/:id
+// @Summary Update user
+// @Description Update an existing user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Param request body user.UpdateUserRequest true "User update data"
+// @Success 200 {object} map[string]any "data: user.User"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID, JSON, or validation error"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "User not found"
+// @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users/{id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid user ID", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateInvalidID, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	var request user.UpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid JSON", err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			"Validation failed", err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateValidationFail, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -147,40 +197,52 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, modelerrors.ErrUserDuplicateEmail) {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				"Email already exists", "", middleware.GetRequestID(r.Context()))
+				apierrors.UserUpdateEmailExists, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to update user", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if u == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			"User not found", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserUpdateNotFound, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": u})
 }
 
-// Delete handles DELETE /api/v1/users/:id
+// @Summary Delete user
+// @Description Soft delete a user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 204 "No content"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid user ID"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "User not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/users/{id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid user ID", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserDeleteInvalidID, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := handler.storage.SoftDeleteUser(r.Context(), id); err != nil {
 		if errors.Is(err, modelerrors.ErrUserNotFound) {
 			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				"User not found", "", middleware.GetRequestID(r.Context()))
+				apierrors.UserDeleteNotFound, "", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to delete user", "", middleware.GetRequestID(r.Context()))
+			apierrors.UserDeleteFailed, "", middleware.GetRequestID(r.Context()))
 		return
 	}
 

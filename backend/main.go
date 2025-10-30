@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/trakrf/platform/backend/docs"
+	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
@@ -32,9 +34,9 @@ var (
 	startTime time.Time
 )
 
-// @title Platform API
+// @title TrakRF Platform API
 // @version 1.0
-// @description Multi-tenant platform API with authentication and org management
+// @description Multi-tenant platform API with authentication and organization management
 // @BasePath /
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -46,6 +48,7 @@ func setupRouter(
 	organizationsHandler *organizationshandler.Handler,
 	usersHandler *usershandler.Handler,
 	orgUsersHandler *orgusershandler.Handler,
+	assetsHandler *assetshandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
 ) *chi.Mux {
@@ -75,6 +78,7 @@ func setupRouter(
 		organizationsHandler.RegisterRoutes(r)
 		usersHandler.RegisterRoutes(r)
 		orgUsersHandler.RegisterRoutes(r)
+		assetsHandler.RegisterRoutes(r)
 	})
 
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -105,18 +109,19 @@ func main() {
 	}
 	slog.Info("Storage initialized")
 
-	authSvc := authservice.NewService(store.Pool(), store)
+	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store)
 	slog.Info("Auth service initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)
 	organizationsHandler := organizationshandler.NewHandler(store)
 	usersHandler := usershandler.NewHandler(store)
 	orgUsersHandler := orgusershandler.NewHandler(store)
-	healthHandler := healthhandler.NewHandler(store.Pool(), version, startTime)
+	assetsHandler := assetshandler.NewHandler(store)
+	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	slog.Info("Handlers initialized")
 
-	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, healthHandler, frontendHandler)
+	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, healthHandler, frontendHandler)
 	slog.Info("Routes registered")
 
 	server := &http.Server{
