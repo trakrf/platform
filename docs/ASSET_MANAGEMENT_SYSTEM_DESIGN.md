@@ -287,7 +287,68 @@ export interface AssetCache {
 
 ## State Management & Caching Architecture
 
-### Zustand Store with Advanced Caching
+### Three-Layer Architecture
+
+The frontend asset management system uses a clean three-layer architecture:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     TSX Components                          │
+│              (AssetsScreen, AssetList, etc.)                │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ↓
+┌─────────────────────────────────────────────────────────────┐
+│                  Layer 3: Service Layer                     │
+│                    (TanStack Query)                         │
+│  - Data fetching & server state synchronization            │
+│  - Automatic cache invalidation                            │
+│  - Loading/error states                                    │
+│  - Optimistic updates                                      │
+│  - Background refetching                                   │
+│                                                             │
+│  Files: hooks/useAssets.ts, hooks/useBulkUpload.ts        │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Layer 2: Business Logic Layer                  │
+│                  (Pure Functions)                           │
+│  - Data transformations                                    │
+│  - Computed values (filtered, sorted assets)               │
+│  - Validation logic                                        │
+│  - CSV parsing and formatting                              │
+│  - Date formatting and business rules                      │
+│                                                             │
+│  Files: lib/asset/transforms.ts, lib/asset/validators.ts  │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ↓
+┌─────────────────────────────────────────────────────────────┐
+│                Layer 1: DB Layer (Zustand)                  │
+│              (Client State Management)                      │
+│  - UI state (filters, pagination, sort)                    │
+│  - Selected assets                                         │
+│  - Form state                                              │
+│  - Bulk upload job tracking                                │
+│  - Multi-index cache for O(1) lookups                      │
+│  - LocalStorage persistence                                │
+│                                                             │
+│  Files: stores/assetStore.ts                               │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   Backend API Layer                         │
+│                 (lib/api/assets.ts)                        │
+│  - HTTP client with interceptors                           │
+│  - Type-safe API methods                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Layer 1: DB Layer (Zustand Store)
+
+**Responsibility:** Client-side state management, UI state, and local caching
 
 ```typescript
 // stores/assetStore.ts
@@ -295,11 +356,8 @@ export interface AssetCache {
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createStoreWithTracking } from './createStore';
-import { assetsApi } from '@/lib/api/assets';
 import type {
   Asset,
-  CreateAssetRequest,
-  UpdateAssetRequest,
   AssetFilters,
   PaginationState,
   SortState,
@@ -308,64 +366,44 @@ import type {
 } from '@/types/asset';
 
 interface AssetState {
-  // ============ Cache Layer ============
+  // ============ Local Cache for O(1) Lookups ============
   cache: AssetCache;
 
   // ============ UI State ============
-  selectedAsset: Asset | null;
+  selectedAssetId: number | null;    // Selected asset ID (use with cache)
   filters: AssetFilters;
   pagination: PaginationState;
   sort: SortState;
 
-  // ============ Loading States ============
-  isLoading: boolean;         // List/fetch operations
-  isCreating: boolean;        // Create operation
-  isUpdating: boolean;        // Update operation
-  isDeleting: boolean;        // Delete operation
-  isUploading: boolean;       // CSV upload
-  isPolling: boolean;         // Job status polling
-
-  // ============ Error States ============
-  error: string | null;
-  validationErrors: Record<string, string>;
-
   // ============ Bulk Upload State ============
-  uploadJob: JobStatusResponse | null;
+  uploadJobId: string | null;        // Current job ID being tracked
   pollingIntervalId: NodeJS.Timeout | null;
 
   // ============ Cache Management Actions ============
-  invalidateCache: () => void;
-  isCacheStale: () => boolean;
+  addAssets: (assets: Asset[]) => void;        // Add assets to cache
+  addAsset: (asset: Asset) => void;            // Add single asset
+  updateCachedAsset: (id: number, updates: Partial<Asset>) => void;
+  removeAsset: (id: number) => void;           // Remove from cache
+  invalidateCache: () => void;                 // Clear cache
   getAssetById: (id: number) => Asset | undefined;
   getAssetByIdentifier: (identifier: string) => Asset | undefined;
   getAssetsByType: (type: AssetType) => Asset[];
   getActiveAssets: () => Asset[];
-
-  // ============ CRUD Actions ============
-  fetchAssets: (forceRefresh?: boolean) => Promise<void>;
-  fetchAssetById: (id: number) => Promise<Asset>;
-  createAsset: (data: CreateAssetRequest) => Promise<Asset>;
-  updateAsset: (id: number, data: UpdateAssetRequest) => Promise<Asset>;
-  deleteAsset: (id: number) => Promise<void>;
-
-  // ============ Bulk Upload Actions ============
-  uploadCSV: (file: File) => Promise<BulkUploadResponse>;
-  startPolling: (jobId: string) => void;
-  stopPolling: () => void;
-  checkJobStatus: (jobId: string) => Promise<JobStatusResponse>;
 
   // ============ Filter/Pagination/Sort Actions ============
   setFilters: (filters: Partial<AssetFilters>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
   setSort: (field: SortField, direction?: SortDirection) => void;
+  resetPagination: () => void;
 
   // ============ Selection Actions ============
-  selectAsset: (asset: Asset | null) => void;
+  selectAsset: (id: number | null) => void;
+  getSelectedAsset: () => Asset | undefined;
 
-  // ============ Error Handling ============
-  clearError: () => void;
-  clearValidationErrors: () => void;
+  // ============ Bulk Upload Tracking ============
+  setUploadJobId: (jobId: string | null) => void;
+  setPollingInterval: (intervalId: NodeJS.Timeout | null) => void;
 }
 
 export const useAssetStore = create<AssetState>()(
@@ -383,7 +421,7 @@ export const useAssetStore = create<AssetState>()(
           ttl: 5 * 60 * 1000, // 5 minutes
         },
 
-        selectedAsset: null,
+        selectedAssetId: null,
 
         filters: {
           type: "all",
@@ -403,20 +441,93 @@ export const useAssetStore = create<AssetState>()(
           direction: "desc",
         },
 
-        isLoading: false,
-        isCreating: false,
-        isUpdating: false,
-        isDeleting: false,
-        isUploading: false,
-        isPolling: false,
-
-        error: null,
-        validationErrors: {},
-
-        uploadJob: null,
+        uploadJobId: null,
         pollingIntervalId: null,
 
         // ============ Cache Management ============
+
+        addAssets: (assets: Asset[]) => {
+          const { cache } = get();
+          const newCache = { ...cache };
+
+          assets.forEach(asset => {
+            newCache.byId.set(asset.id, asset);
+            newCache.byIdentifier.set(asset.identifier, asset);
+
+            if (!newCache.byType.has(asset.type)) {
+              newCache.byType.set(asset.type, new Set());
+            }
+            newCache.byType.get(asset.type)!.add(asset.id);
+
+            if (asset.is_active) {
+              newCache.activeIds.add(asset.id);
+            }
+
+            if (!newCache.allIds.includes(asset.id)) {
+              newCache.allIds.push(asset.id);
+            }
+          });
+
+          newCache.lastFetched = Date.now();
+          set({ cache: newCache });
+        },
+
+        addAsset: (asset: Asset) => {
+          get().addAssets([asset]);
+        },
+
+        updateCachedAsset: (id: number, updates: Partial<Asset>) => {
+          const { cache } = get();
+          const existing = cache.byId.get(id);
+          if (!existing) return;
+
+          const updated = { ...existing, ...updates };
+          const newCache = { ...cache };
+
+          // Update primary index
+          newCache.byId.set(id, updated);
+
+          // Update identifier index if changed
+          if (updates.identifier && updates.identifier !== existing.identifier) {
+            newCache.byIdentifier.delete(existing.identifier);
+            newCache.byIdentifier.set(updated.identifier, updated);
+          }
+
+          // Update type index if changed
+          if (updates.type && updates.type !== existing.type) {
+            newCache.byType.get(existing.type)?.delete(id);
+            if (!newCache.byType.has(updated.type)) {
+              newCache.byType.set(updated.type, new Set());
+            }
+            newCache.byType.get(updated.type)!.add(id);
+          }
+
+          // Update active index if changed
+          if (updates.is_active !== undefined && updates.is_active !== existing.is_active) {
+            if (updated.is_active) {
+              newCache.activeIds.add(id);
+            } else {
+              newCache.activeIds.delete(id);
+            }
+          }
+
+          set({ cache: newCache });
+        },
+
+        removeAsset: (id: number) => {
+          const { cache } = get();
+          const asset = cache.byId.get(id);
+          if (!asset) return;
+
+          const newCache = { ...cache };
+          newCache.byId.delete(id);
+          newCache.byIdentifier.delete(asset.identifier);
+          newCache.byType.get(asset.type)?.delete(id);
+          newCache.activeIds.delete(id);
+          newCache.allIds = newCache.allIds.filter(aid => aid !== id);
+
+          set({ cache: newCache });
+        },
 
         invalidateCache: () => {
           const { cache } = get();
@@ -431,12 +542,6 @@ export const useAssetStore = create<AssetState>()(
               lastFetched: 0,
             },
           });
-        },
-
-        isCacheStale: () => {
-          const { cache } = get();
-          const now = Date.now();
-          return (now - cache.lastFetched) > cache.ttl;
         },
 
         getAssetById: (id: number) => {
@@ -465,362 +570,6 @@ export const useAssetStore = create<AssetState>()(
             .filter((asset): asset is Asset => asset !== undefined);
         },
 
-        // ============ Fetch Assets (with caching) ============
-
-        fetchAssets: async (forceRefresh = false) => {
-          const { isCacheStale, pagination, sort, filters } = get();
-
-          // Use cache if fresh and not forcing refresh
-          if (!forceRefresh && !isCacheStale()) {
-            return;
-          }
-
-          set({ isLoading: true, error: null });
-
-          try {
-            const offset = (pagination.currentPage - 1) * pagination.pageSize;
-
-            const response = await assetsApi.list(pagination.pageSize, offset);
-            const { data: assets, total_count } = response.data;
-
-            // Build multi-index cache
-            const newCache = {
-              byId: new Map<number, Asset>(),
-              byIdentifier: new Map<string, Asset>(),
-              byType: new Map<AssetType, Set<number>>(),
-              activeIds: new Set<number>(),
-              allIds: [] as number[],
-              lastFetched: Date.now(),
-              ttl: 5 * 60 * 1000,
-            };
-
-            assets.forEach(asset => {
-              // Primary index
-              newCache.byId.set(asset.id, asset);
-
-              // Unique index
-              newCache.byIdentifier.set(asset.identifier, asset);
-
-              // Type index
-              if (!newCache.byType.has(asset.type)) {
-                newCache.byType.set(asset.type, new Set());
-              }
-              newCache.byType.get(asset.type)!.add(asset.id);
-
-              // Active index
-              if (asset.is_active) {
-                newCache.activeIds.add(asset.id);
-              }
-
-              // Ordered IDs
-              newCache.allIds.push(asset.id);
-            });
-
-            set({
-              cache: newCache,
-              pagination: {
-                ...pagination,
-                totalCount: total_count,
-                totalPages: Math.ceil(total_count / pagination.pageSize),
-              },
-              isLoading: false,
-            });
-          } catch (err: any) {
-            const errorMessage = extractErrorMessage(err);
-            set({
-              error: errorMessage,
-              isLoading: false,
-            });
-            throw err;
-          }
-        },
-
-        // ============ Fetch Single Asset (cache-aware) ============
-
-        fetchAssetById: async (id: number) => {
-          const { getAssetById } = get();
-
-          // Check cache first
-          const cached = getAssetById(id);
-          if (cached) {
-            return cached;
-          }
-
-          // Fetch from API
-          set({ isLoading: true, error: null });
-          try {
-            const response = await assetsApi.get(id);
-            const asset = response.data.data;
-
-            // Update cache
-            const { cache } = get();
-            const newCache = { ...cache };
-            newCache.byId.set(asset.id, asset);
-            newCache.byIdentifier.set(asset.identifier, asset);
-
-            if (!newCache.byType.has(asset.type)) {
-              newCache.byType.set(asset.type, new Set());
-            }
-            newCache.byType.get(asset.type)!.add(asset.id);
-
-            if (asset.is_active) {
-              newCache.activeIds.add(asset.id);
-            }
-
-            set({ cache: newCache, isLoading: false });
-            return asset;
-          } catch (err: any) {
-            const errorMessage = extractErrorMessage(err);
-            set({ error: errorMessage, isLoading: false });
-            throw err;
-          }
-        },
-
-        // ============ Create Asset (optimistic update) ============
-
-        createAsset: async (data: CreateAssetRequest) => {
-          set({ isCreating: true, error: null, validationErrors: {} });
-
-          try {
-            const response = await assetsApi.create(data);
-            const newAsset = response.data.data;
-
-            // Update cache
-            const { cache } = get();
-            const newCache = { ...cache };
-
-            newCache.byId.set(newAsset.id, newAsset);
-            newCache.byIdentifier.set(newAsset.identifier, newAsset);
-
-            if (!newCache.byType.has(newAsset.type)) {
-              newCache.byType.set(newAsset.type, new Set());
-            }
-            newCache.byType.get(newAsset.type)!.add(newAsset.id);
-
-            if (newAsset.is_active) {
-              newCache.activeIds.add(newAsset.id);
-            }
-
-            newCache.allIds.unshift(newAsset.id); // Add to beginning
-
-            set({
-              cache: newCache,
-              isCreating: false,
-              pagination: {
-                ...get().pagination,
-                totalCount: get().pagination.totalCount + 1,
-              },
-            });
-
-            return newAsset;
-          } catch (err: any) {
-            const errorMessage = extractErrorMessage(err);
-            set({
-              error: errorMessage,
-              isCreating: false,
-            });
-            throw err;
-          }
-        },
-
-        // ============ Update Asset (optimistic update) ============
-
-        updateAsset: async (id: number, data: UpdateAssetRequest) => {
-          const { cache, getAssetById } = get();
-          const existingAsset = getAssetById(id);
-
-          if (!existingAsset) {
-            throw new Error(`Asset ${id} not found in cache`);
-          }
-
-          // Optimistic update
-          const optimisticAsset = { ...existingAsset, ...data };
-          const optimisticCache = { ...cache };
-          optimisticCache.byId.set(id, optimisticAsset);
-
-          set({
-            cache: optimisticCache,
-            isUpdating: true,
-            error: null,
-            validationErrors: {},
-          });
-
-          try {
-            const response = await assetsApi.update(id, data);
-            const updatedAsset = response.data.data;
-
-            // Update cache with real data
-            const newCache = { ...cache };
-
-            // Update primary index
-            newCache.byId.set(updatedAsset.id, updatedAsset);
-
-            // Update identifier index (handle identifier changes)
-            if (existingAsset.identifier !== updatedAsset.identifier) {
-              newCache.byIdentifier.delete(existingAsset.identifier);
-              newCache.byIdentifier.set(updatedAsset.identifier, updatedAsset);
-            }
-
-            // Update type index (handle type changes)
-            if (existingAsset.type !== updatedAsset.type) {
-              newCache.byType.get(existingAsset.type)?.delete(id);
-              if (!newCache.byType.has(updatedAsset.type)) {
-                newCache.byType.set(updatedAsset.type, new Set());
-              }
-              newCache.byType.get(updatedAsset.type)!.add(id);
-            }
-
-            // Update active index (handle is_active changes)
-            if (updatedAsset.is_active) {
-              newCache.activeIds.add(id);
-            } else {
-              newCache.activeIds.delete(id);
-            }
-
-            set({ cache: newCache, isUpdating: false });
-            return updatedAsset;
-          } catch (err: any) {
-            // Rollback optimistic update
-            set({ cache, error: extractErrorMessage(err), isUpdating: false });
-            throw err;
-          }
-        },
-
-        // ============ Delete Asset (optimistic update) ============
-
-        deleteAsset: async (id: number) => {
-          const { cache, getAssetById } = get();
-          const existingAsset = getAssetById(id);
-
-          if (!existingAsset) {
-            throw new Error(`Asset ${id} not found in cache`);
-          }
-
-          // Optimistic delete - remove from cache
-          const optimisticCache = { ...cache };
-          optimisticCache.byId.delete(id);
-          optimisticCache.byIdentifier.delete(existingAsset.identifier);
-          optimisticCache.byType.get(existingAsset.type)?.delete(id);
-          optimisticCache.activeIds.delete(id);
-          optimisticCache.allIds = optimisticCache.allIds.filter(i => i !== id);
-
-          set({
-            cache: optimisticCache,
-            isDeleting: true,
-            error: null,
-            pagination: {
-              ...get().pagination,
-              totalCount: get().pagination.totalCount - 1,
-            },
-          });
-
-          try {
-            await assetsApi.delete(id);
-            set({ isDeleting: false });
-          } catch (err: any) {
-            // Rollback optimistic delete
-            set({
-              cache,
-              error: extractErrorMessage(err),
-              isDeleting: false,
-              pagination: {
-                ...get().pagination,
-                totalCount: get().pagination.totalCount + 1,
-              },
-            });
-            throw err;
-          }
-        },
-
-        // ============ CSV Upload ============
-
-        uploadCSV: async (file: File) => {
-          set({ isUploading: true, error: null, uploadJob: null });
-
-          try {
-            const response = await assetsApi.uploadCSV(file);
-            const uploadResponse = response.data;
-
-            set({
-              isUploading: false,
-              uploadJob: {
-                job_id: uploadResponse.job_id,
-                status: 'pending',
-                total_rows: 0,
-                processed_rows: 0,
-                failed_rows: 0,
-                created_at: new Date().toISOString(),
-              },
-            });
-
-            // Start polling
-            get().startPolling(uploadResponse.job_id);
-
-            return uploadResponse;
-          } catch (err: any) {
-            const errorMessage = extractErrorMessage(err);
-            set({ error: errorMessage, isUploading: false });
-            throw err;
-          }
-        },
-
-        // ============ Job Status Polling ============
-
-        startPolling: (jobId: string) => {
-          const { pollingIntervalId, stopPolling } = get();
-
-          // Clear existing polling
-          if (pollingIntervalId) {
-            stopPolling();
-          }
-
-          set({ isPolling: true });
-
-          const intervalId = setInterval(async () => {
-            try {
-              const status = await get().checkJobStatus(jobId);
-
-              // Stop polling if job is done
-              if (status.status === 'completed' || status.status === 'failed') {
-                get().stopPolling();
-
-                // Invalidate cache to fetch new assets
-                if (status.status === 'completed') {
-                  get().invalidateCache();
-                  get().fetchAssets(true);
-                }
-              }
-            } catch (err) {
-              console.error('Polling error:', err);
-              get().stopPolling();
-            }
-          }, 2000); // Poll every 2 seconds
-
-          set({ pollingIntervalId: intervalId });
-        },
-
-        stopPolling: () => {
-          const { pollingIntervalId } = get();
-          if (pollingIntervalId) {
-            clearInterval(pollingIntervalId);
-            set({ pollingIntervalId: null, isPolling: false });
-          }
-        },
-
-        checkJobStatus: async (jobId: string) => {
-          try {
-            const response = await assetsApi.getJobStatus(jobId);
-            const status = response.data;
-
-            set({ uploadJob: status });
-            return status;
-          } catch (err: any) {
-            const errorMessage = extractErrorMessage(err);
-            set({ error: errorMessage });
-            throw err;
-          }
-        },
-
         // ============ Filters/Pagination/Sort ============
 
         setFilters: (filters: Partial<AssetFilters>) => {
@@ -828,12 +577,10 @@ export const useAssetStore = create<AssetState>()(
             filters: { ...get().filters, ...filters },
             pagination: { ...get().pagination, currentPage: 1 }, // Reset to page 1
           });
-          get().fetchAssets(true);
         },
 
         setPage: (page: number) => {
           set({ pagination: { ...get().pagination, currentPage: page } });
-          get().fetchAssets(true);
         },
 
         setPageSize: (size: number) => {
@@ -844,7 +591,6 @@ export const useAssetStore = create<AssetState>()(
               currentPage: 1,
             },
           });
-          get().fetchAssets(true);
         },
 
         setSort: (field: SortField, direction?: SortDirection) => {
@@ -855,19 +601,36 @@ export const useAssetStore = create<AssetState>()(
               : 'asc');
 
           set({ sort: { field, direction: newDirection } });
-          get().fetchAssets(true);
+        },
+
+        resetPagination: () => {
+          set({ pagination: { ...get().pagination, currentPage: 1 } });
         },
 
         // ============ Selection ============
 
-        selectAsset: (asset: Asset | null) => {
-          set({ selectedAsset: asset });
+        selectAsset: (id: number | null) => {
+          set({ selectedAssetId: id });
         },
 
-        // ============ Error Handling ============
+        getSelectedAsset: () => {
+          const { selectedAssetId, cache } = get();
+          return selectedAssetId ? cache.byId.get(selectedAssetId) : undefined;
+        },
 
-        clearError: () => set({ error: null }),
-        clearValidationErrors: () => set({ validationErrors: {} }),
+        // ============ Bulk Upload Tracking ============
+
+        setUploadJobId: (jobId: string | null) => {
+          set({ uploadJobId: jobId });
+        },
+
+        setPollingInterval: (intervalId: NodeJS.Timeout | null) => {
+          const { pollingIntervalId } = get();
+          if (pollingIntervalId && intervalId !== pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+          }
+          set({ pollingIntervalId: intervalId });
+        },
       }),
       'assetStore' // OpenReplay tracking name
     ),
@@ -908,10 +671,163 @@ export const useAssetStore = create<AssetState>()(
     }
   )
 );
+```
 
-// ============ Helper Functions ============
+**Key Characteristics:**
+- Pure UI state management - no API calls
+- Multi-index cache for O(1) lookups
+- LocalStorage persistence with Map/Set serialization
+- Pagination, filtering, and sorting state
+- Bulk upload job tracking
+- OpenReplay integration for debugging
 
-function extractErrorMessage(err: any): string {
+---
+
+### Layer 2: Business Logic Layer
+
+**Responsibility:** Data transformations, computed values, and business rules
+
+```typescript
+// lib/asset/transforms.ts
+
+import type { Asset, AssetFilters, AssetSort } from '@/types/asset';
+
+/**
+ * Filter assets based on filter criteria
+ */
+export function filterAssets(assets: Asset[], filters: AssetFilters): Asset[] {
+  return assets.filter(asset => {
+    // Type filter
+    if (filters.type && filters.type !== 'all' && asset.type !== filters.type) {
+      return false;
+    }
+
+    // Active status filter
+    if (filters.is_active !== undefined && filters.is_active !== 'all' && asset.is_active !== filters.is_active) {
+      return false;
+    }
+
+    // Search filter (identifier or name)
+    if (filters.search && filters.search.trim()) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesIdentifier = asset.identifier.toLowerCase().includes(searchLower);
+      const matchesName = asset.name.toLowerCase().includes(searchLower);
+      if (!matchesIdentifier && !matchesName) {
+        return false;
+      }
+    }
+
+    // Valid on date filter
+    if (filters.valid_on) {
+      const checkDate = new Date(filters.valid_on);
+      const validFrom = new Date(asset.valid_from);
+      const validTo = asset.valid_to ? new Date(asset.valid_to) : null;
+
+      if (checkDate < validFrom) return false;
+      if (validTo && checkDate > validTo) return false;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Sort assets based on sort configuration
+ */
+export function sortAssets(assets: Asset[], sort: AssetSort): Asset[] {
+  return [...assets].sort((a, b) => {
+    let aVal: any = a[sort.field as keyof Asset];
+    let bVal: any = b[sort.field as keyof Asset];
+
+    // Handle null values
+    if (aVal === null) return 1;
+    if (bVal === null) return -1;
+
+    // String comparison
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      aVal = aVal.toLowerCase();
+      bVal = bVal.toLowerCase();
+    }
+
+    const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    return sort.direction === 'asc' ? comparison : -comparison;
+  });
+}
+
+/**
+ * Paginate assets array
+ */
+export function paginateAssets(assets: Asset[], page: number, pageSize: number): Asset[] {
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  return assets.slice(start, end);
+}
+
+/**
+ * Calculate pagination metadata
+ */
+export function calculatePagination(totalCount: number, page: number, pageSize: number) {
+  return {
+    currentPage: page,
+    pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
+}
+
+/**
+ * Format date for display
+ */
+export function formatAssetDate(dateString: string | null): string {
+  if (!dateString) return 'Indefinite';
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/**
+ * Get asset type badge color
+ */
+export function getAssetTypeBadgeColor(type: string): string {
+  const colors = {
+    person: 'blue',
+    device: 'green',
+    asset: 'purple',
+    inventory: 'orange',
+    other: 'gray',
+  };
+  return colors[type as keyof typeof colors] || 'gray';
+}
+
+/**
+ * Validate CSV file before upload
+ */
+export function validateCSVFile(file: File): { valid: boolean; error?: string } {
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+  const ALLOWED_TYPES = ['text/csv', 'application/vnd.ms-excel', 'application/csv', 'text/plain'];
+
+  if (file.size > MAX_SIZE) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    return { valid: false, error: `File size must not exceed 5MB (current: ${sizeMB}MB)` };
+  }
+
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    return { valid: false, error: 'File must have .csv extension' };
+  }
+
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return { valid: false, error: `Invalid file type: ${file.type}` };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Extract user-friendly error message from API error
+ */
+export function extractErrorMessage(err: any): string {
   const data = err.response?.data;
   const errorObj = data?.error || data;
 
@@ -924,6 +840,288 @@ function extractErrorMessage(err: any): string {
   );
 }
 ```
+
+**Key Characteristics:**
+- Pure functions - no side effects
+- Testable business logic
+- Reusable transformations
+- Client-side validation
+- Display formatting utilities
+
+---
+
+### Layer 3: Service Layer (TanStack Query)
+
+**Responsibility:** Data fetching, server state management, and serving data to components
+
+```typescript
+// hooks/useAssets.ts
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { assetsApi } from '@/lib/api/assets';
+import { useAssetStore } from '@/stores/assetStore';
+import { extractErrorMessage } from '@/lib/asset/transforms';
+import toast from 'react-hot-toast';
+import type {
+  Asset,
+  CreateAssetRequest,
+  UpdateAssetRequest,
+  ListAssetsParams,
+} from '@/types/asset';
+
+// Query keys
+export const assetKeys = {
+  all: ['assets'] as const,
+  lists: () => [...assetKeys.all, 'list'] as const,
+  list: (params: ListAssetsParams) => [...assetKeys.lists(), params] as const,
+  details: () => [...assetKeys.all, 'detail'] as const,
+  detail: (id: number) => [...assetKeys.details(), id] as const,
+};
+
+/**
+ * Fetch paginated assets list
+ */
+export function useAssets() {
+  const { filters, pagination, sort, addAssets } = useAssetStore();
+
+  const params: ListAssetsParams = {
+    limit: pagination.pageSize,
+    offset: (pagination.currentPage - 1) * pagination.pageSize,
+    type: filters.type !== 'all' ? filters.type : undefined,
+    is_active: filters.is_active !== 'all' ? filters.is_active : undefined,
+    search: filters.search || undefined,
+    valid_on: filters.valid_on || undefined,
+    sort_by: sort.field,
+    sort_order: sort.direction,
+  };
+
+  return useQuery({
+    queryKey: assetKeys.list(params),
+    queryFn: async () => {
+      const response = await assetsApi.list(params);
+      // Update Zustand cache
+      addAssets(response.data);
+      return response;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+/**
+ * Fetch single asset by ID
+ */
+export function useAsset(id: number) {
+  const { addAsset } = useAssetStore();
+
+  return useQuery({
+    queryKey: assetKeys.detail(id),
+    queryFn: async () => {
+      const response = await assetsApi.get(id);
+      // Update Zustand cache
+      addAsset(response.data);
+      return response.data;
+    },
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Create new asset
+ */
+export function useCreateAsset() {
+  const queryClient = useQueryClient();
+  const { addAsset } = useAssetStore();
+
+  return useMutation({
+    mutationFn: (data: CreateAssetRequest) => assetsApi.create(data),
+    onSuccess: (response) => {
+      const newAsset = response.data;
+      // Update Zustand cache
+      addAsset(newAsset);
+      // Invalidate list queries
+      queryClient.invalidateQueries({ queryKey: assetKeys.lists() });
+      toast.success(`Asset "${newAsset.name}" created successfully`);
+    },
+    onError: (error) => {
+      const message = extractErrorMessage(error);
+      toast.error(`Failed to create asset: ${message}`);
+    },
+  });
+}
+
+/**
+ * Update existing asset
+ */
+export function useUpdateAsset() {
+  const queryClient = useQueryClient();
+  const { updateCachedAsset } = useAssetStore();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateAssetRequest }) =>
+      assetsApi.update(id, data),
+    onMutate: async ({ id, data }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: assetKeys.detail(id) });
+
+      // Snapshot previous value
+      const previousAsset = queryClient.getQueryData<Asset>(assetKeys.detail(id));
+
+      // Optimistically update cache
+      if (previousAsset) {
+        queryClient.setQueryData(assetKeys.detail(id), { ...previousAsset, ...data });
+        updateCachedAsset(id, data);
+      }
+
+      return { previousAsset };
+    },
+    onSuccess: (response, { id }) => {
+      const updatedAsset = response.data;
+      // Update with real data
+      queryClient.setQueryData(assetKeys.detail(id), updatedAsset);
+      updateCachedAsset(id, updatedAsset);
+      // Invalidate list queries
+      queryClient.invalidateQueries({ queryKey: assetKeys.lists() });
+      toast.success(`Asset "${updatedAsset.name}" updated successfully`);
+    },
+    onError: (error, { id }, context) => {
+      // Rollback on error
+      if (context?.previousAsset) {
+        queryClient.setQueryData(assetKeys.detail(id), context.previousAsset);
+        updateCachedAsset(id, context.previousAsset);
+      }
+      const message = extractErrorMessage(error);
+      toast.error(`Failed to update asset: ${message}`);
+    },
+  });
+}
+
+/**
+ * Delete asset
+ */
+export function useDeleteAsset() {
+  const queryClient = useQueryClient();
+  const { removeAsset } = useAssetStore();
+
+  return useMutation({
+    mutationFn: (id: number) => assetsApi.delete(id),
+    onMutate: async (id) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: assetKeys.detail(id) });
+
+      // Snapshot previous value
+      const previousAsset = queryClient.getQueryData<Asset>(assetKeys.detail(id));
+
+      // Optimistically remove
+      queryClient.removeQueries({ queryKey: assetKeys.detail(id) });
+      removeAsset(id);
+
+      return { previousAsset };
+    },
+    onSuccess: (_, id) => {
+      // Invalidate list queries
+      queryClient.invalidateQueries({ queryKey: assetKeys.lists() });
+      toast.success('Asset deleted successfully');
+    },
+    onError: (error, id, context) => {
+      // Rollback on error
+      if (context?.previousAsset) {
+        queryClient.setQueryData(assetKeys.detail(id), context.previousAsset);
+        useAssetStore.getState().addAsset(context.previousAsset);
+      }
+      const message = extractErrorMessage(error);
+      toast.error(`Failed to delete asset: ${message}`);
+    },
+  });
+}
+```
+
+```typescript
+// hooks/useBulkUpload.ts
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { assetsApi } from '@/lib/api/assets';
+import { useAssetStore } from '@/stores/assetStore';
+import { validateCSVFile, extractErrorMessage } from '@/lib/asset/transforms';
+import toast from 'react-hot-toast';
+import { assetKeys } from './useAssets';
+
+/**
+ * Upload CSV file
+ */
+export function useBulkUpload() {
+  const queryClient = useQueryClient();
+  const { setUploadJobId, invalidateCache } = useAssetStore();
+
+  return useMutation({
+    mutationFn: async (file: File) => {
+      // Client-side validation
+      const validation = validateCSVFile(file);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
+      const response = await assetsApi.uploadCSV(file);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setUploadJobId(data.job_id);
+      toast.success('CSV upload started. Processing...');
+    },
+    onError: (error) => {
+      const message = extractErrorMessage(error);
+      toast.error(`Upload failed: ${message}`);
+    },
+  });
+}
+
+/**
+ * Poll bulk upload job status
+ */
+export function useBulkUploadStatus(jobId: string | null, enabled: boolean = true) {
+  const queryClient = useQueryClient();
+  const { setUploadJobId, invalidateCache } = useAssetStore();
+
+  return useQuery({
+    queryKey: ['bulk-upload-status', jobId],
+    queryFn: async () => {
+      if (!jobId) throw new Error('No job ID');
+      const response = await assetsApi.getJobStatus(jobId);
+      return response.data;
+    },
+    enabled: enabled && !!jobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      // Stop polling when completed or failed
+      if (status === 'completed' || status === 'failed') {
+        if (status === 'completed') {
+          // Invalidate asset list cache
+          invalidateCache();
+          queryClient.invalidateQueries({ queryKey: assetKeys.lists() });
+          toast.success('Bulk upload completed successfully');
+        } else {
+          toast.error('Bulk upload failed');
+        }
+        setUploadJobId(null);
+        return false;
+      }
+      return 2000; // Poll every 2 seconds
+    },
+    gcTime: 0, // Don't cache job status
+  });
+}
+```
+
+**Key Characteristics:**
+- TanStack Query for server state
+- Automatic cache invalidation
+- Optimistic updates with rollback
+- Background refetching
+- Error handling with toast notifications
+- Integration with Zustand cache
+
+---
 
 ### Cache Performance Characteristics
 

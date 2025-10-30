@@ -285,3 +285,17 @@ export const CSV_VALIDATION = {
 - All business logic functions must be pure (no side effects)
 - Follow existing patterns from `authStore.ts` and `auth.ts`
 - UI components will be a separate spec/implementation
+
+## Security Considerations
+
+### Step 5: Token Storage Security Review (Future)
+**Current State**: JWT tokens stored in localStorage via Zustand persist middleware
+**Known Vulnerability**: XSS attacks can steal tokens from localStorage
+**Alternatives to Consider**:
+1. httpOnly cookies (requires backend changes)
+2. In-memory + refresh token pattern (hybrid approach)
+3. BFF (Backend-for-Frontend) proxy pattern
+4. OAuth/OIDC with token exchange
+
+**Priority**: Medium - acceptable for development/staging, should be addressed before production
+**Tracking**: To be addressed in separate security enhancement spec
