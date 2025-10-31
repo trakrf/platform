@@ -52,13 +52,12 @@ export function filterAssets(
  * sortAssets(assets, { field: 'created_at', direction: 'desc' })
  */
 export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
-  const sorted = [...assets]; // Don't mutate original
+  const sorted = [...assets];
 
   sorted.sort((a, b) => {
     let aValue: string | number | null;
     let bValue: string | number | null;
 
-    // Get values based on field
     switch (sort.field) {
       case 'identifier':
         aValue = a.identifier;
@@ -85,12 +84,10 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
         bValue = b.identifier;
     }
 
-    // Handle null values (place at end)
     if (aValue === null && bValue === null) return 0;
     if (aValue === null) return 1;
     if (bValue === null) return -1;
 
-    // Compare values
     let comparison = 0;
     if (aValue < bValue) {
       comparison = -1;
@@ -98,7 +95,6 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
       comparison = 1;
     }
 
-    // Apply direction
     return sort.direction === 'asc' ? comparison : -comparison;
   });
 
@@ -120,7 +116,7 @@ export function searchAssets(assets: Asset[], searchTerm: string): Asset[] {
   const term = searchTerm.trim().toLowerCase();
 
   if (!term) {
-    return assets; // Empty search returns all
+    return assets;
   }
 
   return assets.filter((asset) => {
