@@ -1,4 +1,4 @@
-import type { AssetType } from '@/types/asset';
+import type { AssetType } from '@/types/assets';
 
 /**
  * Validates that end date is after start date

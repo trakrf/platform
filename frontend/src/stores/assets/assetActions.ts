@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { Asset, AssetFilters, SortState } from '@/types/asset';
+import type { Asset, AssetFilters, SortState } from '@/types/assets';
 
 /**
  * Asset store action methods

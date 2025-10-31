@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { Asset, AssetType, CreateAssetRequest } from './asset';
-import { CSV_VALIDATION } from './asset';
+import type { Asset, AssetType, CreateAssetRequest } from '.';
+import { CSV_VALIDATION } from '.';
 
 describe('Asset Types', () => {
   describe('CSV_VALIDATION constants', () => {

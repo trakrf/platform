@@ -6,7 +6,7 @@ import type {
   AssetType,
   PaginationState,
   SortState,
-} from '@/types/asset';
+} from '@/types/assets';
 import {
   filterAssets,
   sortAssets,

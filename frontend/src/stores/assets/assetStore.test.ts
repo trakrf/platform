@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAssetStore } from './assetStore';
-import type { Asset, AssetType } from '@/types/asset';
+import type { Asset, AssetType } from '@/types/assets';
 
 describe('AssetStore - Cache Operations', () => {
   beforeEach(() => {

@@ -3,7 +3,7 @@ import type {
   AssetFilters,
   SortState,
   PaginationState,
-} from '@/types/asset';
+} from '@/types/assets';
 
 /**
  * Filters assets by type and active status

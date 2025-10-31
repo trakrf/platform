@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { assetsApi } from './assets';
-import { apiClient } from './client';
+import { assetsApi } from '.';
+import { apiClient } from '../client';
 import type {
   Asset,
   ListAssetsResponse,
   BulkUploadResponse,
   JobStatusResponse,
-} from '@/types/asset';
+} from '@/types/assets';
 
 // Mock apiClient
-vi.mock('./client', () => ({
+vi.mock('../client', () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),

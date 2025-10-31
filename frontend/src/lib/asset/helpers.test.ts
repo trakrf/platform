@@ -4,7 +4,7 @@ import {
   validateCSVFile,
   extractErrorMessage,
 } from './helpers';
-import { CSV_VALIDATION } from '@/types/asset';
+import { CSV_VALIDATION } from '@/types/assets';
 
 describe('Asset Helpers', () => {
   describe('createAssetCSVFormData()', () => {

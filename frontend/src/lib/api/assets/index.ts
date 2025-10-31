@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient } from '../client';
 import type {
   AssetResponse,
   CreateAssetRequest,
@@ -7,7 +7,7 @@ import type {
   ListAssetsResponse,
   BulkUploadResponse,
   JobStatusResponse,
-} from '@/types/asset';
+} from '@/types/assets';
 
 export interface ListAssetsOptions {
   limit?: number;
