@@ -40,7 +40,7 @@ describe('useAssets', () => {
     vi.clearAllMocks();
   });
 
-  it('should fetch and return assets', async () => {
+  it('should fetch and return assets with pagination params', async () => {
     vi.mocked(assetsApi.list).mockResolvedValue({
       data: { data: [mockAsset], count: 1, offset: 0, total_count: 1 },
     } as any);
@@ -52,6 +52,11 @@ describe('useAssets', () => {
     });
 
     expect(result.current.assets).toHaveLength(1);
+    expect(result.current.totalCount).toBe(1);
+    expect(assetsApi.list).toHaveBeenCalledWith({
+      limit: 25,
+      offset: 0,
+    });
   });
 
   it('should not fetch when enabled is false', () => {
