@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Asset } from '@/types/asset';
+import type { Asset } from '@/types/assets';
 import {
   filterAssets,
   sortAssets,

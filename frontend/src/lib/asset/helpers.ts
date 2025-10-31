@@ -1,4 +1,4 @@
-import { CSV_VALIDATION } from '@/types/asset';
+import { CSV_VALIDATION } from '@/types/assets';
 
 /**
  * Creates FormData for CSV upload with proper field naming

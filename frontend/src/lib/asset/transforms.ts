@@ -1,4 +1,4 @@
-import type { AssetCache } from '@/types/asset';
+import type { AssetCache } from '@/types/assets';
 
 /**
  * Formats ISO 8601 date for display in UI
@@ -140,7 +140,7 @@ export function deserializeCache(data: string): AssetCache | null {
       byIdentifier: new Map(parsed.byIdentifier),
       byType: new Map(
         Object.entries(parsed.byType).map(([type, ids]) => [
-          type as import('@/types/asset').AssetType,
+          type as import('@/types/assets').AssetType,
           new Set(ids as number[]),
         ])
       ),
