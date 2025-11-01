@@ -9,11 +9,15 @@ import { AssetSearchSort } from '@/components/assets/AssetSearchSort';
 import { AssetTable } from '@/components/assets/AssetTable';
 import { AssetCard } from '@/components/assets/AssetCard';
 import { AssetFormModal } from '@/components/assets/AssetFormModal';
+import { AssetCreateChoice } from '@/components/assets/AssetCreateChoice';
+import { BulkUploadModal } from '@/components/assets/BulkUploadModal';
 import type { Asset } from '@/types/assets';
 
 export default function AssetsScreen() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null);
 
@@ -60,6 +64,25 @@ export default function AssetsScreen() {
     setFilters({ type: 'all', is_active: 'all', search: '' });
   };
 
+  const handleCreateClick = () => {
+    setIsChoiceModalOpen(true);
+  };
+
+  const handleSingleCreate = () => {
+    setIsChoiceModalOpen(false);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleBulkUpload = () => {
+    setIsChoiceModalOpen(false);
+    setIsBulkUploadOpen(true);
+  };
+
+  const handleBulkUploadSuccess = () => {
+    setIsBulkUploadOpen(false);
+    // Optionally refetch assets here if needed
+  };
+
   return (
     <div className="h-full flex flex-col p-4">
       {/* Stats Dashboard */}
@@ -84,7 +107,7 @@ export default function AssetsScreen() {
               description="Get started by adding your first asset"
               action={{
                 label: 'Create Asset',
-                onClick: () => setIsCreateModalOpen(true),
+                onClick: handleCreateClick,
               }}
             />
           )}
@@ -127,8 +150,23 @@ export default function AssetsScreen() {
       {/* Floating Action Button */}
       <FloatingActionButton
         icon={Plus}
-        onClick={() => setIsCreateModalOpen(true)}
+        onClick={handleCreateClick}
         ariaLabel="Create new asset"
+      />
+
+      {/* Create Choice Modal */}
+      <AssetCreateChoice
+        isOpen={isChoiceModalOpen}
+        onClose={() => setIsChoiceModalOpen(false)}
+        onSingleCreate={handleSingleCreate}
+        onBulkUpload={handleBulkUpload}
+      />
+
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        isOpen={isBulkUploadOpen}
+        onClose={() => setIsBulkUploadOpen(false)}
+        onSuccess={handleBulkUploadSuccess}
       />
 
       {/* Create Modal */}

@@ -11,3 +11,5 @@ export { AssetStats } from './AssetStats';
 export { AssetSearchSort } from './AssetSearchSort';
 export { AssetForm } from './AssetForm';
 export { AssetFormModal } from './AssetFormModal';
+export { AssetCreateChoice } from './AssetCreateChoice';
+export { BulkUploadModal } from './BulkUploadModal';
