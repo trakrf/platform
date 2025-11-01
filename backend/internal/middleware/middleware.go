@@ -56,30 +56,13 @@ func Recovery(next http.Handler) http.Handler {
 // CORS handles Cross-Origin Resource Sharing headers.
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		allowedOrigins := os.Getenv("BACKEND_CORS_ORIGIN")
-		if allowedOrigins == "" {
-			allowedOrigins = "*"
+		origin := os.Getenv("BACKEND_CORS_ORIGIN")
+		if origin == "" {
+			origin = "*"
 		}
 
-		if allowedOrigins != "disabled" {
-			requestOrigin := r.Header.Get("Origin")
-
-			// If * is set, allow all origins
-			if allowedOrigins == "*" {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-			} else if requestOrigin != "" {
-				// Check if request origin is in allowed list (comma-separated)
-				origins := strings.Split(allowedOrigins, ",")
-				for _, origin := range origins {
-					origin = strings.TrimSpace(origin)
-					if origin == requestOrigin {
-						w.Header().Set("Access-Control-Allow-Origin", requestOrigin)
-						w.Header().Set("Access-Control-Allow-Credentials", "true")
-						break
-					}
-				}
-			}
-
+		if origin != "disabled" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "3600")
