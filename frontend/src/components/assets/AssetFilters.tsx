@@ -23,7 +23,6 @@ export function AssetFilters({ isOpen = true, onToggle, className = '' }: AssetF
   const setFilters = useAssetStore((state) => state.setFilters);
   const cache = useAssetStore((state) => state.cache);
 
-  // Calculate counts by type
   const typeCounts = useMemo(() => {
     const assets = Array.from(cache.byId.values());
     return TYPE_OPTIONS.map((option) => ({

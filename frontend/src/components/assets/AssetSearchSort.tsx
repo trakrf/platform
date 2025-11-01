@@ -24,15 +24,12 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
   const filters = useAssetStore((state) => state.filters);
   const sort = useAssetStore((state) => state.sort);
 
-  // Memoize filtered assets count
   const filteredAssetsCount = useMemo(() => {
     return useAssetStore.getState().getFilteredAssets().length;
   }, [cache.byId.size, filters, sort]);
 
-  // Local state for debounced search
   const [localSearch, setLocalSearch] = useState(search);
 
-  // Debounce search input (300ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchTerm(localSearch);
@@ -41,7 +38,6 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
     return () => clearTimeout(timer);
   }, [localSearch, setSearchTerm]);
 
-  // Sync local state with store when store changes externally
   useEffect(() => {
     setLocalSearch(search);
   }, [search]);

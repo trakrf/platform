@@ -127,7 +127,6 @@ export function AssetCard({
     );
   }
 
-  // Card variant (mobile)
   return (
     <div
       onClick={handleClick}

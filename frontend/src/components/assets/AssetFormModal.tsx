@@ -27,7 +27,6 @@ export function AssetFormModal({ isOpen, mode, asset, onClose }: AssetFormModalP
       if (mode === 'create') {
         const response = await assetsApi.create(data as CreateAssetRequest);
 
-        // Validate response is actually an asset object, not HTML
         if (!response.data || typeof response.data !== 'object' || !response.data.id) {
           throw new Error('Invalid response from server. Asset API may not be available.');
         }
@@ -36,7 +35,6 @@ export function AssetFormModal({ isOpen, mode, asset, onClose }: AssetFormModalP
       } else if (mode === 'edit' && asset) {
         const response = await assetsApi.update(asset.id, data as UpdateAssetRequest);
 
-        // Validate response
         if (!response.data || typeof response.data !== 'object' || !response.data.id) {
           throw new Error('Invalid response from server. Asset API may not be available.');
         }
@@ -44,11 +42,17 @@ export function AssetFormModal({ isOpen, mode, asset, onClose }: AssetFormModalP
         updateCachedAsset(asset.id, response.data);
       }
 
-      // Success: close modal
       onClose();
     } catch (err: any) {
-      // Error: show in form, keep modal open
-      setError(err.message || 'An error occurred. Please try again.');
+      if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        setError('Cannot connect to server. Please check your connection and try again.');
+      } else if (err.response?.status === 404) {
+        setError('Asset API endpoint not found. The backend may not be running.');
+      } else if (err.response?.status >= 500) {
+        setError('Server error. Please try again later.');
+      } else {
+        setError(err.message || 'An error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

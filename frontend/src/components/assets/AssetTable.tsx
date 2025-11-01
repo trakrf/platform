@@ -29,18 +29,15 @@ export function AssetTable({
   const { field: sortField, direction: sortDirection } = sort;
   const setSort = useAssetStore((state) => state.setSort);
 
-  // Memoize filtered assets to prevent infinite re-renders
   const assets = useMemo(() => {
     return useAssetStore.getState().getFilteredAssets();
   }, [cache.byId.size, filters, sort]);
 
   const handleSort = (field: SortableField) => {
     if (sortField === field) {
-      // Toggle direction if same field
       const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
       setSort(field, newDirection);
     } else {
-      // Default to asc for new field
       setSort(field, 'asc');
     }
   };

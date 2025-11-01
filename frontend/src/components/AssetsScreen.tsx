@@ -24,13 +24,11 @@ export default function AssetsScreen() {
   const { data, isLoading } = useAssets();
   const { deleteAsset } = useAssetMutations();
 
-  // Get store state with individual selectors to prevent unnecessary re-renders
   const cache = useAssetStore((state) => state.cache);
   const filters = useAssetStore((state) => state.filters);
   const sort = useAssetStore((state) => state.sort);
   const setFilters = useAssetStore((state) => state.setFilters);
 
-  // Memoize filtered assets to prevent infinite re-renders
   const filteredAssets = useMemo(() => {
     return useAssetStore.getState().getFilteredAssets();
   }, [cache.byId.size, cache.lastFetched, filters, sort]);
@@ -41,7 +39,6 @@ export default function AssetsScreen() {
     (filters.search && filters.search.trim() !== '');
 
   const handleViewAsset = (asset: Asset) => {
-    // Future: Navigate to detail view
     console.log('View asset:', asset);
   };
 
@@ -80,7 +77,6 @@ export default function AssetsScreen() {
 
   const handleBulkUploadSuccess = () => {
     setIsBulkUploadOpen(false);
-    // Optionally refetch assets here if needed
   };
 
   return (

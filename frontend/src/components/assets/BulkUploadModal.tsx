@@ -21,14 +21,12 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
     setSuccess(null);
 
     if (selectedFile) {
-      // Validate file type
       if (!selectedFile.name.endsWith('.csv')) {
         setError('Please select a CSV file');
         setFile(null);
         return;
       }
 
-      // Validate file size (max 5MB)
       if (selectedFile.size > 5 * 1024 * 1024) {
         setError('File size must be less than 5MB');
         setFile(null);
@@ -52,7 +50,6 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
     try {
       const response = await assetsApi.uploadCSV(file);
 
-      // Validate response
       if (!response.data || !response.data.job_id) {
         throw new Error('Invalid response from server. Bulk upload API may not be available.');
       }
@@ -60,17 +57,23 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
       setSuccess(`Upload successful! Job ID: ${response.data.job_id}. ${response.data.message || ''}`);
       setFile(null);
 
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
 
-      // Call success callback after a delay
       setTimeout(() => {
         onSuccess?.();
       }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Upload failed. Please try again.');
+      if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        setError('Cannot connect to server. Please check your connection and try again.');
+      } else if (err.response?.status === 404) {
+        setError('Bulk upload API endpoint not found. The backend may not be running.');
+      } else if (err.response?.status >= 500) {
+        setError('Server error. Please try again later.');
+      } else {
+        setError(err.message || 'Upload failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

@@ -33,7 +33,6 @@ export function AssetStats({ className = '' }: AssetStatsProps) {
       {} as Record<AssetType, number>
     );
 
-    // Calculate percentages
     const typeStats = (Object.keys(TYPE_INFO) as AssetType[]).map((type) => ({
       type,
       count: byType[type] || 0,
