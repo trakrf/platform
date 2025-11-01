@@ -1,5 +1,6 @@
 import { useUIStore } from '@/stores';
 import { MapPinned, Home as HomeIcon } from 'lucide-react';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function LocationsScreen() {
   const { setActiveTab } = useUIStore();
@@ -10,7 +11,8 @@ export default function LocationsScreen() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <ProtectedRoute>
+      <div className="max-w-4xl mx-auto">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8">
         {/* Header with icon */}
         <div className="flex items-center justify-center mb-6">
@@ -41,5 +43,6 @@ export default function LocationsScreen() {
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }

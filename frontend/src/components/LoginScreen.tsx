@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores';
 import { Eye, EyeOff } from 'lucide-react';
+import { handleAuthRedirect } from '@/utils/authRedirect';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -50,13 +51,7 @@ export default function LoginScreen() {
       await login(email, password);
 
       // Handle redirect after successful login
-      const redirect = sessionStorage.getItem('redirectAfterLogin');
-      if (redirect) {
-        window.location.hash = `#${redirect}`;
-        sessionStorage.removeItem('redirectAfterLogin');
-      } else {
-        window.location.hash = '#home';
-      }
+      handleAuthRedirect();
     } catch (err: unknown) {
       // Extract error message from RFC 7807 Problem Details format
       // Handle empty strings by checking truthy AND non-empty

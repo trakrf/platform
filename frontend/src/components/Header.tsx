@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { useDeviceStore, useUIStore } from '@/stores';
+import { useDeviceStore, useUIStore, useAuthStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Battery, BatteryLow, BatteryMedium, BatteryFull, Plug, Unplug, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { UserMenu } from './UserMenu';
 
 const TriggerIndicator = ({ isDown }: { isDown: boolean }) => {
   return (
@@ -61,6 +62,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const connect = useDeviceStore((state) => state.connect);
   const disconnect = useDeviceStore((state) => state.disconnect);
   const activeTab = useUIStore((state) => state.activeTab);
+  const { isAuthenticated, user } = useAuthStore();
   
   // ============= MOCK DATA FOR TESTING =============
   // To test the battery indicator appearance:
@@ -93,7 +95,12 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
   const [showInfoTooltip, setShowInfoTooltip] = useState(false);
-  
+
+  const handleLogout = () => {
+    useAuthStore.getState().logout();
+    useUIStore.getState().setActiveTab('home');
+  };
+
   const handleConnectClick = async () => {
     if (isDebounced || !isBrowserSupported) return;
     
@@ -216,8 +223,22 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
           </div>
 
           {/* Button Controls */}
-          {shouldShowConnectButton && (
           <div className="flex items-center gap-2 md:gap-3">
+            {/* Auth UI - Always visible */}
+            {isAuthenticated && user ? (
+              <UserMenu user={user} onLogout={handleLogout} />
+            ) : (
+              <button
+                onClick={() => useUIStore.getState().setActiveTab('login')}
+                className="px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm md:text-base transition-colors"
+              >
+                Log In
+              </button>
+            )}
+
+            {/* Connect Device Button - Conditionally shown */}
+            {shouldShowConnectButton && (
+              <>
             {(MOCK_TESTING || readerState !== ReaderState.DISCONNECTED) && (MOCK_TESTING ? mockBatteryPercentage : batteryPercentage) !== null && (
                 <div
                   className={`flex items-center gap-1 md:gap-1.5 px-1.5 md:px-2`}
@@ -307,8 +328,9 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
                 )}
                 {MOCK_TESTING ? mockReaderState : readerState}
               </button>
+              </>
+            )}
           </div>
-          )}
         </div>
       </header>
     

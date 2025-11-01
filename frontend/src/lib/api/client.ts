@@ -1,5 +1,6 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '@/stores/authStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
@@ -33,8 +34,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear auth state
-      localStorage.removeItem('auth-storage');
+      // Clear Zustand auth state (important!)
+      useAuthStore.getState().logout();
+
+      // Note: logout() will clear persisted localStorage via Zustand middleware
+      // No need to manually call localStorage.removeItem('auth-storage')
 
       // Show user notification
       toast.error('Session expired. Please log in again.');
