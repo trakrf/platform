@@ -30,7 +30,6 @@ export function AssetCreateChoice({
       onClick={handleBackdropClick}
     >
       <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-lg shadow-xl">
-        {/* Header */}
         <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             Create Assets
@@ -44,9 +43,7 @@ export function AssetCreateChoice({
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6 space-y-4">
-          {/* Single Create Option */}
           <button
             onClick={onSingleCreate}
             className="w-full p-6 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all group"
@@ -60,13 +57,12 @@ export function AssetCreateChoice({
                   Create Single Asset
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Manually enter details for one asset at a time
+                  Create one asset at a time
                 </p>
               </div>
             </div>
           </button>
 
-          {/* Bulk Upload Option */}
           <button
             onClick={onBulkUpload}
             className="w-full p-6 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all group"

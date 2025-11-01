@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, FileText, AlertCircle } from 'lucide-react';
+import { X, Upload, FileText, AlertCircle, Download } from 'lucide-react';
 import { assetsApi } from '@/lib/api/assets';
 
 interface BulkUploadModalProps {
@@ -126,9 +126,19 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
         <div className="p-6 space-y-6">
           {/* Instructions */}
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">
-              CSV Format Requirements
-            </h3>
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300">
+                CSV Format Requirements
+              </h3>
+              <a
+                href="/bulk_assets_sample.csv"
+                download="bulk_assets_sample.csv"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-900/60 border border-blue-300 dark:border-blue-700 rounded-lg transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download Sample
+              </a>
+            </div>
             <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1 list-disc list-inside">
               <li>Required columns: identifier, name, type</li>
               <li>Optional columns: description, is_active, valid_from, valid_to</li>
