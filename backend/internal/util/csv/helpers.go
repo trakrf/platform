@@ -10,15 +10,17 @@ import (
 
 // Supported date formats for CSV import
 const (
-	DateFormatISO      = "2006-01-02" // YYYY-MM-DD
-	DateFormatUSA      = "01/02/2006" // MM/DD/YYYY
-	DateFormatEuropean = "02-01-2006" // DD-MM-YYYY
+	DateFormatISO             = "2006-01-02" // YYYY-MM-DD
+	DateFormatUSA             = "01/02/2006" // MM/DD/YYYY
+	DateFormatEuropean        = "02-01-2006" // DD-MM-YYYY
+	DateFormatEuropeanSlashes = "02/01/2006" // DD/MM/YYYY
 )
 
 // ParseCSVDate converts a date string to time.Time, supporting multiple formats:
 // - YYYY-MM-DD (ISO 8601)
 // - MM/DD/YYYY (US format)
-// - DD-MM-YYYY (European format)
+// - DD-MM-YYYY (European format with hyphens)
+// - DD/MM/YYYY (European format with slashes)
 //
 // Returns detailed error with format suggestions if parsing fails.
 func ParseCSVDate(dateStr string) (time.Time, error) {
@@ -35,6 +37,7 @@ func ParseCSVDate(dateStr string) (time.Time, error) {
 	}{
 		{DateFormatISO, "YYYY-MM-DD"},
 		{DateFormatUSA, "MM/DD/YYYY"},
+		{DateFormatEuropeanSlashes, "DD/MM/YYYY"},
 		{DateFormatEuropean, "DD-MM-YYYY"},
 	}
 
@@ -49,7 +52,7 @@ func ParseCSVDate(dateStr string) (time.Time, error) {
 
 	// Build detailed error message with suggestions
 	return time.Time{}, fmt.Errorf(
-		"invalid date format '%s': could not parse as %s. Expected formats: YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY",
+		"invalid date format '%s': could not parse as %s. Expected formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY, or DD-MM-YYYY",
 		dateStr,
 		strings.Join(parseErrs, ", "),
 	)
@@ -149,15 +152,24 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 	if err != nil {
 		return nil, err
 	}
+	if identifier == "" {
+		return nil, fmt.Errorf("identifier cannot be empty")
+	}
 
 	name, err := getCol("name")
 	if err != nil {
 		return nil, err
 	}
+	if name == "" {
+		return nil, fmt.Errorf("name cannot be empty")
+	}
 
 	assetType, err := getCol("type")
 	if err != nil {
 		return nil, err
+	}
+	if assetType == "" {
+		return nil, fmt.Errorf("type cannot be empty")
 	}
 
 	validFromStr, err := getCol("valid_from")

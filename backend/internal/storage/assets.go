@@ -105,16 +105,16 @@ func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, erro
 	return &asset, nil
 }
 
-func (s *Storage) ListAllAssets(ctx context.Context, limit int, offset int) ([]asset.Asset, error) {
+func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offset int) ([]asset.Asset, error) {
 	query := `
 		select id, org_id, identifier, name, type, description, valid_from, valid_to,
 		       metadata, is_active, created_at, updated_at, deleted_at
 		from trakrf.assets
-		where deleted_at is null
+		where org_id = $1 and deleted_at is null
 		order by created_at desc
-		limit $1 offset $2
+		limit $2 offset $3
 	`
-	rows, err := s.pool.Query(ctx, query, limit, offset)
+	rows, err := s.pool.Query(ctx, query, orgID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list assets: %w", err)
 	}
@@ -140,16 +140,16 @@ func (s *Storage) ListAllAssets(ctx context.Context, limit int, offset int) ([]a
 	return assets, nil
 }
 
-// CountAllAssets returns the total count of non-deleted assets
-func (s *Storage) CountAllAssets(ctx context.Context) (int, error) {
+// CountAllAssets returns the total count of non-deleted assets for a specific org
+func (s *Storage) CountAllAssets(ctx context.Context, orgID int) (int, error) {
 	query := `
 		SELECT COUNT(*)
 		FROM trakrf.assets
-		WHERE deleted_at IS NULL
+		WHERE org_id = $1 AND deleted_at IS NULL
 	`
 
 	var count int
-	err := s.pool.QueryRow(ctx, query).Scan(&count)
+	err := s.pool.QueryRow(ctx, query, orgID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count assets: %w", err)
 	}
@@ -166,35 +166,38 @@ func (s *Storage) DeleteAsset(ctx context.Context, id *int) (bool, error) {
 	return result.RowsAffected() > 0, nil
 }
 
-// BatchCreateAssets creates multiple assets in a single transaction.
-// If any asset fails to insert, the entire transaction is rolled back and errors are returned.
-// Returns the number of successful inserts and a slice of errors (with row numbers).
-// BatchCreateAssets atomically inserts multiple assets.
+// BatchCreateAssets atomically inserts multiple assets in a single transaction.
 // This is an all-or-nothing operation: if ANY asset fails to insert,
 // the entire transaction is rolled back and ZERO assets are saved.
+// Returns the number of successful inserts and a slice of errors (with row numbers).
 func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (int, []error) {
 	if len(assets) == 0 {
 		return 0, nil
 	}
 
-	// Begin transaction for atomic all-or-nothing insert
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, []error{fmt.Errorf("failed to begin transaction: %w", err)}
 	}
 
-	// Ensure transaction is rolled back if not explicitly committed
-	// This is safe to call multiple times (no-op after commit/rollback)
 	defer tx.Rollback(ctx)
 
 	query := `
 		INSERT INTO trakrf.assets
 		(name, identifier, type, description, valid_from, valid_to, metadata, is_active, org_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (org_id, identifier) DO UPDATE SET
+			name = EXCLUDED.name,
+			type = EXCLUDED.type,
+			description = EXCLUDED.description,
+			valid_from = EXCLUDED.valid_from,
+			valid_to = EXCLUDED.valid_to,
+			metadata = EXCLUDED.metadata,
+			is_active = EXCLUDED.is_active,
+			deleted_at = NULL,
+			updated_at = NOW()
 	`
 
-	// Try to insert all assets within the transaction
-	// STOP IMMEDIATELY on first error - PostgreSQL aborts transaction on error
 	for i, a := range assets {
 		_, err := tx.Exec(ctx, query,
 			a.Name, a.Identifier, a.Type, a.Description,
@@ -202,10 +205,8 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 		)
 
 		if err != nil {
-			// Transaction is now aborted - must rollback
 			tx.Rollback(ctx)
 
-			// Return single meaningful error (not multiple "transaction aborted" errors)
 			var singleError error
 			if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 				singleError = fmt.Errorf("row %d: asset with identifier %s already exists", i, a.Identifier)
@@ -213,16 +214,14 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 				singleError = fmt.Errorf("row %d: %w", i, err)
 			}
 
-			return 0, []error{singleError} // ZERO assets saved due to transaction rollback
+			return 0, []error{singleError}
 		}
 	}
 
-	// All inserts succeeded, commit the transaction
 	if err := tx.Commit(ctx); err != nil {
 		return 0, []error{fmt.Errorf("failed to commit transaction: %w", err)}
 	}
 
-	// Success: all assets saved
 	return len(assets), nil
 }
 

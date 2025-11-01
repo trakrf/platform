@@ -148,39 +148,10 @@ func (s *Service) processCSVAsync(
 		}
 	}
 
-	// PHASE 3: Check for duplicate identifiers against existing database records
-	// Only check identifiers that aren't already flagged as duplicates within CSV
-	var identifiersToCheck []string
-	for identifier, rowNumbers := range identifierToRows {
-		if len(rowNumbers) == 1 {
-			// Only appears once in CSV, check against database
-			identifiersToCheck = append(identifiersToCheck, identifier)
-		}
-	}
-
-	if len(identifiersToCheck) > 0 {
-		existingIdentifiers, err := s.storage.CheckDuplicateIdentifiers(ctx, orgID, identifiersToCheck)
-		if err != nil {
-			fmt.Printf("Failed to check existing identifiers for job %d: %v\n", jobID, err)
-			allErrors = append(allErrors, bulkimport.ErrorDetail{
-				Row:   0,
-				Field: "system",
-				Error: fmt.Sprintf("Failed to check existing identifiers: %v", err),
-			})
-		} else {
-			// Report identifiers that already exist in database
-			for _, pr := range validRows {
-				if existingIdentifiers[pr.asset.Identifier] {
-					fmt.Printf("Identifier '%s' at row %d already exists in database for job %d\n", pr.asset.Identifier, pr.rowNumber, jobID)
-					allErrors = append(allErrors, bulkimport.ErrorDetail{
-						Row:   pr.rowNumber,
-						Field: "identifier",
-						Error: fmt.Sprintf("asset with identifier '%s' already exists in the database", pr.asset.Identifier),
-					})
-				}
-			}
-		}
-	}
+	// PHASE 3: Database duplicate check REMOVED
+	// With UPSERT (ON CONFLICT DO UPDATE), existing identifiers will be updated instead of rejected
+	// This allows users to re-upload CSVs to update asset information and resurrect soft-deleted assets
+	// Only duplicates WITHIN the same CSV batch (PHASE 2) are still rejected
 
 	// PHASE 4: If ANY errors found, report them all and fail
 	if len(allErrors) > 0 {

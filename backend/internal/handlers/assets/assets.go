@@ -43,23 +43,35 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Security BearerAuth
 // @Router /api/v1/assets [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	requestID := middleware.GetRequestID(r.Context())
+
+	claims := middleware.GetUserClaims(r)
+	if claims == nil || claims.CurrentOrgID == nil {
+		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetCreateFailed, "missing organization context", requestID)
+		return
+	}
+	orgID := *claims.CurrentOrgID
+
 	var request asset.Asset
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.InvalidJSON, err.Error(), requestID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.ValidationFailed, err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.ValidationFailed, err.Error(), requestID)
 		return
 	}
+
+	request.OrgID = orgID
 
 	result, err := handler.storage.CreateAsset(r.Context(), request)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.AssetCreateFailed, err.Error(), middleware.GetRequestID(r.Context()))
+			apierrors.AssetCreateFailed, err.Error(), requestID)
 		return
 	}
 
@@ -209,6 +221,14 @@ type ListAssetsResponse struct {
 func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
+	claims := middleware.GetUserClaims(req)
+	if claims == nil || claims.CurrentOrgID == nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetListFailed, "missing organization context", ctx)
+		return
+	}
+	orgID := *claims.CurrentOrgID
+
 	limit := 10
 	offset := 0
 
@@ -224,23 +244,20 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// Get paginated assets
-	assets, err := handler.storage.ListAllAssets(req.Context(), limit, offset)
+	assets, err := handler.storage.ListAllAssets(req.Context(), orgID, limit, offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetListFailed, err.Error(), ctx)
 		return
 	}
 
-	// Get total count for pagination metadata
-	totalCount, err := handler.storage.CountAllAssets(req.Context())
+	totalCount, err := handler.storage.CountAllAssets(req.Context(), orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetCountFailed, err.Error(), ctx)
 		return
 	}
 
-	// Build response with pagination metadata
 	response := map[string]any{
 		"data":        assets,
 		"count":       len(assets),
@@ -251,7 +268,6 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, response)
 }
 
-// RegisterRoutes registers all asset routes
 func (handler *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/v1/assets", handler.ListAssets)
 	r.Get("/api/v1/assets/{id}", handler.GetAsset)
