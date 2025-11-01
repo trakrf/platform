@@ -3,20 +3,15 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores/authStore';
 
 const getApiUrl = (): string => {
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const apiUrl = import.meta.env.VITE_API_URL || '/api/v1';
 
-  if (!apiUrl) {
-    const errorMsg = 'VITE_API_URL environment variable is not set. Please check your .env file.';
-    console.error('[API Client]', errorMsg);
-    throw new Error(errorMsg);
-  }
-
-  try {
-    new URL(apiUrl);
-  } catch (err) {
-    const errorMsg = `Invalid VITE_API_URL format: ${apiUrl}. Must be a valid URL.`;
-    console.error('[API Client]', errorMsg);
-    throw new Error(errorMsg);
+  if (apiUrl && apiUrl !== '/api/v1') {
+    try {
+      new URL(apiUrl);
+    } catch (err) {
+      console.warn(`[API Client] Invalid VITE_API_URL format: ${apiUrl}. Falling back to /api/v1`);
+      return '/api/v1';
+    }
   }
 
   console.info('[API Client] Using API URL:', apiUrl);
