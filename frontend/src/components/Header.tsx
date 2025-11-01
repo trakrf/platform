@@ -63,23 +63,11 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const disconnect = useDeviceStore((state) => state.disconnect);
   const activeTab = useUIStore((state) => state.activeTab);
   const { isAuthenticated, user } = useAuthStore();
-  
-  // ============= MOCK DATA FOR TESTING =============
-  // To test the battery indicator appearance:
-  // 1. Set MOCK_TESTING to true
-  // 2. Change mockBatteryPercentage to test different colors:
-  //    - 75 = Green (good battery)
-  //    - 45 = Yellow (medium battery)
-  //    - 25 = Red (low battery)
-  // 3. Navigate to any screen except Home to see the indicator
-  // 4. Set MOCK_TESTING to false when done testing
-  const MOCK_TESTING = false; // Set to false to disable mock
-  const mockBatteryPercentage = MOCK_TESTING ? 75 : batteryPercentage; // Try: 75 (green), 45 (yellow), 25 (red)
-  const mockReaderState = MOCK_TESTING ? ReaderState.CONNECTED : readerState; // Simulate connected state
-  // ==================================================
-  
-  
-  
+
+  const MOCK_TESTING = false;
+  const mockBatteryPercentage = MOCK_TESTING ? 75 : batteryPercentage;
+  const mockReaderState = MOCK_TESTING ? ReaderState.CONNECTED : readerState;
+
   const pageTitles = {
     home: { title: "RFID Dashboard", subtitle: "Choose your scanning mode to get started" },
     inventory: { title: "My Items", subtitle: "View and manage your scanned items" },
@@ -111,10 +99,8 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
       if (readerState === ReaderState.DISCONNECTED) {
         await connect();
       } else if (readerState === ReaderState.CONNECTED) {
-        // Show modal instead of direct disconnect
         setShowDisconnectModal(true);
       }
-      // Remove cancel behavior - button is now disabled during CONFIGURING/BUSY states
     } catch (error) {
       // Error handling with toasts
       const errorMessage = error instanceof Error ? error.message : '';
@@ -140,10 +126,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     }
   };
   
-  // Move browser support check to useEffect to prevent hydration mismatch
   React.useEffect(() => {
-    // Only run this check on the client side
-    // Check browser support using Web Bluetooth API directly
     const checkSupport = () => {
       const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
       const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothMocked;
@@ -151,8 +134,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     };
     
     checkSupport();
-    
-    // Listen for mock ready event
+
     const handleMockReady = () => checkSupport();
     window.addEventListener('webBluetoothMockReady', handleMockReady);
     
@@ -160,8 +142,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
       window.removeEventListener('webBluetoothMockReady', handleMockReady);
     };
   }, []);
-  
-  // Blinking effect for Connect Device button
+
   React.useEffect(() => {
     if (readerState === ReaderState.DISCONNECTED && isBrowserSupported) {
       const interval = setInterval(() => {
@@ -179,7 +160,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
 
   return (
     <>
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 lg:px-8 py-3 md:py-4">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 lg:px-8 py-3 md:py-4 sticky top-0 z-50">
         <div className="flex justify-between items-center">
           {/* Page Title with Info Button */}
           <div className="flex items-center gap-2">
@@ -303,7 +284,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
                   )
                 }
                 className={`
-                  flex items-center px-3 md:px-6 py-2 md:py-3 rounded-lg font-semibold text-white
+                  flex items-center px-2 md:px-2 py-2 md:py-2 rounded-lg font-semibold text-white
                   transition-all duration-200 text-sm md:text-base
                   ${(MOCK_TESTING ? mockReaderState : readerState) === ReaderState.DISCONNECTED ?
                     (isBlinking ? 'bg-blue-700' : 'bg-blue-600') + ' hover:bg-blue-700' : ''}
@@ -322,9 +303,9 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
                 aria-label={(MOCK_TESTING ? mockReaderState : readerState)}
               >
                 {(MOCK_TESTING ? mockReaderState : readerState) === ReaderState.DISCONNECTED ? (
-                  <Plug className="w-5 h-5 mr-1" />
+                  <Plug className="w-5 h-5 mr-0" />
                 ) : (
-                  <Unplug className="w-5 h-5 mr-1" />
+                  <Unplug className="w-5 h-5 mr-0" />
                 )}
                 {MOCK_TESTING ? mockReaderState : readerState}
               </button>

@@ -2,7 +2,28 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores/authStore';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const getApiUrl = (): string => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+
+  if (!apiUrl) {
+    const errorMsg = 'VITE_API_URL environment variable is not set. Please check your .env file.';
+    console.error('[API Client]', errorMsg);
+    throw new Error(errorMsg);
+  }
+
+  try {
+    new URL(apiUrl);
+  } catch (err) {
+    const errorMsg = `Invalid VITE_API_URL format: ${apiUrl}. Must be a valid URL.`;
+    console.error('[API Client]', errorMsg);
+    throw new Error(errorMsg);
+  }
+
+  console.info('[API Client] Using API URL:', apiUrl);
+  return apiUrl;
+};
+
+const API_BASE_URL = getApiUrl();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

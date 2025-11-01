@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, AlertCircle, Download } from 'lucide-react';
 import { assetsApi } from '@/lib/api/assets';
+import { useUploadStore } from '@/stores/uploadStore';
+import toast from 'react-hot-toast';
 
 interface BulkUploadModalProps {
   isOpen: boolean;
@@ -14,6 +16,7 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const setActiveJobId = useUploadStore((state) => state.setActiveJobId);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -48,22 +51,29 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
     setSuccess(null);
 
     try {
+      setActiveJobId(null);
+
       const response = await assetsApi.uploadCSV(file);
 
       if (!response.data || !response.data.job_id) {
         throw new Error('Invalid response from server. Bulk upload API may not be available.');
       }
 
-      setSuccess(`Upload successful! Job ID: ${response.data.job_id}. ${response.data.message || ''}`);
+      setActiveJobId(response.data.job_id);
+      toast.success('Upload started! Tracking progress...');
+
       setFile(null);
+      setError(null);
+      setSuccess(null);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
 
       setTimeout(() => {
+        onClose();
         onSuccess?.();
-      }, 2000);
+      }, 1000);
     } catch (err: any) {
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
         setError('Cannot connect to server. Please check your connection and try again.');
@@ -107,7 +117,6 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
       onClick={handleBackdropClick}
     >
       <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg shadow-xl">
-        {/* Header */}
         <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             Bulk Upload Assets
@@ -122,9 +131,7 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Instructions */}
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
             <div className="flex items-start justify-between mb-2">
               <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300">
@@ -147,7 +154,6 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
             </ul>
           </div>
 
-          {/* Error Message */}
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
@@ -155,14 +161,12 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
             </div>
           )}
 
-          {/* Success Message */}
           {success && (
             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
               <p className="text-sm text-green-800 dark:text-green-300">{success}</p>
             </div>
           )}
 
-          {/* File Upload Area */}
           <div>
             <label
               htmlFor="csv-upload"
@@ -210,7 +214,6 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
             </label>
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"

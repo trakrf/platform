@@ -84,13 +84,21 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       return;
     }
 
+    const toRFC3339 = (dateStr: string): string => {
+      if (!dateStr) return '';
+      if (!dateStr.includes('T')) {
+        return `${dateStr}T00:00:00Z`;
+      }
+      return dateStr;
+    };
+
     const data: CreateAssetRequest | UpdateAssetRequest = {
       identifier: formData.identifier,
       name: formData.name,
       type: formData.type,
       description: formData.description,
-      valid_from: formData.valid_from,
-      valid_to: formData.valid_to || new Date('2099-12-31').toISOString().split('T')[0],
+      valid_from: toRFC3339(formData.valid_from),
+      valid_to: toRFC3339(formData.valid_to || '2099-12-31'),
       is_active: formData.is_active,
       metadata: {},
     };
@@ -100,7 +108,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear field error when user starts typing
     if (fieldErrors[field]) {
       setFieldErrors((prev) => {
         const updated = { ...prev };
@@ -114,9 +121,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <ErrorBanner error={error} />}
 
-      {/* Two-column grid on desktop */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Identifier */}
         <div>
           <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Identifier <span className="text-red-500">*</span>
@@ -139,7 +144,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
           )}
         </div>
 
-        {/* Name */}
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Name <span className="text-red-500">*</span>
@@ -160,7 +164,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
           {fieldErrors.name && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.name}</p>}
         </div>
 
-        {/* Type */}
         <div>
           <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Type <span className="text-red-500">*</span>
@@ -180,7 +183,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
           </select>
         </div>
 
-        {/* Is Active */}
         <div className="flex items-center pt-8">
           <input
             type="checkbox"
@@ -196,7 +198,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         </div>
       </div>
 
-      {/* Description (full width) */}
       <div>
         <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Description
@@ -212,7 +213,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         />
       </div>
 
-      {/* Date Range */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label htmlFor="valid_from" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -250,7 +250,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         </div>
       </div>
 
-      {/* Form Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <button
           type="button"

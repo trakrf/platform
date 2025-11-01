@@ -28,7 +28,7 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
     return useAssetStore.getState().getFilteredAssets().length;
   }, [cache.byId.size, filters, sort]);
 
-  const [localSearch, setLocalSearch] = useState(search);
+  const [localSearch, setLocalSearch] = useState(search ?? '');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -39,7 +39,7 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
   }, [localSearch, setSearchTerm]);
 
   useEffect(() => {
-    setLocalSearch(search);
+    setLocalSearch(search ?? '');
   }, [search]);
 
   const handleClearSearch = () => {

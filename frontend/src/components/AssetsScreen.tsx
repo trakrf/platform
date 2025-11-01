@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, Package } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAssets, useAssetMutations } from '@/hooks/assets';
 import { useAssetStore } from '@/stores';
 import { FloatingActionButton, EmptyState, NoResults, ConfirmModal } from '@/components/shared';
@@ -11,7 +12,9 @@ import { AssetCard } from '@/components/assets/AssetCard';
 import { AssetFormModal } from '@/components/assets/AssetFormModal';
 import { AssetCreateChoice } from '@/components/assets/AssetCreateChoice';
 import { BulkUploadModal } from '@/components/assets/BulkUploadModal';
+import { AssetDetailsModal } from '@/components/assets/AssetDetailsModal';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { GlobalUploadAlert } from '@/components/shared/GlobalUploadAlert';
 import type { Asset } from '@/types/assets';
 
 export default function AssetsScreen() {
@@ -21,9 +24,12 @@ export default function AssetsScreen() {
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null);
+  const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  const { assets, isLoading } = useAssets();
-  const { deleteAsync, isDeleting } = useAssetMutations();
+  const { isLoading } = useAssets();
+  const { delete: deleteAsset } = useAssetMutations();
 
   const cache = useAssetStore((state) => state.cache);
   const filters = useAssetStore((state) => state.filters);
@@ -34,13 +40,23 @@ export default function AssetsScreen() {
     return useAssetStore.getState().getFilteredAssets();
   }, [cache.byId.size, cache.lastFetched, filters, sort]);
 
+  const paginatedAssets = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredAssets.slice(startIndex, endIndex);
+  }, [filteredAssets, currentPage, pageSize]);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, sort]);
+
   const hasActiveFilters =
     (filters.type && filters.type !== 'all') ||
     (filters.is_active !== 'all' && filters.is_active !== undefined) ||
     (filters.search && filters.search.trim() !== '');
 
   const handleViewAsset = (asset: Asset) => {
-    console.log('View asset:', asset);
+    setViewingAsset(asset);
   };
 
   const handleEditAsset = (asset: Asset) => {
@@ -53,8 +69,14 @@ export default function AssetsScreen() {
 
   const confirmDelete = async () => {
     if (deletingAsset) {
-      await deleteAsync(deletingAsset.id);
-      setDeletingAsset(null);
+      try {
+        await deleteAsset(deletingAsset.id);
+        toast.success(`Asset "${deletingAsset.identifier}" deleted successfully`);
+        setDeletingAsset(null);
+      } catch (error: any) {
+        console.error('Delete error:', error);
+        toast.error(error.message || 'Failed to delete asset');
+      }
     }
   };
 
@@ -82,22 +104,17 @@ export default function AssetsScreen() {
 
   return (
     <ProtectedRoute>
-      <div className="h-full flex flex-col p-4">
-        {/* Stats Dashboard */}
-        <AssetStats className="mb-6" />
+      <div className="h-full flex flex-col p-2">
+        <GlobalUploadAlert />
 
         <div className="flex gap-4 flex-1 overflow-hidden">
-          {/* Filters Sidebar (desktop only) */}
           <div className="hidden md:block w-72 flex-shrink-0">
             <AssetFilters isOpen={true} />
           </div>
 
-          {/* Main Content */}
           <div className="flex-1 flex flex-col gap-4 min-w-0">
-            {/* Search & Sort */}
             <AssetSearchSort />
 
-            {/* Empty State (no assets at all) */}
             {!isLoading && filteredAssets.length === 0 && !hasActiveFilters && (
               <EmptyState
                 icon={Package}
@@ -110,25 +127,27 @@ export default function AssetsScreen() {
               />
             )}
 
-            {/* No Results (with filters active) */}
             {!isLoading && filteredAssets.length === 0 && hasActiveFilters && (
               <NoResults searchTerm={filters.search || ''} onClearFilters={handleClearFilters} />
             )}
 
-            {/* Data Display */}
             {!isLoading && filteredAssets.length > 0 && (
               <>
-                {/* Desktop Table */}
                 <AssetTable
                   loading={isLoading}
+                  assets={paginatedAssets}
+                  totalAssets={filteredAssets.length}
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
                   onAssetClick={handleViewAsset}
                   onEdit={handleEditAsset}
                   onDelete={handleDeleteAsset}
                 />
 
-                {/* Mobile Cards */}
                 <div className="md:hidden space-y-3">
-                  {filteredAssets.map((asset) => (
+                  {paginatedAssets.map((asset) => (
                     <AssetCard
                       key={asset.id}
                       asset={asset}
@@ -144,15 +163,14 @@ export default function AssetsScreen() {
             )}
           </div>
         </div>
+        <AssetStats className="mt-6" />
 
-        {/* Floating Action Button */}
         <FloatingActionButton
           icon={Plus}
           onClick={handleCreateClick}
           ariaLabel="Create new asset"
         />
 
-        {/* Create Choice Modal */}
         <AssetCreateChoice
           isOpen={isChoiceModalOpen}
           onClose={() => setIsChoiceModalOpen(false)}
@@ -160,21 +178,18 @@ export default function AssetsScreen() {
           onBulkUpload={handleBulkUpload}
         />
 
-        {/* Bulk Upload Modal */}
         <BulkUploadModal
           isOpen={isBulkUploadOpen}
           onClose={() => setIsBulkUploadOpen(false)}
           onSuccess={handleBulkUploadSuccess}
         />
 
-        {/* Create Modal */}
         <AssetFormModal
           isOpen={isCreateModalOpen}
           mode="create"
           onClose={() => setIsCreateModalOpen(false)}
         />
 
-        {/* Edit Modal */}
         {editingAsset && (
           <AssetFormModal
             isOpen={true}
@@ -184,17 +199,20 @@ export default function AssetsScreen() {
           />
         )}
 
-        {/* Delete Confirmation */}
         <ConfirmModal
           isOpen={!!deletingAsset}
           title="Delete Asset"
           message={`Are you sure you want to delete "${deletingAsset?.identifier}"? This action cannot be undone.`}
           onConfirm={confirmDelete}
           onCancel={() => setDeletingAsset(null)}
-          variant="danger"
         />
 
-        {/* Mobile Filters Drawer (future enhancement) */}
+        <AssetDetailsModal
+          asset={viewingAsset}
+          isOpen={!!viewingAsset}
+          onClose={() => setViewingAsset(null)}
+        />
+
         {isFiltersOpen && (
           <div className="fixed inset-0 z-40 md:hidden">
             <div

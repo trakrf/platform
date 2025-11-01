@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { User, Laptop, Package, Archive, HelpCircle } from 'lucide-react';
 import { useAssetStore } from '@/stores';
 import { Container } from '@/components/shared';
