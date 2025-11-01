@@ -157,7 +157,7 @@ export interface PaginationState {
 /**
  * Sort field options
  */
-export type SortField = 'identifier' | 'name' | 'type' | 'valid_from' | 'created_at';
+export type SortField = 'identifier' | 'name' | 'type' | 'is_active' | 'valid_from' | 'created_at';
 
 /**
  * Sort direction

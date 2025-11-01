@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { createStoreWithTracking } from './createStore';
 import { authApi } from '@/lib/api/auth';
 import type { User } from '@/lib/api/auth';
+import { jwtDecode } from 'jwt-decode';
 
 interface AuthState {
   // State
@@ -36,7 +37,7 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: true, error: null });
           try {
             const response = await authApi.login({ email, password });
-            const { token, user } = response.data.data;
+            const { token, user } = response.data.data; // Backend wraps response in {data: {token, user}}
 
             set({
               token,
@@ -77,9 +78,8 @@ export const useAuthStore = create<AuthState>()(
             const response = await authApi.signup({
               email,
               password,
-              // org_name removed - backend auto-generates from email
             });
-            const { token, user } = response.data.data;
+            const { token, user } = response.data.data; // Backend wraps response in {data: {token, user}}
 
             set({
               token,
@@ -113,7 +113,6 @@ export const useAuthStore = create<AuthState>()(
           }
         },
 
-        // Logout action
         logout: () => {
           set({
             user: null,
@@ -123,20 +122,42 @@ export const useAuthStore = create<AuthState>()(
           });
         },
 
-        // Clear error
         clearError: () => set({ error: null }),
 
-        // Initialize - restore from persisted state
         initialize: () => {
           const state = get();
-          if (state.token && state.user) {
+
+          if (!state.token) {
+            set({ isAuthenticated: false, user: null });
+            return;
+          }
+
+          try {
+            const decoded = jwtDecode<{ exp: number }>(state.token);
+
+            const now = Math.floor(Date.now() / 1000);
+            if (decoded.exp && decoded.exp < now) {
+              console.warn('AuthStore: Token expired, clearing auth state');
+              set({
+                token: null,
+                user: null,
+                isAuthenticated: false,
+              });
+              return;
+            }
+
             set({ isAuthenticated: true });
-          } else {
-            set({ isAuthenticated: false });
+          } catch (error) {
+            console.error('AuthStore: Failed to decode JWT, clearing auth state:', error);
+            set({
+              token: null,
+              user: null,
+              isAuthenticated: false,
+            });
           }
         },
       }),
-      'authStore' // OpenReplay tracking name
+      'authStore'
     ),
     {
       name: 'auth-storage',
@@ -144,10 +165,8 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         user: state.user,
       }),
-      // Sanitize for OpenReplay - redact sensitive data
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // Sanitize token from OpenReplay tracking
           if ((window as any).__OPENREPLAY__) {
             console.log('AuthStore: Sanitizing sensitive data for OpenReplay');
           }
