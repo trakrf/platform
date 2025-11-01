@@ -1,9 +1,12 @@
 import '@testing-library/jest-dom';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
 import { Container } from './Container';
 
 describe('Container', () => {
+  afterEach(() => {
+    cleanup();
+  });
   it('renders children correctly', () => {
     render(
       <Container>

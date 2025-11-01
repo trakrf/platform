@@ -1,10 +1,13 @@
 import '@testing-library/jest-dom';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { Plus } from 'lucide-react';
 import { FloatingActionButton } from './FloatingActionButton';
 
 describe('FloatingActionButton', () => {
+  afterEach(() => {
+    cleanup();
+  });
   it('renders with icon and aria-label', () => {
     render(
       <FloatingActionButton

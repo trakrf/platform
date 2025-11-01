@@ -1,10 +1,13 @@
 import '@testing-library/jest-dom';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { Package } from 'lucide-react';
 import { EmptyState } from './EmptyState';
 
 describe('EmptyState', () => {
+  afterEach(() => {
+    cleanup();
+  });
   it('renders title correctly', () => {
     render(<EmptyState title="No items found" />);
 

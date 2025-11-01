@@ -1,9 +1,12 @@
 import '@testing-library/jest-dom';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { NoResults } from './NoResults';
 
 describe('NoResults', () => {
+  afterEach(() => {
+    cleanup();
+  });
   it('renders default message when no props provided', () => {
     render(<NoResults />);
 

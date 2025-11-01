@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
 import { Plus, Package } from 'lucide-react';
 
 // Test that all components can be imported from barrel exports
@@ -18,6 +18,10 @@ import {
 } from './index';
 
 describe('Shared Components Integration', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it('imports all components from barrel export', () => {
     expect(FloatingActionButton).toBeDefined();
     expect(Container).toBeDefined();
