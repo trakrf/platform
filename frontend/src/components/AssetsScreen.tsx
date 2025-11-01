@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Plus, Package } from 'lucide-react';
 import { useAssets, useAssetMutations } from '@/hooks/assets';
 import { useAssetStore } from '@/stores';
@@ -20,14 +20,16 @@ export default function AssetsScreen() {
   const { data, isLoading } = useAssets();
   const { deleteAsset } = useAssetMutations();
 
-  const filteredAssets = useAssetStore((state) => state.getFilteredAssets());
+  // Get store state with individual selectors to prevent unnecessary re-renders
+  const cache = useAssetStore((state) => state.cache);
   const filters = useAssetStore((state) => state.filters);
+  const sort = useAssetStore((state) => state.sort);
   const setFilters = useAssetStore((state) => state.setFilters);
 
-  // Load assets on mount
-  useEffect(() => {
-    // Assets are loaded by useAssets hook
-  }, []);
+  // Memoize filtered assets to prevent infinite re-renders
+  const filteredAssets = useMemo(() => {
+    return useAssetStore.getState().getFilteredAssets();
+  }, [cache.byId.size, cache.lastFetched, filters, sort]);
 
   const hasActiveFilters =
     (filters.type && filters.type !== 'all') ||
