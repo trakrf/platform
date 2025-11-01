@@ -37,7 +37,7 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: true, error: null });
           try {
             const response = await authApi.login({ email, password });
-            const { token, user } = response.data.data;
+            const { token, user } = response.data;
 
             set({
               token,
@@ -80,7 +80,7 @@ export const useAuthStore = create<AuthState>()(
               password,
               // org_name removed - backend auto-generates from email
             });
-            const { token, user } = response.data.data;
+            const { token, user } = response.data;
 
             set({
               token,
