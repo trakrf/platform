@@ -25,7 +25,7 @@ CREATE INDEX idx_organizations_identifier ON organizations(identifier);
 CREATE TRIGGER generate_id_trigger
     BEFORE INSERT ON organizations
     FOR EACH ROW
-    EXECUTE FUNCTION generate_hashed_id('organization_seq');
+    EXECUTE FUNCTION generate_hashed_id('trakrf.organization_seq');
 
 -- Create the update trigger
 CREATE TRIGGER update_organizations_updated_at

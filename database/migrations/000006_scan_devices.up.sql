@@ -33,7 +33,7 @@ CREATE INDEX idx_scan_devices_active ON scan_devices(is_active) WHERE is_active 
 CREATE TRIGGER generate_scan_device_id_trigger
     BEFORE INSERT ON scan_devices
     FOR EACH ROW
-    EXECUTE FUNCTION generate_permuted_id('scan_device_seq');
+    EXECUTE FUNCTION generate_permuted_id('trakrf.scan_device_seq');
 
 -- Create the update trigger (reusing common update_updated_at_column function)
 CREATE TRIGGER update_scan_devices_updated_at

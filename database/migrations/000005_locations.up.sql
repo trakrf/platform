@@ -31,7 +31,7 @@ CREATE INDEX idx_locations_active ON locations(is_active) WHERE is_active = true
 CREATE TRIGGER generate_location_id_trigger
     BEFORE INSERT ON locations
     FOR EACH ROW
-    EXECUTE FUNCTION generate_permuted_id('location_seq');
+    EXECUTE FUNCTION generate_permuted_id('trakrf.location_seq');
 
 -- Create the update trigger (reusing common update_updated_at_column function)
 CREATE TRIGGER update_locations_updated_at

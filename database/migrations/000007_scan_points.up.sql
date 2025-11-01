@@ -34,7 +34,7 @@ CREATE INDEX idx_scan_points_active ON scan_points(is_active) WHERE is_active = 
 CREATE TRIGGER generate_scan_point_id_trigger
     BEFORE INSERT ON scan_points
     FOR EACH ROW
-    EXECUTE FUNCTION generate_permuted_id('scan_point_seq');
+    EXECUTE FUNCTION generate_permuted_id('trakrf.scan_point_seq');
 
 -- Create the update trigger (reusing common update_updated_at_column function)
 CREATE TRIGGER update_scan_points_updated_at

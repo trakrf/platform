@@ -33,7 +33,7 @@ CREATE INDEX idx_assets_active ON assets(is_active) WHERE is_active = true;
 CREATE TRIGGER generate_asset_id_trigger
     BEFORE INSERT ON assets
     FOR EACH ROW
-    EXECUTE FUNCTION generate_permuted_id('asset_seq');
+    EXECUTE FUNCTION generate_permuted_id('trakrf.asset_seq');
 
 -- Create the update trigger (reusing common update_updated_at_column function)
 CREATE TRIGGER update_assets_updated_at

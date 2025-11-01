@@ -40,7 +40,7 @@ CREATE INDEX idx_identifiers_active ON identifiers(is_active) WHERE is_active = 
 CREATE TRIGGER generate_identifier_id_trigger
     BEFORE INSERT ON identifiers
     FOR EACH ROW
-    EXECUTE FUNCTION generate_permuted_id('identifier_seq');
+    EXECUTE FUNCTION generate_permuted_id('trakrf.identifier_seq');
 
 -- Create the update trigger (reusing common update_updated_at_column function)
 CREATE TRIGGER update_identifiers_updated_at

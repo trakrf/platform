@@ -20,7 +20,7 @@ CREATE TABLE bulk_import_jobs (
 CREATE TRIGGER generate_bulk_import_job_id_trigger
     BEFORE INSERT ON bulk_import_jobs
     FOR EACH ROW
-    EXECUTE FUNCTION generate_permuted_id('bulk_import_job_seq');
+    EXECUTE FUNCTION generate_permuted_id('trakrf.bulk_import_job_seq');
 
 -- Indexes for common access patterns
 CREATE INDEX idx_bulk_import_jobs_org_id ON bulk_import_jobs(org_id);

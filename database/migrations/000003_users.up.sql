@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX idx_users_email ON users(email);
 CREATE TRIGGER generate_user_id_trigger
     BEFORE INSERT ON users
     FOR EACH ROW
-    EXECUTE FUNCTION generate_hashed_id('user_seq');
+    EXECUTE FUNCTION generate_hashed_id('trakrf.user_seq');
 
 -- Trigger for updated_at
 CREATE TRIGGER update_users_updated_at
