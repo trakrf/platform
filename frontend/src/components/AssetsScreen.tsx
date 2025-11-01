@@ -11,6 +11,7 @@ import { AssetCard } from '@/components/assets/AssetCard';
 import { AssetFormModal } from '@/components/assets/AssetFormModal';
 import { AssetCreateChoice } from '@/components/assets/AssetCreateChoice';
 import { BulkUploadModal } from '@/components/assets/BulkUploadModal';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import type { Asset } from '@/types/assets';
 
 export default function AssetsScreen() {
@@ -21,8 +22,8 @@ export default function AssetsScreen() {
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null);
 
-  const { data, isLoading } = useAssets();
-  const { deleteAsset } = useAssetMutations();
+  const { assets, isLoading } = useAssets();
+  const { deleteAsync, isDeleting } = useAssetMutations();
 
   const cache = useAssetStore((state) => state.cache);
   const filters = useAssetStore((state) => state.filters);
@@ -52,7 +53,7 @@ export default function AssetsScreen() {
 
   const confirmDelete = async () => {
     if (deletingAsset) {
-      await deleteAsset.mutateAsync(deletingAsset.id);
+      await deleteAsync(deletingAsset.id);
       setDeletingAsset(null);
     }
   };
@@ -80,131 +81,132 @@ export default function AssetsScreen() {
   };
 
   return (
-    <div className="h-full flex flex-col p-4">
-      {/* Stats Dashboard */}
-      <AssetStats className="mb-6" />
+    <ProtectedRoute>
+      <div className="h-full flex flex-col p-4">
+        {/* Stats Dashboard */}
+        <AssetStats className="mb-6" />
 
-      <div className="flex gap-4 flex-1 overflow-hidden">
-        {/* Filters Sidebar (desktop only) */}
-        <div className="hidden md:block w-72 flex-shrink-0">
-          <AssetFilters isOpen={true} />
-        </div>
+        <div className="flex gap-4 flex-1 overflow-hidden">
+          {/* Filters Sidebar (desktop only) */}
+          <div className="hidden md:block w-72 flex-shrink-0">
+            <AssetFilters isOpen={true} />
+          </div>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col gap-4 min-w-0">
-          {/* Search & Sort */}
-          <AssetSearchSort />
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col gap-4 min-w-0">
+            {/* Search & Sort */}
+            <AssetSearchSort />
 
-          {/* Empty State (no assets at all) */}
-          {!isLoading && filteredAssets.length === 0 && !hasActiveFilters && (
-            <EmptyState
-              icon={Package}
-              title="No assets yet"
-              description="Get started by adding your first asset"
-              action={{
-                label: 'Create Asset',
-                onClick: handleCreateClick,
-              }}
-            />
-          )}
-
-          {/* No Results (with filters active) */}
-          {!isLoading && filteredAssets.length === 0 && hasActiveFilters && (
-            <NoResults searchTerm={filters.search || ''} onClearFilters={handleClearFilters} />
-          )}
-
-          {/* Data Display */}
-          {!isLoading && filteredAssets.length > 0 && (
-            <>
-              {/* Desktop Table */}
-              <AssetTable
-                loading={isLoading}
-                onAssetClick={handleViewAsset}
-                onEdit={handleEditAsset}
-                onDelete={handleDeleteAsset}
+            {/* Empty State (no assets at all) */}
+            {!isLoading && filteredAssets.length === 0 && !hasActiveFilters && (
+              <EmptyState
+                icon={Package}
+                title="No assets yet"
+                description="Get started by adding your first asset"
+                action={{
+                  label: 'Create Asset',
+                  onClick: handleCreateClick,
+                }}
               />
+            )}
 
-              {/* Mobile Cards */}
-              <div className="md:hidden space-y-3">
-                {filteredAssets.map((asset) => (
-                  <AssetCard
-                    key={asset.id}
-                    asset={asset}
-                    variant="card"
-                    onClick={() => handleViewAsset(asset)}
-                    onEdit={handleEditAsset}
-                    onDelete={handleDeleteAsset}
-                    showActions={true}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+            {/* No Results (with filters active) */}
+            {!isLoading && filteredAssets.length === 0 && hasActiveFilters && (
+              <NoResults searchTerm={filters.search || ''} onClearFilters={handleClearFilters} />
+            )}
 
-      {/* Floating Action Button */}
-      <FloatingActionButton
-        icon={Plus}
-        onClick={handleCreateClick}
-        ariaLabel="Create new asset"
-      />
+            {/* Data Display */}
+            {!isLoading && filteredAssets.length > 0 && (
+              <>
+                {/* Desktop Table */}
+                <AssetTable
+                  loading={isLoading}
+                  onAssetClick={handleViewAsset}
+                  onEdit={handleEditAsset}
+                  onDelete={handleDeleteAsset}
+                />
 
-      {/* Create Choice Modal */}
-      <AssetCreateChoice
-        isOpen={isChoiceModalOpen}
-        onClose={() => setIsChoiceModalOpen(false)}
-        onSingleCreate={handleSingleCreate}
-        onBulkUpload={handleBulkUpload}
-      />
-
-      {/* Bulk Upload Modal */}
-      <BulkUploadModal
-        isOpen={isBulkUploadOpen}
-        onClose={() => setIsBulkUploadOpen(false)}
-        onSuccess={handleBulkUploadSuccess}
-      />
-
-      {/* Create Modal */}
-      <AssetFormModal
-        isOpen={isCreateModalOpen}
-        mode="create"
-        onClose={() => setIsCreateModalOpen(false)}
-      />
-
-      {/* Edit Modal */}
-      {editingAsset && (
-        <AssetFormModal
-          isOpen={true}
-          mode="edit"
-          asset={editingAsset}
-          onClose={() => setEditingAsset(null)}
-        />
-      )}
-
-      {/* Delete Confirmation */}
-      <ConfirmModal
-        isOpen={!!deletingAsset}
-        title="Delete Asset"
-        message={`Are you sure you want to delete "${deletingAsset?.identifier}"? This action cannot be undone.`}
-        confirmLabel="Delete"
-        confirmVariant="danger"
-        onConfirm={confirmDelete}
-        onCancel={() => setDeletingAsset(null)}
-      />
-
-      {/* Mobile Filters Drawer (future enhancement) */}
-      {isFiltersOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div
-            className="absolute inset-0 bg-black bg-opacity-50"
-            onClick={() => setIsFiltersOpen(false)}
-          />
-          <div className="absolute right-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 p-4 overflow-y-auto">
-            <AssetFilters isOpen={true} onToggle={() => setIsFiltersOpen(false)} />
+                {/* Mobile Cards */}
+                <div className="md:hidden space-y-3">
+                  {filteredAssets.map((asset) => (
+                    <AssetCard
+                      key={asset.id}
+                      asset={asset}
+                      variant="card"
+                      onClick={() => handleViewAsset(asset)}
+                      onEdit={handleEditAsset}
+                      onDelete={handleDeleteAsset}
+                      showActions={true}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Floating Action Button */}
+        <FloatingActionButton
+          icon={Plus}
+          onClick={handleCreateClick}
+          ariaLabel="Create new asset"
+        />
+
+        {/* Create Choice Modal */}
+        <AssetCreateChoice
+          isOpen={isChoiceModalOpen}
+          onClose={() => setIsChoiceModalOpen(false)}
+          onSingleCreate={handleSingleCreate}
+          onBulkUpload={handleBulkUpload}
+        />
+
+        {/* Bulk Upload Modal */}
+        <BulkUploadModal
+          isOpen={isBulkUploadOpen}
+          onClose={() => setIsBulkUploadOpen(false)}
+          onSuccess={handleBulkUploadSuccess}
+        />
+
+        {/* Create Modal */}
+        <AssetFormModal
+          isOpen={isCreateModalOpen}
+          mode="create"
+          onClose={() => setIsCreateModalOpen(false)}
+        />
+
+        {/* Edit Modal */}
+        {editingAsset && (
+          <AssetFormModal
+            isOpen={true}
+            mode="edit"
+            asset={editingAsset}
+            onClose={() => setEditingAsset(null)}
+          />
+        )}
+
+        {/* Delete Confirmation */}
+        <ConfirmModal
+          isOpen={!!deletingAsset}
+          title="Delete Asset"
+          message={`Are you sure you want to delete "${deletingAsset?.identifier}"? This action cannot be undone.`}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeletingAsset(null)}
+          variant="danger"
+        />
+
+        {/* Mobile Filters Drawer (future enhancement) */}
+        {isFiltersOpen && (
+          <div className="fixed inset-0 z-40 md:hidden">
+            <div
+              className="absolute inset-0 bg-black bg-opacity-50"
+              onClick={() => setIsFiltersOpen(false)}
+            />
+            <div className="absolute right-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 p-4 overflow-y-auto">
+              <AssetFilters isOpen={true} onToggle={() => setIsFiltersOpen(false)} />
+            </div>
+          </div>
+        )}
+      </div>
+    </ProtectedRoute>
   );
 }

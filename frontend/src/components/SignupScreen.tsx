@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores';
 import { Eye, EyeOff } from 'lucide-react';
+import { handleAuthRedirect } from '@/utils/authRedirect';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -54,8 +55,8 @@ export default function SignupScreen() {
     try {
       await signup(email, password);
 
-      // After successful signup, redirect to home
-      window.location.hash = '#home';
+      // Handle redirect after successful signup
+      handleAuthRedirect();
     } catch (err: unknown) {
       // Extract error message from RFC 7807 Problem Details format
       // Handle empty strings by checking truthy AND non-empty

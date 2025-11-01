@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense } from 'react';
-import { useUIStore, useDeviceStore } from '@/stores';
+import { useUIStore, useDeviceStore, useAuthStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 import TabNavigation from '@/components/TabNavigation';
@@ -29,6 +29,11 @@ export default function App() {
 
   useEffect(() => {
     initOpenReplay();
+  }, []);
+
+  useEffect(() => {
+    // Initialize auth state from persisted storage
+    useAuthStore.getState().initialize();
   }, []);
 
   const parseHash = (hash: string = window.location.hash.slice(1)) => {
