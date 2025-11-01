@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useAssetStore } from '@/stores';
 import { EmptyState, SkeletonTableRow } from '@/components/shared';
@@ -23,9 +23,16 @@ export function AssetTable({
   onDelete,
   className = '',
 }: AssetTableProps) {
-  const assets = useAssetStore((state) => state.getFilteredAssets());
-  const { field: sortField, direction: sortDirection } = useAssetStore((state) => state.sort);
+  const cache = useAssetStore((state) => state.cache);
+  const filters = useAssetStore((state) => state.filters);
+  const sort = useAssetStore((state) => state.sort);
+  const { field: sortField, direction: sortDirection } = sort;
   const setSort = useAssetStore((state) => state.setSort);
+
+  // Memoize filtered assets to prevent infinite re-renders
+  const assets = useMemo(() => {
+    return useAssetStore.getState().getFilteredAssets();
+  }, [cache.byId.size, filters, sort]);
 
   const handleSort = (field: SortableField) => {
     if (sortField === field) {

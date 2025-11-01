@@ -21,15 +21,16 @@ const TYPE_OPTIONS: Array<{ value: AssetType; label: string; icon: typeof User }
 export function AssetFilters({ isOpen = true, onToggle, className = '' }: AssetFiltersProps) {
   const filters = useAssetStore((state) => state.filters);
   const setFilters = useAssetStore((state) => state.setFilters);
-  const assets = useAssetStore((state) => Array.from(state.cache.byId.values()));
+  const cache = useAssetStore((state) => state.cache);
 
   // Calculate counts by type
   const typeCounts = useMemo(() => {
+    const assets = Array.from(cache.byId.values());
     return TYPE_OPTIONS.map((option) => ({
       ...option,
       count: assets.filter((a) => a.type === option.value).length,
     }));
-  }, [assets]);
+  }, [cache.byId.size]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;

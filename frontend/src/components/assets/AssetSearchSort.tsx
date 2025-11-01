@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, X, ArrowUpDown } from 'lucide-react';
 import { useAssetStore } from '@/stores';
 import type { SortState } from '@/types/assets';
@@ -20,7 +20,14 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
   const setSearchTerm = useAssetStore((state) => state.setSearchTerm);
   const { field: sortField, direction: sortDirection } = useAssetStore((state) => state.sort);
   const setSort = useAssetStore((state) => state.setSort);
-  const filteredAssets = useAssetStore((state) => state.getFilteredAssets());
+  const cache = useAssetStore((state) => state.cache);
+  const filters = useAssetStore((state) => state.filters);
+  const sort = useAssetStore((state) => state.sort);
+
+  // Memoize filtered assets count
+  const filteredAssetsCount = useMemo(() => {
+    return useAssetStore.getState().getFilteredAssets().length;
+  }, [cache.byId.size, filters, sort]);
 
   // Local state for debounced search
   const [localSearch, setLocalSearch] = useState(search);
@@ -108,7 +115,7 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
 
       {/* Results Count */}
       <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-        {filteredAssets.length} {filteredAssets.length === 1 ? 'result' : 'results'}
+        {filteredAssetsCount} {filteredAssetsCount === 1 ? 'result' : 'results'}
       </div>
     </div>
   );

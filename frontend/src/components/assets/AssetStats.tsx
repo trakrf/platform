@@ -17,9 +17,10 @@ const TYPE_INFO = {
 } as const;
 
 export function AssetStats({ className = '' }: AssetStatsProps) {
-  const assets = useAssetStore((state) => Array.from(state.cache.byId.values()));
+  const cache = useAssetStore((state) => state.cache);
 
   const stats = useMemo(() => {
+    const assets = Array.from(cache.byId.values());
     const total = assets.length;
     const active = assets.filter((a) => a.is_active).length;
     const inactive = total - active;
@@ -40,7 +41,7 @@ export function AssetStats({ className = '' }: AssetStatsProps) {
     }));
 
     return { total, active, inactive, typeStats };
-  }, [assets]);
+  }, [cache.byId.size]);
 
   return (
     <div className={className}>
