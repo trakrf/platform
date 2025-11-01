@@ -29,7 +29,7 @@ export function AssetCard({
   showActions = true,
   className = '',
 }: AssetCardProps) {
-  const TypeIcon = TYPE_ICONS[asset.type];
+  const TypeIcon = TYPE_ICONS[asset.type] || HelpCircle;
   const location = asset.metadata?.location as string | undefined;
 
   const handleEdit = (e: React.MouseEvent) => {

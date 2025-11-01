@@ -26,9 +26,21 @@ export function AssetFormModal({ isOpen, mode, asset, onClose }: AssetFormModalP
     try {
       if (mode === 'create') {
         const response = await assetsApi.create(data as CreateAssetRequest);
+
+        // Validate response is actually an asset object, not HTML
+        if (!response.data || typeof response.data !== 'object' || !response.data.id) {
+          throw new Error('Invalid response from server. Asset API may not be available.');
+        }
+
         addAsset(response.data);
       } else if (mode === 'edit' && asset) {
         const response = await assetsApi.update(asset.id, data as UpdateAssetRequest);
+
+        // Validate response
+        if (!response.data || typeof response.data !== 'object' || !response.data.id) {
+          throw new Error('Invalid response from server. Asset API may not be available.');
+        }
+
         updateCachedAsset(asset.id, response.data);
       }
 
