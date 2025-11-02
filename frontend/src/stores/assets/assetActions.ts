@@ -6,6 +6,7 @@ import type { Asset, AssetFilters, SortState } from '@/types/assets';
  *
  * Factory functions that create action methods for the asset store.
  * Separated by domain: cache, UI, and upload operations.
+ * Note: Maps and Sets are cloned for Zustand immutability requirements.
  */
 
 export function createCacheActions(
@@ -20,7 +21,6 @@ export function createCacheActions(
       set((state: any) => {
         const newCache = { ...state.cache };
 
-        // Clone Maps/Sets for immutability (Zustand requirement)
         newCache.byId = new Map(state.cache.byId);
         newCache.byIdentifier = new Map(state.cache.byIdentifier);
         newCache.byType = new Map(state.cache.byType);
@@ -71,7 +71,6 @@ export function createCacheActions(
         const updated = { ...current, ...updates };
         const newCache = { ...state.cache };
 
-        // Clone Maps/Sets for immutability
         newCache.byId = new Map(state.cache.byId);
         newCache.byIdentifier = new Map(state.cache.byIdentifier);
         newCache.byType = new Map(state.cache.byType);
@@ -88,7 +87,6 @@ export function createCacheActions(
           newCache.byIdentifier.set(current.identifier, updated);
         }
 
-        // Handle type change (move between type indexes)
         if (updates.type && updates.type !== current.type) {
           const oldTypeSet = newCache.byType.get(current.type);
           if (oldTypeSet) {
@@ -107,7 +105,6 @@ export function createCacheActions(
           newCache.byType.set(updates.type, updatedNewTypeSet);
         }
 
-        // Handle active status change
         if (updates.is_active !== undefined) {
           if (updates.is_active) {
             newCache.activeIds.add(id);
@@ -115,6 +112,8 @@ export function createCacheActions(
             newCache.activeIds.delete(id);
           }
         }
+
+        newCache.lastFetched = Date.now();
 
         return { cache: newCache };
       }),
@@ -131,7 +130,6 @@ export function createCacheActions(
 
         const newCache = { ...state.cache };
 
-        // Clone Maps/Sets for immutability
         newCache.byId = new Map(state.cache.byId);
         newCache.byIdentifier = new Map(state.cache.byIdentifier);
         newCache.byType = new Map(state.cache.byType);
@@ -154,6 +152,8 @@ export function createCacheActions(
         newCache.activeIds.delete(id);
         newCache.allIds = state.cache.allIds.filter((aid: number) => aid !== id);
 
+        newCache.lastFetched = Date.now();
+
         return { cache: newCache };
       }),
 
@@ -169,7 +169,7 @@ export function createCacheActions(
           activeIds: new Set(),
           allIds: [],
           lastFetched: 0,
-          ttl: 60 * 60 * 1000, // 1 hour - assets change rarely
+          ttl: 60 * 60 * 1000,
         },
       }),
   };
@@ -180,62 +180,38 @@ export function createUIActions(
   _get: Parameters<StateCreator<any>>[1]
 ) {
   return {
-    /**
-     * Update filters (partial update)
-     * Resets pagination to page 1 when filters change
-     */
     setFilters: (newFilters: Partial<AssetFilters>) =>
       set((state: any) => ({
         filters: { ...state.filters, ...newFilters },
         pagination: { ...state.pagination, currentPage: 1 },
       })),
 
-    /**
-     * Set current page
-     */
     setPage: (page: number) =>
       set((state: any) => ({
         pagination: { ...state.pagination, currentPage: page },
       })),
 
-    /**
-     * Set page size
-     * Resets to page 1 when page size changes
-     */
     setPageSize: (size: number) =>
       set((state: any) => ({
         pagination: { ...state.pagination, pageSize: size, currentPage: 1 },
       })),
 
-    /**
-     * Update sort field and direction
-     */
     setSort: (field: SortState['field'], direction: SortState['direction']) =>
       set({
         sort: { field, direction },
       }),
 
-    /**
-     * Update search term
-     * Resets pagination to page 1 when search changes
-     */
     setSearchTerm: (term: string) =>
       set((state: any) => ({
         filters: { ...state.filters, search: term },
         pagination: { ...state.pagination, currentPage: 1 },
       })),
 
-    /**
-     * Reset pagination to page 1
-     */
     resetPagination: () =>
       set((state: any) => ({
         pagination: { ...state.pagination, currentPage: 1 },
       })),
 
-    /**
-     * Select an asset by ID
-     */
     selectAsset: (id: number | null) =>
       set({
         selectedAssetId: id,
@@ -248,25 +224,16 @@ export function createUploadActions(
   _get: Parameters<StateCreator<any>>[1]
 ) {
   return {
-    /**
-     * Set the current upload job ID for tracking
-     */
     setUploadJobId: (jobId: string | null) =>
       set({
         uploadJobId: jobId,
       }),
 
-    /**
-     * Set the polling interval ID for cleanup
-     */
     setPollingInterval: (intervalId: NodeJS.Timeout | null) =>
       set({
         pollingIntervalId: intervalId,
       }),
 
-    /**
-     * Clear all bulk upload state
-     */
     clearUploadState: () =>
       set({
         uploadJobId: null,

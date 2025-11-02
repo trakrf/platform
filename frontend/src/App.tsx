@@ -207,10 +207,7 @@ export default function App() {
       </Suspense>
     );
   };
-  if (!activeTab) {
-    return <div style={{ padding: '20px', backgroundColor: 'yellow' }}>Loading - no active tab...</div>;
-  }
-  
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex relative">
       <Toaster 

@@ -2,7 +2,23 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores/authStore';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const getApiUrl = (): string => {
+  const apiUrl = import.meta.env.VITE_API_URL || '/api/v1';
+
+  if (apiUrl && apiUrl !== '/api/v1') {
+    try {
+      new URL(apiUrl);
+    } catch (err) {
+      console.warn(`[API Client] Invalid VITE_API_URL format: ${apiUrl}. Falling back to /api/v1`);
+      return '/api/v1';
+    }
+  }
+
+  console.info('[API Client] Using API URL:', apiUrl);
+  return apiUrl;
+};
+
+const API_BASE_URL = getApiUrl();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
