@@ -188,7 +188,7 @@ func (s *Service) processCSVAsync(
 		return
 	}
 
-	fmt.Printf("Successfully completed job %s with %d assets\n", jobID, successCount)
+	fmt.Printf("Successfully completed job %d with %d assets\n", jobID, successCount)
 	s.storage.UpdateBulkImportJobProgress(ctx, jobID, successCount, 0, nil)
 	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "completed")
 }

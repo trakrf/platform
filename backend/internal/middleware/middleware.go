@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -39,11 +39,14 @@ func Recovery(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				requestID := GetRequestID(r.Context())
-				slog.Error("Panic recovered",
-					"error", err,
-					"request_id", requestID,
-					"path", r.URL.Path,
-					"method", r.Method)
+
+				// Use zerolog instead of slog
+				logger.Get().Error().
+					Interface("error", err).
+					Str("request_id", requestID).
+					Str("path", r.URL.Path).
+					Str("method", r.Method).
+					Msg("Panic recovered")
 
 				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
 					errors.ErrInternal, "Internal server error", "", requestID)
@@ -117,9 +120,10 @@ func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			slog.Info("Missing authorization header",
-				"request_id", GetRequestID(r.Context()),
-				"path", r.URL.Path)
+			logger.Get().Info().
+				Str("request_id", GetRequestID(r.Context())).
+				Str("path", r.URL.Path).
+				Msg("Missing authorization header")
 			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
 				"Missing authorization header", "", GetRequestID(r.Context()))
 			return
@@ -127,9 +131,10 @@ func Auth(next http.Handler) http.Handler {
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			slog.Info("Invalid authorization header format",
-				"request_id", GetRequestID(r.Context()),
-				"path", r.URL.Path)
+			logger.Get().Info().
+				Str("request_id", GetRequestID(r.Context())).
+				Str("path", r.URL.Path).
+				Msg("Invalid authorization header format")
 			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
 				"Invalid authorization header format", "", GetRequestID(r.Context()))
 			return
@@ -138,19 +143,21 @@ func Auth(next http.Handler) http.Handler {
 
 		claims, err := jwt.Validate(token)
 		if err != nil {
-			slog.Info("JWT validation failed",
-				"error", err,
-				"request_id", GetRequestID(r.Context()),
-				"path", r.URL.Path)
+			logger.Get().Info().
+				Err(err).
+				Str("request_id", GetRequestID(r.Context())).
+				Str("path", r.URL.Path).
+				Msg("JWT validation failed")
 			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
 				"Invalid or expired token", "", GetRequestID(r.Context()))
 			return
 		}
 
 		if claims == nil {
-			slog.Error("Validate returned nil claims without error",
-				"request_id", GetRequestID(r.Context()),
-				"path", r.URL.Path)
+			logger.Get().Error().
+				Str("request_id", GetRequestID(r.Context())).
+				Str("path", r.URL.Path).
+				Msg("Validate returned nil claims without error")
 			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
 				"Invalid or expired token", "", GetRequestID(r.Context()))
 			return

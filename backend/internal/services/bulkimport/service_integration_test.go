@@ -3,6 +3,7 @@ package bulkimport
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -221,14 +222,15 @@ func TestConcurrentUploads(t *testing.T) {
 
 		job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
 		require.NoError(t, err)
-		jobIDs[i] = job.ID.String()
+		jobIDs[i] = fmt.Sprintf("%d", job.ID)
 
 		go service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
 	}
 
 	for i, jobID := range jobIDs {
-		uuid := mustParseUUID(t, jobID)
-		status, err := store.GetBulkImportJobByID(ctx, uuid, orgID)
+		jobIDInt, err := strconv.Atoi(jobID)
+		require.NoError(t, err)
+		status, err := store.GetBulkImportJobByID(ctx, jobIDInt, orgID)
 		require.NoError(t, err)
 		assert.NotEmpty(t, status.Status, "Job %d should have a status", i)
 		assert.Equal(t, 2, status.TotalRows, "Job %d should have 2 total rows", i)
@@ -348,7 +350,9 @@ ASSET-TEST-002,Test Asset 2,person,Description 2,2024-01-01,2024-12-31,false`
 	assert.Equal(t, "accepted", response.Status)
 	assert.NotEmpty(t, response.JobID)
 
-	job, err := store.GetBulkImportJobByID(ctx, mustParseUUID(t, response.JobID), orgID)
+	jobIDInt, err := strconv.Atoi(response.JobID)
+	require.NoError(t, err)
+	job, err := store.GetBulkImportJobByID(ctx, jobIDInt, orgID)
 	require.NoError(t, err)
 	assert.NotNil(t, job)
 	assert.Equal(t, 2, job.TotalRows)
