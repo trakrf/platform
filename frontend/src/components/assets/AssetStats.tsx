@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { User, Laptop, Package, Archive, HelpCircle } from 'lucide-react';
+import { User, Laptop, Package, Archive, HelpCircle, BarChart3, CheckCircle, XCircle } from 'lucide-react';
 import { useAssetStore } from '@/stores';
-import { Container } from '@/components/shared';
+import { StatCard } from './StatCard';
+import { TypeCard } from './TypeCard';
 import type { AssetType } from '@/types/assets';
 
 interface AssetStatsProps {
@@ -44,79 +45,50 @@ export function AssetStats({ className = '' }: AssetStatsProps) {
 
   return (
     <div className={className}>
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <Container padding="small" border={true} rounded={true}>
-          <div className="text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Total Assets
-            </p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-white">
-              {stats.total}
-            </p>
-          </div>
-        </Container>
-
-        <Container padding="small" border={true} rounded={true}>
-          <div className="text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Active
-            </p>
-            <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-              {stats.active}
-            </p>
-          </div>
-        </Container>
-
-        <Container padding="small" border={true} rounded={true}>
-          <div className="text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Inactive
-            </p>
-            <p className="text-3xl font-bold text-gray-600 dark:text-gray-400">
-              {stats.inactive}
-            </p>
-          </div>
-        </Container>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3 mb-6">
+        <StatCard
+          icon={BarChart3}
+          label="Total Assets"
+          value={stats.total}
+          subtitle="All registered"
+          variant="blue"
+        />
+        <StatCard
+          icon={CheckCircle}
+          label="Active"
+          value={stats.active}
+          subtitle="In use"
+          variant="green"
+        />
+        <StatCard
+          icon={XCircle}
+          label="Inactive"
+          value={stats.inactive}
+          subtitle="Not in use"
+          variant="gray"
+        />
       </div>
 
       {/* By Type Breakdown */}
-      <Container padding="small" border={true} rounded={true}>
-        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
+      <div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
           By Type
         </h3>
-        <div className="space-y-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
           {stats.typeStats.map(({ type, count, percentage }) => {
-            const { icon: Icon, label } = TYPE_INFO[type];
+            const { icon, label } = TYPE_INFO[type];
             return (
-              <div key={type} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
-                      {label}:
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-gray-900 dark:text-white font-semibold">
-                      {count}
-                    </span>
-                    <span className="text-gray-600 dark:text-gray-400 min-w-[3rem] text-right">
-                      {percentage}%
-                    </span>
-                  </div>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
-              </div>
+              <TypeCard
+                key={type}
+                icon={icon}
+                label={label}
+                count={count}
+                percentage={percentage}
+              />
             );
           })}
         </div>
-      </Container>
+      </div>
     </div>
   );
 }

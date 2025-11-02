@@ -93,8 +93,8 @@ describe('AssetStats', () => {
     render(<AssetStats />);
 
     expect(screen.getByText('By Type')).toBeInTheDocument();
-    expect(screen.getByText('Devices:')).toBeInTheDocument();
-    expect(screen.getByText('People:')).toBeInTheDocument();
+    expect(screen.getByText('Devices')).toBeInTheDocument();
+    expect(screen.getByText('People')).toBeInTheDocument();
   });
 
   it('calculates correct percentages', () => {
@@ -112,7 +112,7 @@ describe('AssetStats', () => {
   it('renders progress bars for each type', () => {
     const { container } = render(<AssetStats />);
 
-    const progressBars = container.querySelectorAll('.bg-blue-600');
+    const progressBars = container.querySelectorAll('.bg-blue-500');
     expect(progressBars.length).toBeGreaterThan(0);
   });
 
