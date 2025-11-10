@@ -1,6 +1,5 @@
 package apierrors
 
-// Common error messages
 const (
 	InvalidJSON      = "Invalid JSON"
 	ValidationFailed = "Validation failed"
@@ -8,7 +7,6 @@ const (
 	InternalError    = "Internal server error"
 )
 
-// Asset error messages
 const (
 	AssetCreateFailed     = "Failed to create asset"
 	AssetUpdateInvalidID  = "Invalid Asset ID: %s"
@@ -35,7 +33,6 @@ const (
 	BulkImportUploadFailed        = "Upload failed"
 )
 
-// Auth error messages
 const (
 	AuthSignupInvalidJSON        = "Invalid JSON"
 	AuthSignupValidationFailed   = "Validation failed"
@@ -48,7 +45,6 @@ const (
 	AuthLoginFailed              = "Failed to login"
 )
 
-// User error messages
 const (
 	UserListFailed           = "Failed to list users"
 	UserGetInvalidID         = "Invalid user ID"

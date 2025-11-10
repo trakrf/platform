@@ -13,7 +13,7 @@ type Asset struct {
 	Org         *org.Org   `json:"org"`
 	Identifier  string     `json:"identifier"`
 	Name        string     `json:"name"`
-	Type        string     `json:"type"`
+	Type        string     `json:"type" `
 	Description string     `json:"description"`
 	ValidFrom   time.Time  `json:"valid_from"`
 	ValidTo     *time.Time `json:"valid_to"`
@@ -28,7 +28,7 @@ type CreateAssetRequest struct {
 	OrgID       int        `json:"org_id" validate:"omitempty,min=1"`
 	Identifier  string     `json:"identifier" validate:"required,min=1,max=255"`
 	Name        string     `json:"name" validate:"required,min=1,max=255"`
-	Type        string     `json:"type" validate:"oneof=person device asset inventory other"`
+	Type        string     `json:"type" validate:"oneof=asset"`
 	Description string     `json:"description" validate:"omitempty,max=1024"`
 	ValidFrom   time.Time  `json:"valid_from"`
 	ValidTo     *time.Time `json:"valid_to"`
@@ -40,7 +40,7 @@ type UpdateAssetRequest struct {
 	OrgID       *int       `json:"org_id" validate:"omitempty,min=1"`
 	Identifier  *string    `json:"identifier" validate:"omitempty,min=1,max=255"`
 	Name        *string    `json:"name" validate:"omitempty,min=1,max=255"`
-	Type        *string    `json:"type" validate:"omitempty,oneof=person device asset inventory other"`
+	Type        *string    `json:"type" validate:"omitempty,oneof=asset"`
 	Description *string    `json:"description" validate:"omitempty,max=1024"`
 	ValidFrom   *time.Time `json:"valid_from"`
 	ValidTo     *time.Time `json:"valid_to"`
