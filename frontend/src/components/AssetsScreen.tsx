@@ -5,7 +5,6 @@ import { useAssets, useAssetMutations } from '@/hooks/assets';
 import { useAssetStore } from '@/stores';
 import { FloatingActionButton, EmptyState, NoResults, ConfirmModal } from '@/components/shared';
 import { AssetStats } from '@/components/assets/AssetStats';
-import { AssetFilters } from '@/components/assets/AssetFilters';
 import { AssetSearchSort } from '@/components/assets/AssetSearchSort';
 import { AssetTable } from '@/components/assets/AssetTable';
 import { AssetCard } from '@/components/assets/AssetCard';
@@ -108,9 +107,9 @@ export default function AssetsScreen() {
         <GlobalUploadAlert />
 
         <div className="flex gap-4 flex-1 overflow-hidden">
-          <div className="hidden md:block w-72 flex-shrink-0">
+          {/* <div className="hidden md:block w-72 flex-shrink-0">
             <AssetFilters isOpen={true} />
-          </div>
+          </div> */}
 
           <div className="flex-1 flex flex-col gap-4 min-w-0">
             <AssetSearchSort />
@@ -213,7 +212,7 @@ export default function AssetsScreen() {
           onClose={() => setViewingAsset(null)}
         />
 
-        {isFiltersOpen && (
+        {/* {isFiltersOpen && (
           <div className="fixed inset-0 z-40 md:hidden">
             <div
               className="absolute inset-0 bg-black bg-opacity-50"
@@ -223,7 +222,7 @@ export default function AssetsScreen() {
               <AssetFilters isOpen={true} onToggle={() => setIsFiltersOpen(false)} />
             </div>
           </div>
-        )}
+        )} */}
       </div>
     </ProtectedRoute>
   );
