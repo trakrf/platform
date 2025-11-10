@@ -17,7 +17,6 @@ import { GlobalUploadAlert } from '@/components/shared/GlobalUploadAlert';
 import type { Asset } from '@/types/assets';
 
 export default function AssetsScreen() {
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
