@@ -128,7 +128,7 @@ func main() {
 	log.Info().Msg("Handlers initialized")
 
 	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler)
-	slog.Info("Routes registered")
+	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
 		Addr:         ":" + port,
