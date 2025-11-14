@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -63,14 +64,20 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var validTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		validTo = &t
+	}
+
 	loc := location.Location{
 		OrgID:              orgID,
 		Name:               request.Name,
 		Identifier:         request.Identifier,
 		ParentLocationID:   request.ParentLocationID,
 		Description:        request.Description,
-		ValidFrom:          request.ValidFrom,
-		ValidTo:            request.ValidTo,
+		ValidFrom:          request.ValidFrom.ToTime(),
+		ValidTo:            validTo,
 		IsActive:           request.IsActive,
 	}
 

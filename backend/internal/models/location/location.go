@@ -35,25 +35,23 @@ type LocationWithRelations struct {
 }
 
 type CreateLocationRequest struct {
-	OrgID              int        `json:"org_id" validate:"omitempty,min=1"`
-	Name               string     `json:"name" validate:"required,min=1,max=255"`
-	Identifier         string     `json:"identifier" validate:"required,min=1,max=255"`
-	ParentLocationID   *int       `json:"parent_location_id" validate:"omitempty,min=1"`
-	Description        string     `json:"description" validate:"omitempty,max=1024"`
-	ValidFrom          time.Time  `json:"valid_from"`
-	ValidTo            *time.Time `json:"valid_to,omitempty"`
-	IsActive           bool       `json:"is_active"`
+	Name               string        `json:"name" validate:"required,min=1,max=255"`
+	Identifier         string        `json:"identifier" validate:"required,min=1,max=255"`
+	ParentLocationID   *int          `json:"parent_location_id" validate:"omitempty,min=1"`
+	Description        string        `json:"description" validate:"omitempty,max=1024"`
+	ValidFrom          FlexibleDate  `json:"valid_from"`
+	ValidTo            *FlexibleDate `json:"valid_to,omitempty"`
+	IsActive           bool          `json:"is_active"`
 }
 
 type UpdateLocationRequest struct {
-	OrgID              *int       `json:"org_id" validate:"omitempty,min=1"`
-	Name               *string    `json:"name" validate:"omitempty,min=1,max=255"`
-	Identifier         *string    `json:"identifier" validate:"omitempty,min=1,max=255"`
-	ParentLocationID   *int       `json:"parent_location_id" validate:"omitempty,min=1"`
-	Description        *string    `json:"description" validate:"omitempty,max=1024"`
-	ValidFrom          *time.Time `json:"valid_from"`
-	ValidTo            *time.Time `json:"valid_to"`
-	IsActive           *bool      `json:"is_active"`
+	Name               *string        `json:"name" validate:"omitempty,min=1,max=255"`
+	Identifier         *string        `json:"identifier" validate:"omitempty,min=1,max=255"`
+	ParentLocationID   *int           `json:"parent_location_id" validate:"omitempty,min=1"`
+	Description        *string        `json:"description" validate:"omitempty,max=1024"`
+	ValidFrom          *FlexibleDate  `json:"valid_from"`
+	ValidTo            *FlexibleDate  `json:"valid_to"`
+	IsActive           *bool          `json:"is_active"`
 }
 
 type LocationListResponse struct {

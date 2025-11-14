@@ -368,9 +368,6 @@ func (s *Storage) GetChildren(ctx context.Context, id int) ([]location.Location,
 func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any, error) {
 	fields := make(map[string]any)
 
-	if req.OrgID != nil {
-		fields["org_id"] = *req.OrgID
-	}
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
@@ -384,10 +381,12 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 		fields["description"] = *req.Description
 	}
 	if req.ValidFrom != nil {
-		fields["valid_from"] = *req.ValidFrom
+		t := req.ValidFrom.ToTime()
+		fields["valid_from"] = t
 	}
 	if req.ValidTo != nil {
-		fields["valid_to"] = *req.ValidTo
+		t := req.ValidTo.ToTime()
+		fields["valid_to"] = t
 	}
 	if req.IsActive != nil {
 		fields["is_active"] = *req.IsActive
