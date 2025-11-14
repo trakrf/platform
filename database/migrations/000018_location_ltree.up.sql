@@ -7,7 +7,7 @@ ALTER TABLE locations ADD COLUMN path ltree;
 -- Backfill existing locations before adding NOT NULL constraint
 -- Root locations (no parent)
 UPDATE locations
-SET path = text2ltree(identifier)
+SET path = text2ltree(REPLACE(LOWER(identifier), '-', '_'))
 WHERE parent_location_id IS NULL AND path IS NULL;
 
 -- Child locations (recursive update by depth)
@@ -21,7 +21,7 @@ WITH RECURSIVE location_hierarchy AS (
 
     -- Child locations
     SELECT l.id, l.identifier, l.parent_location_id,
-           lh.path || text2ltree(l.identifier) as path,
+           lh.path || text2ltree(REPLACE(LOWER(l.identifier), '-', '_')) as path,
            lh.level + 1
     FROM locations l
     INNER JOIN location_hierarchy lh ON l.parent_location_id = lh.id
@@ -38,9 +38,12 @@ CREATE OR REPLACE FUNCTION update_location_path()
 RETURNS TRIGGER AS $$
 DECLARE
     parent_path ltree;
+    sanitized_identifier text;
 BEGIN
+    sanitized_identifier := REPLACE(LOWER(NEW.identifier), '-', '_');
+
     IF NEW.parent_location_id IS NULL THEN
-        NEW.path = text2ltree(NEW.identifier);
+        NEW.path = text2ltree(sanitized_identifier);
     ELSE
         SELECT path INTO parent_path
         FROM locations
@@ -50,7 +53,7 @@ BEGIN
             RAISE EXCEPTION 'Parent location % has no path', NEW.parent_location_id;
         END IF;
 
-        NEW.path = parent_path || text2ltree(NEW.identifier);
+        NEW.path = parent_path || text2ltree(sanitized_identifier);
     END IF;
 
     RETURN NEW;
