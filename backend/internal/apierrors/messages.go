@@ -64,3 +64,17 @@ const (
 	UserDeleteNotFound       = "User not found"
 	UserDeleteFailed         = "Failed to delete user"
 )
+
+const (
+	LocationCreateFailed     = "Failed to create location"
+	LocationUpdateInvalidID  = "Invalid Location ID: %s"
+	LocationUpdateInvalidReq = "Invalid Request"
+	LocationUpdateFailed     = "Failed to update location"
+	LocationGetInvalidID     = "Invalid Location ID: %s"
+	LocationGetFailed        = "Failed to get location"
+	LocationNotFound         = "Location not found"
+	LocationDeleteInvalidID  = "Invalid Location ID: %s"
+	LocationDeleteFailed     = "Failed to delete location"
+	LocationListFailed       = "Failed to list locations"
+	LocationCountFailed      = "Failed to count locations"
+)
