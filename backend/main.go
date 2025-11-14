@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"embed"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,6 +21,7 @@ import (
 	orgusershandler "github.com/trakrf/platform/backend/internal/handlers/org_users"
 	organizationshandler "github.com/trakrf/platform/backend/internal/handlers/organizations"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -57,6 +57,7 @@ func setupRouter(
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
+	r.Use(logger.Middleware)
 	r.Use(middleware.Recovery)
 	r.Use(middleware.CORS)
 	r.Use(middleware.ContentType)
@@ -94,10 +95,11 @@ func setupRouter(
 func main() {
 	startTime = time.Now()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	slog.SetDefault(logger)
+	loggerCfg := logger.NewConfig(version)
+	logger.Initialize(loggerCfg)
+	log := logger.Get()
+
+	log.Info().Msg("Logger initialized")
 
 	port := os.Getenv("BACKEND_PORT")
 	if port == "" {
@@ -107,13 +109,13 @@ func main() {
 	ctx := context.Background()
 	store, err := storage.New(ctx)
 	if err != nil {
-		slog.Error("Failed to initialize storage", "error", err)
+		log.Error().Err(err).Msg("Failed to initialize storage")
 		os.Exit(1)
 	}
-	slog.Info("Storage initialized")
+	log.Info().Msg("Storage initialized")
 
 	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store)
-	slog.Info("Auth service initialized")
+	log.Info().Msg("Auth service initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)
 	organizationsHandler := organizationshandler.NewHandler(store)
@@ -123,7 +125,7 @@ func main() {
 	locationsHandler := locationshandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
-	slog.Info("Handlers initialized")
+	log.Info().Msg("Handlers initialized")
 
 	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler)
 	slog.Info("Routes registered")
@@ -137,9 +139,9 @@ func main() {
 	}
 
 	go func() {
-		slog.Info("Server starting", "port", port, "version", version)
+		log.Info().Str("port", port).Str("version", version).Msg("Server starting")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Server failed", "error", err)
+			log.Error().Err(err).Msg("Server failed")
 			os.Exit(1)
 		}
 	}()
@@ -148,14 +150,14 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	slog.Info("Shutting down gracefully...")
+	log.Info().Msg("Shutting down gracefully...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		slog.Error("Shutdown error", "error", err)
+		log.Error().Err(err).Msg("Shutdown error")
 	}
 
 	store.Close()
-	slog.Info("Server stopped")
+	log.Info().Msg("Server stopped")
 }
