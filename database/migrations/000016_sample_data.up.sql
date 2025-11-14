@@ -40,9 +40,9 @@ VALUES
 -- 4. Create locations
 INSERT INTO locations (org_id, identifier, name, description)
 VALUES
-    ((SELECT id FROM organizations WHERE identifier = 'acme.com'), 'WAREHOUSE-1', 'Main Warehouse', 'Primary storage facility'),
-    ((SELECT id FROM organizations WHERE identifier = 'acme.com'), 'OFFICE-1', 'Head Office', 'Main office building'),
-    ((SELECT id FROM organizations WHERE identifier = 'techstart.io'), 'LAB-1', 'Development Lab', 'Main development space');
+    ((SELECT id FROM organizations WHERE identifier = 'acme.com'), 'WAREHOUSE_1', 'Main Warehouse', 'Primary storage facility'),
+    ((SELECT id FROM organizations WHERE identifier = 'acme.com'), 'OFFICE_1', 'Head Office', 'Main office building'),
+    ((SELECT id FROM organizations WHERE identifier = 'techstart.io'), 'LAB_1', 'Development Lab', 'Main development space');
 
 -- 5. Create scan devices
 INSERT INTO scan_devices (org_id, identifier, name, type, description)
@@ -57,21 +57,21 @@ VALUES
     -- Warehouse reader antennas
     ((SELECT id FROM organizations WHERE identifier = 'acme.com'),
      (SELECT id FROM scan_devices WHERE identifier = 'READER-001'),
-     (SELECT id FROM locations WHERE identifier = 'WAREHOUSE-1'),
+     (SELECT id FROM locations WHERE identifier = 'WAREHOUSE_1'),
      'READER-001-ANT1', 'Warehouse Entry Antenna 1', 1),
     ((SELECT id FROM organizations WHERE identifier = 'acme.com'),
      (SELECT id FROM scan_devices WHERE identifier = 'READER-001'),
-     (SELECT id FROM locations WHERE identifier = 'WAREHOUSE-1'),
+     (SELECT id FROM locations WHERE identifier = 'WAREHOUSE_1'),
      'READER-001-ANT2', 'Warehouse Entry Antenna 2', 2),
     -- Office reader antenna
     ((SELECT id FROM organizations WHERE identifier = 'acme.com'),
      (SELECT id FROM scan_devices WHERE identifier = 'READER-002'),
-     (SELECT id FROM locations WHERE identifier = 'OFFICE-1'),
+     (SELECT id FROM locations WHERE identifier = 'OFFICE_1'),
      'READER-002-ANT1', 'Office Scanner Antenna', 1),
     -- Lab reader antenna
     ((SELECT id FROM organizations WHERE identifier = 'techstart.io'),
      (SELECT id FROM scan_devices WHERE identifier = 'READER-LAB-1'),
-     (SELECT id FROM locations WHERE identifier = 'LAB-1'),
+     (SELECT id FROM locations WHERE identifier = 'LAB_1'),
      'READER-LAB-1-ANT1', 'Lab Equipment Antenna', 1);
 
 -- 7. Create assets
@@ -103,18 +103,18 @@ VALUES
     -- Pallet scanned at warehouse
     ((SELECT id FROM organizations WHERE identifier = 'acme.com'),
      (SELECT id FROM assets WHERE identifier = 'PALLET-001'),
-     (SELECT id FROM locations WHERE identifier = 'WAREHOUSE-1'),
+     (SELECT id FROM locations WHERE identifier = 'WAREHOUSE_1'),
      (SELECT id FROM scan_points WHERE identifier = 'READER-001-ANT1'),
      NOW() - INTERVAL '1 hour'),
     -- Laptop scanned at office
     ((SELECT id FROM organizations WHERE identifier = 'acme.com'),
      (SELECT id FROM assets WHERE identifier = 'LAPTOP-042'),
-     (SELECT id FROM locations WHERE identifier = 'OFFICE-1'),
+     (SELECT id FROM locations WHERE identifier = 'OFFICE_1'),
      (SELECT id FROM scan_points WHERE identifier = 'READER-002-ANT1'),
      NOW() - INTERVAL '30 minutes'),
     -- Oscilloscope scanned at lab
     ((SELECT id FROM organizations WHERE identifier = 'techstart.io'),
      (SELECT id FROM assets WHERE identifier = 'SCOPE-001'),
-     (SELECT id FROM locations WHERE identifier = 'LAB-1'),
+     (SELECT id FROM locations WHERE identifier = 'LAB_1'),
      (SELECT id FROM scan_points WHERE identifier = 'READER-LAB-1-ANT1'),
      NOW() - INTERVAL '15 minutes');
