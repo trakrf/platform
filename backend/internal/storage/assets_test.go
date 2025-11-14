@@ -12,6 +12,10 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/asset"
 )
 
+func timePtr(t time.Time) *time.Time {
+	return &t
+}
+
 func TestCreateAsset(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
@@ -26,7 +30,7 @@ func TestCreateAsset(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
 		OrgID:       1,
@@ -75,7 +79,7 @@ func TestCreateAsset_DuplicateIdentifier(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
 		OrgID:       1,
@@ -111,7 +115,7 @@ func TestCreateAsset_EmptyName(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
 		OrgID:       1,
@@ -147,7 +151,7 @@ func TestCreateAsset_EmptyIdentifier(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
 		OrgID:       1,
@@ -183,7 +187,7 @@ func TestCreateAsset_InvalidOrgID(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
 		OrgID:       99999,
@@ -219,7 +223,7 @@ func TestCreateAsset_NullMetadata(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    nil,
 		IsActive:    true,
 		OrgID:       1,
@@ -266,7 +270,7 @@ func TestCreateAsset_EmptyMetadata(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    []byte(`{}`),
 		IsActive:    true,
 		OrgID:       1,
@@ -317,7 +321,7 @@ func TestCreateAsset_DatabaseConnectionError(t *testing.T) {
 		Type:        "equipment",
 		Description: "Test description",
 		ValidFrom:   now,
-		ValidTo:     now.Add(24 * time.Hour),
+		ValidTo:     timePtr(now.Add(24 * time.Hour)),
 		Metadata:    []byte(`{"key":"value"}`),
 		IsActive:    true,
 		OrgID:       1,
@@ -369,7 +373,7 @@ func TestCreateAsset_ComplexMetadata(t *testing.T) {
 		Type:        "equipment",
 		Description: "Equipment with complex metadata",
 		ValidFrom:   now,
-		ValidTo:     now.Add(365 * 24 * time.Hour),
+		ValidTo:     timePtr(now.Add(365 * 24 * time.Hour)),
 		Metadata:    complexMetadata,
 		IsActive:    true,
 		OrgID:       1,
@@ -430,7 +434,7 @@ func TestUpdateAsset(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", newName, "equipment", newDescription,
-		now, now.Add(24*time.Hour), []byte(`{"key":"value"}`), true,
+		now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
 		now, now, nil,
 	)
 
@@ -511,7 +515,7 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
-		now, now.Add(24*time.Hour), []byte(`{"key":"value"}`), false,
+		now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), false,
 		now, now, nil,
 	)
 
@@ -544,7 +548,7 @@ func TestGetAssetByID(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
-		now, now.Add(24*time.Hour), []byte(`{"key":"value"}`), true,
+		now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
 		now, now, nil,
 	)
 
@@ -599,7 +603,7 @@ func TestGetAssetByID_WithNullMetadata(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
-		now, now.Add(24*time.Hour), nil, true,
+		now, timePtr(now.Add(24*time.Hour)), nil, true,
 		now, now, nil,
 	)
 
@@ -645,6 +649,7 @@ func TestListAllAssets(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	now := time.Now()
+	orgID := 1
 	limit := 10
 	offset := 0
 
@@ -654,20 +659,20 @@ func TestListAllAssets(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	}).
 		AddRow(1, 1, "TEST-001", "Asset 1", "equipment", "Description 1",
-			now, now.Add(24*time.Hour), []byte(`{"key":"value1"}`), true,
+			now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value1"}`), true,
 			now, now, nil).
 		AddRow(2, 1, "TEST-002", "Asset 2", "device", "Description 2",
-			now, now.Add(24*time.Hour), []byte(`{"key":"value2"}`), true,
+			now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value2"}`), true,
 			now, now, nil).
-		AddRow(3, 2, "TEST-003", "Asset 3", "equipment", "Description 3",
-			now, now.Add(24*time.Hour), nil, false,
+		AddRow(3, 1, "TEST-003", "Asset 3", "equipment", "Description 3",
+			now, timePtr(now.Add(24*time.Hour)), nil, false,
 			now, now, nil)
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(limit, offset).
+		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
 
-	results, err := storage.ListAllAssets(context.Background(), limit, offset)
+	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -685,6 +690,7 @@ func TestListAllAssets_Empty(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	limit := 10
 	offset := 0
 
@@ -695,10 +701,10 @@ func TestListAllAssets_Empty(t *testing.T) {
 	})
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(limit, offset).
+		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
 
-	results, err := storage.ListAllAssets(context.Background(), limit, offset)
+	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
 	assert.NoError(t, err)
 	assert.Empty(t, results)
@@ -713,6 +719,7 @@ func TestListAllAssets_WithPagination(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	now := time.Now()
+	orgID := 1
 	limit := 2
 	offset := 5
 
@@ -722,17 +729,17 @@ func TestListAllAssets_WithPagination(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	}).
 		AddRow(6, 1, "TEST-006", "Asset 6", "equipment", "Description 6",
-			now, now.Add(24*time.Hour), []byte(`{}`), true,
+			now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
 			now, now, nil).
 		AddRow(7, 1, "TEST-007", "Asset 7", "device", "Description 7",
-			now, now.Add(24*time.Hour), []byte(`{}`), true,
+			now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
 			now, now, nil)
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(limit, offset).
+		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
 
-	results, err := storage.ListAllAssets(context.Background(), limit, offset)
+	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -749,14 +756,15 @@ func TestListAllAssets_DatabaseError(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	limit := 10
 	offset := 0
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(limit, offset).
+		WithArgs(orgID, limit, offset).
 		WillReturnError(errors.New("connection lost"))
 
-	results, err := storage.ListAllAssets(context.Background(), limit, offset)
+	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
@@ -772,6 +780,7 @@ func TestListAllAssets_ScanError(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	now := time.Now()
+	orgID := 1
 	limit := 10
 	offset := 0
 
@@ -781,15 +790,15 @@ func TestListAllAssets_ScanError(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		"not-an-int", 1, "TEST-001", "Asset 1", "equipment", "Description",
-		now, now.Add(24*time.Hour), []byte(`{}`), true,
+		now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
 		now, now, nil,
 	).RowError(0, errors.New("scan error: invalid type"))
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(limit, offset).
+		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
 
-	results, err := storage.ListAllAssets(context.Background(), limit, offset)
+	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
