@@ -88,22 +88,18 @@ export function filterByActiveStatus(
 export function filterLocations(locations: Location[], filters: LocationFilters): Location[] {
   let result = locations;
 
-  // Search
   if (filters.search) {
     result = searchLocations(result, filters.search);
   }
 
-  // Identifier filter
   if (filters.identifier) {
     result = filterByIdentifier(result, filters.identifier);
   }
 
-  // Date range
   if (filters.created_after || filters.created_before) {
     result = filterByCreatedDate(result, filters.created_after, filters.created_before);
   }
 
-  // Active status
   result = filterByActiveStatus(result, filters.is_active);
 
   return result;
