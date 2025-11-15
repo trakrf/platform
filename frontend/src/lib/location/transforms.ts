@@ -20,7 +20,6 @@ export function formatPath(path: string): string[] {
   if (!path) return [];
 
   return path.split('.').map((segment) => {
-    // Convert underscores to spaces and capitalize each word
     const words = segment.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1));
     return words.join(' ');
   });

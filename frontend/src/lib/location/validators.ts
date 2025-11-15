@@ -24,7 +24,6 @@ export function validateIdentifier(identifier: string): string | null {
     return 'Identifier must be 255 characters or less';
   }
 
-  // ltree-safe: lowercase alphanumeric + underscores only
   const ltreePattern = /^[a-z0-9_]+$/;
   if (!ltreePattern.test(identifier)) {
     return 'Identifier must be lowercase letters, numbers, and underscores only';
