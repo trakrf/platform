@@ -66,27 +66,20 @@ frontend/src/stores/locations/
 **State Shape**:
 ```typescript
 interface LocationState {
-  // ============ Cache ============
   cache: LocationCache;
-
-  // ============ UI State ============
   selectedLocationId: number | null;
   filters: LocationFilters;
   pagination: PaginationState;
   sort: LocationSort;
-
-  // ============ Loading State ============
   isLoading: boolean;
   error: string | null;
 
-  // ============ Cache Actions ============
   addLocation: (location: Location) => void;
   updateLocation: (id: number, updates: Partial<Location>) => void;
   deleteLocation: (id: number) => void;
   setLocations: (locations: Location[]) => void;
   clearCache: () => void;
 
-  // ============ Hierarchy Queries ============
   getLocationById: (id: number) => Location | undefined;
   getLocationByIdentifier: (identifier: string) => Location | undefined;
   getChildren: (id: number) => Location[];
@@ -95,12 +88,10 @@ interface LocationState {
   getRootLocations: () => Location[];
   getActiveLocations: () => Location[];
 
-  // ============ Filtered Data ============
   getFilteredLocations: () => Location[];
   getSortedLocations: (locations: Location[]) => Location[];
   getPaginatedLocations: (locations: Location[]) => Location[];
 
-  // ============ UI Actions ============
   setSelectedLocation: (id: number | null) => void;
   setFilters: (filters: Partial<LocationFilters>) => void;
   setSort: (sort: LocationSort) => void;
@@ -118,19 +109,22 @@ import { devtools } from 'zustand/middleware';
 import { locationPersistMiddleware } from './locationPersistence';
 import { createCacheActions } from './locationActions';
 
-// Initial state
-const initialState = {
-  cache: {
-    byId: new Map(),
-    byIdentifier: new Map(),
-    byParentId: new Map(),
-    rootIds: new Set(),
-    activeIds: new Set(),
-    allIds: [],
-    allIdentifiers: [],
-    lastFetched: 0,
-    ttl: 5 * 60 * 1000, // 5 minutes
-  },
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+const createEmptyCache = (): LocationCache => ({
+  byId: new Map(),
+  byIdentifier: new Map(),
+  byParentId: new Map(),
+  rootIds: new Set(),
+  activeIds: new Set(),
+  allIds: [],
+  allIdentifiers: [],
+  lastFetched: 0,
+  ttl: CACHE_TTL_MS,
+});
+
+const createInitialState = () => ({
+  cache: createEmptyCache(),
   selectedLocationId: null,
   filters: {
     search: '',
@@ -149,26 +143,19 @@ const initialState = {
   },
   isLoading: false,
   error: null,
-};
+});
 
 export const useLocationStore = create<LocationState>()(
   devtools(
     locationPersistMiddleware(
       (set, get) => ({
-        ...initialState,
+        ...createInitialState(),
         ...createCacheActions(set, get),
-        // ... UI actions
       })
     )
   )
 );
 ```
-
-**Validation**:
-- [ ] Store initializes with empty cache
-- [ ] All actions available via hooks
-- [ ] DevTools integration works
-- [ ] No TypeScript errors
 
 ---
 
@@ -176,254 +163,345 @@ export const useLocationStore = create<LocationState>()(
 
 **Purpose**: Cache operations maintaining all index invariants
 
-**Exports**:
+**Core Actions**:
+
 ```typescript
-export function createCacheActions(
-  set: SetState<LocationState>,
-  get: GetState<LocationState>
-) {
-  return {
-    addLocation,
-    updateLocation,
-    deleteLocation,
-    setLocations,
-    clearCache,
-    getLocationById,
-    getLocationByIdentifier,
-    getChildren,
-    getDescendants,
-    getAncestors,
-    getRootLocations,
-    getActiveLocations,
-    getFilteredLocations,
-    getSortedLocations,
-    getPaginatedLocations,
-  };
-}
-```
+import type { Location, LocationCache } from '@/types/locations';
+import { filterLocations, sortLocations, paginateLocations } from '@/lib/location/filters';
 
-**Critical Cache Operations**:
-
-**`addLocation(location: Location)`**:
-```typescript
-function addLocation(location: Location) {
-  set((state) => {
-    const cache = { ...state.cache };
-
-    // Add to primary indexes
-    cache.byId.set(location.id, location);
-    cache.byIdentifier.set(location.identifier, location);
-
-    // Update parent-child mapping
-    const parentId = location.parent_location_id;
+export function createCacheActions(set, get) {
+  const ensureParentChildrenSet = (cache: LocationCache, parentId: number | null) => {
     if (!cache.byParentId.has(parentId)) {
       cache.byParentId.set(parentId, new Set());
     }
-    cache.byParentId.get(parentId)!.add(location.id);
+  };
 
-    // Update root set
+  const updatePrimaryIndexes = (cache: LocationCache, location: Location) => {
+    cache.byId.set(location.id, location);
+    cache.byIdentifier.set(location.identifier, location);
+  };
+
+  const updateParentChildMapping = (cache: LocationCache, locationId: number, parentId: number | null) => {
+    ensureParentChildrenSet(cache, parentId);
+    cache.byParentId.get(parentId)!.add(locationId);
+  };
+
+  const updateRootSet = (cache: LocationCache, locationId: number, parentId: number | null) => {
     if (parentId === null) {
-      cache.rootIds.add(location.id);
+      cache.rootIds.add(locationId);
     }
+  };
 
-    // Update active set
+  const updateActiveSet = (cache: LocationCache, location: Location) => {
     if (location.is_active) {
       cache.activeIds.add(location.id);
     }
+  };
 
-    // Update ordered lists (MUST maintain consistency)
+  const rebuildOrderedLists = (cache: LocationCache) => {
     cache.allIds = Array.from(cache.byId.keys());
     cache.allIdentifiers = Array.from(cache.byIdentifier.keys()).sort();
+  };
 
-    return { cache };
-  });
-}
-```
-
-**`updateLocation(id: number, updates: Partial<Location>)`**:
-```typescript
-function updateLocation(id: number, updates: Partial<Location>) {
-  set((state) => {
-    const cache = { ...state.cache };
-    const existing = cache.byId.get(id);
-
-    if (!existing) return state; // No-op if not found
-
-    const updated = { ...existing, ...updates };
-
-    // Update primary indexes
-    cache.byId.set(id, updated);
-
-    // Handle identifier change
-    if (updates.identifier && updates.identifier !== existing.identifier) {
+  const handleIdentifierChange = (
+    cache: LocationCache,
+    existing: Location,
+    updated: Location,
+    hasIdentifierChanged: boolean
+  ) => {
+    if (hasIdentifierChanged) {
       cache.byIdentifier.delete(existing.identifier);
       cache.byIdentifier.set(updated.identifier, updated);
-      cache.allIdentifiers = Array.from(cache.byIdentifier.keys()).sort();
+      rebuildOrderedLists(cache);
     } else {
       cache.byIdentifier.set(updated.identifier, updated);
     }
+  };
 
-    // Handle parent change (re-parenting)
-    if (updates.parent_location_id !== undefined && updates.parent_location_id !== existing.parent_location_id) {
-      // Remove from old parent's children
-      const oldParentChildren = cache.byParentId.get(existing.parent_location_id);
-      if (oldParentChildren) {
-        oldParentChildren.delete(id);
-      }
-
-      // Add to new parent's children
-      const newParentId = updates.parent_location_id;
-      if (!cache.byParentId.has(newParentId)) {
-        cache.byParentId.set(newParentId, new Set());
-      }
-      cache.byParentId.get(newParentId)!.add(id);
-
-      // Update root set
-      if (existing.parent_location_id === null) {
-        cache.rootIds.delete(id);
-      }
-      if (newParentId === null) {
-        cache.rootIds.add(id);
-      }
-    }
-
-    // Handle active status change
-    if (updates.is_active !== undefined && updates.is_active !== existing.is_active) {
-      if (updated.is_active) {
-        cache.activeIds.add(id);
-      } else {
-        cache.activeIds.delete(id);
-      }
-    }
-
-    return { cache };
-  });
-}
-```
-
-**`deleteLocation(id: number)`**:
-```typescript
-function deleteLocation(id: number) {
-  set((state) => {
-    const cache = { ...state.cache };
-    const location = cache.byId.get(id);
-
-    if (!location) return state;
-
-    // Remove from primary indexes
-    cache.byId.delete(id);
-    cache.byIdentifier.delete(location.identifier);
-
-    // Remove from parent's children
-    const parentChildren = cache.byParentId.get(location.parent_location_id);
+  const removeFromParentChildren = (cache: LocationCache, locationId: number, parentId: number | null) => {
+    const parentChildren = cache.byParentId.get(parentId);
     if (parentChildren) {
-      parentChildren.delete(id);
+      parentChildren.delete(locationId);
     }
+  };
 
-    // Remove from root set if applicable
-    if (location.parent_location_id === null) {
-      cache.rootIds.delete(id);
+  const handleParentChange = (
+    cache: LocationCache,
+    locationId: number,
+    oldParentId: number | null,
+    newParentId: number | null
+  ) => {
+    removeFromParentChildren(cache, locationId, oldParentId);
+    updateParentChildMapping(cache, locationId, newParentId);
+
+    if (oldParentId === null) {
+      cache.rootIds.delete(locationId);
     }
+    if (newParentId === null) {
+      cache.rootIds.add(locationId);
+    }
+  };
 
-    // Remove from active set if applicable
+  const handleActiveStatusChange = (cache: LocationCache, location: Location, wasActive: boolean) => {
     if (location.is_active) {
-      cache.activeIds.delete(id);
+      cache.activeIds.add(location.id);
+    } else {
+      cache.activeIds.delete(location.id);
+    }
+  };
+
+  const removeFromAllIndexes = (cache: LocationCache, location: Location) => {
+    cache.byId.delete(location.id);
+    cache.byIdentifier.delete(location.identifier);
+    removeFromParentChildren(cache, location.id, location.parent_location_id);
+
+    if (location.parent_location_id === null) {
+      cache.rootIds.delete(location.id);
     }
 
-    // Update ordered lists
-    cache.allIds = Array.from(cache.byId.keys());
-    cache.allIdentifiers = Array.from(cache.byIdentifier.keys()).sort();
-
-    // Note: Children are NOT automatically deleted (must be handled by caller)
-
-    return { cache };
-  });
-}
-```
-
-**Hierarchy Query Functions**:
-
-**`getChildren(id: number): Location[]`**:
-```typescript
-function getChildren(id: number): Location[] {
-  const cache = get().cache;
-  const childIds = cache.byParentId.get(id);
-
-  if (!childIds) return [];
-
-  return Array.from(childIds)
-    .map(childId => cache.byId.get(childId))
-    .filter((loc): loc is Location => loc !== undefined);
-}
-```
-
-**`getDescendants(id: number): Location[]`** (recursive):
-```typescript
-function getDescendants(id: number): Location[] {
-  const descendants: Location[] = [];
-  const visited = new Set<number>();
-
-  function collectDescendants(parentId: number) {
-    if (visited.has(parentId)) return; // Prevent infinite loops
-    visited.add(parentId);
-
-    const children = getChildren(parentId);
-    for (const child of children) {
-      descendants.push(child);
-      collectDescendants(child.id);
+    if (location.is_active) {
+      cache.activeIds.delete(location.id);
     }
-  }
 
-  collectDescendants(id);
-  return descendants;
+    rebuildOrderedLists(cache);
+  };
+
+  return {
+    addLocation: (location: Location) => {
+      set((state) => {
+        const cache = { ...state.cache };
+        const parentId = location.parent_location_id;
+
+        updatePrimaryIndexes(cache, location);
+        updateParentChildMapping(cache, location.id, parentId);
+        updateRootSet(cache, location.id, parentId);
+        updateActiveSet(cache, location);
+        rebuildOrderedLists(cache);
+
+        return { cache };
+      });
+    },
+
+    updateLocation: (id: number, updates: Partial<Location>) => {
+      set((state) => {
+        const cache = { ...state.cache };
+        const existing = cache.byId.get(id);
+
+        if (!existing) return state;
+
+        const updated = { ...existing, ...updates };
+        cache.byId.set(id, updated);
+
+        const hasIdentifierChanged = updates.identifier && updates.identifier !== existing.identifier;
+        handleIdentifierChange(cache, existing, updated, !!hasIdentifierChanged);
+
+        const hasParentChanged =
+          updates.parent_location_id !== undefined &&
+          updates.parent_location_id !== existing.parent_location_id;
+
+        if (hasParentChanged) {
+          handleParentChange(cache, id, existing.parent_location_id, updates.parent_location_id!);
+        }
+
+        const hasActiveStatusChanged =
+          updates.is_active !== undefined && updates.is_active !== existing.is_active;
+
+        if (hasActiveStatusChanged) {
+          handleActiveStatusChange(cache, updated, existing.is_active);
+        }
+
+        return { cache };
+      });
+    },
+
+    deleteLocation: (id: number) => {
+      set((state) => {
+        const cache = { ...state.cache };
+        const location = cache.byId.get(id);
+
+        if (!location) return state;
+
+        removeFromAllIndexes(cache, location);
+
+        return { cache };
+      });
+    },
+
+    setLocations: (locations: Location[]) => {
+      set((state) => {
+        const cache = {
+          byId: new Map<number, Location>(),
+          byIdentifier: new Map<string, Location>(),
+          byParentId: new Map<number | null, Set<number>>(),
+          rootIds: new Set<number>(),
+          activeIds: new Set<number>(),
+          allIds: [] as number[],
+          allIdentifiers: [] as string[],
+          lastFetched: Date.now(),
+          ttl: state.cache.ttl,
+        };
+
+        for (const location of locations) {
+          const parentId = location.parent_location_id;
+
+          updatePrimaryIndexes(cache, location);
+          updateParentChildMapping(cache, location.id, parentId);
+          updateRootSet(cache, location.id, parentId);
+          updateActiveSet(cache, location);
+        }
+
+        rebuildOrderedLists(cache);
+
+        return { cache };
+      });
+    },
+
+    clearCache: () => {
+      set((state) => ({
+        cache: {
+          byId: new Map(),
+          byIdentifier: new Map(),
+          byParentId: new Map(),
+          rootIds: new Set(),
+          activeIds: new Set(),
+          allIds: [],
+          allIdentifiers: [],
+          lastFetched: 0,
+          ttl: state.cache.ttl,
+        },
+      }));
+    },
+
+    getLocationById: (id: number) => {
+      return get().cache.byId.get(id);
+    },
+
+    getLocationByIdentifier: (identifier: string) => {
+      return get().cache.byIdentifier.get(identifier);
+    },
+
+    getChildren: (id: number) => {
+      const cache = get().cache;
+      const childIds = cache.byParentId.get(id);
+
+      if (!childIds) return [];
+
+      return Array.from(childIds)
+        .map((childId) => cache.byId.get(childId))
+        .filter((loc): loc is Location => loc !== undefined);
+    },
+
+    getDescendants: (id: number) => {
+      const descendants: Location[] = [];
+      const visited = new Set<number>();
+      const { getChildren } = get();
+
+      const collectDescendants = (parentId: number) => {
+        if (visited.has(parentId)) return;
+        visited.add(parentId);
+
+        const children = getChildren(parentId);
+        for (const child of children) {
+          descendants.push(child);
+          collectDescendants(child.id);
+        }
+      };
+
+      collectDescendants(id);
+      return descendants;
+    },
+
+    getAncestors: (id: number) => {
+      const cache = get().cache;
+      const ancestors: Location[] = [];
+      const visited = new Set<number>([id]);
+
+      let current = cache.byId.get(id);
+
+      while (current && current.parent_location_id !== null) {
+        if (visited.has(current.parent_location_id)) break;
+
+        const parent = cache.byId.get(current.parent_location_id);
+        if (!parent) break;
+
+        ancestors.unshift(parent);
+        visited.add(parent.id);
+        current = parent;
+      }
+
+      return ancestors;
+    },
+
+    getRootLocations: () => {
+      const cache = get().cache;
+      return Array.from(cache.rootIds)
+        .map((id) => cache.byId.get(id))
+        .filter((loc): loc is Location => loc !== undefined);
+    },
+
+    getActiveLocations: () => {
+      const cache = get().cache;
+      return Array.from(cache.activeIds)
+        .map((id) => cache.byId.get(id))
+        .filter((loc): loc is Location => loc !== undefined);
+    },
+
+    getFilteredLocations: () => {
+      const { cache, filters } = get();
+      const allLocations = Array.from(cache.byId.values());
+      return filterLocations(allLocations, filters);
+    },
+
+    getSortedLocations: (locations: Location[]) => {
+      const { sort } = get();
+      return sortLocations(locations, sort);
+    },
+
+    getPaginatedLocations: (locations: Location[]) => {
+      const { pagination } = get();
+      return paginateLocations(locations, pagination);
+    },
+
+    setSelectedLocation: (id: number | null) => {
+      set({ selectedLocationId: id });
+    },
+
+    setFilters: (filters: Partial<LocationFilters>) => {
+      set((state) => ({
+        filters: { ...state.filters, ...filters },
+      }));
+    },
+
+    setSort: (sort: LocationSort) => {
+      set({ sort });
+    },
+
+    setPagination: (pagination: Partial<PaginationState>) => {
+      set((state) => ({
+        pagination: { ...state.pagination, ...pagination },
+      }));
+    },
+
+    resetFilters: () => {
+      set({
+        filters: {
+          search: '',
+          identifier: '',
+          is_active: 'all',
+        },
+      });
+    },
+
+    setLoading: (isLoading: boolean) => {
+      set({ isLoading });
+    },
+
+    setError: (error: string | null) => {
+      set({ error });
+    },
+  };
 }
 ```
-
-**`getAncestors(id: number): Location[]`**:
-```typescript
-function getAncestors(id: number): Location[] {
-  const cache = get().cache;
-  const ancestors: Location[] = [];
-  const visited = new Set<number>([id]);
-
-  let current = cache.byId.get(id);
-
-  while (current && current.parent_location_id !== null) {
-    if (visited.has(current.parent_location_id)) break; // Prevent cycles
-
-    const parent = cache.byId.get(current.parent_location_id);
-    if (!parent) break;
-
-    ancestors.unshift(parent); // Add to front (root first)
-    visited.add(parent.id);
-    current = parent;
-  }
-
-  return ancestors;
-}
-```
-
-**Filtered Data Functions**:
-
-**`getFilteredLocations(): Location[]`**:
-```typescript
-function getFilteredLocations(): Location[] {
-  const { cache, filters } = get();
-  const allLocations = Array.from(cache.byId.values());
-
-  return filterLocations(allLocations, filters); // Use Phase 1 filter
-}
-```
-
-**Validation**:
-- [ ] `addLocation` maintains all index invariants
-- [ ] `updateLocation` handles identifier change correctly
-- [ ] `updateLocation` handles re-parenting correctly
-- [ ] `deleteLocation` cleans up all indexes
-- [ ] `getChildren` returns immediate children only
-- [ ] `getDescendants` returns full subtree
-- [ ] `getAncestors` returns root-to-parent chain
-- [ ] All hierarchy queries handle cycles gracefully
 
 ---
 
@@ -431,7 +509,6 @@ function getFilteredLocations(): Location[] {
 
 **Purpose**: LocalStorage middleware with TTL enforcement
 
-**Implementation Pattern** (follow Assets):
 ```typescript
 import { StateCreator, StoreMutatorFn } from 'zustand';
 import { serializeCache, deserializeCache } from '@/lib/location/transforms';
@@ -439,67 +516,64 @@ import type { LocationState } from './locationStore';
 
 const STORAGE_KEY = 'location-store';
 
-export const locationPersistMiddleware: StoreMutatorFn = (config) => (set, get, api) => {
-  // Load from LocalStorage on init
+const loadFromLocalStorage = () => {
   const stored = localStorage.getItem(STORAGE_KEY);
+  if (!stored) return null;
 
-  let initialState = {};
-
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      const cache = deserializeCache(parsed.cache);
-
-      if (cache) {
-        const now = Date.now();
-        const age = now - cache.lastFetched;
-
-        // Only restore if within TTL
-        if (age < cache.ttl) {
-          initialState = { cache };
-        }
-      }
-    } catch (error) {
-      console.error('[LocationStore] Failed to restore from LocalStorage:', error);
-      localStorage.removeItem(STORAGE_KEY);
-    }
+  try {
+    return JSON.parse(stored);
+  } catch (error) {
+    console.error('[LocationStore] LocalStorage parse failed:', error);
+    localStorage.removeItem(STORAGE_KEY);
+    return null;
   }
+};
 
-  // Create store with initial state
-  const store = config(
-    (args) => {
-      set(args);
+const isCacheValid = (cache: any, now: number) => {
+  if (!cache) return false;
 
-      // Persist to LocalStorage after state updates
-      const state = get() as LocationState;
+  const age = now - cache.lastFetched;
+  return age < cache.ttl;
+};
 
-      try {
-        const serialized = {
-          cache: serializeCache(state.cache),
-        };
+const restoreCacheFromStorage = () => {
+  const stored = loadFromLocalStorage();
+  if (!stored?.cache) return {};
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
-      } catch (error) {
-        console.error('[LocationStore] Failed to persist to LocalStorage:', error);
-      }
-    },
-    get,
-    api
-  );
+  const cache = deserializeCache(stored.cache);
+  if (!cache) return {};
+
+  const now = Date.now();
+  if (!isCacheValid(cache, now)) return {};
+
+  return { cache };
+};
+
+const persistToLocalStorage = (state: LocationState) => {
+  try {
+    const serialized = {
+      cache: serializeCache(state.cache),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
+  } catch (error) {
+    console.error('[LocationStore] LocalStorage save failed:', error);
+  }
+};
+
+export const locationPersistMiddleware: StoreMutatorFn = (config) => (set, get, api) => {
+  const initialState = restoreCacheFromStorage();
+
+  const wrappedSet = (args: any) => {
+    set(args);
+    persistToLocalStorage(get() as LocationState);
+  };
 
   return {
-    ...store,
+    ...config(wrappedSet, get, api),
     ...initialState,
   };
 };
 ```
-
-**Validation**:
-- [ ] Cache persists to LocalStorage on updates
-- [ ] Cache restores from LocalStorage on init
-- [ ] Expired cache is ignored (TTL enforced)
-- [ ] Corrupted cache is cleared
-- [ ] No errors thrown during serialize/deserialize
 
 ---
 
@@ -511,74 +585,37 @@ export const locationPersistMiddleware: StoreMutatorFn = (config) => (set, get, 
 
 **Test Coverage** (minimum 30 tests):
 
-**Cache Operations** (12 tests):
-1. `addLocation` - adds location to all indexes
-2. `addLocation` - handles root location (null parent)
-3. `addLocation` - handles child location (with parent)
-4. `addLocation` - adds to active set if is_active=true
-5. `updateLocation` - updates location properties
-6. `updateLocation` - handles identifier change
-7. `updateLocation` - handles re-parenting
-8. `updateLocation` - handles active status toggle
-9. `deleteLocation` - removes from all indexes
-10. `deleteLocation` - removes from parent's children
-11. `setLocations` - replaces entire cache
-12. `clearCache` - resets to empty state
-
-**Hierarchy Queries** (9 tests):
-13. `getChildren` - returns immediate children only
-14. `getChildren` - returns empty array if no children
-15. `getDescendants` - returns full subtree
-16. `getDescendants` - handles deep hierarchies
-17. `getDescendants` - handles cycles gracefully
-18. `getAncestors` - returns root-to-parent chain
-19. `getAncestors` - returns empty for root location
-20. `getRootLocations` - returns all roots
-21. `getActiveLocations` - returns only active locations
-
-**Filtered Data** (5 tests):
-22. `getFilteredLocations` - applies search filter
-23. `getFilteredLocations` - applies identifier filter
-24. `getFilteredLocations` - applies date range
-25. `getSortedLocations` - sorts by field and direction
-26. `getPaginatedLocations` - returns correct page
-
-**LocalStorage** (4 tests):
-27. Persists cache to LocalStorage on add
-28. Restores cache from LocalStorage on init
-29. Ignores expired cache (TTL)
-30. Clears corrupted cache
-
-**Test Pattern**:
 ```typescript
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useLocationStore } from './locationStore';
 import type { Location } from '@/types/locations';
+
+const createMockLocation = (overrides = {}): Location => ({
+  id: 1,
+  org_id: 1,
+  identifier: 'usa',
+  name: 'United States',
+  description: '',
+  parent_location_id: null,
+  path: 'usa',
+  depth: 1,
+  valid_from: '2024-01-01',
+  valid_to: null,
+  is_active: true,
+  metadata: {},
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+  ...overrides,
+});
 
 describe('LocationStore', () => {
   beforeEach(() => {
     useLocationStore.getState().clearCache();
   });
 
-  describe('addLocation()', () => {
-    it('should add location to all indexes', () => {
-      const location: Location = {
-        id: 1,
-        org_id: 1,
-        identifier: 'usa',
-        name: 'United States',
-        description: '',
-        parent_location_id: null,
-        path: 'usa',
-        depth: 1,
-        valid_from: '2024-01-01',
-        valid_to: null,
-        is_active: true,
-        metadata: {},
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      };
-
+  describe('Cache Operations', () => {
+    it('adds location to all indexes', () => {
+      const location = createMockLocation();
       useLocationStore.getState().addLocation(location);
 
       const { cache } = useLocationStore.getState();
@@ -590,9 +627,90 @@ describe('LocationStore', () => {
       expect(cache.allIds).toContain(1);
       expect(cache.allIdentifiers).toContain('usa');
     });
+
+    it('updates location identifier correctly', () => {
+      const location = createMockLocation();
+      useLocationStore.getState().addLocation(location);
+
+      useLocationStore.getState().updateLocation(1, { identifier: 'united_states' });
+
+      const { cache } = useLocationStore.getState();
+
+      expect(cache.byIdentifier.has('usa')).toBe(false);
+      expect(cache.byIdentifier.has('united_states')).toBe(true);
+      expect(cache.allIdentifiers).toContain('united_states');
+    });
+
+    it('handles re-parenting correctly', () => {
+      const root = createMockLocation({ id: 1, identifier: 'root' });
+      const child = createMockLocation({ id: 2, identifier: 'child', parent_location_id: 1 });
+
+      useLocationStore.getState().addLocation(root);
+      useLocationStore.getState().addLocation(child);
+
+      useLocationStore.getState().updateLocation(2, { parent_location_id: null });
+
+      const { cache } = useLocationStore.getState();
+
+      expect(cache.rootIds.has(2)).toBe(true);
+      expect(cache.byParentId.get(1)?.has(2)).toBe(false);
+      expect(cache.byParentId.get(null)?.has(2)).toBe(true);
+    });
+
+    it('removes location from all indexes', () => {
+      const location = createMockLocation();
+      useLocationStore.getState().addLocation(location);
+      useLocationStore.getState().deleteLocation(1);
+
+      const { cache } = useLocationStore.getState();
+
+      expect(cache.byId.has(1)).toBe(false);
+      expect(cache.byIdentifier.has('usa')).toBe(false);
+      expect(cache.rootIds.has(1)).toBe(false);
+      expect(cache.activeIds.has(1)).toBe(false);
+      expect(cache.allIds).not.toContain(1);
+    });
   });
 
-  // ... more tests
+  describe('Hierarchy Queries', () => {
+    beforeEach(() => {
+      const root = createMockLocation({ id: 1, identifier: 'root' });
+      const child1 = createMockLocation({ id: 2, identifier: 'child1', parent_location_id: 1 });
+      const child2 = createMockLocation({ id: 3, identifier: 'child2', parent_location_id: 1 });
+      const grandchild = createMockLocation({ id: 4, identifier: 'grandchild', parent_location_id: 2 });
+
+      useLocationStore.getState().setLocations([root, child1, child2, grandchild]);
+    });
+
+    it('returns immediate children only', () => {
+      const children = useLocationStore.getState().getChildren(1);
+
+      expect(children).toHaveLength(2);
+      expect(children.map((c) => c.id)).toEqual([2, 3]);
+    });
+
+    it('returns all descendants', () => {
+      const descendants = useLocationStore.getState().getDescendants(1);
+
+      expect(descendants).toHaveLength(3);
+      expect(descendants.map((d) => d.id)).toContain(2);
+      expect(descendants.map((d) => d.id)).toContain(3);
+      expect(descendants.map((d) => d.id)).toContain(4);
+    });
+
+    it('returns ancestors in root-first order', () => {
+      const ancestors = useLocationStore.getState().getAncestors(4);
+
+      expect(ancestors).toHaveLength(2);
+      expect(ancestors[0].id).toBe(1);
+      expect(ancestors[1].id).toBe(2);
+    });
+
+    it('returns empty array for root ancestors', () => {
+      const ancestors = useLocationStore.getState().getAncestors(1);
+      expect(ancestors).toHaveLength(0);
+    });
+  });
 });
 ```
 
@@ -601,13 +719,15 @@ describe('LocationStore', () => {
 ## Validation Gates
 
 **After EVERY file**:
-1. `just frontend typecheck` - No type errors
-2. `just frontend lint` - Clean (ignore pre-existing)
-3. `just frontend test stores/locations/` - All tests passing
+```bash
+just frontend typecheck
+just frontend lint
+just frontend test stores/locations/
+```
 
 **Final Validation**:
 ```bash
-just frontend validate  # Runs all checks
+just frontend validate
 ```
 
 **Success Criteria**:
@@ -617,35 +737,6 @@ just frontend validate  # Runs all checks
 - [ ] Hierarchy queries correct
 - [ ] LocalStorage persistence works
 - [ ] TTL enforcement works
-- [ ] No console errors
-
----
-
-## Risk Assessment
-
-**Low Risk**:
-- Following proven Assets store pattern exactly
-- Reusing Phase 1 serialize/deserialize functions
-- Clear test coverage requirements
-
-**Medium Risk**:
-- Hierarchy queries complexity (cycles, deep trees)
-- **Mitigation**: Comprehensive tests with cycle detection
-
-**Potential Issues**:
-- Re-parenting complexity
-- **Mitigation**: Explicit test cases for re-parenting edge cases
-
----
-
-## Success Metrics
-
-- ✅ 30+ unit tests passing
-- ✅ 100% TypeScript coverage
-- ✅ Cache invariants maintained
-- ✅ O(1) primary lookups
-- ✅ LocalStorage persistence functional
-- ✅ Ready for Phase 3 (React Hooks)
 
 ---
 
@@ -660,6 +751,3 @@ just frontend validate  # Runs all checks
 - Types: `frontend/src/types/locations/index.ts`
 - Transforms: `frontend/src/lib/location/transforms.ts`
 - Filters: `frontend/src/lib/location/filters.ts`
-
-**Backend Reference**:
-- Locations Handler: `backend/internal/handlers/locations/locations.go`
