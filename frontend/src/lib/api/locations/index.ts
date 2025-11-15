@@ -20,8 +20,8 @@ import type {
  * Options for listing locations with pagination
  */
 export interface ListLocationsOptions {
-  limit?: number; // Number of locations to return (backend default: 10)
-  offset?: number; // Number of locations to skip (backend default: 0)
+  limit?: number;
+  offset?: number;
 }
 
 /**

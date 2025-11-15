@@ -161,10 +161,8 @@ describe('Filters', () => {
     });
 
     it('should handle date range boundaries', () => {
-      // ISO string comparison: '2024-02-01T00:00:00Z' > '2024-02-01' is true
-      // So the last item is excluded
       const result = filterByCreatedDate(mockLocations, '2024-01-01', '2024-02-01');
-      expect(result).toHaveLength(2); // usa and warehouse_1 included, old_building excluded
+      expect(result).toHaveLength(2);
     });
   });
 

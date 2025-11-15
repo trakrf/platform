@@ -11,20 +11,20 @@
  * Reference: backend/internal/models/location/location.go
  */
 export interface Location {
-  id: number; // Go: int
-  org_id: number; // Go: int
-  identifier: string; // Go: string - ltree-safe identifier
-  name: string; // Go: string
-  description: string; // Go: string
-  parent_location_id: number | null; // Go: *int
-  path: string; // Go: string - PostgreSQL ltree path
-  depth: number; // Go: int - Computed from path
-  valid_from: string; // Go: time.Time - ISO 8601 string
-  valid_to: string | null; // Go: *time.Time - ISO 8601 string
-  is_active: boolean; // Go: bool
-  metadata: Record<string, any>; // Go: map[string]interface{}
-  created_at: string; // Go: time.Time - ISO 8601 string
-  updated_at: string; // Go: time.Time - ISO 8601 string
+  id: number;
+  org_id: number;
+  identifier: string;
+  name: string;
+  description: string;
+  parent_location_id: number | null;
+  path: string;
+  depth: number;
+  valid_from: string;
+  valid_to: string | null;
+  is_active: boolean;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
 }
 
 /**
@@ -36,8 +36,8 @@ export interface CreateLocationRequest {
   identifier: string;
   parent_location_id?: number | null;
   description?: string;
-  valid_from: string; // ISO 8601 date string
-  valid_to?: string | null; // ISO 8601 date string
+  valid_from: string;
+  valid_to?: string | null;
   is_active: boolean;
   metadata?: Record<string, any>;
 }
@@ -51,8 +51,8 @@ export interface UpdateLocationRequest {
   identifier?: string;
   parent_location_id?: number | null;
   description?: string;
-  valid_from?: string; // ISO 8601 date string
-  valid_to?: string | null; // ISO 8601 date string
+  valid_from?: string;
+  valid_to?: string | null;
   is_active?: boolean;
   metadata?: Record<string, any>;
 }
@@ -88,11 +88,11 @@ export interface DeleteResponse {
  * UI state for filtering locations
  */
 export interface LocationFilters {
-  search: string; // Search by identifier or name
-  identifier: string; // Filter by exact identifier
-  is_active: 'all' | 'active' | 'inactive'; // Filter by active status
-  created_after?: string; // ISO 8601 date string
-  created_before?: string; // ISO 8601 date string
+  search: string;
+  identifier: string;
+  is_active: 'all' | 'active' | 'inactive';
+  created_after?: string;
+  created_before?: string;
 }
 
 /**
@@ -118,13 +118,13 @@ export interface PaginationState {
  * Optimized for tree navigation and filtering operations
  */
 export interface LocationCache {
-  byId: Map<number, Location>; // Fast ID lookup
-  byIdentifier: Map<string, Location>; // Fast identifier lookup
-  byParentId: Map<number | null, Set<number>>; // Fast children lookup by parent ID
-  rootIds: Set<number>; // IDs of root locations (parent_location_id = null)
-  activeIds: Set<number>; // IDs of active locations (is_active = true)
-  allIds: number[]; // All location IDs (for iteration)
-  allIdentifiers: string[]; // All identifiers (cached for dropdown performance)
-  lastFetched: number; // Timestamp of last cache update
-  ttl: number; // Time to live in milliseconds
+  byId: Map<number, Location>;
+  byIdentifier: Map<string, Location>;
+  byParentId: Map<number | null, Set<number>>;
+  rootIds: Set<number>;
+  activeIds: Set<number>;
+  allIds: number[];
+  allIdentifiers: string[];
+  lastFetched: number;
+  ttl: number;
 }
