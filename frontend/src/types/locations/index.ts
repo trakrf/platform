@@ -58,6 +58,14 @@ export interface UpdateLocationRequest {
 }
 
 /**
+ * Request payload for moving a location to a new parent
+ * Reference: backend/internal/handlers/locations/locations.go Move handler
+ */
+export interface MoveLocationRequest {
+  new_parent_id: number | null;
+}
+
+/**
  * API response for single location operations (get, create, update)
  * Reference: backend/internal/handlers/locations/locations.go response format
  */
