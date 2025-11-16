@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLocations, useLocationMutations } from '@/hooks/locations';
 import { useLocationStore } from '@/stores/locations/locationStore';
+import { useUIStore } from '@/stores';
 import { FloatingActionButton, EmptyState, NoResults, ConfirmModal } from '@/components/shared';
 import { LocationStats } from '@/components/locations/LocationStats';
 import { LocationSearchSort } from '@/components/locations/LocationSearchSort';
@@ -21,6 +22,11 @@ export default function LocationsScreen() {
 
   const { isLoading } = useLocations();
   const { delete: deleteLocation } = useLocationMutations();
+  const { setActiveTab } = useUIStore();
+
+  useEffect(() => {
+    setActiveTab('locations');
+  }, [setActiveTab]);
 
   const cache = useLocationStore((state) => state.cache);
   const filters = useLocationStore((state) => state.filters);
