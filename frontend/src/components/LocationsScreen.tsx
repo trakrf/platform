@@ -1,48 +1,175 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Plus, MapPin } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useLocations, useLocationMutations } from '@/hooks/locations';
+import { useLocationStore } from '@/stores/locations/locationStore';
 import { useUIStore } from '@/stores';
-import { MapPinned, Home as HomeIcon } from 'lucide-react';
+import { FloatingActionButton, EmptyState, NoResults, ConfirmModal } from '@/components/shared';
+import { LocationStats } from '@/components/locations/LocationStats';
+import { LocationSearchSort } from '@/components/locations/LocationSearchSort';
+import { LocationTable } from '@/components/locations/LocationTable';
+import { LocationCard } from '@/components/locations/LocationCard';
+import { LocationFormModal } from '@/components/locations/LocationFormModal';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import type { Location } from '@/types/locations';
 
 export default function LocationsScreen() {
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [deletingLocation, setDeletingLocation] = useState<Location | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const { isLoading } = useLocations();
+  const { delete: deleteLocation } = useLocationMutations();
   const { setActiveTab } = useUIStore();
 
-  const handleBackToHome = () => {
-    setActiveTab('home');
-    window.history.pushState({ tab: 'home' }, '', '#home');
+  useEffect(() => {
+    setActiveTab('locations');
+  }, [setActiveTab]);
+
+  const cache = useLocationStore((state) => state.cache);
+  const filters = useLocationStore((state) => state.filters);
+  const sort = useLocationStore((state) => state.sort);
+  const setFilters = useLocationStore((state) => state.setFilters);
+
+  const filteredLocations = useMemo(() => {
+    return useLocationStore.getState().getFilteredLocations();
+  }, [cache.byId.size, filters, sort]);
+
+  const paginatedLocations = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredLocations.slice(startIndex, endIndex);
+  }, [filteredLocations, currentPage, pageSize]);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, sort]);
+
+  const hasActiveFilters =
+    (filters.is_active !== 'all' && filters.is_active !== undefined) ||
+    (filters.search && filters.search.trim() !== '');
+
+  const handleEditLocation = (location: Location) => {
+    setEditingLocation(location);
+  };
+
+  const handleDeleteLocation = (location: Location) => {
+    setDeletingLocation(location);
+  };
+
+  const confirmDelete = async () => {
+    if (deletingLocation) {
+      try {
+        await deleteLocation(deletingLocation.id);
+        toast.success(`Location "${deletingLocation.identifier}" deleted successfully`);
+        setDeletingLocation(null);
+      } catch (error: any) {
+        console.error('Delete error:', error);
+        toast.error(error.message || 'Failed to delete location');
+      }
+    }
+  };
+
+  const handleClearFilters = () => {
+    setFilters({ is_active: 'all', search: '' });
+  };
+
+  const handleCreateClick = () => {
+    setIsCreateModalOpen(true);
+  };
+
+  const handleLocationClick = (location: Location) => {
+    setEditingLocation(location);
   };
 
   return (
     <ProtectedRoute>
-      <div className="max-w-4xl mx-auto">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8">
-        {/* Header with icon */}
-        <div className="flex items-center justify-center mb-6">
-          <div className="w-16 h-16 text-green-600 dark:text-green-400">
-            <MapPinned className="w-full h-full" />
+      <div className="h-full flex flex-col p-2">
+        <div className="flex gap-4 flex-1 overflow-hidden">
+          <div className="flex-1 flex flex-col gap-4 min-w-0">
+            <LocationSearchSort />
+
+            {!isLoading && filteredLocations.length === 0 && !hasActiveFilters && (
+              <EmptyState
+                icon={MapPin}
+                title="No locations yet"
+                description="Get started by adding your first location"
+                action={{
+                  label: 'Create Location',
+                  onClick: handleCreateClick,
+                }}
+              />
+            )}
+
+            {!isLoading && filteredLocations.length === 0 && hasActiveFilters && (
+              <NoResults searchTerm={filters.search || ''} onClearFilters={handleClearFilters} />
+            )}
+
+            {!isLoading && filteredLocations.length > 0 && (
+              <>
+                <LocationTable
+                  loading={isLoading}
+                  locations={paginatedLocations}
+                  totalLocations={filteredLocations.length}
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  onLocationClick={handleLocationClick}
+                  onEdit={handleEditLocation}
+                  onDelete={handleDeleteLocation}
+                />
+
+                <div className="md:hidden space-y-3">
+                  {paginatedLocations.map((location) => (
+                    <LocationCard
+                      key={location.id}
+                      location={location}
+                      variant="card"
+                      onClick={() => handleLocationClick(location)}
+                      onEdit={handleEditLocation}
+                      onDelete={handleDeleteLocation}
+                      showActions={true}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
+        <LocationStats className="mt-6" />
 
-        {/* Title */}
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-center mb-4">
-          Locations Management
-        </h1>
+        <FloatingActionButton
+          icon={Plus}
+          onClick={handleCreateClick}
+          ariaLabel="Create new location"
+        />
 
-        {/* Description */}
-        <p className="text-lg text-gray-600 dark:text-gray-400 text-center mb-8">
-          Location tracking and management features are coming soon. This page will allow you to view, create, edit, and manage your locations.
-        </p>
+        <LocationFormModal
+          isOpen={isCreateModalOpen}
+          mode="create"
+          onClose={() => setIsCreateModalOpen(false)}
+        />
 
-        {/* Back to Home button */}
-        <div className="flex justify-center">
-          <button
-            onClick={handleBackToHome}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium"
-          >
-            <HomeIcon className="w-5 h-5" />
-            Back to Home
-          </button>
-        </div>
+        {editingLocation && (
+          <LocationFormModal
+            isOpen={true}
+            mode="edit"
+            location={editingLocation}
+            onClose={() => setEditingLocation(null)}
+          />
+        )}
+
+        <ConfirmModal
+          isOpen={!!deletingLocation}
+          title="Delete Location"
+          message={`Are you sure you want to delete "${deletingLocation?.identifier}"? This action cannot be undone.`}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeletingLocation(null)}
+        />
       </div>
-    </div>
     </ProtectedRoute>
   );
 }
