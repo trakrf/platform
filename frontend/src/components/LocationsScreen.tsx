@@ -117,7 +117,7 @@ export default function LocationsScreen() {
             <div className="flex items-center justify-between gap-4">
               <LocationSearchSort className="flex-1" />
 
-              <div className="hidden md:flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+              <div className="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
                 <button
                   onClick={() => setViewMode('list')}
                   className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
