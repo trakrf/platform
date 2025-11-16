@@ -74,7 +74,9 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     locate: { title: "Find Item", subtitle: "Search for a specific item" },
     barcode: { title: "Barcode Scanner", subtitle: "Scan barcodes to identify items" },
     settings: { title: "Device Setup", subtitle: "Configure your RFID reader" },
-    help: { title: "Help", subtitle: "Quick answers to get you started" }
+    help: { title: "Help", subtitle: "Quick answers to get you started" },
+    assets: { title: "Assets", subtitle: "Manage your organization's assets" },
+    locations: { title: "Locations", subtitle: "Manage your organization's locations" }
   };
   
   const [isBrowserSupported, setIsBrowserSupported] = React.useState(true);
