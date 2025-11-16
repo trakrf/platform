@@ -2,26 +2,28 @@
 
 **Status**: Ready for Implementation
 **Dependencies**: Phase 1 (Data Foundation) - ✅ Complete
-**Estimated Time**: 2 days
+**Estimated Time**: 1.5 days
 **Branch**: `feature/locations-crud-frontend-phase2`
 
 ## Overview
 
 Phase 2 implements the Zustand state management layer for locations, including:
-- Hierarchical cache with optimized lookups
-- LocalStorage persistence with TTL
+- In-memory hierarchical cache with optimized lookups
+- Lightweight LocalStorage for filter metadata only (identifiers, last fetch timestamp)
 - Cache operations maintaining index consistency
 - Hierarchy query functions
 - Comprehensive unit tests
+
+**Design Philosophy**: Fetch-first, cache in-memory only. LocalStorage stores minimal metadata for filters.
 
 This phase builds directly on Phase 1's pure functions and types.
 
 ## Goals
 
-1. ✅ Create Zustand store with hierarchical cache structure
+1. ✅ Create Zustand store with in-memory hierarchical cache
 2. ✅ Implement all cache operations (add, update, delete, clear)
 3. ✅ Implement hierarchy queries (ancestors, descendants, children, roots)
-4. ✅ LocalStorage persistence with TTL enforcement
+4. ✅ Lightweight LocalStorage for filter metadata (identifiers only)
 5. ✅ Maintain index consistency across all operations
 6. ✅ Unit test all store actions and cache operations
 
@@ -29,18 +31,19 @@ This phase builds directly on Phase 1's pure functions and types.
 
 ### Store Structure
 
-Following Assets store pattern at `frontend/src/stores/assets/assetStore.ts`:
+Simpler than Assets store - no heavy persistence needed:
 
 ```
 frontend/src/stores/locations/
-├── locationStore.ts          # Main Zustand store (state + actions)
-├── locationActions.ts        # Store actions (cache operations)
-└── locationPersistence.ts    # LocalStorage middleware
+├── locationStore.ts          # Main Zustand store (state + actions + lightweight persistence)
+└── locationStore.test.ts     # Unit tests
 ```
+
+**No separate action/persistence files needed** - everything in one file for simplicity.
 
 ### Cache Design
 
-**Optimized for Hierarchy Operations**:
+**In-Memory Only** (cleared on page refresh):
 - `byId`: O(1) lookup by ID
 - `byIdentifier`: O(1) lookup by identifier
 - `byParentId`: O(1) children lookup
@@ -48,6 +51,14 @@ frontend/src/stores/locations/
 - `activeIds`: O(1) active location filtering
 - `allIds`: Ordered list for iteration
 - `allIdentifiers`: Cached for dropdown performance
+
+**LocalStorage (Lightweight)** - Only store filter metadata:
+```typescript
+interface LocationMetadata {
+  allIdentifiers: string[];
+  lastFetched: number;
+}
+```
 
 **Cache Invariants** (MUST maintain):
 1. Every location in `byId` also in `byIdentifier`
@@ -61,7 +72,7 @@ frontend/src/stores/locations/
 
 ### 1. `frontend/src/stores/locations/locationStore.ts`
 
-**Purpose**: Main Zustand store combining state and actions
+**Purpose**: Complete Zustand store with in-memory cache and lightweight persistence
 
 **State Shape**:
 ```typescript
@@ -106,10 +117,39 @@ interface LocationState {
 ```typescript
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { locationPersistMiddleware } from './locationPersistence';
-import { createCacheActions } from './locationActions';
+import type { Location, LocationCache, LocationFilters, LocationSort, PaginationState } from '@/types/locations';
+import { filterLocations, sortLocations, paginateLocations, extractUniqueIdentifiers } from '@/lib/location/filters';
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const STORAGE_KEY = 'location-metadata';
+
+interface LocationMetadata {
+  allIdentifiers: string[];
+  lastFetched: number;
+}
+
+const loadMetadata = (): Partial<{ allIdentifiers: string[] }> => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return {};
+
+    const metadata: LocationMetadata = JSON.parse(stored);
+    return { allIdentifiers: metadata.allIdentifiers };
+  } catch {
+    return {};
+  }
+};
+
+const saveMetadata = (allIdentifiers: string[]) => {
+  try {
+    const metadata: LocationMetadata = {
+      allIdentifiers,
+      lastFetched: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(metadata));
+  } catch (error) {
+    console.error('[LocationStore] Failed to save metadata:', error);
+  }
+};
 
 const createEmptyCache = (): LocationCache => ({
   byId: new Map(),
@@ -120,56 +160,127 @@ const createEmptyCache = (): LocationCache => ({
   allIds: [],
   allIdentifiers: [],
   lastFetched: 0,
-  ttl: CACHE_TTL_MS,
+  ttl: 0,
 });
 
-const createInitialState = () => ({
-  cache: createEmptyCache(),
-  selectedLocationId: null,
-  filters: {
-    search: '',
-    identifier: '',
-    is_active: 'all' as const,
-  },
-  pagination: {
-    currentPage: 1,
-    pageSize: 10,
-    totalCount: 0,
-    totalPages: 0,
-  },
-  sort: {
-    field: 'identifier' as const,
-    direction: 'asc' as const,
-  },
-  isLoading: false,
-  error: null,
-});
+interface LocationState {
+  cache: LocationCache;
+  selectedLocationId: number | null;
+  filters: LocationFilters;
+  pagination: PaginationState;
+  sort: LocationSort;
+  isLoading: boolean;
+  error: string | null;
+
+  addLocation: (location: Location) => void;
+  updateLocation: (id: number, updates: Partial<Location>) => void;
+  deleteLocation: (id: number) => void;
+  setLocations: (locations: Location[]) => void;
+  clearCache: () => void;
+
+  getLocationById: (id: number) => Location | undefined;
+  getLocationByIdentifier: (identifier: string) => Location | undefined;
+  getChildren: (id: number) => Location[];
+  getDescendants: (id: number) => Location[];
+  getAncestors: (id: number) => Location[];
+  getRootLocations: () => Location[];
+  getActiveLocations: () => Location[];
+
+  getFilteredLocations: () => Location[];
+  getSortedLocations: (locations: Location[]) => Location[];
+  getPaginatedLocations: (locations: Location[]) => Location[];
+
+  setSelectedLocation: (id: number | null) => void;
+  setFilters: (filters: Partial<LocationFilters>) => void;
+  setSort: (sort: LocationSort) => void;
+  setPagination: (pagination: Partial<PaginationState>) => void;
+  resetFilters: () => void;
+  setLoading: (isLoading: boolean) => void;
+  setError: (error: string | null) => void;
+}
 
 export const useLocationStore = create<LocationState>()(
-  devtools(
-    locationPersistMiddleware(
-      (set, get) => ({
-        ...createInitialState(),
-        ...createCacheActions(set, get),
-      })
-    )
-  )
+  devtools((set, get) => {
+    const metadata = loadMetadata();
+
+    return {
+      cache: {
+        ...createEmptyCache(),
+        allIdentifiers: metadata.allIdentifiers || [],
+      },
+      selectedLocationId: null,
+      filters: {
+        search: '',
+        identifier: '',
+        is_active: 'all' as const,
+      },
+      pagination: {
+        currentPage: 1,
+        pageSize: 10,
+        totalCount: 0,
+        totalPages: 0,
+      },
+      sort: {
+        field: 'identifier' as const,
+        direction: 'asc' as const,
+      },
+      isLoading: false,
+      error: null,
+
+      // All actions and helpers defined inline below...
+    };
+  })
 );
 ```
 
----
-
-### 2. `frontend/src/stores/locations/locationActions.ts`
-
-**Purpose**: Cache operations maintaining all index invariants
-
-**Core Actions**:
+**Action Implementations** (inside the store):
 
 ```typescript
-import type { Location, LocationCache } from '@/types/locations';
-import { filterLocations, sortLocations, paginateLocations } from '@/lib/location/filters';
+const ensureParentChildrenSet = (cache: LocationCache, parentId: number | null) => {
+  if (!cache.byParentId.has(parentId)) {
+    cache.byParentId.set(parentId, new Set());
+  }
+};
 
-export function createCacheActions(set, get) {
+const updatePrimaryIndexes = (cache: LocationCache, location: Location) => {
+  cache.byId.set(location.id, location);
+  cache.byIdentifier.set(location.identifier, location);
+};
+
+const updateParentChildMapping = (cache: LocationCache, locationId: number, parentId: number | null) => {
+  ensureParentChildrenSet(cache, parentId);
+  cache.byParentId.get(parentId)!.add(locationId);
+};
+
+const updateRootSet = (cache: LocationCache, locationId: number, parentId: number | null) => {
+  if (parentId === null) {
+    cache.rootIds.add(locationId);
+  }
+};
+
+const updateActiveSet = (cache: LocationCache, location: Location) => {
+  if (location.is_active) {
+    cache.activeIds.add(location.id);
+  }
+};
+
+const rebuildOrderedLists = (cache: LocationCache) => {
+  cache.allIds = Array.from(cache.byId.keys());
+  cache.allIdentifiers = Array.from(cache.byIdentifier.keys()).sort();
+};
+
+return {
+  cache: createEmptyCache(),
+  selectedLocationId: null,
+  filters: { search: '', identifier: '', is_active: 'all' as const },
+  pagination: { currentPage: 1, pageSize: 10, totalCount: 0, totalPages: 0 },
+  sort: { field: 'identifier' as const, direction: 'asc' as const },
+  isLoading: false,
+  error: null,
+
+  addLocation: (location: Location) => {
+    set((state) => {
+      const cache = { ...state.cache };
   const ensureParentChildrenSet = (cache: LocationCache, parentId: number | null) => {
     if (!cache.byParentId.has(parentId)) {
       cache.byParentId.set(parentId, new Set());
@@ -503,77 +614,10 @@ export function createCacheActions(set, get) {
 }
 ```
 
----
-
-### 3. `frontend/src/stores/locations/locationPersistence.ts`
-
-**Purpose**: LocalStorage middleware with TTL enforcement
-
-```typescript
-import { StateCreator, StoreMutatorFn } from 'zustand';
-import { serializeCache, deserializeCache } from '@/lib/location/transforms';
-import type { LocationState } from './locationStore';
-
-const STORAGE_KEY = 'location-store';
-
-const loadFromLocalStorage = () => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return null;
-
-  try {
-    return JSON.parse(stored);
-  } catch (error) {
-    console.error('[LocationStore] LocalStorage parse failed:', error);
-    localStorage.removeItem(STORAGE_KEY);
-    return null;
-  }
-};
-
-const isCacheValid = (cache: any, now: number) => {
-  if (!cache) return false;
-
-  const age = now - cache.lastFetched;
-  return age < cache.ttl;
-};
-
-const restoreCacheFromStorage = () => {
-  const stored = loadFromLocalStorage();
-  if (!stored?.cache) return {};
-
-  const cache = deserializeCache(stored.cache);
-  if (!cache) return {};
-
-  const now = Date.now();
-  if (!isCacheValid(cache, now)) return {};
-
-  return { cache };
-};
-
-const persistToLocalStorage = (state: LocationState) => {
-  try {
-    const serialized = {
-      cache: serializeCache(state.cache),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
-  } catch (error) {
-    console.error('[LocationStore] LocalStorage save failed:', error);
-  }
-};
-
-export const locationPersistMiddleware: StoreMutatorFn = (config) => (set, get, api) => {
-  const initialState = restoreCacheFromStorage();
-
-  const wrappedSet = (args: any) => {
-    set(args);
-    persistToLocalStorage(get() as LocationState);
-  };
-
-  return {
-    ...config(wrappedSet, get, api),
-    ...initialState,
-  };
-};
-```
+**Note on Persistence**:
+- Only `allIdentifiers` persisted to LocalStorage for filter dropdowns
+- Full cache is in-memory only (cleared on refresh)
+- Call `saveMetadata(cache.allIdentifiers)` after `setLocations()` to update localStorage
 
 ---
 
