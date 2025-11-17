@@ -13,7 +13,6 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
-  // Get full asset details from store for modal
   const asset = tag.assetId ? useAssetStore.getState().getAssetById(tag.assetId) : null;
 
   const handleAssetClick = (e: React.MouseEvent) => {
@@ -57,7 +56,6 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
                   {tag.assetName}
                 </button>
 
-                {/* Hover tooltip */}
                 {isHovering && asset && (
                   <div className="absolute left-0 top-full mt-1 z-10 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg p-3 min-w-[250px] pointer-events-none">
                     <div className="space-y-1">
@@ -119,7 +117,6 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
       </div>
     </div>
 
-    {/* Asset Details Modal */}
     <AssetDetailsModal
       asset={asset || null}
       isOpen={isModalOpen}

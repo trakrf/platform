@@ -26,15 +26,13 @@ export interface TagInfo {
   lastSeenTime?: number;   // When tag was last seen
   readCount?: number;      // Total read count
 
-  // New fields for reconciliation
   description?: string;
   location?: string;
-  source: 'scan' | 'reconciliation' | 'rfid';  // Track origin of tag
+  source: 'scan' | 'reconciliation' | 'rfid';
 
-  // Asset enrichment fields
-  assetId?: number;        // Asset ID from asset store
-  assetName?: string;      // Asset name for display
-  assetIdentifier?: string; // Asset identifier (should match EPC)
+  assetId?: number;
+  assetName?: string;
+  assetIdentifier?: string;
 }
 
 // Tag Store interface
@@ -229,23 +227,18 @@ export const useTagStore = create<TagState>()(
     };
   }),
   
-  // Add single tag
   addTag: (tag) => set((state) => {
     const now = Date.now();
     const existingIndex = state.tags.findIndex(t => t.epc === tag.epc);
 
-    // Always trim leading zeros for display
     const displayEpc = removeLeadingZeros(tag.epc || '');
 
-    // Look up asset details from asset store
-    // Try both full EPC and displayEpc to match asset identifier
     const assetStore = useAssetStore.getState();
     let asset = assetStore.getAssetByIdentifier(tag.epc || '');
     if (!asset) {
       asset = assetStore.getAssetByIdentifier(displayEpc);
     }
 
-    // Prepare asset enrichment data
     const assetData = asset ? {
       assetId: asset.id,
       assetName: asset.name,
@@ -255,23 +248,21 @@ export const useTagStore = create<TagState>()(
 
     let newTags;
     if (existingIndex >= 0) {
-      // Update existing tag
       newTags = [...state.tags];
       newTags[existingIndex] = {
         ...newTags[existingIndex],
         ...tag,
-        ...assetData, // Inject asset details
-        displayEpc, // Update displayEpc to trimmed version
+        ...assetData,
+        displayEpc,
         lastSeenTime: now,
         readCount: (newTags[existingIndex].readCount || 0) + 1,
         count: (newTags[existingIndex].count || 0) + 1,
         timestamp: now
       };
     } else {
-      // Add new tag
       const newTag: TagInfo = {
         epc: tag.epc || '',
-        displayEpc, // Set displayEpc to trimmed version
+        displayEpc,
         count: 1,
         source: 'rfid',
         firstSeenTime: now,
@@ -279,7 +270,7 @@ export const useTagStore = create<TagState>()(
         readCount: 1,
         timestamp: now,
         ...tag,
-        ...assetData, // Inject asset details
+        ...assetData,
       };
       newTags = [...state.tags, newTag];
     }

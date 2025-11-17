@@ -51,59 +51,6 @@ export default function InventoryScreen() {
   const audio = useInventoryAudio();
   const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
 
-  // TODO: REMOVE - Sample data injection for testing asset enrichment
-  // These identifiers match existing assets in the system
-  useEffect(() => {
-    const addTag = useTagStore.getState().addTag;
-
-    // Simulate RFID reads for existing assets
-    // These EPCs match actual assets: 300833B2DDD9014000000001, 300833B2DDD9014000000002, 300833B2DDD9014000000003
-    setTimeout(() => {
-      addTag({
-        epc: '300833B2DDD9014000000001',
-        rssi: -45,
-        count: 1,
-        antenna: 1,
-        timestamp: Date.now(),
-        source: 'rfid',
-      });
-    }, 500);
-
-    setTimeout(() => {
-      addTag({
-        epc: '300833B2DDD9014000000002',
-        rssi: -52,
-        count: 1,
-        antenna: 1,
-        timestamp: Date.now(),
-        source: 'rfid',
-      });
-    }, 1000);
-
-    setTimeout(() => {
-      addTag({
-        epc: '300833B2DDD9014000000003',
-        rssi: -38,
-        count: 1,
-        antenna: 1,
-        timestamp: Date.now(),
-        source: 'rfid',
-      });
-    }, 1500);
-
-    // Add one tag without matching asset
-    setTimeout(() => {
-      addTag({
-        epc: '300833B2DDD9014099999999',
-        rssi: -60,
-        count: 1,
-        antenna: 1,
-        timestamp: Date.now(),
-        source: 'rfid',
-      });
-    }, 2000);
-  }, []); // Run only once on mount
-
   const sortedTags = useSortableInventory(tags, sortColumn, sortDirection);
 
   const filteredTags = useMemo(() => {
