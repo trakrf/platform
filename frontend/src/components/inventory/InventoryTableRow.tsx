@@ -29,7 +29,21 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
       </div>
 
       <div className="flex-1">
-        <div className="font-mono text-sm text-gray-900 dark:text-gray-100">{tag.displayEpc || tag.epc}</div>
+        {tag.assetName ? (
+          <>
+            <a
+              href={`#assets?id=${tag.assetId}`}
+              className="font-medium text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              {tag.assetName}
+            </a>
+            <div className="font-mono text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {tag.displayEpc || tag.epc}
+            </div>
+          </>
+        ) : (
+          <div className="font-mono text-sm text-gray-900 dark:text-gray-100">{tag.displayEpc || tag.epc}</div>
+        )}
         {tag.description && (
           <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{tag.description}</div>
         )}

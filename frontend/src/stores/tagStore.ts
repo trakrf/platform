@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware';
 import type { ReconciliationItem } from '@/utils/reconciliationUtils';
 import { normalizeEpc, removeLeadingZeros } from '@/utils/reconciliationUtils';
 import { useSettingsStore } from './settingsStore';
+import { useAssetStore } from './assets/assetStore';
 import { createStoreWithTracking } from './createStore';
 
 // Define tag info type
@@ -29,6 +30,11 @@ export interface TagInfo {
   description?: string;
   location?: string;
   source: 'scan' | 'reconciliation' | 'rfid';  // Track origin of tag
+
+  // Asset enrichment fields
+  assetId?: number;        // Asset ID from asset store
+  assetName?: string;      // Asset name for display
+  assetIdentifier?: string; // Asset identifier (should match EPC)
 }
 
 // Tag Store interface
@@ -231,6 +237,22 @@ export const useTagStore = create<TagState>()(
     // Always trim leading zeros for display
     const displayEpc = removeLeadingZeros(tag.epc || '');
 
+    // Look up asset details from asset store
+    // Try both full EPC and displayEpc to match asset identifier
+    const assetStore = useAssetStore.getState();
+    let asset = assetStore.getAssetByIdentifier(tag.epc || '');
+    if (!asset) {
+      asset = assetStore.getAssetByIdentifier(displayEpc);
+    }
+
+    // Prepare asset enrichment data
+    const assetData = asset ? {
+      assetId: asset.id,
+      assetName: asset.name,
+      assetIdentifier: asset.identifier,
+      description: asset.description || undefined,
+    } : {};
+
     let newTags;
     if (existingIndex >= 0) {
       // Update existing tag
@@ -238,6 +260,7 @@ export const useTagStore = create<TagState>()(
       newTags[existingIndex] = {
         ...newTags[existingIndex],
         ...tag,
+        ...assetData, // Inject asset details
         displayEpc, // Update displayEpc to trimmed version
         lastSeenTime: now,
         readCount: (newTags[existingIndex].readCount || 0) + 1,
@@ -255,7 +278,8 @@ export const useTagStore = create<TagState>()(
         lastSeenTime: now,
         readCount: 1,
         timestamp: now,
-        ...tag
+        ...tag,
+        ...assetData, // Inject asset details
       };
       newTags = [...state.tags, newTag];
     }
