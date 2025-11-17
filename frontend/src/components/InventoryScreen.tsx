@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { useDeviceStore, useTagStore, useSettingsStore, useAssetStore } from '@/stores';
+import { useDeviceStore, useTagStore, useSettingsStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search } from 'lucide-react';
 import { ShareModal } from '@/components/ShareModal';
@@ -16,7 +16,6 @@ import { InventoryHeader } from '@/components/inventory/InventoryHeader';
 import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryTableContent } from '@/components/inventory/InventoryTableContent';
 import { InventorySettingsPanel } from '@/components/inventory/InventorySettingsPanel';
-import type { Asset } from '@/types/assets';
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,62 +52,12 @@ export default function InventoryScreen() {
   const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
 
   // TODO: REMOVE - Sample data injection for testing asset enrichment
+  // These identifiers match existing assets in the system
   useEffect(() => {
-    const addAssets = useAssetStore.getState().addAssets;
     const addTag = useTagStore.getState().addTag;
 
-    // Add sample assets to the asset store
-    const sampleAssets: Asset[] = [
-      {
-        id: 1,
-        org_id: 1,
-        identifier: '300833B2DDD9014000000001', // Full EPC
-        name: 'Laptop - Dell XPS 13',
-        type: 'device',
-        description: 'Engineering laptop',
-        valid_from: new Date().toISOString(),
-        valid_to: null,
-        metadata: {},
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted_at: null,
-      },
-      {
-        id: 2,
-        org_id: 1,
-        identifier: '300833B2DDD9014000000002',
-        name: 'Monitor - LG 27"',
-        type: 'device',
-        description: 'Office monitor',
-        valid_from: new Date().toISOString(),
-        valid_to: null,
-        metadata: {},
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted_at: null,
-      },
-      {
-        id: 3,
-        org_id: 1,
-        identifier: '300833B2DDD9014000000003',
-        name: 'Keyboard - Mechanical',
-        type: 'device',
-        description: 'Wireless mechanical keyboard',
-        valid_from: new Date().toISOString(),
-        valid_to: null,
-        metadata: {},
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted_at: null,
-      },
-    ];
-
-    addAssets(sampleAssets);
-
-    // Add sample RFID reads that match the assets
+    // Simulate RFID reads for existing assets
+    // These EPCs match actual assets: 300833B2DDD9014000000001, 300833B2DDD9014000000002, 300833B2DDD9014000000003
     setTimeout(() => {
       addTag({
         epc: '300833B2DDD9014000000001',
