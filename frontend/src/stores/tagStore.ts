@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware';
 import type { ReconciliationItem } from '@/utils/reconciliationUtils';
 import { normalizeEpc, removeLeadingZeros } from '@/utils/reconciliationUtils';
 import { useSettingsStore } from './settingsStore';
+import { useAssetStore } from './assets/assetStore';
 import { createStoreWithTracking } from './createStore';
 
 // Define tag info type
@@ -25,10 +26,13 @@ export interface TagInfo {
   lastSeenTime?: number;   // When tag was last seen
   readCount?: number;      // Total read count
 
-  // New fields for reconciliation
   description?: string;
   location?: string;
-  source: 'scan' | 'reconciliation' | 'rfid';  // Track origin of tag
+  source: 'scan' | 'reconciliation' | 'rfid';
+
+  assetId?: number;
+  assetName?: string;
+  assetIdentifier?: string;
 }
 
 // Tag Store interface
@@ -223,39 +227,50 @@ export const useTagStore = create<TagState>()(
     };
   }),
   
-  // Add single tag
   addTag: (tag) => set((state) => {
     const now = Date.now();
     const existingIndex = state.tags.findIndex(t => t.epc === tag.epc);
 
-    // Always trim leading zeros for display
     const displayEpc = removeLeadingZeros(tag.epc || '');
+
+    const assetStore = useAssetStore.getState();
+    let asset = assetStore.getAssetByIdentifier(tag.epc || '');
+    if (!asset) {
+      asset = assetStore.getAssetByIdentifier(displayEpc);
+    }
+
+    const assetData = asset ? {
+      assetId: asset.id,
+      assetName: asset.name,
+      assetIdentifier: asset.identifier,
+      description: asset.description || undefined,
+    } : {};
 
     let newTags;
     if (existingIndex >= 0) {
-      // Update existing tag
       newTags = [...state.tags];
       newTags[existingIndex] = {
         ...newTags[existingIndex],
         ...tag,
-        displayEpc, // Update displayEpc to trimmed version
+        ...assetData,
+        displayEpc,
         lastSeenTime: now,
         readCount: (newTags[existingIndex].readCount || 0) + 1,
         count: (newTags[existingIndex].count || 0) + 1,
         timestamp: now
       };
     } else {
-      // Add new tag
       const newTag: TagInfo = {
         epc: tag.epc || '',
-        displayEpc, // Set displayEpc to trimmed version
+        displayEpc,
         count: 1,
         source: 'rfid',
         firstSeenTime: now,
         lastSeenTime: now,
         readCount: 1,
         timestamp: now,
-        ...tag
+        ...tag,
+        ...assetData,
       };
       newTags = [...state.tags, newTag];
     }
