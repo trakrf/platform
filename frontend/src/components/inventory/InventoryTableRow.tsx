@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { CheckCircle, XCircle, Target } from 'lucide-react';
+import { CheckCircle, XCircle, Target, Pencil } from 'lucide-react';
 import { SignalStrengthIndicator } from '@/components/SignalStrengthIndicator';
 import { useTagStore, useAssetStore } from '@/stores';
 import { AssetDetailsModal } from '@/components/assets/AssetDetailsModal';
+import { AssetFormModal } from '@/components/assets/AssetFormModal';
 import type { TagInfo } from '@/stores/tagStore';
 
 interface InventoryTableRowProps {
@@ -11,6 +12,7 @@ interface InventoryTableRowProps {
 
 export function InventoryTableRow({ tag }: InventoryTableRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
   const asset = tag.assetId ? useAssetStore.getState().getAssetById(tag.assetId) : null;
@@ -104,6 +106,20 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
 
       <div className="w-24 text-center">
         <button
+          onClick={(e) => {
+            e.preventDefault();
+            setIsAssetFormOpen(true);
+          }}
+          className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          title={tag.assetId ? 'Edit Asset' : 'Create Asset'}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+          {tag.assetId ? 'Edit' : 'Create'}
+        </button>
+      </div>
+
+      <div className="w-24 text-center">
+        <button
           onClick={() => {
             useTagStore.getState().selectTag(tag);
             const targetEPC = tag.displayEpc || tag.epc;
@@ -121,6 +137,15 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
       asset={asset || null}
       isOpen={isModalOpen}
       onClose={() => setIsModalOpen(false)}
+    />
+
+    {/* Asset Create/Edit Modal */}
+    <AssetFormModal
+      isOpen={isAssetFormOpen}
+      mode={tag.assetId ? 'edit' : 'create'}
+      asset={tag.assetId ? asset : undefined}
+      onClose={() => setIsAssetFormOpen(false)}
+      initialIdentifier={!tag.assetId ? (tag.displayEpc || tag.epc) : undefined}
     />
   </>
   );
