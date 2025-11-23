@@ -157,4 +157,23 @@ describe('InventoryTableRow - Asset Actions', () => {
     const identifierInput = screen.getByDisplayValue('TEST-001');
     expect(identifierInput).toBeInTheDocument();
   });
+
+  it('should call onAssetUpdated callback when modal closes', () => {
+    const onAssetUpdated = vi.fn();
+    render(<InventoryTableRow tag={mockTag} onAssetUpdated={onAssetUpdated} />);
+
+    // Open the asset form modal
+    fireEvent.click(screen.getByText('Create'));
+    expect(screen.getByText('Create New Asset')).toBeInTheDocument();
+
+    // Close the modal
+    const cancelButtons = screen.getAllByText('Cancel');
+    const formCancelButton = cancelButtons.find(
+      btn => !btn.closest('button')?.className.includes('bg-red-600')
+    );
+    fireEvent.click(formCancelButton!);
+
+    // Callback should have been called
+    expect(onAssetUpdated).toHaveBeenCalledTimes(1);
+  });
 });

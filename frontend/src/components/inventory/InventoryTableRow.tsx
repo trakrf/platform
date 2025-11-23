@@ -8,9 +8,10 @@ import type { TagInfo } from '@/stores/tagStore';
 
 interface InventoryTableRowProps {
   tag: TagInfo;
+  onAssetUpdated?: () => void;
 }
 
-export function InventoryTableRow({ tag }: InventoryTableRowProps) {
+export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -20,6 +21,12 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
   const handleAssetClick = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsModalOpen(true);
+  };
+
+  const handleAssetFormClose = () => {
+    setIsAssetFormOpen(false);
+    // Trigger inventory refresh to update enrichment
+    onAssetUpdated?.();
   };
 
   return (
@@ -144,7 +151,7 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
       isOpen={isAssetFormOpen}
       mode={tag.assetId ? 'edit' : 'create'}
       asset={tag.assetId ? asset : undefined}
-      onClose={() => setIsAssetFormOpen(false)}
+      onClose={handleAssetFormClose}
       initialIdentifier={!tag.assetId ? (tag.displayEpc || tag.epc) : undefined}
     />
   </>
