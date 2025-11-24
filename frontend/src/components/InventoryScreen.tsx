@@ -197,6 +197,10 @@ export default function InventoryScreen() {
             onLastPage={goToLastPage}
             onPageSizeChange={setPageSize}
             scrollContainerRef={scrollContainerRef}
+            onAssetUpdated={() => {
+              // Asset enrichment runs automatically via worker/inventory subsystem
+              console.log('[InventoryScreen] Asset updated, enrichment will refresh');
+            }}
           />
         )}
       </div>

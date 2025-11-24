@@ -11,9 +11,10 @@ interface AssetFormModalProps {
   mode: 'create' | 'edit';
   asset?: Asset;
   onClose: () => void;
+  initialIdentifier?: string;
 }
 
-export function AssetFormModal({ isOpen, mode, asset, onClose }: AssetFormModalProps) {
+export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier }: AssetFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,6 +100,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose }: AssetFormModalP
             onCancel={onClose}
             loading={loading}
             error={error}
+            initialIdentifier={initialIdentifier}
           />
         </div>
       </div>

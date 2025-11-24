@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType } from '@/types/assets';
 import { validateDateRange, validateAssetType } from '@/lib/asset/validators';
 import { ErrorBanner } from '@/components/shared';
+import { useScanToInput } from '@/hooks/useScanToInput';
+import { useDeviceStore } from '@/stores';
+import { ScanLine, QrCode, X } from 'lucide-react';
 
 interface AssetFormProps {
   mode: 'create' | 'edit';
@@ -10,6 +13,7 @@ interface AssetFormProps {
   onCancel: () => void;
   loading?: boolean;
   error?: string | null;
+  initialIdentifier?: string;
 }
 
 const ASSET_TYPES: Array<{ value: AssetType; label: string }> = [
@@ -20,9 +24,9 @@ const ASSET_TYPES: Array<{ value: AssetType; label: string }> = [
   { value: 'other', label: 'Other' },
 ];
 
-export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error }: AssetFormProps) {
+export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
   const [formData, setFormData] = useState({
-    identifier: asset?.identifier || '',
+    identifier: asset?.identifier || initialIdentifier || '',
     name: asset?.name || '',
     type: asset?.type || ('device' as AssetType),
     description: asset?.description || '',
@@ -32,6 +36,13 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Scanner integration
+  const isConnected = useDeviceStore((s) => s.isConnected);
+  const { startRfidScan, startBarcodeScan, stopScan, isScanning, scanType } = useScanToInput({
+    onScan: (value) => handleChange('identifier', value),
+    autoStop: true,
+  });
 
   useEffect(() => {
     if (asset && mode === 'edit') {
@@ -131,16 +142,60 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             id="identifier"
             value={formData.identifier}
             onChange={(e) => handleChange('identifier', e.target.value)}
-            disabled={loading || mode === 'edit'}
+            disabled={loading || mode === 'edit' || isScanning}
             className={`block w-full px-3 py-2 border rounded-lg ${
               fieldErrors.identifier
                 ? 'border-red-500 focus:ring-red-500'
                 : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
             } bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed`}
-            placeholder="e.g., LAP-001"
+            placeholder={isScanning
+              ? (scanType === 'rfid' ? 'Scanning RFID...' : 'Scanning barcode...')
+              : 'e.g., LAP-001'
+            }
           />
           {fieldErrors.identifier && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.identifier}</p>
+          )}
+
+          {/* Scanner buttons - only show in create mode when device connected */}
+          {mode === 'create' && isConnected && !isScanning && (
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={startRfidScan}
+                disabled={loading}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                <ScanLine className="w-4 h-4" />
+                Scan RFID
+              </button>
+              <button
+                type="button"
+                onClick={startBarcodeScan}
+                disabled={loading}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                <QrCode className="w-4 h-4" />
+                Scan Barcode
+              </button>
+            </div>
+          )}
+
+          {/* Scanning state feedback */}
+          {isScanning && (
+            <div className="flex items-center gap-2 mt-2">
+              <p className="text-sm text-blue-600 dark:text-blue-400">
+                {scanType === 'rfid' ? 'Scanning for RFID tag...' : 'Scanning for barcode...'}
+              </p>
+              <button
+                type="button"
+                onClick={stopScan}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Cancel
+              </button>
+            </div>
           )}
         </div>
 
