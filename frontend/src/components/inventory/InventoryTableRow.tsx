@@ -16,7 +16,10 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
   const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
-  const asset = tag.assetId ? useAssetStore.getState().getAssetById(tag.assetId) : null;
+  // Use reactive Zustand selector to re-render when asset is loaded
+  const asset = useAssetStore(state =>
+    tag.assetId ? state.getAssetById(tag.assetId) : null
+  );
 
   const handleAssetClick = (e: React.MouseEvent) => {
     e.preventDefault();
