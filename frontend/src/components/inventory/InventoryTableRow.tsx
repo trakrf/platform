@@ -153,7 +153,7 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
     <AssetFormModal
       isOpen={isAssetFormOpen}
       mode={tag.assetId ? 'edit' : 'create'}
-      asset={tag.assetId ? asset : undefined}
+      asset={asset ?? undefined}
       onClose={handleAssetFormClose}
       initialIdentifier={!tag.assetId ? (tag.displayEpc || tag.epc) : undefined}
     />
