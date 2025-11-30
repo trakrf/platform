@@ -1,14 +1,41 @@
-import { CheckCircle, XCircle, Target } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, XCircle, Target, Pencil, Link2 } from 'lucide-react';
 import { SignalStrengthIndicator } from '@/components/SignalStrengthIndicator';
-import { useTagStore } from '@/stores';
+import { useTagStore, useAssetStore } from '@/stores';
+import { AssetDetailsModal } from '@/components/assets/AssetDetailsModal';
+import { AssetFormModal } from '@/components/assets/AssetFormModal';
 import type { TagInfo } from '@/stores/tagStore';
 
 interface InventoryMobileCardProps {
   tag: TagInfo;
+  onAssetUpdated?: () => void;
 }
 
-export function InventoryMobileCard({ tag }: InventoryMobileCardProps) {
+export function InventoryMobileCard({ tag, onAssetUpdated }: InventoryMobileCardProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
+
+  const asset = useAssetStore(state =>
+    tag.assetId ? state.cache.byId.get(tag.assetId) ?? null : null
+  );
+
+  const handleAssetClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsModalOpen(true);
+  };
+
+  const handleAssetFormClose = (assetCreatedOrUpdated?: boolean) => {
+    setIsAssetFormOpen(false);
+    if (assetCreatedOrUpdated) {
+      setTimeout(() => {
+        useTagStore.getState().refreshAssetEnrichment();
+        onAssetUpdated?.();
+      }, 0);
+    }
+  };
+
   return (
+    <>
     <div
       data-testid={`tag-${tag.epc}`}
       data-epc={tag.epc}
@@ -16,9 +43,32 @@ export function InventoryMobileCard({ tag }: InventoryMobileCardProps) {
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
-          <div className="font-mono text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-all">
-            {tag.displayEpc || tag.epc}
-          </div>
+          {tag.assetName ? (
+            <>
+              <button
+                onClick={handleAssetClick}
+                className="font-medium text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-left"
+              >
+                {tag.assetName}
+              </button>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono text-xs text-gray-500 dark:text-gray-400 break-all">
+                  {tag.displayEpc || tag.epc}
+                </span>
+                <button
+                  onClick={handleAssetClick}
+                  className="text-blue-500 hover:text-blue-700 flex-shrink-0 p-0.5"
+                  title="View linked asset details"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="font-mono text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-all">
+              {tag.displayEpc || tag.epc}
+            </div>
+          )}
           {tag.description && (
             <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">{tag.description}</div>
           )}
@@ -65,18 +115,43 @@ export function InventoryMobileCard({ tag }: InventoryMobileCardProps) {
         </div>
       </div>
 
-      <button
-        data-testid="locate-button"
-        onClick={() => {
-          const targetEPC = tag.displayEpc || tag.epc;
-          useTagStore.getState().selectTag(tag);
-          window.location.hash = `#locate?epc=${encodeURIComponent(targetEPC)}`;
-        }}
-        className="w-full text-blue-600 hover:text-blue-800 text-xs sm:text-sm font-medium flex items-center justify-center py-1.5 sm:py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
-      >
-        <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-        Locate Item
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setIsAssetFormOpen(true)}
+          className="flex-1 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs sm:text-sm font-medium flex items-center justify-center py-1.5 sm:py-2 rounded-lg transition-colors"
+          title={tag.assetId ? 'Edit Asset' : 'Create Asset'}
+        >
+          <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+          {tag.assetId ? 'Edit' : 'Link'}
+        </button>
+        <button
+          data-testid="locate-button"
+          onClick={() => {
+            const targetEPC = tag.displayEpc || tag.epc;
+            useTagStore.getState().selectTag(tag);
+            window.location.hash = `#locate?epc=${encodeURIComponent(targetEPC)}`;
+          }}
+          className="flex-1 text-blue-600 hover:text-blue-800 text-xs sm:text-sm font-medium flex items-center justify-center py-1.5 sm:py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
+        >
+          <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+          Locate
+        </button>
+      </div>
     </div>
+
+    <AssetDetailsModal
+      asset={asset || null}
+      isOpen={isModalOpen}
+      onClose={() => setIsModalOpen(false)}
+    />
+
+    <AssetFormModal
+      isOpen={isAssetFormOpen}
+      mode={tag.assetId ? 'edit' : 'create'}
+      asset={asset ?? undefined}
+      onClose={handleAssetFormClose}
+      initialIdentifier={!tag.assetId ? (tag.displayEpc || tag.epc) : undefined}
+    />
+  </>
   );
 }
