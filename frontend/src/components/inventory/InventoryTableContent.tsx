@@ -26,6 +26,7 @@ interface InventoryTableContentProps {
   onLastPage: () => void;
   onPageSizeChange: (size: number) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement>;
+  onAssetUpdated?: () => void;
 }
 
 export function InventoryTableContent({
@@ -46,6 +47,7 @@ export function InventoryTableContent({
   onLastPage,
   onPageSizeChange,
   scrollContainerRef,
+  onAssetUpdated,
 }: InventoryTableContentProps) {
   if (tags.length === 0) {
     return (
@@ -77,7 +79,7 @@ export function InventoryTableContent({
         </div>
         <div className="hidden md:block">
           {paginatedTags.map((tag) => (
-            <InventoryTableRow key={tag.epc} tag={tag} />
+            <InventoryTableRow key={tag.epc} tag={tag} onAssetUpdated={onAssetUpdated} />
           ))}
         </div>
       </div>

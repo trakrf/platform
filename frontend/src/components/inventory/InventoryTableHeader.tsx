@@ -71,7 +71,7 @@ export function InventoryTableHeader({ sortColumn, sortDirection, onSort }: Inve
             />
           </React.Suspense>
         </div>
-        <div className="w-24 text-center">Actions</div>
+        <div className="w-32 text-center">Actions</div>
       </div>
     </div>
   );

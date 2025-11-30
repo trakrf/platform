@@ -1,23 +1,42 @@
 import { useState } from 'react';
-import { CheckCircle, XCircle, Target } from 'lucide-react';
+import { CheckCircle, XCircle, Target, Pencil, Link2 } from 'lucide-react';
 import { SignalStrengthIndicator } from '@/components/SignalStrengthIndicator';
 import { useTagStore, useAssetStore } from '@/stores';
 import { AssetDetailsModal } from '@/components/assets/AssetDetailsModal';
+import { AssetFormModal } from '@/components/assets/AssetFormModal';
 import type { TagInfo } from '@/stores/tagStore';
 
 interface InventoryTableRowProps {
   tag: TagInfo;
+  onAssetUpdated?: () => void;
 }
 
-export function InventoryTableRow({ tag }: InventoryTableRowProps) {
+export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
-  const asset = tag.assetId ? useAssetStore.getState().getAssetById(tag.assetId) : null;
+  // Use reactive Zustand selector to re-render when asset is loaded
+  // Access cache.byId directly to get stable reference
+  const asset = useAssetStore(state =>
+    tag.assetId ? state.cache.byId.get(tag.assetId) ?? null : null
+  );
 
   const handleAssetClick = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsModalOpen(true);
+  };
+
+  const handleAssetFormClose = (assetCreatedOrUpdated?: boolean) => {
+    setIsAssetFormOpen(false);
+    if (assetCreatedOrUpdated) {
+      // Immediately refresh tag enrichment to update UI
+      // Use setTimeout to break the render cycle and avoid infinite loop
+      setTimeout(() => {
+        useTagStore.getState().refreshAssetEnrichment();
+        onAssetUpdated?.();
+      }, 0);
+    }
   };
 
   return (
@@ -69,8 +88,20 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
                   </div>
                 )}
               </div>
-              <div className="font-mono text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {tag.displayEpc || tag.epc}
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
+                  {tag.displayEpc || tag.epc}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setIsAssetFormOpen(true);
+                  }}
+                  className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                  title="Edit linked asset"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             </>
           ) : (
@@ -102,7 +133,17 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
         }
       </div>
 
-      <div className="w-24 text-center">
+      <div className="w-32 flex items-center justify-center gap-1">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            setIsAssetFormOpen(true);
+          }}
+          className="inline-flex items-center justify-center p-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          title={tag.assetId ? 'Edit Asset' : 'Create Asset'}
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
         <button
           onClick={() => {
             useTagStore.getState().selectTag(tag);
@@ -111,7 +152,7 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
           }}
           className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center justify-center"
         >
-          <Target className="w-4 h-4 mr-2" />
+          <Target className="w-4 h-4 mr-1" />
           Locate
         </button>
       </div>
@@ -121,6 +162,15 @@ export function InventoryTableRow({ tag }: InventoryTableRowProps) {
       asset={asset || null}
       isOpen={isModalOpen}
       onClose={() => setIsModalOpen(false)}
+    />
+
+    {/* Asset Create/Edit Modal */}
+    <AssetFormModal
+      isOpen={isAssetFormOpen}
+      mode={tag.assetId ? 'edit' : 'create'}
+      asset={asset ?? undefined}
+      onClose={handleAssetFormClose}
+      initialIdentifier={!tag.assetId ? (tag.displayEpc || tag.epc) : undefined}
     />
   </>
   );

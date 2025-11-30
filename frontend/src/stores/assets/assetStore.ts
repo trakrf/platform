@@ -84,6 +84,7 @@ const initialFilters: AssetFilters = {
   type: 'all',
   is_active: 'all',
   search: '',
+  location_id: 'all',
 };
 
 /**

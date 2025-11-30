@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useDeviceStore, useTagStore, useSettingsStore } from '@/stores';
+import { useAssets } from '@/hooks/assets';
 import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search } from 'lucide-react';
 import { ShareModal } from '@/components/ShareModal';
@@ -50,6 +51,9 @@ export default function InventoryScreen() {
 
   const audio = useInventoryAudio();
   const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
+
+  // Load assets for tag enrichment
+  useAssets({ enabled: true });
 
   const sortedTags = useSortableInventory(tags, sortColumn, sortDirection);
 
@@ -197,6 +201,10 @@ export default function InventoryScreen() {
             onLastPage={goToLastPage}
             onPageSizeChange={setPageSize}
             scrollContainerRef={scrollContainerRef}
+            onAssetUpdated={() => {
+              // Asset enrichment runs automatically via worker/inventory subsystem
+              console.log('[InventoryScreen] Asset updated, enrichment will refresh');
+            }}
           />
         )}
       </div>

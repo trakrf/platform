@@ -1,5 +1,6 @@
-import { X } from 'lucide-react';
+import { X, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
+import { useLocationStore } from '@/stores';
 
 interface AssetDetailsModalProps {
   asset: Asset | null;
@@ -8,6 +9,9 @@ interface AssetDetailsModalProps {
 }
 
 export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalProps) {
+  const getLocationById = useLocationStore((state) => state.getLocationById);
+  const location = asset?.current_location_id ? getLocationById(asset.current_location_id) : null;
+
   if (!isOpen || !asset) return null;
 
   const formatDate = (date: string | null) => {
@@ -79,6 +83,19 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                     >
                       {asset.is_active ? 'Active' : 'Inactive'}
                     </span>
+                  }
+                />
+                <InfoField
+                  label="Location"
+                  value={
+                    location ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-blue-500" />
+                        {location.name}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500">No location assigned</span>
+                    )
                   }
                 />
               </div>

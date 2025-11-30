@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle } from 'lucide-react';
+import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
+import { useLocationStore } from '@/stores';
 
 interface AssetCardProps {
   asset: Asset;
@@ -30,7 +31,9 @@ export function AssetCard({
   className = '',
 }: AssetCardProps) {
   const TypeIcon = TYPE_ICONS[asset.type] || HelpCircle;
-  const location = asset.metadata?.location as string | undefined;
+  const getLocationById = useLocationStore((state) => state.getLocationById);
+  const locationData = asset.current_location_id ? getLocationById(asset.current_location_id) : null;
+  const locationName = locationData?.name;
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -81,8 +84,13 @@ export function AssetCard({
 
         {/* Location */}
         <td className="px-4 py-3">
-          {location && (
-            <span className="text-sm text-gray-600 dark:text-gray-400">{location}</span>
+          {locationName ? (
+            <span className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+              <MapPin className="h-3.5 w-3.5" />
+              {locationName}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
           )}
         </td>
 
@@ -150,10 +158,11 @@ export function AssetCard({
       </div>
 
       {/* Location */}
-      {location && (
+      {locationName && (
         <div className="mb-3">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">Location:</span> {location}
+          <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
+            <MapPin className="h-3.5 w-3.5" />
+            <span className="font-medium">Location:</span> {locationName}
           </p>
         </div>
       )}
