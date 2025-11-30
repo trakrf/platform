@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType } from '@/types/assets';
 import { validateDateRange, validateAssetType } from '@/lib/asset/validators';
 import { ErrorBanner } from '@/components/shared';
 import { useScanToInput } from '@/hooks/useScanToInput';
-import { useDeviceStore } from '@/stores';
+import { useDeviceStore, useLocationStore } from '@/stores';
+import { useLocations } from '@/hooks/locations';
 import { ScanLine, QrCode, X } from 'lucide-react';
 
 interface AssetFormProps {
@@ -17,25 +18,27 @@ interface AssetFormProps {
 }
 
 const ASSET_TYPES: Array<{ value: AssetType; label: string }> = [
-  { value: 'person', label: 'Person' },
-  { value: 'device', label: 'Device' },
   { value: 'asset', label: 'Asset' },
-  { value: 'inventory', label: 'Inventory' },
-  { value: 'other', label: 'Other' },
 ];
 
 export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
   const [formData, setFormData] = useState({
     identifier: asset?.identifier || initialIdentifier || '',
     name: asset?.name || '',
-    type: asset?.type || ('device' as AssetType),
+    type: asset?.type || ('asset' as AssetType),
     description: asset?.description || '',
+    current_location_id: asset?.current_location_id ?? null as number | null,
     valid_from: asset?.valid_from?.split('T')[0] || new Date().toISOString().split('T')[0],
     valid_to: asset?.valid_to?.split('T')[0] || '',
     is_active: asset?.is_active ?? true,
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Load locations for dropdown
+  useLocations({ enabled: true });
+  const locationCache = useLocationStore((state) => state.cache.byId);
+  const locations = useMemo(() => Array.from(locationCache.values()), [locationCache]);
 
   // Scanner integration
   const isConnected = useDeviceStore((s) => s.isConnected);
@@ -51,6 +54,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         name: asset.name,
         type: asset.type,
         description: asset.description,
+        current_location_id: asset.current_location_id ?? null,
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
@@ -108,6 +112,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       name: formData.name,
       type: formData.type,
       description: formData.description,
+      current_location_id: formData.current_location_id,
       valid_from: toRFC3339(formData.valid_from),
       valid_to: toRFC3339(formData.valid_to || '2099-12-31'),
       is_active: formData.is_active,
@@ -235,6 +240,29 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
                 {type.label}
               </option>
             ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="location" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Location
+          </label>
+          <select
+            id="location"
+            value={formData.current_location_id ?? ''}
+            onChange={(e) => handleChange('current_location_id', e.target.value ? Number(e.target.value) : null)}
+            disabled={loading}
+            className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            <option value="">No location assigned</option>
+            {locations
+              .filter(loc => loc.is_active)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
           </select>
         </div>
 

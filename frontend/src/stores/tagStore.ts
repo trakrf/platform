@@ -79,6 +79,9 @@ interface TagState {
   // Locate actions
   setSearchRunning: (running: boolean) => void;
   updateSearchRSSI: (rssi: number) => void;
+
+  // Asset enrichment
+  refreshAssetEnrichment: () => void;
 }
 
 export const useTagStore = create<TagState>()(
@@ -306,6 +309,33 @@ export const useTagStore = create<TagState>()(
   setSearchRSSI: (rssi) => set({
     searchRSSI: rssi,
     lastRSSIUpdateTime: Date.now()
+  }),
+
+  // Re-enrich all tags with current asset data
+  refreshAssetEnrichment: () => set((state) => {
+    const assetStore = useAssetStore.getState();
+
+    const enrichedTags = state.tags.map(tag => {
+      // Try to find asset by EPC or displayEpc
+      let asset = assetStore.getAssetByIdentifier(tag.epc);
+      if (!asset && tag.displayEpc) {
+        asset = assetStore.getAssetByIdentifier(tag.displayEpc);
+      }
+
+      if (asset) {
+        return {
+          ...tag,
+          assetId: asset.id,
+          assetName: asset.name,
+          assetIdentifier: asset.identifier,
+          description: asset.description || undefined,
+        };
+      }
+
+      return tag;
+    });
+
+    return { tags: enrichedTags };
   })
   }), 'TagStore'),
   {

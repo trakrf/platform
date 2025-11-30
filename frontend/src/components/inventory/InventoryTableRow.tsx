@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, XCircle, Target, Pencil } from 'lucide-react';
+import { CheckCircle, XCircle, Target, Pencil, Link2 } from 'lucide-react';
 import { SignalStrengthIndicator } from '@/components/SignalStrengthIndicator';
 import { useTagStore, useAssetStore } from '@/stores';
 import { AssetDetailsModal } from '@/components/assets/AssetDetailsModal';
@@ -17,8 +17,9 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
   const [isHovering, setIsHovering] = useState(false);
 
   // Use reactive Zustand selector to re-render when asset is loaded
+  // Access cache.byId directly to get stable reference
   const asset = useAssetStore(state =>
-    tag.assetId ? state.getAssetById(tag.assetId) : null
+    tag.assetId ? state.cache.byId.get(tag.assetId) ?? null : null
   );
 
   const handleAssetClick = (e: React.MouseEvent) => {
@@ -26,10 +27,16 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
     setIsModalOpen(true);
   };
 
-  const handleAssetFormClose = () => {
+  const handleAssetFormClose = (assetCreatedOrUpdated?: boolean) => {
     setIsAssetFormOpen(false);
-    // Trigger inventory refresh to update enrichment
-    onAssetUpdated?.();
+    if (assetCreatedOrUpdated) {
+      // Immediately refresh tag enrichment to update UI
+      // Use setTimeout to break the render cycle and avoid infinite loop
+      setTimeout(() => {
+        useTagStore.getState().refreshAssetEnrichment();
+        onAssetUpdated?.();
+      }, 0);
+    }
   };
 
   return (
@@ -81,8 +88,20 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
                   </div>
                 )}
               </div>
-              <div className="font-mono text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {tag.displayEpc || tag.epc}
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
+                  {tag.displayEpc || tag.epc}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setIsAssetFormOpen(true);
+                  }}
+                  className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                  title="Edit linked asset"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             </>
           ) : (
@@ -114,21 +133,17 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
         }
       </div>
 
-      <div className="w-24 text-center">
+      <div className="w-32 flex items-center justify-center gap-1">
         <button
           onClick={(e) => {
             e.preventDefault();
             setIsAssetFormOpen(true);
           }}
-          className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          className="inline-flex items-center justify-center p-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
           title={tag.assetId ? 'Edit Asset' : 'Create Asset'}
         >
-          <Pencil className="w-3.5 h-3.5" />
-          {tag.assetId ? 'Edit' : 'Create'}
+          <Pencil className="w-4 h-4" />
         </button>
-      </div>
-
-      <div className="w-24 text-center">
         <button
           onClick={() => {
             useTagStore.getState().selectTag(tag);
@@ -137,7 +152,7 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
           }}
           className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center justify-center"
         >
-          <Target className="w-4 h-4 mr-2" />
+          <Target className="w-4 h-4 mr-1" />
           Locate
         </button>
       </div>

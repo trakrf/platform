@@ -36,6 +36,21 @@ export function filterAssets(
       }
     }
 
+    // Filter by location
+    if (filters.location_id !== undefined && filters.location_id !== 'all') {
+      if (filters.location_id === null) {
+        // Filter for unassigned assets (no location)
+        if (asset.current_location_id !== null) {
+          return false;
+        }
+      } else {
+        // Filter for specific location
+        if (asset.current_location_id !== filters.location_id) {
+          return false;
+        }
+      }
+    }
+
     return true;
   });
 }

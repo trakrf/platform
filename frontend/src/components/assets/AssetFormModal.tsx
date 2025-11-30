@@ -10,7 +10,7 @@ interface AssetFormModalProps {
   isOpen: boolean;
   mode: 'create' | 'edit';
   asset?: Asset;
-  onClose: () => void;
+  onClose: (assetCreatedOrUpdated?: boolean) => void;
   initialIdentifier?: string;
 }
 
@@ -46,7 +46,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         toast.success(`Asset "${response.data.data.identifier}" updated successfully`);
       }
 
-      onClose();
+      onClose(true);
     } catch (err: any) {
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
         setError('Cannot connect to server. Please check your connection and try again.');
@@ -83,7 +83,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
             {mode === 'create' ? 'Create New Asset' : `Edit Asset: ${asset?.identifier}`}
           </h2>
           <button
-            onClick={onClose}
+            onClick={() => onClose()}
             disabled={loading}
             className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
             aria-label="Close modal"
@@ -97,7 +97,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
             mode={mode}
             asset={asset}
             onSubmit={handleSubmit}
-            onCancel={onClose}
+            onCancel={() => onClose()}
             loading={loading}
             error={error}
             initialIdentifier={initialIdentifier}

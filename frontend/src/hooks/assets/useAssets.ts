@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAssetStore } from '@/stores/assets/assetStore';
+import { useTagStore } from '@/stores/tagStore';
 import { assetsApi } from '@/lib/api/assets';
 
 export interface UseAssetsOptions {
@@ -21,6 +22,8 @@ export function useAssets(options: UseAssetsOptions = {}) {
         offset,
       });
       useAssetStore.getState().addAssets(response.data.data);
+      // Re-enrich tags with newly loaded assets
+      useTagStore.getState().refreshAssetEnrichment();
       return response.data;
     },
     enabled,

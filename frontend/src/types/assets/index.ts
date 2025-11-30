@@ -23,6 +23,7 @@ export interface Asset {
   name: string; // Go: string
   type: AssetType; // Go: string with validation
   description: string; // Go: string
+  current_location_id: number | null; // Go: *int → Location foreign key
   valid_from: string; // Go: time.Time → ISO 8601 string
   valid_to: string | null; // Go: *time.Time → ISO 8601 string or null
   metadata: Record<string, any>; // Go: any → JSON object
@@ -43,6 +44,7 @@ export interface CreateAssetRequest {
   name: string; // required, max 255
   type: AssetType; // required, oneof
   description?: string; // optional, max 1024
+  current_location_id?: number | null; // optional location foreign key
   valid_from: string; // ISO 8601 date
   valid_to: string; // ISO 8601 date
   is_active: boolean;
@@ -58,6 +60,7 @@ export interface UpdateAssetRequest {
   name?: string;
   type?: AssetType;
   description?: string;
+  current_location_id?: number | null;
   valid_from?: string;
   valid_to?: string;
   is_active?: boolean;
@@ -142,6 +145,7 @@ export interface AssetFilters {
   type?: AssetType | 'all';
   is_active?: boolean | 'all';
   search?: string;
+  location_id?: number | null | 'all'; // null = unassigned, 'all' = all locations
 }
 
 /**
