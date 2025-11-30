@@ -93,6 +93,9 @@ temp/
 
 # MCP/Serena memories
 .serena/
+
+# SpecStory AI conversation history
+.specstory/
 dev-mock.log
 .dev-mock.pid
 
