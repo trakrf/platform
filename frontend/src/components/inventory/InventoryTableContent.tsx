@@ -74,7 +74,7 @@ export function InventoryTableContent({
       <div ref={scrollContainerRef} className="flex-1 overflow-auto">
         <div className="md:hidden">
           {paginatedTags.map((tag) => (
-            <InventoryMobileCard key={tag.epc} tag={tag} />
+            <InventoryMobileCard key={tag.epc} tag={tag} onAssetUpdated={onAssetUpdated} />
           ))}
         </div>
         <div className="hidden md:block">
