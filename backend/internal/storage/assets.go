@@ -12,17 +12,17 @@ import (
 func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.Asset, error) {
 	query := `
 	insert into trakrf.assets
-	(name, identifier, type, description, valid_from, valid_to, metadata, is_active, org_id)
-	values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	returning id, org_id, identifier, name, type, description, valid_from, valid_to,
+	(name, identifier, type, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
+	values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	returning id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
 	          metadata, is_active, created_at, updated_at, deleted_at
 	`
 	var asset asset.Asset
 	err := s.pool.QueryRow(ctx, query, request.Name, request.Identifier, request.Type,
-		request.Description, request.ValidFrom, request.ValidTo, request.Metadata,
+		request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo, request.Metadata,
 		request.IsActive, request.OrgID,
 	).Scan(&asset.ID, &asset.OrgID, &asset.Identifier, &asset.Name, &asset.Type,
-		&asset.Description, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
+		&asset.Description, &asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
 		&asset.IsActive, &asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 	)
 
@@ -62,14 +62,14 @@ func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateA
 		update trakrf.assets
 		set %s, updated_at = now()
 		where id = $1
-		returning id, org_id, identifier, name, type, description, valid_from, valid_to,
+		returning id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
 		          metadata, is_active, created_at, updated_at, deleted_at
 	`, strings.Join(updates, ", "))
 
 	var asset asset.Asset
 	err = s.pool.QueryRow(ctx, query, args...).Scan(&asset.ID, &asset.OrgID,
 		&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
-		&asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
+		&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
 		&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 	)
 
@@ -85,7 +85,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateA
 
 func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, error) {
 	query := `
-	select id, org_id, identifier, name, type, description, valid_from, valid_to,
+	select id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	from trakrf.assets
 	where id = $1 and deleted_at is null
@@ -93,7 +93,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, erro
 	var asset asset.Asset
 	err := s.pool.QueryRow(ctx, query, id).Scan(&asset.ID, &asset.OrgID,
 		&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
-		&asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
+		&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
 		&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 	)
 	if err != nil {
@@ -107,7 +107,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, erro
 
 func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offset int) ([]asset.Asset, error) {
 	query := `
-		select id, org_id, identifier, name, type, description, valid_from, valid_to,
+		select id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
 		       metadata, is_active, created_at, updated_at, deleted_at
 		from trakrf.assets
 		where org_id = $1 and deleted_at is null
@@ -124,7 +124,7 @@ func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offse
 	for rows.Next() {
 		var a asset.Asset
 		err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
-			&a.Description, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+			&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 			&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 		)
 		if err != nil {
@@ -184,12 +184,13 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 
 	query := `
 		INSERT INTO trakrf.assets
-		(name, identifier, type, description, valid_from, valid_to, metadata, is_active, org_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		(name, identifier, type, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (org_id, identifier) DO UPDATE SET
 			name = EXCLUDED.name,
 			type = EXCLUDED.type,
 			description = EXCLUDED.description,
+			current_location_id = EXCLUDED.current_location_id,
 			valid_from = EXCLUDED.valid_from,
 			valid_to = EXCLUDED.valid_to,
 			metadata = EXCLUDED.metadata,
@@ -200,7 +201,7 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 
 	for i, a := range assets {
 		_, err := tx.Exec(ctx, query,
-			a.Name, a.Identifier, a.Type, a.Description,
+			a.Name, a.Identifier, a.Type, a.Description, a.CurrentLocationID,
 			a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
 		)
 
@@ -277,6 +278,9 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	}
 	if req.Description != nil {
 		fields["description"] = *req.Description
+	}
+	if req.CurrentLocationID != nil {
+		fields["current_location_id"] = *req.CurrentLocationID
 	}
 	if req.ValidFrom != nil {
 		fields["valid_from"] = *req.ValidFrom
