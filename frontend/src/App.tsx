@@ -20,8 +20,10 @@ const AssetsScreen = lazyWithRetry(() => import('@/components/AssetsScreen'));
 const LocationsScreen = lazyWithRetry(() => import('@/components/LocationsScreen'));
 const LoginScreen = lazyWithRetry(() => import('@/components/LoginScreen'));
 const SignupScreen = lazyWithRetry(() => import('@/components/SignupScreen'));
+const ForgotPasswordScreen = lazyWithRetry(() => import('@/components/ForgotPasswordScreen'));
+const ResetPasswordScreen = lazyWithRetry(() => import('@/components/ResetPasswordScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -172,7 +174,8 @@ export default function App() {
   }, []);
 
   const renderTabContent = () => {
-    const tabComponents = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tabComponents: Record<string, React.ComponentType<any>> = {
       home: HomeScreen,
       inventory: InventoryScreen,
       locate: LocateScreen,
@@ -182,10 +185,12 @@ export default function App() {
       settings: SettingsScreen,
       help: HelpScreen,
       login: LoginScreen,
-      signup: SignupScreen
+      signup: SignupScreen,
+      'forgot-password': ForgotPasswordScreen,
+      'reset-password': ResetPasswordScreen,
     };
 
-    const loadingScreens = {
+    const loadingScreens: Record<string, React.ComponentType> = {
       home: LoadingScreen,
       inventory: InventoryLoadingScreen,
       locate: LocateLoadingScreen,
@@ -195,15 +200,25 @@ export default function App() {
       settings: SettingsLoadingScreen,
       help: HelpLoadingScreen,
       login: LoadingScreen,
-      signup: LoadingScreen
+      signup: LoadingScreen,
+      'forgot-password': LoadingScreen,
+      'reset-password': LoadingScreen,
     };
 
     const Component = tabComponents[activeTab] || HomeScreen;
     const LoadingComponent = loadingScreens[activeTab] || LoadingScreen;
 
+    // Get token from URL for reset-password screen
+    const { params } = parseHash();
+    const token = params.get('token');
+
     return (
       <Suspense fallback={<LoadingComponent />}>
-        <Component />
+        {activeTab === 'reset-password' ? (
+          <Component token={token} />
+        ) : (
+          <Component />
+        )}
       </Suspense>
     );
   };

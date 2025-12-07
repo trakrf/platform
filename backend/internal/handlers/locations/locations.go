@@ -11,8 +11,8 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/middleware"
-	"github.com/trakrf/platform/backend/internal/models/location"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
@@ -71,14 +71,14 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loc := location.Location{
-		OrgID:              orgID,
-		Name:               request.Name,
-		Identifier:         request.Identifier,
-		ParentLocationID:   request.ParentLocationID,
-		Description:        request.Description,
-		ValidFrom:          request.ValidFrom.ToTime(),
-		ValidTo:            validTo,
-		IsActive:           request.IsActive,
+		OrgID:            orgID,
+		Name:             request.Name,
+		Identifier:       request.Identifier,
+		ParentLocationID: request.ParentLocationID,
+		Description:      request.Description,
+		ValidFrom:        request.ValidFrom.ToTime(),
+		ValidTo:          validTo,
+		IsActive:         request.IsActive,
 	}
 
 	result, err := handler.storage.CreateLocation(r.Context(), loc)

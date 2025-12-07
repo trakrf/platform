@@ -24,6 +24,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
+	"github.com/trakrf/platform/backend/internal/services/email"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -114,7 +115,8 @@ func main() {
 	}
 	log.Info().Msg("Storage initialized")
 
-	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store)
+	emailClient := email.NewClient()
+	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
 	log.Info().Msg("Auth service initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)

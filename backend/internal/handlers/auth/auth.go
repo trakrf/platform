@@ -113,7 +113,82 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": response})
 }
 
+// @Summary Request password reset
+// @Description Send a password reset email if account exists
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body auth.ForgotPasswordRequest true "Email address"
+// @Success 200 {object} auth.MessageResponse "Success message (always returns 200)"
+// @Failure 400 {object} errors.ErrorResponse "Validation error"
+// @Router /api/v1/auth/forgot-password [post]
+func (handler *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var request auth.ForgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+			apierrors.AuthForgotPasswordInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
+			apierrors.AuthForgotPasswordValidation, err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	// ForgotPassword always returns nil to avoid leaking account existence
+	_ = handler.service.ForgotPassword(r.Context(), request.Email)
+
+	// Always return success to avoid leaking whether email exists
+	httputil.WriteJSON(w, http.StatusOK, auth.MessageResponse{
+		Message: "If an account exists, a reset email has been sent",
+	})
+}
+
+// @Summary Reset password
+// @Description Reset password using a valid token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body auth.ResetPasswordRequest true "Token and new password"
+// @Success 200 {object} auth.MessageResponse "Success message"
+// @Failure 400 {object} errors.ErrorResponse "Invalid or expired token"
+// @Failure 500 {object} errors.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/reset-password [post]
+func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var request auth.ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+			apierrors.AuthResetPasswordInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
+			apierrors.AuthResetPasswordValidation, err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	err := handler.service.ResetPassword(r.Context(), request.Token, request.Password, password.Hash)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid or expired") {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.AuthResetPasswordInvalidToken, "", middleware.GetRequestID(r.Context()))
+			return
+		}
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
+			apierrors.AuthResetPasswordFailed, "", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, auth.MessageResponse{
+		Message: "Password updated successfully",
+	})
+}
+
 func (handler *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/v1/auth/signup", handler.Signup)
 	r.Post("/api/v1/auth/login", handler.Login)
+	r.Post("/api/v1/auth/forgot-password", handler.ForgotPassword)
+	r.Post("/api/v1/auth/reset-password", handler.ResetPassword)
 }

@@ -45,6 +45,17 @@ const (
 	AuthLoginFailed              = "Failed to login"
 )
 
+// Password reset error messages
+const (
+	AuthForgotPasswordInvalidJSON = "Invalid JSON"
+	AuthForgotPasswordValidation  = "Validation failed"
+	AuthForgotPasswordFailed      = "Failed to process request"
+	AuthResetPasswordInvalidJSON  = "Invalid JSON"
+	AuthResetPasswordValidation   = "Validation failed"
+	AuthResetPasswordInvalidToken = "Invalid or expired reset link"
+	AuthResetPasswordFailed       = "Failed to reset password"
+)
+
 const (
 	UserListFailed           = "Failed to list users"
 	UserGetInvalidID         = "Invalid user ID"

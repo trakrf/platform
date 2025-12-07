@@ -26,10 +26,20 @@ export interface AuthResponse {
   };
 }
 
+export interface MessageResponse {
+  message: string;
+}
+
 export const authApi = {
   signup: (data: SignupRequest) =>
     apiClient.post<AuthResponse>('/auth/signup', data),
 
   login: (data: LoginRequest) =>
     apiClient.post<AuthResponse>('/auth/login', data),
+
+  forgotPassword: (email: string) =>
+    apiClient.post<MessageResponse>('/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, password: string) =>
+    apiClient.post<MessageResponse>('/auth/reset-password', { token, password }),
 };

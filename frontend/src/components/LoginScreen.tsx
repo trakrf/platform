@@ -132,6 +132,11 @@ export default function LoginScreen() {
             {errors.password && (
               <p className="text-red-400 text-sm mt-1">{errors.password}</p>
             )}
+            <div className="text-right mt-1">
+              <a href="#forgot-password" className="text-sm text-blue-400 hover:text-blue-300">
+                Forgot password?
+              </a>
+            </div>
           </div>
 
           {/* General error */}

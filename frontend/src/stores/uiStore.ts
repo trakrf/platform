@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 
 // Define tab types
-export type TabType = 'home' | 'inventory' | 'barcode' | 'settings' | 'locate' | 'help' | 'assets' | 'locations' | 'login' | 'signup';
+export type TabType = 'home' | 'inventory' | 'barcode' | 'settings' | 'locate' | 'help' | 'assets' | 'locations' | 'login' | 'signup' | 'forgot-password' | 'reset-password';
 export type TabId = TabType;
 
 // Notification interface
