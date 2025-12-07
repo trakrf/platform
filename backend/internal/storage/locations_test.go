@@ -26,14 +26,14 @@ func TestCreateLocation(t *testing.T) {
 	now := time.Now()
 	parentID := 1
 	request := location.Location{
-		Name:               "Warehouse 1",
-		Identifier:         "warehouse_1",
-		ParentLocationID:   &parentID,
-		Description:        "Main warehouse in California",
-		ValidFrom:          now,
-		ValidTo:            nil,
-		IsActive:           true,
-		OrgID:              1,
+		Name:             "Warehouse 1",
+		Identifier:       "warehouse_1",
+		ParentLocationID: &parentID,
+		Description:      "Main warehouse in California",
+		ValidFrom:        now,
+		ValidTo:          nil,
+		IsActive:         true,
+		OrgID:            1,
 	}
 
 	rows := pgxmock.NewRows([]string{
@@ -72,14 +72,14 @@ func TestCreateLocation_RootLocation(t *testing.T) {
 
 	now := time.Now()
 	request := location.Location{
-		Name:               "USA",
-		Identifier:         "usa",
-		ParentLocationID:   nil,
-		Description:        "United States region",
-		ValidFrom:          now,
-		ValidTo:            nil,
-		IsActive:           true,
-		OrgID:              1,
+		Name:             "USA",
+		Identifier:       "usa",
+		ParentLocationID: nil,
+		Description:      "United States region",
+		ValidFrom:        now,
+		ValidTo:          nil,
+		IsActive:         true,
+		OrgID:            1,
 	}
 
 	rows := pgxmock.NewRows([]string{
@@ -121,14 +121,14 @@ func TestCreateLocation_DuplicateIdentifier(t *testing.T) {
 
 	now := time.Now()
 	request := location.Location{
-		Name:               "Warehouse 1",
-		Identifier:         "warehouse_1",
-		ParentLocationID:   nil,
-		Description:        "Test",
-		ValidFrom:          now,
-		ValidTo:            nil,
-		IsActive:           true,
-		OrgID:              1,
+		Name:             "Warehouse 1",
+		Identifier:       "warehouse_1",
+		ParentLocationID: nil,
+		Description:      "Test",
+		ValidFrom:        now,
+		ValidTo:          nil,
+		IsActive:         true,
+		OrgID:            1,
 	}
 
 	mock.ExpectQuery(`INSERT INTO trakrf.locations`).
@@ -157,14 +157,14 @@ func TestCreateLocation_InvalidParentID(t *testing.T) {
 	now := time.Now()
 	parentID := 99999
 	request := location.Location{
-		Name:               "Child Location",
-		Identifier:         "child",
-		ParentLocationID:   &parentID,
-		Description:        "Test",
-		ValidFrom:          now,
-		ValidTo:            nil,
-		IsActive:           true,
-		OrgID:              1,
+		Name:             "Child Location",
+		Identifier:       "child",
+		ParentLocationID: &parentID,
+		Description:      "Test",
+		ValidFrom:        now,
+		ValidTo:          nil,
+		IsActive:         true,
+		OrgID:            1,
 	}
 
 	mock.ExpectQuery(`INSERT INTO trakrf.locations`).

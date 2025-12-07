@@ -47,9 +47,11 @@ export function LocationTable({
   const { field: sortField, direction: sortDirection } = sort;
   const setSort = useLocationStore((state) => state.setSort);
 
-  const locations = propLocations ?? useMemo(() => {
+  const cachedLocations = useMemo(() => {
     return useLocationStore.getState().getFilteredLocations();
   }, [cache.byId.size, filters, sort]);
+
+  const locations = propLocations ?? cachedLocations;
 
   const handleSort = (field: string, direction: 'asc' | 'desc') => {
     setSort({ field: field as any, direction });

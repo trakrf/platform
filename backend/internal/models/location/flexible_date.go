@@ -14,15 +14,15 @@ type FlexibleDate struct {
 
 // Supported date formats
 var dateFormats = []string{
-	time.RFC3339,              // "2006-01-02T15:04:05Z07:00"
-	time.RFC3339Nano,          // "2006-01-02T15:04:05.999999999Z07:00"
-	"2006-01-02",              // ISO 8601: "2025-12-14"
-	"2006-01-02 15:04:05",     // ISO with time: "2025-12-14 10:30:00"
-	"01/02/2006",              // US format: "12/14/2025"
-	"02/01/2006",              // UK format: "14/12/2025"
-	"02.01.2006",              // European format: "14.12.2025"
-	"01.02.2006",              // Alternative: "12.14.2025"
-	"2006/01/02",              // ISO slashes: "2025/12/14"
+	time.RFC3339,          // "2006-01-02T15:04:05Z07:00"
+	time.RFC3339Nano,      // "2006-01-02T15:04:05.999999999Z07:00"
+	"2006-01-02",          // ISO 8601: "2025-12-14"
+	"2006-01-02 15:04:05", // ISO with time: "2025-12-14 10:30:00"
+	"01/02/2006",          // US format: "12/14/2025"
+	"02/01/2006",          // UK format: "14/12/2025"
+	"02.01.2006",          // European format: "14.12.2025"
+	"01.02.2006",          // Alternative: "12.14.2025"
+	"2006/01/02",          // ISO slashes: "2025/12/14"
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for flexible date parsing

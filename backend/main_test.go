@@ -21,7 +21,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	t.Helper()
 
 	store := &storage.Storage{}
-	authSvc := authservice.NewService(nil, store)
+	authSvc := authservice.NewService(nil, store, nil)
 
 	authHandler := authhandler.NewHandler(authSvc)
 	organizationsHandler := organizationshandler.NewHandler(store)
@@ -61,6 +61,8 @@ func TestRouterRegistration(t *testing.T) {
 		{"GET", "/health"},
 		{"POST", "/api/v1/auth/signup"},
 		{"POST", "/api/v1/auth/login"},
+		{"POST", "/api/v1/auth/forgot-password"},
+		{"POST", "/api/v1/auth/reset-password"},
 		{"GET", "/api/v1/organizations"},
 		{"GET", "/api/v1/users"},
 		{"GET", "/assets/index.js"},

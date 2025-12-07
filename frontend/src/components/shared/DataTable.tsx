@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { ReactNode } from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown, LucideIcon } from 'lucide-react';
 import { EmptyState } from '@/components/shared';
