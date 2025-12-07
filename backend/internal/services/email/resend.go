@@ -22,7 +22,12 @@ func NewClient() *Client {
 
 // SendPasswordResetEmail sends a password reset email with a link containing the token
 func (c *Client) SendPasswordResetEmail(toEmail, token string) error {
-	resetURL := fmt.Sprintf("https://app.trakrf.id/#reset-password?token=%s", token)
+	// Use APP_URL env var if set, otherwise default to production
+	baseURL := os.Getenv("APP_URL")
+	if baseURL == "" {
+		baseURL = "https://app.trakrf.id"
+	}
+	resetURL := fmt.Sprintf("%s/#reset-password?token=%s", baseURL, token)
 
 	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
 		From:    "TrakRF <noreply@trakrf.id>",
