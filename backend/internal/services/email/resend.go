@@ -20,14 +20,10 @@ func NewClient() *Client {
 	}
 }
 
-// SendPasswordResetEmail sends a password reset email with a link containing the token
-func (c *Client) SendPasswordResetEmail(toEmail, token string) error {
-	// Use APP_URL env var if set, otherwise default to production
-	baseURL := os.Getenv("APP_URL")
-	if baseURL == "" {
-		baseURL = "https://app.trakrf.id"
-	}
-	resetURL := fmt.Sprintf("%s/#reset-password?token=%s", baseURL, token)
+// SendPasswordResetEmail sends a password reset email with a link containing the token.
+// resetURL should be the base URL for the reset page (e.g., "https://app.trakrf.id/#reset-password")
+func (c *Client) SendPasswordResetEmail(toEmail, resetURL, token string) error {
+	fullResetURL := fmt.Sprintf("%s?token=%s", resetURL, token)
 
 	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
 		From:    "TrakRF <noreply@trakrf.id>",
@@ -38,7 +34,7 @@ func (c *Client) SendPasswordResetEmail(toEmail, token string) error {
 			<p>Click the link below to reset your TrakRF password. This link expires in 24 hours.</p>
 			<p><a href="%s">Reset Password</a></p>
 			<p>If you didn't request this, you can safely ignore this email.</p>
-		`, resetURL),
+		`, fullResetURL),
 	})
 
 	if err != nil {

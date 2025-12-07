@@ -137,7 +137,7 @@ func (handler *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ForgotPassword always returns nil to avoid leaking account existence
-	_ = handler.service.ForgotPassword(r.Context(), request.Email)
+	_ = handler.service.ForgotPassword(r.Context(), request.Email, request.ResetURL)
 
 	// Always return success to avoid leaking whether email exists
 	httputil.WriteJSON(w, http.StatusOK, auth.MessageResponse{

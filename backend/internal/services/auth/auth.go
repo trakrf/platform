@@ -166,7 +166,7 @@ func (s *Service) Login(ctx context.Context, request auth.LoginRequest, compareP
 
 // ForgotPassword initiates a password reset flow by sending an email with a reset token.
 // Always returns nil to avoid leaking whether an email exists in the system.
-func (s *Service) ForgotPassword(ctx context.Context, emailAddr string) error {
+func (s *Service) ForgotPassword(ctx context.Context, emailAddr, resetURL string) error {
 	// Look up user by email
 	usr, err := s.storage.GetUserByEmail(ctx, emailAddr)
 	if err != nil {
@@ -202,7 +202,7 @@ func (s *Service) ForgotPassword(ctx context.Context, emailAddr string) error {
 
 	// Send email via Resend
 	if s.emailClient != nil {
-		if err := s.emailClient.SendPasswordResetEmail(emailAddr, token); err != nil {
+		if err := s.emailClient.SendPasswordResetEmail(emailAddr, resetURL, token); err != nil {
 			fmt.Printf("Warning: failed to send password reset email: %v\n", err)
 			// Token is stored, but email failed - user can try again
 		}
