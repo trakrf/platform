@@ -47,9 +47,11 @@ export function AssetTable({
   const { field: sortField, direction: sortDirection } = sort;
   const setSort = useAssetStore((state) => state.setSort);
 
-  const assets = propAssets ?? useMemo(() => {
+  const cachedAssets = useMemo(() => {
     return useAssetStore.getState().getFilteredAssets();
   }, [cache.byId.size, filters, sort]);
+
+  const assets = propAssets ?? cachedAssets;
 
   const handleSort = (field: string, direction: 'asc' | 'desc') => {
     setSort(field as any, direction);
