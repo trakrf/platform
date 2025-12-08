@@ -5,12 +5,6 @@ WORKDIR /app
 # Install Air for hot-reload
 RUN go install github.com/air-verse/air@v1.63.0
 
-# Install migrate CLI (pinned version for reproducibility)
-RUN wget -qO- https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | \
-    tar xvz && \
-    mv migrate /usr/local/bin/migrate && \
-    chmod +x /usr/local/bin/migrate
-
 # Copy go.mod and go.sum for dependency management
 COPY go.mod go.sum ./
 RUN go mod download
@@ -41,9 +35,7 @@ FROM alpine:3.20 AS production
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 
-# Copy migrate CLI from development stage (avoid downloading twice)
-COPY --from=development /usr/local/bin/migrate /usr/local/bin/migrate
-
+# Copy server binary (migrations are embedded via go:embed)
 COPY --from=builder /app/server .
 EXPOSE 8080
 CMD ["./server"]

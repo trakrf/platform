@@ -35,7 +35,6 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
     volumes:
       - ./backend:/app
-      - ./database/migrations:/app/database/migrations
       - ./database/seeds:/app/database/seeds
       - go_mod_cache:/go/pkg/mod
     depends_on:

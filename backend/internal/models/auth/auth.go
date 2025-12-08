@@ -23,8 +23,8 @@ type AuthResponse struct {
 
 // ForgotPasswordRequest for POST /api/v1/auth/forgot-password
 type ForgotPasswordRequest struct {
-	Email     string `json:"email" validate:"required,email"`
-	ResetURL  string `json:"reset_url" validate:"required,url"`
+	Email    string `json:"email" validate:"required,email"`
+	ResetURL string `json:"reset_url" validate:"required,url"`
 }
 
 // ResetPasswordRequest for POST /api/v1/auth/reset-password
