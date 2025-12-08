@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,7 +11,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/trakrf/platform/backend/docs"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
@@ -31,10 +36,48 @@ import (
 //go:embed frontend/dist
 var frontendFS embed.FS
 
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
 var (
 	version   = "dev"
 	startTime time.Time
 )
+
+func runMigrations(pool *pgxpool.Pool) error {
+	log := logger.Get()
+
+	// Convert pgxpool to *sql.DB for golang-migrate
+	db := stdlib.OpenDBFromPool(pool)
+
+	// Create iofs source from embedded migrations
+	source, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("failed to create migration source: %w", err)
+	}
+
+	// Create postgres driver
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create migration driver: %w", err)
+	}
+
+	// Create migrator
+	m, err := migrate.NewWithInstance("iofs", source, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("failed to create migrator: %w", err)
+	}
+
+	// Run migrations
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	migrationVersion, dirty, _ := m.Version()
+	log.Info().Uint("version", migrationVersion).Bool("dirty", dirty).Msg("Migrations complete")
+
+	return nil
+}
 
 // @title TrakRF Platform API
 // @version 1.0
@@ -114,6 +157,12 @@ func main() {
 		os.Exit(1)
 	}
 	log.Info().Msg("Storage initialized")
+
+	if err := runMigrations(store.Pool().(*pgxpool.Pool)); err != nil {
+		log.Error().Err(err).Msg("Failed to run migrations")
+		os.Exit(1)
+	}
+	log.Info().Msg("Migrations applied")
 
 	emailClient := email.NewClient()
 	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)

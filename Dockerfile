@@ -21,16 +21,7 @@ RUN pnpm --filter frontend run build
 FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
 
-# Install build dependencies
-RUN apk add --no-cache wget tar
-
-# Install migrate CLI (pattern from backend/Dockerfile:9-12)
-RUN wget -qO- https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | \
-    tar xvz && \
-    mv migrate /usr/local/bin/migrate && \
-    chmod +x /usr/local/bin/migrate
-
-# Copy go.mod for layer caching (pattern from backend/Dockerfile:28-30)
+# Copy go.mod for layer caching
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
@@ -56,20 +47,9 @@ RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
-# Copy migrate CLI (pattern from backend/Dockerfile:42)
-COPY --from=backend-builder /usr/local/bin/migrate /usr/local/bin/migrate
-
-# Copy server binary
+# Copy server binary (migrations are embedded via go:embed)
 COPY --from=backend-builder /app/backend/server /server
-
-# Copy database migrations (must match entrypoint path)
-COPY database/migrations /app/database/migrations
-
-# Copy entrypoint script
-COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8080
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/server"]
