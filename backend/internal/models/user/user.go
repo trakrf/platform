@@ -17,6 +17,9 @@ type User struct {
 	Metadata     any        `json:"metadata"` // JSONB
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+	// RBAC fields
+	IsSuperadmin bool `json:"is_superadmin"`
+	LastOrgID    *int `json:"last_org_id,omitempty"`
 }
 
 // CreateUserRequest for POST /api/v1/users
