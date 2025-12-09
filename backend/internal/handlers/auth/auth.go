@@ -11,6 +11,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/auth"
 	"github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/models/organization"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -186,9 +187,75 @@ func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (handler *Handler) RegisterRoutes(r chi.Router) {
+// @Summary Accept organization invitation
+// @Description Accept an invitation to join an organization using the token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body organization.AcceptInvitationRequest true "Invitation token"
+// @Success 200 {object} map[string]any "data: organization.AcceptInvitationResponse"
+// @Failure 400 {object} errors.ErrorResponse "Invalid or expired token"
+// @Failure 401 {object} errors.ErrorResponse "Not authenticated"
+// @Failure 409 {object} errors.ErrorResponse "Already a member"
+// @Failure 500 {object} errors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/auth/accept-invite [post]
+func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
+	// Get authenticated user
+	claims := middleware.GetUserClaims(r)
+	if claims == nil {
+		httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
+			"Please log in to accept this invitation", "", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	var request organization.AcceptInvitationRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+			apierrors.InvitationAcceptInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
+			apierrors.InvitationAcceptValidation, err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	response, err := handler.service.AcceptInvitation(r.Context(), request.Token, claims.UserID)
+	if err != nil {
+		switch err.Error() {
+		case "invalid_token":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationInvalidToken, "", middleware.GetRequestID(r.Context()))
+		case "expired":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationExpired, "", middleware.GetRequestID(r.Context()))
+		case "cancelled":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationCancelled, "", middleware.GetRequestID(r.Context()))
+		case "already_accepted":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationAcceptAlreadyUsed, "", middleware.GetRequestID(r.Context()))
+		case "already_member":
+			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
+				apierrors.InvitationAcceptAlreadyMember, "", middleware.GetRequestID(r.Context()))
+		default:
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
+				apierrors.InvitationAcceptFailed, "", middleware.GetRequestID(r.Context()))
+		}
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": response})
+}
+
+func (handler *Handler) RegisterRoutes(r chi.Router, jwtMiddleware func(http.Handler) http.Handler) {
 	r.Post("/api/v1/auth/signup", handler.Signup)
 	r.Post("/api/v1/auth/login", handler.Login)
 	r.Post("/api/v1/auth/forgot-password", handler.ForgotPassword)
 	r.Post("/api/v1/auth/reset-password", handler.ResetPassword)
+
+	// Protected auth routes
+	r.With(jwtMiddleware).Post("/api/v1/auth/accept-invite", handler.AcceptInvite)
 }

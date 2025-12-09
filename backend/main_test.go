@@ -63,6 +63,7 @@ func TestRouterRegistration(t *testing.T) {
 		{"POST", "/api/v1/auth/login"},
 		{"POST", "/api/v1/auth/forgot-password"},
 		{"POST", "/api/v1/auth/reset-password"},
+		{"POST", "/api/v1/auth/accept-invite"},
 		{"GET", "/api/v1/orgs"},
 		{"POST", "/api/v1/orgs"},
 		{"GET", "/api/v1/orgs/1/members"},

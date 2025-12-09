@@ -117,7 +117,7 @@ func setupRouter(
 
 	healthHandler.RegisterRoutes(r)
 
-	authHandler.RegisterRoutes(r)
+	authHandler.RegisterRoutes(r, middleware.Auth)
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)

@@ -104,3 +104,16 @@ type CreateInvitationResponse struct {
 	Role      string    `json:"role"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
+
+// AcceptInvitationRequest for POST /api/v1/auth/accept-invite
+type AcceptInvitationRequest struct {
+	Token string `json:"token" validate:"required,len=64"`
+}
+
+// AcceptInvitationResponse for successful acceptance
+type AcceptInvitationResponse struct {
+	Message string `json:"message"`
+	OrgID   int    `json:"org_id"`
+	OrgName string `json:"org_name"`
+	Role    string `json:"role"`
+}
