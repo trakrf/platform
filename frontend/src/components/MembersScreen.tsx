@@ -13,6 +13,7 @@ import { ArrowLeft, Trash2 } from 'lucide-react';
 import { useOrgStore, useAuthStore } from '@/stores';
 import { orgsApi } from '@/lib/api/orgs';
 import type { OrgMember, OrgRole } from '@/types/org';
+import InvitationsSection from './InvitationsSection';
 import toast from 'react-hot-toast';
 
 const ROLES: OrgRole[] = ['owner', 'admin', 'manager', 'operator', 'viewer'];
@@ -271,13 +272,9 @@ export default function MembersScreen() {
           </div>
         )}
 
-        {/* Invite Link (Phase 3c placeholder) */}
-        {isAdmin && (
-          <div className="mt-6 pt-6 border-t border-gray-700 text-center">
-            <p className="text-gray-500 text-sm">
-              Invite new members coming in Phase 3c
-            </p>
-          </div>
+        {/* Invitations Section */}
+        {isAdmin && currentOrg && (
+          <InvitationsSection orgId={currentOrg.id} isAdmin={isAdmin} />
         )}
       </div>
     </div>

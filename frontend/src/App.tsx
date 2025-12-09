@@ -25,8 +25,9 @@ const ResetPasswordScreen = lazyWithRetry(() => import('@/components/ResetPasswo
 const CreateOrgScreen = lazyWithRetry(() => import('@/components/CreateOrgScreen'));
 const MembersScreen = lazyWithRetry(() => import('@/components/MembersScreen'));
 const OrgSettingsScreen = lazyWithRetry(() => import('@/components/OrgSettingsScreen'));
+const AcceptInviteScreen = lazyWithRetry(() => import('@/components/AcceptInviteScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -198,6 +199,7 @@ export default function App() {
       'create-org': CreateOrgScreen,
       'org-members': MembersScreen,
       'org-settings': OrgSettingsScreen,
+      'accept-invite': AcceptInviteScreen,
     };
 
     const loadingScreens: Record<string, React.ComponentType> = {
@@ -216,6 +218,7 @@ export default function App() {
       'create-org': LoadingScreen,
       'org-members': LoadingScreen,
       'org-settings': LoadingScreen,
+      'accept-invite': LoadingScreen,
     };
 
     const Component = tabComponents[activeTab] || HomeScreen;
@@ -227,7 +230,7 @@ export default function App() {
 
     return (
       <Suspense fallback={<LoadingComponent />}>
-        {activeTab === 'reset-password' ? (
+        {activeTab === 'reset-password' || activeTab === 'accept-invite' ? (
           <Component token={token} />
         ) : (
           <Component />
