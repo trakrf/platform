@@ -48,22 +48,11 @@ CREATE INDEX idx_org_invitations_token ON org_invitations(token);
 CREATE INDEX idx_org_invitations_org_id ON org_invitations(org_id);
 CREATE INDEX idx_org_invitations_email ON org_invitations(email);
 
--- 6. Backfill existing org creators as admin
--- First, try to set role based on created_by
-UPDATE org_users ou
-SET role = 'admin'::org_role
-FROM organizations o
-WHERE ou.org_id = o.id
-  AND ou.user_id = o.created_by
-  AND o.created_by IS NOT NULL;
-
--- For orgs where created_by is NULL, make the first user (by created_at) the admin
+-- 6. Backfill: Make the first user (by created_at) in each org the admin
 WITH first_users AS (
   SELECT DISTINCT ON (org_id) org_id, user_id
   FROM org_users
-  WHERE org_id IN (
-    SELECT id FROM organizations WHERE created_by IS NULL
-  )
+  WHERE deleted_at IS NULL
   ORDER BY org_id, created_at ASC
 )
 UPDATE org_users ou
