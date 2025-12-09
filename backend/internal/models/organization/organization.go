@@ -60,3 +60,17 @@ type UserProfile struct {
 	CurrentOrg   *UserOrgWithRole `json:"current_org,omitempty"`
 	Orgs         []UserOrg        `json:"orgs"`
 }
+
+// OrgMember represents a member in an organization for the list response
+type OrgMember struct {
+	UserID   int       `json:"user_id"`
+	Name     string    `json:"name"`
+	Email    string    `json:"email"`
+	Role     string    `json:"role"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
+// UpdateMemberRoleRequest for PUT /api/v1/orgs/:id/members/:userId
+type UpdateMemberRoleRequest struct {
+	Role string `json:"role" validate:"required,oneof=viewer operator manager admin"`
+}

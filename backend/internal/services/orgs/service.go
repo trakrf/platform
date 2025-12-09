@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/trakrf/platform/backend/internal/models"
 	"github.com/trakrf/platform/backend/internal/models/organization"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
@@ -156,4 +157,62 @@ func slugifyOrgName(name string) string {
 	slug = reg.ReplaceAllString(slug, "-")
 	slug = strings.Trim(slug, "-")
 	return slug
+}
+
+// ListMembers returns all members of an organization
+func (s *Service) ListMembers(ctx context.Context, orgID int) ([]organization.OrgMember, error) {
+	members, err := s.storage.ListOrgMembers(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list members: %w", err)
+	}
+	return members, nil
+}
+
+// UpdateMemberRole updates a member's role with last-admin protection
+func (s *Service) UpdateMemberRole(ctx context.Context, orgID, targetUserID int, newRole models.OrgRole) error {
+	// Get current role
+	currentRole, err := s.storage.GetUserOrgRole(ctx, targetUserID, orgID)
+	if err != nil {
+		return fmt.Errorf("member not found")
+	}
+
+	// If demoting from admin, check if they're the last admin
+	if currentRole == models.RoleAdmin && newRole != models.RoleAdmin {
+		adminCount, err := s.storage.CountOrgAdmins(ctx, orgID)
+		if err != nil {
+			return fmt.Errorf("failed to check admin count: %w", err)
+		}
+		if adminCount <= 1 {
+			return fmt.Errorf("cannot demote the last admin")
+		}
+	}
+
+	return s.storage.UpdateMemberRole(ctx, orgID, targetUserID, newRole)
+}
+
+// RemoveMember removes a member with last-admin and self-removal protection
+func (s *Service) RemoveMember(ctx context.Context, orgID, targetUserID, actorUserID int) error {
+	// Prevent self-removal
+	if targetUserID == actorUserID {
+		return fmt.Errorf("cannot remove yourself")
+	}
+
+	// Check if target is a member
+	targetRole, err := s.storage.GetUserOrgRole(ctx, targetUserID, orgID)
+	if err != nil {
+		return fmt.Errorf("member not found")
+	}
+
+	// If removing an admin, check if they're the last admin
+	if targetRole == models.RoleAdmin {
+		adminCount, err := s.storage.CountOrgAdmins(ctx, orgID)
+		if err != nil {
+			return fmt.Errorf("failed to check admin count: %w", err)
+		}
+		if adminCount <= 1 {
+			return fmt.Errorf("cannot remove the last admin")
+		}
+	}
+
+	return s.storage.RemoveMember(ctx, orgID, targetUserID)
 }

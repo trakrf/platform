@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models"
-	"github.com/trakrf/platform/backend/internal/models/org_user"
+	"github.com/trakrf/platform/backend/internal/models/organization"
 )
 
 // ErrOrgUserNotFound is returned when a user is not a member of an org
@@ -80,32 +80,61 @@ func (s *Storage) AddUserToOrg(ctx context.Context, orgID, userID int, role mode
 	return nil
 }
 
-// ListOrgUsers retrieves a paginated list of users in an organization.
-func (s *Storage) ListOrgUsers(ctx context.Context, orgID int, limit, offset int) ([]org_user.OrgUser, int, error) {
-	// TODO: Implement with new schema
-	return nil, 0, fmt.Errorf("not implemented: org_user list requires schema migration")
+// ListOrgMembers returns all members of an organization with user details
+func (s *Storage) ListOrgMembers(ctx context.Context, orgID int) ([]organization.OrgMember, error) {
+	query := `
+		SELECT ou.user_id, u.name, u.email, ou.role, ou.created_at
+		FROM trakrf.org_users ou
+		JOIN trakrf.users u ON u.id = ou.user_id
+		WHERE ou.org_id = $1 AND ou.deleted_at IS NULL AND u.deleted_at IS NULL
+		ORDER BY ou.created_at ASC
+	`
+	rows, err := s.pool.Query(ctx, query, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list org members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []organization.OrgMember
+	for rows.Next() {
+		var m organization.OrgMember
+		if err := rows.Scan(&m.UserID, &m.Name, &m.Email, &m.Role, &m.JoinedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan member: %w", err)
+		}
+		members = append(members, m)
+	}
+	return members, nil
 }
 
-// GetOrgUser retrieves a single org-user relationship.
-func (s *Storage) GetOrgUser(ctx context.Context, orgID, userID int) (*org_user.OrgUser, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented: org_user get requires schema migration")
+// UpdateMemberRole updates a member's role in an organization
+func (s *Storage) UpdateMemberRole(ctx context.Context, orgID, userID int, role models.OrgRole) error {
+	query := `
+		UPDATE trakrf.org_users
+		SET role = $3, updated_at = NOW()
+		WHERE org_id = $1 AND user_id = $2 AND deleted_at IS NULL
+	`
+	result, err := s.pool.Exec(ctx, query, orgID, userID, role)
+	if err != nil {
+		return fmt.Errorf("failed to update member role: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrOrgUserNotFound
+	}
+	return nil
 }
 
-// CreateOrgUser creates a new org-user relationship.
-func (s *Storage) CreateOrgUser(ctx context.Context, request org_user.CreateOrgUserRequest) (*org_user.OrgUser, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented: org_user create requires schema migration")
-}
-
-// UpdateOrgUser updates an org-user relationship.
-func (s *Storage) UpdateOrgUser(ctx context.Context, orgID, userID int, request org_user.UpdateOrgUserRequest) (*org_user.OrgUser, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented: org_user update requires schema migration")
-}
-
-// SoftDeleteOrgUser marks an org-user relationship as deleted.
-func (s *Storage) SoftDeleteOrgUser(ctx context.Context, orgID, userID int) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented: org_user delete requires schema migration")
+// RemoveMember removes a user from an organization (hard delete)
+func (s *Storage) RemoveMember(ctx context.Context, orgID, userID int) error {
+	query := `
+		DELETE FROM trakrf.org_users
+		WHERE org_id = $1 AND user_id = $2
+	`
+	result, err := s.pool.Exec(ctx, query, orgID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to remove member: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrOrgUserNotFound
+	}
+	return nil
 }
