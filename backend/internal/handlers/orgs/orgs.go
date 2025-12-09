@@ -194,5 +194,10 @@ func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 		r.With(middleware.RequireOrgMember(store)).Get("/", h.Get)
 		r.With(middleware.RequireOrgAdmin(store)).Put("/", h.Update)
 		r.With(middleware.RequireOrgAdmin(store)).Delete("/", h.Delete)
+
+		// Member management routes
+		r.With(middleware.RequireOrgMember(store)).Get("/members", h.ListMembers)
+		r.With(middleware.RequireOrgAdmin(store)).Put("/members/{userId}", h.UpdateMemberRole)
+		r.With(middleware.RequireOrgAdmin(store)).Delete("/members/{userId}", h.RemoveMember)
 	})
 }

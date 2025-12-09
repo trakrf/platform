@@ -112,3 +112,17 @@ const (
 	OrgNotMember            = "You are not a member of this organization"
 	OrgSetCurrentFailed     = "Failed to set current organization"
 )
+
+// Member management error messages
+const (
+	MemberListFailed           = "Failed to list members"
+	MemberUpdateInvalidID      = "Invalid user ID"
+	MemberUpdateInvalidJSON    = "Invalid JSON"
+	MemberUpdateValidationFail = "Validation failed"
+	MemberUpdateFailed         = "Failed to update member role"
+	MemberNotFound             = "Member not found"
+	MemberRemoveFailed         = "Failed to remove member"
+	MemberLastAdmin            = "Cannot remove or demote the last admin"
+	MemberSelfRemoval          = "Cannot remove yourself"
+	MemberInvalidRole          = "Invalid role"
+)
