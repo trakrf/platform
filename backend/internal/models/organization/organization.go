@@ -74,3 +74,33 @@ type OrgMember struct {
 type UpdateMemberRoleRequest struct {
 	Role string `json:"role" validate:"required,oneof=viewer operator manager admin"`
 }
+
+// Invitation represents an org invitation for list response
+type Invitation struct {
+	ID        int            `json:"id"`
+	Email     string         `json:"email"`
+	Role      string         `json:"role"`
+	InvitedBy *InvitedByUser `json:"invited_by,omitempty"`
+	ExpiresAt time.Time      `json:"expires_at"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+// InvitedByUser is the minimal user info for invited_by
+type InvitedByUser struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// CreateInvitationRequest for POST /orgs/:id/invitations
+type CreateInvitationRequest struct {
+	Email string `json:"email" validate:"required,email"`
+	Role  string `json:"role" validate:"required,oneof=viewer operator manager admin"`
+}
+
+// CreateInvitationResponse for successful creation
+type CreateInvitationResponse struct {
+	ID        int       `json:"id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	ExpiresAt time.Time `json:"expires_at"`
+}

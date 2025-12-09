@@ -9,16 +9,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/trakrf/platform/backend/internal/models"
 	"github.com/trakrf/platform/backend/internal/models/organization"
+	"github.com/trakrf/platform/backend/internal/services/email"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
 type Service struct {
-	db      *pgxpool.Pool
-	storage *storage.Storage
+	db          *pgxpool.Pool
+	storage     *storage.Storage
+	emailClient *email.Client
 }
 
-func NewService(db *pgxpool.Pool, storage *storage.Storage) *Service {
-	return &Service{db: db, storage: storage}
+func NewService(db *pgxpool.Pool, storage *storage.Storage, emailClient *email.Client) *Service {
+	return &Service{db: db, storage: storage, emailClient: emailClient}
 }
 
 // CreateOrgWithAdmin creates a new team org and makes the creator an admin.
