@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models"
@@ -61,6 +62,22 @@ func (s *Storage) CountOrgAdmins(ctx context.Context, orgID int) (int, error) {
 		return 0, fmt.Errorf("failed to count org admins: %w", err)
 	}
 	return count, nil
+}
+
+// AddUserToOrg adds a user to an organization with the specified role.
+func (s *Storage) AddUserToOrg(ctx context.Context, orgID, userID int, role models.OrgRole) error {
+	query := `
+		INSERT INTO trakrf.org_users (org_id, user_id, role)
+		VALUES ($1, $2, $3)
+	`
+	_, err := s.pool.Exec(ctx, query, orgID, userID, role)
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") {
+			return fmt.Errorf("user is already a member of this organization")
+		}
+		return fmt.Errorf("failed to add user to org: %w", err)
+	}
+	return nil
 }
 
 // ListOrgUsers retrieves a paginated list of users in an organization.

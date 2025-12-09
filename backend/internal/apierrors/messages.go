@@ -89,3 +89,26 @@ const (
 	LocationListFailed       = "Failed to list locations"
 	LocationCountFailed      = "Failed to count locations"
 )
+
+// Organization error messages
+const (
+	OrgListFailed           = "Failed to list organizations"
+	OrgGetInvalidID         = "Invalid organization ID"
+	OrgGetFailed            = "Failed to get organization"
+	OrgNotFound             = "Organization not found"
+	OrgCreateInvalidJSON    = "Invalid JSON"
+	OrgCreateValidationFail = "Validation failed"
+	OrgCreateFailed         = "Failed to create organization"
+	OrgUpdateInvalidID      = "Invalid organization ID"
+	OrgUpdateInvalidJSON    = "Invalid JSON"
+	OrgUpdateValidationFail = "Validation failed"
+	OrgUpdateFailed         = "Failed to update organization"
+	OrgUpdateNotFound       = "Organization not found"
+	OrgDeleteInvalidID      = "Invalid organization ID"
+	OrgDeleteInvalidJSON    = "Invalid JSON"
+	OrgDeleteNameMismatch   = "Organization name does not match"
+	OrgDeleteFailed         = "Failed to delete organization"
+	OrgDeleteNotFound       = "Organization not found"
+	OrgNotMember            = "You are not a member of this organization"
+	OrgSetCurrentFailed     = "Failed to set current organization"
+)

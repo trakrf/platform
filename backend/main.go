@@ -23,13 +23,13 @@ import (
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
-	orgusershandler "github.com/trakrf/platform/backend/internal/handlers/org_users"
-	organizationshandler "github.com/trakrf/platform/backend/internal/handlers/organizations"
+	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
+	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -90,13 +90,13 @@ func runMigrations(pool *pgxpool.Pool) error {
 
 func setupRouter(
 	authHandler *authhandler.Handler,
-	organizationsHandler *organizationshandler.Handler,
+	orgsHandler *orgshandler.Handler,
 	usersHandler *usershandler.Handler,
-	orgUsersHandler *orgusershandler.Handler,
 	assetsHandler *assetshandler.Handler,
 	locationsHandler *locationshandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
+	store *storage.Storage,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -122,9 +122,9 @@ func setupRouter(
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 
-		organizationsHandler.RegisterRoutes(r)
+		orgsHandler.RegisterRoutes(r, store)
+		orgsHandler.RegisterMeRoutes(r)
 		usersHandler.RegisterRoutes(r)
-		orgUsersHandler.RegisterRoutes(r)
 		assetsHandler.RegisterRoutes(r)
 		locationsHandler.RegisterRoutes(r)
 	})
@@ -166,19 +166,19 @@ func main() {
 
 	emailClient := email.NewClient()
 	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
-	log.Info().Msg("Auth service initialized")
+	orgsSvc := orgsservice.NewService(store.Pool().(*pgxpool.Pool), store)
+	log.Info().Msg("Services initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)
-	organizationsHandler := organizationshandler.NewHandler(store)
+	orgsHandler := orgshandler.NewHandler(store, orgsSvc)
 	usersHandler := usershandler.NewHandler(store)
-	orgUsersHandler := orgusershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

@@ -10,10 +10,10 @@ import (
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
-	orgusershandler "github.com/trakrf/platform/backend/internal/handlers/org_users"
-	organizationshandler "github.com/trakrf/platform/backend/internal/handlers/organizations"
+	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
+	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -22,17 +22,17 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 
 	store := &storage.Storage{}
 	authSvc := authservice.NewService(nil, store, nil)
+	orgsSvc := orgsservice.NewService(nil, store)
 
 	authHandler := authhandler.NewHandler(authSvc)
-	organizationsHandler := organizationshandler.NewHandler(store)
+	orgsHandler := orgshandler.NewHandler(store, orgsSvc)
 	usersHandler := usershandler.NewHandler(store)
-	orgUsersHandler := orgusershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, "test", time.Now())
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 
-	return setupRouter(authHandler, organizationsHandler, usersHandler, orgUsersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {
@@ -63,7 +63,10 @@ func TestRouterRegistration(t *testing.T) {
 		{"POST", "/api/v1/auth/login"},
 		{"POST", "/api/v1/auth/forgot-password"},
 		{"POST", "/api/v1/auth/reset-password"},
-		{"GET", "/api/v1/organizations"},
+		{"GET", "/api/v1/orgs"},
+		{"POST", "/api/v1/orgs"},
+		{"GET", "/api/v1/users/me"},
+		{"POST", "/api/v1/users/me/current-org"},
 		{"GET", "/api/v1/users"},
 		{"GET", "/assets/index.js"},
 		{"GET", "/favicon.ico"},

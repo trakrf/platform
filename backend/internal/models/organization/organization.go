@@ -18,16 +18,45 @@ type Organization struct {
 	DeletedAt  *time.Time             `json:"deleted_at,omitempty"`
 }
 
-// TODO(TRA-94): Define proper request/response models for organization CRUD operations
-// These request types are placeholders for the storage layer stubs
-
-// CreateOrganizationRequest for POST /api/v1/organizations
+// CreateOrganizationRequest for POST /api/v1/orgs
 type CreateOrganizationRequest struct {
-	Name       string `json:"name" validate:"required,min=1,max=255"`
-	Identifier string `json:"identifier" validate:"required"`
+	Name string `json:"name" validate:"required,min=1,max=255"`
 }
 
-// UpdateOrganizationRequest for PUT /api/v1/organizations/:id
+// UpdateOrganizationRequest for PUT /api/v1/orgs/:id
 type UpdateOrganizationRequest struct {
 	Name *string `json:"name" validate:"omitempty,min=1,max=255"`
+}
+
+// DeleteOrganizationRequest for DELETE /api/v1/orgs/:id (GitHub-style confirmation)
+type DeleteOrganizationRequest struct {
+	ConfirmName string `json:"confirm_name" validate:"required"`
+}
+
+// UserOrg represents an org in the user's org list (minimal)
+type UserOrg struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// UserOrgWithRole represents the current org with role context
+type UserOrgWithRole struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
+// SetCurrentOrgRequest for POST /users/me/current-org
+type SetCurrentOrgRequest struct {
+	OrgID int `json:"org_id" validate:"required,gt=0"`
+}
+
+// UserProfile represents the enhanced /users/me response
+type UserProfile struct {
+	ID           int              `json:"id"`
+	Name         string           `json:"name"`
+	Email        string           `json:"email"`
+	IsSuperadmin bool             `json:"is_superadmin"`
+	CurrentOrg   *UserOrgWithRole `json:"current_org,omitempty"`
+	Orgs         []UserOrg        `json:"orgs"`
 }
