@@ -3,7 +3,7 @@
  */
 
 import { Menu } from '@headlessui/react';
-import { ChevronDown, Building2, Plus, Check } from 'lucide-react';
+import { ChevronDown, Building2, Plus, Check, Settings, Users } from 'lucide-react';
 import { useOrgStore } from '@/stores';
 import { RoleBadge } from './RoleBadge';
 
@@ -88,6 +88,36 @@ export function OrgSwitcher({ onCreateOrg }: OrgSwitcherProps) {
             )}
           </Menu.Item>
         </div>
+        {currentRole && ['owner', 'admin'].includes(currentRole) && (
+          <div className="p-1">
+            <Menu.Item>
+              {({ active }) => (
+                <a
+                  href="#org-settings"
+                  className={`${
+                    active ? 'bg-gray-100 dark:bg-gray-700' : ''
+                  } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
+                >
+                  <Settings className="w-4 h-4" />
+                  Organization Settings
+                </a>
+              )}
+            </Menu.Item>
+            <Menu.Item>
+              {({ active }) => (
+                <a
+                  href="#org-members"
+                  className={`${
+                    active ? 'bg-gray-100 dark:bg-gray-700' : ''
+                  } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
+                >
+                  <Users className="w-4 h-4" />
+                  Members
+                </a>
+              )}
+            </Menu.Item>
+          </div>
+        )}
       </Menu.Items>
     </Menu>
   );
