@@ -13,7 +13,8 @@ import (
 // ListUsers retrieves a paginated list of active users ordered by creation date.
 func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User, int, error) {
 	query := `
-		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at
+		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
+		       is_superadmin, last_org_id
 		FROM trakrf.users
 		WHERE deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -30,7 +31,8 @@ func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User
 	for rows.Next() {
 		var usr user.User
 		err := rows.Scan(&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
-			&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt)
+			&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
+			&usr.IsSuperadmin, &usr.LastOrgID)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan user: %w", err)
 		}
@@ -49,7 +51,8 @@ func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User
 // GetUserByID retrieves a single user by their ID.
 func (s *Storage) GetUserByID(ctx context.Context, id int) (*user.User, error) {
 	query := `
-		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at
+		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
+		       is_superadmin, last_org_id
 		FROM trakrf.users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -57,7 +60,8 @@ func (s *Storage) GetUserByID(ctx context.Context, id int) (*user.User, error) {
 	var usr user.User
 	err := s.pool.QueryRow(ctx, query, id).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
-		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt)
+		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
+		&usr.IsSuperadmin, &usr.LastOrgID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -72,7 +76,8 @@ func (s *Storage) GetUserByID(ctx context.Context, id int) (*user.User, error) {
 // GetUserByEmail retrieves a single user by their email address.
 func (s *Storage) GetUserByEmail(ctx context.Context, email string) (*user.User, error) {
 	query := `
-		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at
+		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
+		       is_superadmin, last_org_id
 		FROM trakrf.users
 		WHERE email = $1 AND deleted_at IS NULL
 	`
@@ -80,7 +85,8 @@ func (s *Storage) GetUserByEmail(ctx context.Context, email string) (*user.User,
 	var usr user.User
 	err := s.pool.QueryRow(ctx, query, email).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
-		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt)
+		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
+		&usr.IsSuperadmin, &usr.LastOrgID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -97,13 +103,15 @@ func (s *Storage) CreateUser(ctx context.Context, request user.CreateUserRequest
 	query := `
 		INSERT INTO trakrf.users (email, name, password_hash)
 		VALUES ($1, $2, $3)
-		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at
+		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
+		          is_superadmin, last_org_id
 	`
 
 	var usr user.User
 	err := s.pool.QueryRow(ctx, query, request.Email, request.Name, request.PasswordHash).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
-		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt)
+		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
+		&usr.IsSuperadmin, &usr.LastOrgID)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -140,13 +148,15 @@ func (s *Storage) UpdateUser(ctx context.Context, id int, request user.UpdateUse
 		UPDATE trakrf.users
 		SET %s, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at
+		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
+		          is_superadmin, last_org_id
 	`, strings.Join(updates, ", "))
 
 	var usr user.User
 	err := s.pool.QueryRow(ctx, query, args...).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
-		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt)
+		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
+		&usr.IsSuperadmin, &usr.LastOrgID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
