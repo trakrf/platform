@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useDeviceStore, useUIStore, useAuthStore } from '@/stores';
+import { useDeviceStore, useUIStore, useAuthStore, useOrgStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { Battery, BatteryLow, BatteryMedium, BatteryFull, Plug, Unplug, Info } from 'lucide-react';
+import { Battery, BatteryLow, BatteryMedium, BatteryFull, Plug, Unplug, Info, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { UserMenu } from './UserMenu';
+import { OrgSwitcher } from './OrgSwitcher';
 
 const TriggerIndicator = ({ isDown }: { isDown: boolean }) => {
   return (
@@ -63,6 +64,11 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const disconnect = useDeviceStore((state) => state.disconnect);
   const activeTab = useUIStore((state) => state.activeTab);
   const { isAuthenticated, user } = useAuthStore();
+  const { currentOrg } = useOrgStore();
+
+  const handleCreateOrg = () => {
+    window.location.hash = '#create-org';
+  };
 
   const MOCK_TESTING = false;
   const mockBatteryPercentage = MOCK_TESTING ? 75 : batteryPercentage;
@@ -164,7 +170,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     <>
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 lg:px-8 py-3 md:py-4 sticky top-0 z-50">
         <div className="flex justify-between items-center">
-          {/* Page Title with Info Button */}
+          {/* Breadcrumb: Org / Page Title */}
           <div className="flex items-center gap-2">
             {/* Mobile/Tablet Menu Toggle Button - Show on screens up to 1280px */}
             {onMenuToggle && (
@@ -180,6 +186,15 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
                   <span className={`block h-0.5 w-6 bg-gray-600 dark:bg-gray-400 transform transition duration-300 ${isMobileMenuOpen ? '-rotate-45 -translate-y-1.5' : ''}`}></span>
                 </div>
               </button>
+            )}
+            {/* Org Switcher (when authenticated) */}
+            {isAuthenticated && (
+              <>
+                <OrgSwitcher onCreateOrg={handleCreateOrg} />
+                {currentOrg && (
+                  <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                )}
+              </>
             )}
             <h1 className="text-lg md:text-2xl font-bold text-gray-900 dark:text-gray-100">{currentPage.title}</h1>
             <div className="relative">
