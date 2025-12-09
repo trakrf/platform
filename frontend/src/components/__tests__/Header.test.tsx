@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import Header from '@/components/Header';
-import { useDeviceStore, useUIStore, useAuthStore } from '@/stores';
+import { useDeviceStore, useUIStore, useAuthStore, useOrgStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 
 describe('Header', () => {
@@ -37,13 +37,20 @@ describe('Header', () => {
     });
     
     // Set default store states
-    useDeviceStore.setState({ 
+    useDeviceStore.setState({
       readerState: ReaderState.DISCONNECTED,
       batteryPercentage: null,
       connect: mockConnect,
       disconnect: mockDisconnect
     });
     useUIStore.setState({ activeTab: 'home' });
+    useOrgStore.setState({
+      currentOrg: null,
+      currentRole: null,
+      orgs: [],
+      isLoading: false,
+      error: null,
+    });
   });
 
   it('should not show connection button on home page', () => {

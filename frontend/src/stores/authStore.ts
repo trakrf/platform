@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createStoreWithTracking } from './createStore';
 import { authApi } from '@/lib/api/auth';
+import { orgsApi } from '@/lib/api/orgs';
 import type { User } from '@/lib/api/auth';
+import type { UserProfile } from '@/types/org';
 import { jwtDecode } from 'jwt-decode';
 
 interface AuthState {
@@ -12,6 +14,8 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  profile: UserProfile | null;
+  profileLoading: boolean;
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
@@ -19,6 +23,7 @@ interface AuthState {
   logout: () => void;
   clearError: () => void;
   initialize: () => void;
+  fetchProfile: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -31,6 +36,8 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: false,
         isLoading: false,
         error: null,
+        profile: null,
+        profileLoading: false,
 
         // Login action
         login: async (email: string, password: string) => {
@@ -119,6 +126,7 @@ export const useAuthStore = create<AuthState>()(
             token: null,
             isAuthenticated: false,
             error: null,
+            profile: null,
           });
         },
 
@@ -154,6 +162,25 @@ export const useAuthStore = create<AuthState>()(
               user: null,
               isAuthenticated: false,
             });
+          }
+        },
+
+        fetchProfile: async () => {
+          const state = get();
+          if (!state.isAuthenticated || !state.token) {
+            return;
+          }
+
+          set({ profileLoading: true });
+          try {
+            const response = await orgsApi.getProfile();
+            set({
+              profile: response.data.data,
+              profileLoading: false,
+            });
+          } catch (error) {
+            console.error('AuthStore: Failed to fetch profile:', error);
+            set({ profileLoading: false });
           }
         },
       }),

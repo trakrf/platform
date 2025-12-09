@@ -22,8 +22,9 @@ const LoginScreen = lazyWithRetry(() => import('@/components/LoginScreen'));
 const SignupScreen = lazyWithRetry(() => import('@/components/SignupScreen'));
 const ForgotPasswordScreen = lazyWithRetry(() => import('@/components/ForgotPasswordScreen'));
 const ResetPasswordScreen = lazyWithRetry(() => import('@/components/ResetPasswordScreen'));
+const CreateOrgScreen = lazyWithRetry(() => import('@/components/CreateOrgScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -36,6 +37,10 @@ export default function App() {
   useEffect(() => {
     // Initialize auth state from persisted storage
     useAuthStore.getState().initialize();
+    // If already authenticated, fetch profile to get org data
+    if (useAuthStore.getState().isAuthenticated) {
+      useAuthStore.getState().fetchProfile();
+    }
   }, []);
 
   const parseHash = (hash: string = window.location.hash.slice(1)) => {
@@ -188,6 +193,7 @@ export default function App() {
       signup: SignupScreen,
       'forgot-password': ForgotPasswordScreen,
       'reset-password': ResetPasswordScreen,
+      'create-org': CreateOrgScreen,
     };
 
     const loadingScreens: Record<string, React.ComponentType> = {
@@ -203,6 +209,7 @@ export default function App() {
       signup: LoadingScreen,
       'forgot-password': LoadingScreen,
       'reset-password': LoadingScreen,
+      'create-org': LoadingScreen,
     };
 
     const Component = tabComponents[activeTab] || HomeScreen;
