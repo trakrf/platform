@@ -182,3 +182,16 @@ func (s *Storage) SoftDeleteUser(ctx context.Context, id int) error {
 
 	return nil
 }
+
+// UpdateUserLastOrg sets the user's last_org_id for org switching.
+func (s *Storage) UpdateUserLastOrg(ctx context.Context, userID, orgID int) error {
+	query := `UPDATE trakrf.users SET last_org_id = $2, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+	result, err := s.pool.Exec(ctx, query, userID, orgID)
+	if err != nil {
+		return fmt.Errorf("failed to update last org: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.ErrUserNotFound
+	}
+	return nil
+}
