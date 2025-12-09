@@ -166,7 +166,7 @@ func main() {
 
 	emailClient := email.NewClient()
 	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
-	orgsSvc := orgsservice.NewService(store.Pool().(*pgxpool.Pool), store)
+	orgsSvc := orgsservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
 	log.Info().Msg("Services initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)

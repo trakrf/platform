@@ -126,3 +126,19 @@ const (
 	MemberSelfRemoval          = "Cannot remove yourself"
 	MemberInvalidRole          = "Invalid role"
 )
+
+// Invitation error messages
+const (
+	InvitationListFailed        = "Failed to list invitations"
+	InvitationCreateInvalidJSON = "Invalid JSON"
+	InvitationCreateValidation  = "Validation failed"
+	InvitationCreateFailed      = "Failed to create invitation"
+	InvitationAlreadyMember     = "%s is already a member of this organization"
+	InvitationAlreadyPending    = "An invitation is already pending for %s"
+	InvitationNotFound          = "Invitation not found"
+	InvitationCancelFailed      = "Failed to cancel invitation"
+	InvitationResendFailed      = "Failed to resend invitation"
+	InvitationInvalidID         = "Invalid invitation ID"
+	InvitationExpired           = "This invitation has expired"
+	InvitationCancelled         = "This invitation has been cancelled"
+)

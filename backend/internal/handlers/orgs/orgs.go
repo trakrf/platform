@@ -199,5 +199,11 @@ func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 		r.With(middleware.RequireOrgMember(store)).Get("/members", h.ListMembers)
 		r.With(middleware.RequireOrgAdmin(store)).Put("/members/{userId}", h.UpdateMemberRole)
 		r.With(middleware.RequireOrgAdmin(store)).Delete("/members/{userId}", h.RemoveMember)
+
+		// Invitation routes (admin only)
+		r.With(middleware.RequireOrgAdmin(store)).Get("/invitations", h.ListInvitations)
+		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations", h.CreateInvitation)
+		r.With(middleware.RequireOrgAdmin(store)).Delete("/invitations/{inviteId}", h.CancelInvitation)
+		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations/{inviteId}/resend", h.ResendInvitation)
 	})
 }
