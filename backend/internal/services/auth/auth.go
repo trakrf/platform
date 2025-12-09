@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"regexp"
@@ -271,4 +272,69 @@ func slugifyOrgName(name string) string {
 	// Trim leading/trailing hyphens
 	slug = strings.Trim(slug, "-")
 	return slug
+}
+
+// AcceptInvitation validates token and adds user to org
+func (s *Service) AcceptInvitation(ctx context.Context, token string, userID int) (*organization.AcceptInvitationResponse, error) {
+	// Hash the incoming token
+	hash := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hash[:])
+
+	// Look up invitation by token hash
+	inv, err := s.storage.GetInvitationByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invitation: %w", err)
+	}
+	if inv == nil {
+		return nil, fmt.Errorf("invalid_token")
+	}
+
+	// Check if expired
+	if time.Now().After(inv.ExpiresAt) {
+		return nil, fmt.Errorf("expired")
+	}
+
+	// Check if cancelled
+	if inv.CancelledAt != nil {
+		return nil, fmt.Errorf("cancelled")
+	}
+
+	// Check if already accepted
+	if inv.AcceptedAt != nil {
+		return nil, fmt.Errorf("already_accepted")
+	}
+
+	// Check if user is already a member
+	isMember, err := s.storage.IsUserMemberOfOrg(ctx, userID, inv.OrgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check membership: %w", err)
+	}
+	if isMember {
+		return nil, fmt.Errorf("already_member")
+	}
+
+	// Accept invitation (atomic: mark accepted + add to org)
+	err = s.storage.AcceptInvitation(ctx, inv.ID, userID, inv.OrgID, inv.Role)
+	if err != nil {
+		if strings.Contains(err.Error(), "already a member") {
+			return nil, fmt.Errorf("already_member")
+		}
+		if strings.Contains(err.Error(), "already accepted") {
+			return nil, fmt.Errorf("already_accepted")
+		}
+		return nil, fmt.Errorf("failed to accept invitation: %w", err)
+	}
+
+	// Get org name for response
+	org, err := s.storage.GetOrganizationByID(ctx, inv.OrgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	return &organization.AcceptInvitationResponse{
+		Message: fmt.Sprintf("You have joined %s", org.Name),
+		OrgID:   inv.OrgID,
+		OrgName: org.Name,
+		Role:    inv.Role,
+	}, nil
 }

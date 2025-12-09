@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -164,4 +165,89 @@ func (s *Storage) GetInvitationOrgID(ctx context.Context, inviteID int) (int, er
 		return 0, fmt.Errorf("failed to get invitation org: %w", err)
 	}
 	return orgID, nil
+}
+
+// InvitationForAccept contains data needed for acceptance flow
+type InvitationForAccept struct {
+	ID          int
+	OrgID       int
+	Email       string
+	Role        string
+	ExpiresAt   time.Time
+	CancelledAt *time.Time
+	AcceptedAt  *time.Time
+}
+
+// GetInvitationByTokenHash retrieves invitation by hashed token
+func (s *Storage) GetInvitationByTokenHash(ctx context.Context, tokenHash string) (*InvitationForAccept, error) {
+	query := `
+		SELECT id, org_id, email, role, expires_at, cancelled_at, accepted_at
+		FROM trakrf.org_invitations
+		WHERE token = $1
+	`
+	var inv InvitationForAccept
+	err := s.pool.QueryRow(ctx, query, tokenHash).Scan(
+		&inv.ID, &inv.OrgID, &inv.Email, &inv.Role,
+		&inv.ExpiresAt, &inv.CancelledAt, &inv.AcceptedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get invitation by token: %w", err)
+	}
+	return &inv, nil
+}
+
+// AcceptInvitation marks invitation as accepted and adds user to org (atomic)
+func (s *Storage) AcceptInvitation(ctx context.Context, inviteID, userID, orgID int, role string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Set accepted_at
+	acceptQuery := `
+		UPDATE trakrf.org_invitations
+		SET accepted_at = NOW()
+		WHERE id = $1 AND accepted_at IS NULL
+	`
+	result, err := tx.Exec(ctx, acceptQuery, inviteID)
+	if err != nil {
+		return fmt.Errorf("failed to mark invitation accepted: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("invitation already accepted")
+	}
+
+	// Add user to org
+	addQuery := `
+		INSERT INTO trakrf.org_users (org_id, user_id, role)
+		VALUES ($1, $2, $3)
+	`
+	_, err = tx.Exec(ctx, addQuery, orgID, userID, role)
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") {
+			return fmt.Errorf("already a member")
+		}
+		return fmt.Errorf("failed to add user to org: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+// IsUserMemberOfOrg checks if user is already a member (by user ID)
+func (s *Storage) IsUserMemberOfOrg(ctx context.Context, userID, orgID int) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM trakrf.org_users
+			WHERE user_id = $1 AND org_id = $2 AND deleted_at IS NULL
+		)
+	`
+	var exists bool
+	err := s.pool.QueryRow(ctx, query, userID, orgID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check membership: %w", err)
+	}
+	return exists, nil
 }
