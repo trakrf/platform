@@ -86,7 +86,7 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 
 	orgUserQuery := `
 		INSERT INTO trakrf.org_users (org_id, user_id, role)
-		VALUES ($1, $2, 'owner')
+		VALUES ($1, $2, 'admin')
 	`
 	_, err = tx.Exec(ctx, orgUserQuery, org.ID, usr.ID)
 	if err != nil {

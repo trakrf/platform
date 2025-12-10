@@ -16,7 +16,7 @@ export interface MessageResponse {
 
 export const orgsApi = {
   // Profile
-  getProfile: () => apiClient.get<{ data: UserProfile }>('/auth/profile'),
+  getProfile: () => apiClient.get<{ data: UserProfile }>('/users/me'),
 
   // Org CRUD
   get: (orgId: number) => apiClient.get<{ data: Organization }>(`/orgs/${orgId}`),
@@ -25,7 +25,7 @@ export const orgsApi = {
     apiClient.post<CreateOrgResponse>('/orgs', data),
 
   update: (orgId: number, data: { name: string }) =>
-    apiClient.patch<{ data: Organization }>(`/orgs/${orgId}`, data),
+    apiClient.put<{ data: Organization }>(`/orgs/${orgId}`, data),
 
   delete: (orgId: number, confirmName: string) =>
     apiClient.delete<MessageResponse>(`/orgs/${orgId}`, {
@@ -34,7 +34,7 @@ export const orgsApi = {
 
   // Org switching
   setCurrentOrg: (data: SetCurrentOrgRequest) =>
-    apiClient.post<MessageResponse>('/auth/current-org', data),
+    apiClient.post<MessageResponse>('/users/me/current-org', data),
 
   // Members (Phase 3b)
   listMembers: (orgId: number) =>

@@ -25,6 +25,7 @@ import {
   signupTestUser,
   loginTestUser,
   openOrgSwitcher,
+  switchToOrg,
 } from './fixtures/org.fixture';
 
 test.describe('Organization CRUD', () => {
@@ -43,7 +44,7 @@ test.describe('Organization CRUD', () => {
     await page.goto('/');
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
-    await signupTestUser(page, testEmail, testPassword, testOrgName);
+    await signupTestUser(page, testEmail, testPassword);
     await page.close();
   });
 
@@ -110,8 +111,8 @@ test.describe('Organization CRUD', () => {
       // Should see the "Organizations" header in dropdown
       await expect(page.locator('text=Organizations')).toBeVisible();
 
-      // Should see at least the test org from signup
-      await expect(page.getByText(testOrgName)).toBeVisible();
+      // Should see the personal org from signup (named after email)
+      await expect(page.getByRole('menuitem', { name: testEmail })).toBeVisible();
     });
 
     test('should show newly created org in list', async ({ page }) => {
@@ -126,8 +127,8 @@ test.describe('Organization CRUD', () => {
       // Open the org switcher
       await openOrgSwitcher(page);
 
-      // The new org should appear in the list
-      await expect(page.getByText(newOrgName)).toBeVisible();
+      // The new org should appear in the list - use menuitem role to be specific
+      await expect(page.getByRole('menuitem', { name: newOrgName })).toBeVisible();
     });
   });
 
@@ -142,16 +143,17 @@ test.describe('Organization CRUD', () => {
       await page.locator('button[type="submit"]').click();
       await page.waitForURL(/#home/, { timeout: 10000 });
 
+      // Switch to the newly created org
+      await switchToOrg(page, originalName);
+
       // Go to org settings
       await page.goto('/#org-settings');
 
-      // Wait for the settings page to load
-      await expect(
-        page.getByRole('heading', { name: 'Organization Settings' })
-      ).toBeVisible();
+      // Wait for the settings page to load and the form to be ready
+      const nameInput = page.locator('input#org-name');
+      await expect(nameInput).toBeVisible({ timeout: 10000 });
 
       // Edit the name
-      const nameInput = page.locator('input#org-name');
       await nameInput.clear();
       await nameInput.fill(newName);
 
@@ -172,17 +174,21 @@ test.describe('Organization CRUD', () => {
       await page.locator('button[type="submit"]').click();
       await page.waitForURL(/#home/, { timeout: 10000 });
 
+      // Switch to the newly created org
+      await switchToOrg(page, orgName);
+
       // Go to org settings
       await page.goto('/#org-settings');
 
-      // Clear the name field
+      // Wait for the input to be ready
       const nameInput = page.locator('input#org-name');
+      await expect(nameInput).toBeVisible({ timeout: 10000 });
+
+      // Clear the name field
       await nameInput.clear();
 
-      // The save button should be disabled (no changes or invalid state)
+      // The save button should be disabled when the form is invalid (empty name)
       const saveButton = page.locator('button[type="submit"]');
-      // Note: The button is disabled when there are no changes, which happens
-      // when the field is empty (original name is cleared)
       await expect(saveButton).toBeDisabled();
     });
 
@@ -199,11 +205,16 @@ test.describe('Organization CRUD', () => {
       await page.locator('button[type="submit"]').click();
       await page.waitForURL(/#home/, { timeout: 10000 });
 
+      // Switch to the newly created org
+      await switchToOrg(page, orgName);
+
       // Go to org settings
       await page.goto('/#org-settings');
 
-      // Click the delete button
-      await page.locator('button:has-text("Delete Organization")').click();
+      // Wait for the Delete Organization button and click it
+      const deleteButton = page.locator('button:has-text("Delete Organization")');
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      await deleteButton.click();
 
       // Modal should appear with confirmation input
       await expect(
@@ -219,9 +230,14 @@ test.describe('Organization CRUD', () => {
       await page.locator('button[type="submit"]').click();
       await page.waitForURL(/#home/, { timeout: 10000 });
 
+      // Switch to the newly created org
+      await switchToOrg(page, orgName);
+
       // Go to org settings and open delete modal
       await page.goto('/#org-settings');
-      await page.locator('button:has-text("Delete Organization")').click();
+      const deleteButton = page.locator('button:has-text("Delete Organization")');
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      await deleteButton.click();
 
       // Type wrong name - delete button should be disabled
       await page
@@ -249,9 +265,14 @@ test.describe('Organization CRUD', () => {
       await page.locator('button[type="submit"]').click();
       await page.waitForURL(/#home/, { timeout: 10000 });
 
+      // Switch to the newly created org
+      await switchToOrg(page, orgName);
+
       // Go to org settings and delete
       await page.goto('/#org-settings');
-      await page.locator('button:has-text("Delete Organization")').click();
+      const deleteButton = page.locator('button:has-text("Delete Organization")');
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      await deleteButton.click();
 
       // Confirm deletion
       await page
