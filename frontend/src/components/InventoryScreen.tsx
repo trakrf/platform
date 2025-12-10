@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { useDeviceStore, useTagStore, useSettingsStore } from '@/stores';
+import { useDeviceStore, useTagStore, useSettingsStore, useAuthStore } from '@/stores';
 import { useAssets } from '@/hooks/assets';
 import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search } from 'lucide-react';
@@ -52,8 +52,9 @@ export default function InventoryScreen() {
   const audio = useInventoryAudio();
   const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
 
-  // Load assets for tag enrichment
-  useAssets({ enabled: true });
+  // Load assets for tag enrichment (only when authenticated)
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  useAssets({ enabled: isAuthenticated });
 
   const sortedTags = useSortableInventory(tags, sortColumn, sortDirection);
 
