@@ -80,9 +80,9 @@ yarn.lock
 .vite/
 
 # Playwright
-/test-results/
-/playwright-report/
-/playwright/.cache/
+test-results/
+playwright-report/
+playwright/.cache/
 
 # E2E test logs
 tests/e2e/logs/
