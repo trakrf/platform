@@ -93,7 +93,7 @@ shell:
 # Run database migrations
 migrate:
     @echo "🔄 Running database migrations..."
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" up'
+    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" up'
     @echo "✅ Migrations complete"
 
 # Alias for consistency
@@ -102,20 +102,20 @@ migrate-up: migrate
 # Roll back last migration
 migrate-down:
     @echo "⏪ Rolling back last migration..."
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" down 1'
+    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" down 1'
     @echo "✅ Rollback complete"
 
 # Show current migration version
 migrate-status:
     @echo "📊 Migration status:"
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" version'
+    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" version'
 
 # Create new migration file
 migrate-create name:
     @echo "📝 Creating new migration: {{name}}"
-    docker compose exec backend sh -c 'migrate create -ext sql -dir /app/database/migrations -seq {{name}}'
+    docker compose exec backend sh -c 'migrate create -ext sql -dir /app/migrations -seq {{name}}'
 
 # Force migration to specific version (dangerous)
 migrate-force version:
     @echo "⚠️  Forcing migration version to {{version}}"
-    docker compose exec backend sh -c 'migrate -path /app/database/migrations -database "$PG_URL" force {{version}}'
+    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" force {{version}}'

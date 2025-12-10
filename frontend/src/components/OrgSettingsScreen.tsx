@@ -25,6 +25,7 @@ export default function OrgSettingsScreen() {
 
   const isAdmin = currentRole === 'owner' || currentRole === 'admin';
   const hasChanges = name !== originalName;
+  const isValid = name.trim().length >= 2; // Org name must be at least 2 characters
 
   // Initialize name from current org
   useEffect(() => {
@@ -153,7 +154,7 @@ export default function OrgSettingsScreen() {
           {isAdmin && (
             <button
               type="submit"
-              disabled={!hasChanges || isSaving}
+              disabled={!hasChanges || !isValid || isSaving}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? 'Saving...' : 'Save Changes'}

@@ -39,6 +39,7 @@ export function OrgSwitcher({ onCreateOrg }: OrgSwitcherProps) {
     <Menu as="div" className="relative inline-block text-left">
       <Menu.Button
         disabled={isLoading}
+        data-testid="org-switcher"
         className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
       >
         <Building2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />

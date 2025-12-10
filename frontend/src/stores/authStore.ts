@@ -53,6 +53,9 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               error: null,
             });
+
+            // Fetch profile to populate org data after login
+            get().fetchProfile();
           } catch (err: any) {
             // Extract error message from RFC 7807 Problem Details format
             // Handle empty strings by checking truthy AND non-empty
@@ -95,6 +98,9 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               error: null,
             });
+
+            // Fetch profile to populate org data after signup
+            get().fetchProfile();
           } catch (err: any) {
             // Extract error message from RFC 7807 Problem Details format
             // Handle empty strings by checking truthy AND non-empty

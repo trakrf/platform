@@ -25,7 +25,7 @@ export interface UserOrgWithRole {
 
 /**
  * User profile with org memberships
- * Returned by GET /api/v1/auth/profile
+ * Returned by GET /api/v1/users/me
  */
 export interface UserProfile {
   id: number;
