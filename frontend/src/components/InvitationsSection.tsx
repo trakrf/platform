@@ -46,7 +46,7 @@ export default function InvitationsSection({ orgId, isAdmin }: InvitationsSectio
 
     try {
       const response = await orgsApi.listInvitations(orgId);
-      setInvitations(response.data.data);
+      setInvitations(response.data.data ?? []);
     } catch (err: unknown) {
       const errorMessage = extractErrorMessage(err, 'Failed to load invitations');
       setError(errorMessage);

@@ -45,7 +45,7 @@ func (s *Storage) ListPendingInvitations(ctx context.Context, orgID int) ([]orga
 	}
 	defer rows.Close()
 
-	var invitations []organization.Invitation
+	invitations := []organization.Invitation{}
 	for rows.Next() {
 		var inv organization.Invitation
 		var inviterID *int
