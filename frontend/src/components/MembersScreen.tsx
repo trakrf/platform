@@ -38,7 +38,7 @@ export default function MembersScreen() {
 
     try {
       const response = await orgsApi.listMembers(currentOrg.id);
-      setMembers(response.data.data);
+      setMembers(response.data.data ?? []);
     } catch (err: unknown) {
       const errorMessage = extractErrorMessage(err, 'Failed to load members');
       setError(errorMessage);

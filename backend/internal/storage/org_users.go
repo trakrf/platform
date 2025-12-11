@@ -95,7 +95,7 @@ func (s *Storage) ListOrgMembers(ctx context.Context, orgID int) ([]organization
 	}
 	defer rows.Close()
 
-	var members []organization.OrgMember
+	members := []organization.OrgMember{}
 	for rows.Next() {
 		var m organization.OrgMember
 		if err := rows.Scan(&m.UserID, &m.Name, &m.Email, &m.Role, &m.JoinedAt); err != nil {
