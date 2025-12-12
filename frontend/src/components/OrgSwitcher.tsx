@@ -5,6 +5,7 @@
 import { Menu } from '@headlessui/react';
 import { ChevronDown, Building2, Plus, Check, Settings, Users } from 'lucide-react';
 import { useOrgStore } from '@/stores';
+import { useOrgSwitch } from '@/hooks/orgs';
 import { RoleBadge } from './RoleBadge';
 
 interface OrgSwitcherProps {
@@ -12,7 +13,8 @@ interface OrgSwitcherProps {
 }
 
 export function OrgSwitcher({ onCreateOrg }: OrgSwitcherProps) {
-  const { currentOrg, currentRole, orgs, isLoading, switchOrg } = useOrgStore();
+  const { currentOrg, currentRole, orgs } = useOrgStore();
+  const { switchOrg, isLoading } = useOrgSwitch();
 
   const handleSwitchOrg = async (orgId: number) => {
     if (orgId === currentOrg?.id) return;
