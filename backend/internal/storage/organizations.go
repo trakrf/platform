@@ -40,14 +40,14 @@ func (s *Storage) ListUserOrgs(ctx context.Context, userID int) ([]organization.
 // GetOrganizationByID retrieves a single organization by its ID.
 func (s *Storage) GetOrganizationByID(ctx context.Context, id int) (*organization.Organization, error) {
 	query := `
-		SELECT id, name, identifier, is_personal, metadata,
+		SELECT id, name, identifier, metadata,
 		       valid_from, valid_to, is_active, created_at, updated_at
 		FROM trakrf.organizations
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	var org organization.Organization
 	err := s.pool.QueryRow(ctx, query, id).Scan(
-		&org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
 
 	if err != nil {
@@ -59,18 +59,18 @@ func (s *Storage) GetOrganizationByID(ctx context.Context, id int) (*organizatio
 	return &org, nil
 }
 
-// CreateOrganization creates a new team organization (is_personal=false).
+// CreateOrganization creates a new organization.
 // Returns the created org. Caller must separately add user to org_users.
 func (s *Storage) CreateOrganization(ctx context.Context, name, identifier string) (*organization.Organization, error) {
 	query := `
-		INSERT INTO trakrf.organizations (name, identifier, is_personal)
-		VALUES ($1, $2, false)
-		RETURNING id, name, identifier, is_personal, metadata,
+		INSERT INTO trakrf.organizations (name, identifier)
+		VALUES ($1, $2)
+		RETURNING id, name, identifier, metadata,
 		          valid_from, valid_to, is_active, created_at, updated_at
 	`
 	var org organization.Organization
 	err := s.pool.QueryRow(ctx, query, name, identifier).Scan(
-		&org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
 
 	if err != nil {
@@ -92,12 +92,12 @@ func (s *Storage) UpdateOrganization(ctx context.Context, id int, request organi
 		UPDATE trakrf.organizations
 		SET name = $2, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING id, name, identifier, is_personal, metadata,
+		RETURNING id, name, identifier, metadata,
 		          valid_from, valid_to, is_active, created_at, updated_at
 	`
 	var org organization.Organization
 	err := s.pool.QueryRow(ctx, query, id, *request.Name).Scan(
-		&org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
 
 	if err != nil {

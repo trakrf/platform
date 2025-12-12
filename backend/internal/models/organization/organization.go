@@ -8,7 +8,6 @@ type Organization struct {
 	ID         int                    `json:"id"`
 	Name       string                 `json:"name"`
 	Identifier string                 `json:"identifier"`
-	IsPersonal bool                   `json:"is_personal"`
 	Metadata   map[string]interface{} `json:"metadata"`
 	ValidFrom  time.Time              `json:"valid_from"`
 	ValidTo    *time.Time             `json:"valid_to,omitempty"`

@@ -3,7 +3,7 @@ import { apiClient } from './client';
 export interface SignupRequest {
   email: string;
   password: string;
-  // org_name removed - backend auto-generates from email
+  org_name: string;
 }
 
 export interface LoginRequest {

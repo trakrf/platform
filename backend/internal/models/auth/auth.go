@@ -6,7 +6,7 @@ import "github.com/trakrf/platform/backend/internal/models/user"
 type SignupRequest struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required,min=8"`
-	// OrgName removed - auto-generated from email
+	OrgName  string `json:"org_name" validate:"required,min=2,max=100"`
 }
 
 // LoginRequest for POST /api/v1/auth/login

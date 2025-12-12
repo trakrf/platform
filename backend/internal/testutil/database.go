@@ -253,10 +253,10 @@ func CreateTestAccount(t *testing.T, pool *pgxpool.Pool) int {
 
 	var accountID int
 	err := pool.QueryRow(ctx, `
-		INSERT INTO trakrf.organizations (name, identifier, is_personal, is_active)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO trakrf.organizations (name, identifier, is_active)
+		VALUES ($1, $2, $3)
 		RETURNING id
-	`, "Test Organization", "test-org", false, true).Scan(&accountID)
+	`, "Test Organization", "test-org", true).Scan(&accountID)
 
 	if err != nil {
 		t.Fatalf("Failed to create test account: %v", err)

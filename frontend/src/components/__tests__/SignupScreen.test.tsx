@@ -29,9 +29,16 @@ describe('SignupScreen', () => {
 
       expect(screen.getByRole('heading', { name: 'Sign Up' })).toBeInTheDocument();
       expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/organization name/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
       expect(screen.getByText(/already have an account/i)).toBeInTheDocument();
+    });
+
+    it('should show helper text for existing company users', () => {
+      render(<SignupScreen />);
+
+      expect(screen.getByText(/ask your admin for an invite/i)).toBeInTheDocument();
     });
 
     it('should render password visibility toggle', () => {
@@ -68,6 +75,30 @@ describe('SignupScreen', () => {
       });
     });
 
+    it('should show org name error on blur with empty name', async () => {
+      render(<SignupScreen />);
+
+      const orgNameInput = screen.getByLabelText(/organization name/i);
+      fireEvent.change(orgNameInput, { target: { value: '' } });
+      fireEvent.blur(orgNameInput);
+
+      await waitFor(() => {
+        expect(screen.getByText(/organization name is required/i)).toBeInTheDocument();
+      });
+    });
+
+    it('should show org name error on blur with name too short', async () => {
+      render(<SignupScreen />);
+
+      const orgNameInput = screen.getByLabelText(/organization name/i);
+      fireEvent.change(orgNameInput, { target: { value: 'A' } });
+      fireEvent.blur(orgNameInput);
+
+      await waitFor(() => {
+        expect(screen.getByText(/at least 2 characters/i)).toBeInTheDocument();
+      });
+    });
+
     it('should not submit with validation errors', async () => {
       render(<SignupScreen />);
 
@@ -101,21 +132,42 @@ describe('SignupScreen', () => {
   });
 
   describe('Form Submission', () => {
-    it('should call signup with only email and password', async () => {
+    it('should call signup with email, password, and org name', async () => {
       mockSignup.mockResolvedValue(undefined);
       render(<SignupScreen />);
 
       const emailInput = screen.getByLabelText(/email/i);
+      const orgNameInput = screen.getByLabelText(/organization name/i);
       const passwordInput = screen.getByLabelText(/password/i);
       const submitButton = screen.getByRole('button', { name: /sign up/i });
 
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.change(orgNameInput, { target: { value: 'Test Company' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockSignup).toHaveBeenCalledWith('test@example.com', 'password123');
+        expect(mockSignup).toHaveBeenCalledWith('test@example.com', 'password123', 'Test Company');
         expect(mockSignup).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('should trim org name before submitting', async () => {
+      mockSignup.mockResolvedValue(undefined);
+      render(<SignupScreen />);
+
+      const emailInput = screen.getByLabelText(/email/i);
+      const orgNameInput = screen.getByLabelText(/organization name/i);
+      const passwordInput = screen.getByLabelText(/password/i);
+      const submitButton = screen.getByRole('button', { name: /sign up/i });
+
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.change(orgNameInput, { target: { value: '  Trimmed Company  ' } });
+      fireEvent.change(passwordInput, { target: { value: 'password123' } });
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockSignup).toHaveBeenCalledWith('test@example.com', 'password123', 'Trimmed Company');
       });
     });
 
@@ -124,10 +176,12 @@ describe('SignupScreen', () => {
       render(<SignupScreen />);
 
       const emailInput = screen.getByLabelText(/email/i);
+      const orgNameInput = screen.getByLabelText(/organization name/i);
       const passwordInput = screen.getByLabelText(/password/i);
       const submitButton = screen.getByRole('button', { name: /sign up/i });
 
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.change(orgNameInput, { target: { value: 'Test Company' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
       fireEvent.click(submitButton);
 
@@ -145,10 +199,12 @@ describe('SignupScreen', () => {
       render(<SignupScreen />);
 
       const emailInput = screen.getByLabelText(/email/i);
+      const orgNameInput = screen.getByLabelText(/organization name/i);
       const passwordInput = screen.getByLabelText(/password/i);
       const submitButton = screen.getByRole('button', { name: /sign up/i });
 
       fireEvent.change(emailInput, { target: { value: 'existing@example.com' } });
+      fireEvent.change(orgNameInput, { target: { value: 'Test Company' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
       fireEvent.click(submitButton);
 
@@ -166,10 +222,12 @@ describe('SignupScreen', () => {
       render(<SignupScreen />);
 
       const emailInput = screen.getByLabelText(/email/i);
+      const orgNameInput = screen.getByLabelText(/organization name/i);
       const passwordInput = screen.getByLabelText(/password/i);
       const submitButton = screen.getByRole('button', { name: /signing up/i });
 
       expect(emailInput).toBeDisabled();
+      expect(orgNameInput).toBeDisabled();
       expect(passwordInput).toBeDisabled();
       expect(submitButton).toBeDisabled();
     });
