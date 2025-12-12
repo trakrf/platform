@@ -2,9 +2,17 @@ import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { AssetSearchSort } from './AssetSearchSort';
-import { useAssetStore } from '@/stores';
+import { useAssetStore, useLocationStore } from '@/stores';
 
 vi.mock('@/stores');
+vi.mock('@/hooks/locations', () => ({
+  useLocations: vi.fn(() => ({
+    locations: [],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+}));
 
 describe('AssetSearchSort', () => {
   afterEach(() => {
@@ -16,14 +24,31 @@ describe('AssetSearchSort', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const mockStore = {
-      filters: { search: '' },
+    const mockAssetStore = {
+      filters: { search: '', location_id: 'all' },
       setSearchTerm: mockSetSearchTerm,
+      setFilters: vi.fn(),
       sort: { field: 'identifier', direction: 'asc' as const },
       setSort: mockSetSort,
       getFilteredAssets: vi.fn(() => [{ id: 1 }, { id: 2 }]),
+      cache: {
+        byId: new Map(),
+        byIdentifier: new Map(),
+        byType: new Map(),
+        activeIds: new Set(),
+        allIds: [],
+        lastFetched: 0,
+        ttl: 60 * 60 * 1000,
+      },
     };
-    (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
+    const mockLocationStore = {
+      cache: {
+        byId: new Map(),
+      },
+    };
+    (useAssetStore as any).mockImplementation((selector: any) => selector(mockAssetStore));
+    (useAssetStore as any).getState = vi.fn(() => mockAssetStore);
+    (useLocationStore as any).mockImplementation((selector: any) => selector(mockLocationStore));
   });
 
   it('renders search input', () => {

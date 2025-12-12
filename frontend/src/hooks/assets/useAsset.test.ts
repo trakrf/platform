@@ -9,6 +9,14 @@ import type { Asset } from '@/types/assets';
 
 vi.mock('@/lib/api/assets');
 
+// Mock useOrgStore to provide currentOrg for query keys
+vi.mock('@/stores/orgStore', () => ({
+  useOrgStore: vi.fn((selector) => {
+    const state = { currentOrg: { id: 1, name: 'Test Org' } };
+    return selector ? selector(state) : state;
+  }),
+}));
+
 const mockAsset: Asset = {
   id: 1,
   org_id: 100,

@@ -37,7 +37,7 @@ const createWrapper = () => {
 
 describe('useLocationMutations', () => {
   beforeEach(() => {
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
     vi.clearAllMocks();
   });
 
