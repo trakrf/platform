@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAssetStore } from '@/stores/assets/assetStore';
+import { useOrgStore } from '@/stores/orgStore';
 import { useTagStore } from '@/stores/tagStore';
 import { assetsApi } from '@/lib/api/assets';
 
@@ -12,9 +13,10 @@ export function useAssets(options: UseAssetsOptions = {}) {
   const { enabled = true, refetchOnMount = false } = options;
 
   const pagination = useAssetStore((state) => state.pagination);
+  const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const query = useQuery({
-    queryKey: ['assets', pagination.currentPage, pagination.pageSize],
+    queryKey: ['assets', currentOrg?.id, pagination.currentPage, pagination.pageSize],
     queryFn: async () => {
       const offset = (pagination.currentPage - 1) * pagination.pageSize;
       const response = await assetsApi.list({

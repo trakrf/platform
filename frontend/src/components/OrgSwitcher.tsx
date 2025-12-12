@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Menu } from '@headlessui/react';
 import { ChevronDown, Plus, Check, Settings, Users, LogOut } from 'lucide-react';
 import { useOrgStore } from '@/stores';
+import { useOrgSwitch } from '@/hooks/orgs';
 import { RoleBadge } from './RoleBadge';
 import { OrgModal } from './OrgModal';
 import type { ModalMode, TabType } from './useOrgModal';
@@ -25,6 +26,7 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>('manage');
   const [modalTab, setModalTab] = useState<TabType>('members');
+
 
   const handleSwitchOrg = async (orgId: number) => {
     if (orgId === currentOrg?.id) return;

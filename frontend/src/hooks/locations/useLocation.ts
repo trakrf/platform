@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocationStore } from '@/stores/locations/locationStore';
+import { useOrgStore } from '@/stores/orgStore';
 import { locationsApi } from '@/lib/api/locations';
 
 export interface UseLocationOptions {
@@ -12,9 +13,10 @@ export function useLocation(id: number | null, options: UseLocationOptions = {})
   const location = useLocationStore((state) =>
     id ? state.getLocationById(id) ?? null : null
   );
+  const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const query = useQuery({
-    queryKey: ['location', id],
+    queryKey: ['location', currentOrg?.id, id],
     queryFn: async () => {
       if (!id) throw new Error('Location ID is required');
       const response = await locationsApi.get(id);

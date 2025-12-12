@@ -9,6 +9,14 @@ import type { Location } from '@/types/locations';
 
 vi.mock('@/lib/api/locations');
 
+// Mock useOrgStore to provide currentOrg for query keys
+vi.mock('@/stores/orgStore', () => ({
+  useOrgStore: vi.fn((selector) => {
+    const state = { currentOrg: { id: 1, name: 'Test Org' } };
+    return selector ? selector(state) : state;
+  }),
+}));
+
 const mockLocation: Location = {
   id: 1,
   org_id: 100,
@@ -37,7 +45,7 @@ const createWrapper = () => {
 
 describe('useLocation', () => {
   beforeEach(() => {
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
     vi.clearAllMocks();
   });
 

@@ -71,7 +71,7 @@ const createWrapper = () => {
 
 describe('useLocationHierarchy', () => {
   beforeEach(() => {
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
     vi.clearAllMocks();
   });
 

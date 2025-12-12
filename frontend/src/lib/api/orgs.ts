@@ -14,6 +14,11 @@ export interface MessageResponse {
   message: string;
 }
 
+export interface SetCurrentOrgResponse {
+  message: string;
+  token: string;
+}
+
 export const orgsApi = {
   // Profile
   getProfile: () => apiClient.get<{ data: UserProfile }>('/users/me'),
@@ -34,7 +39,7 @@ export const orgsApi = {
 
   // Org switching
   setCurrentOrg: (data: SetCurrentOrgRequest) =>
-    apiClient.post<MessageResponse>('/users/me/current-org', data),
+    apiClient.post<SetCurrentOrgResponse>('/users/me/current-org', data),
 
   // Members (Phase 3b)
   listMembers: (orgId: number) =>

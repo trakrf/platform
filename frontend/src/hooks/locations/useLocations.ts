@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocationStore } from '@/stores/locations/locationStore';
+import { useOrgStore } from '@/stores/orgStore';
 import { locationsApi } from '@/lib/api/locations';
 
 export interface UseLocationsOptions {
@@ -9,9 +10,10 @@ export interface UseLocationsOptions {
 
 export function useLocations(options: UseLocationsOptions = {}) {
   const { enabled = true, refetchOnMount = false } = options;
+  const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const query = useQuery({
-    queryKey: ['locations'],
+    queryKey: ['locations', currentOrg?.id],
     queryFn: async () => {
       const response = await locationsApi.list();
       useLocationStore.getState().setLocations(response.data.data);

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAssetStore } from '@/stores/assets/assetStore';
+import { useOrgStore } from '@/stores/orgStore';
 import { assetsApi } from '@/lib/api/assets';
 
 export interface UseAssetOptions {
@@ -12,9 +13,10 @@ export function useAsset(id: number | null, options: UseAssetOptions = {}) {
   const asset = useAssetStore((state) =>
     id ? state.getAssetById(id) ?? null : null
   );
+  const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const query = useQuery({
-    queryKey: ['asset', id],
+    queryKey: ['asset', currentOrg?.id, id],
     queryFn: async () => {
       if (!id) return null;
       const response = await assetsApi.get(id);

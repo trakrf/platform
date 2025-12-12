@@ -53,7 +53,10 @@ export const useOrgStore = create<OrgState>()(
       switchOrg: async (orgId: number) => {
         set({ isLoading: true, error: null });
         try {
-          await orgsApi.setCurrentOrg({ org_id: orgId });
+          const response = await orgsApi.setCurrentOrg({ org_id: orgId });
+          // Update the token with new org_id claim
+          const authState = useAuthStore.getState();
+          useAuthStore.setState({ ...authState, token: response.data.token });
           // Refetch profile to get updated current_org
           await useAuthStore.getState().fetchProfile();
           // Sync derived state

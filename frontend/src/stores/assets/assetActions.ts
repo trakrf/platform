@@ -158,7 +158,8 @@ export function createCacheActions(
       }),
 
     /**
-     * Clear all cached data
+     * Clear all cached data and reset UI state to defaults
+     * Used on org switch to ensure clean state for new org
      */
     invalidateCache: () =>
       set({
@@ -171,6 +172,23 @@ export function createCacheActions(
           lastFetched: 0,
           ttl: 60 * 60 * 1000,
         },
+        filters: {
+          type: 'all',
+          is_active: 'all',
+          search: '',
+          location_id: 'all',
+        },
+        pagination: {
+          currentPage: 1,
+          pageSize: 25,
+          totalCount: 0,
+          totalPages: 0,
+        },
+        sort: {
+          field: 'created_at',
+          direction: 'desc',
+        },
+        selectedAssetId: null,
       }),
   };
 }
