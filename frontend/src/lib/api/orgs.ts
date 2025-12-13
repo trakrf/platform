@@ -66,5 +66,5 @@ export const orgsApi = {
 
   // Accept invitation (auth endpoint)
   acceptInvitation: (token: string) =>
-    apiClient.post<AcceptInvitationResponse>('/auth/invitations/accept', { token }),
+    apiClient.post<{ data: AcceptInvitationResponse }>('/auth/accept-invite', { token }),
 };
