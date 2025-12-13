@@ -45,8 +45,9 @@ func (c *Client) SendPasswordResetEmail(toEmail, resetURL, token string) error {
 }
 
 // SendInvitationEmail sends an organization invitation email.
-func (c *Client) SendInvitationEmail(toEmail, orgName, inviterName, role, token string) error {
-	acceptURL := fmt.Sprintf("https://app.trakrf.id/#accept-invite?token=%s", token)
+// baseURL should be the frontend origin (e.g., "https://app.trakrf.id")
+func (c *Client) SendInvitationEmail(toEmail, orgName, inviterName, role, token, baseURL string) error {
+	acceptURL := fmt.Sprintf("%s/#accept-invite?token=%s", baseURL, token)
 
 	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
 		From:    "TrakRF <noreply@trakrf.id>",
