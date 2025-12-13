@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
+import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
 
@@ -44,6 +44,16 @@ export function AssetCard({
     e.stopPropagation();
     onDelete?.(asset);
   };
+
+  const handleLocate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (asset.is_active && asset.identifier) {
+      window.location.hash = `#locate?epc=${encodeURIComponent(asset.identifier)}`;
+    }
+  };
+
+  const hasIdentifier = !!asset.identifier;
+  const canLocate = asset.is_active && hasIdentifier;
 
   const handleClick = () => {
     onClick?.();
@@ -114,9 +124,24 @@ export function AssetCard({
         <td className="px-4 py-3">
           {showActions && (
             <div className="flex items-center gap-2">
+              {hasIdentifier && (
+                <button
+                  onClick={handleLocate}
+                  disabled={!canLocate}
+                  data-testid="locate-button"
+                  className={`p-1.5 rounded transition-colors ${
+                    canLocate
+                      ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
+                      : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                  }`}
+                  aria-label={`Locate ${asset.identifier}`}
+                >
+                  <Target className="h-4 w-4" />
+                </button>
+              )}
               <button
                 onClick={handleEdit}
-                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded transition-colors"
+                className="p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
                 aria-label={`Edit ${asset.identifier}`}
               >
                 <Pencil className="h-4 w-4" />
@@ -186,9 +211,24 @@ export function AssetCard({
       {/* Actions */}
       {showActions && (
         <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+          {hasIdentifier && (
+            <button
+              onClick={handleLocate}
+              disabled={!canLocate}
+              data-testid="locate-button"
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${
+                canLocate
+                  ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border-blue-200 dark:border-blue-800'
+                  : 'text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-not-allowed'
+              }`}
+            >
+              <Target className="h-4 w-4" />
+              Locate
+            </button>
+          )}
           <button
             onClick={handleEdit}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-lg transition-colors"
           >
             <Pencil className="h-4 w-4" />
             Edit
