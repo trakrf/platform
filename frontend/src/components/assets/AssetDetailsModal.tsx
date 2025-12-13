@@ -1,4 +1,4 @@
-import { X, MapPin } from 'lucide-react';
+import { X, MapPin, Target } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
 
@@ -155,7 +155,27 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+            {asset.identifier && (
+              <button
+                data-testid="locate-button"
+                disabled={!asset.is_active}
+                onClick={() => {
+                  if (asset.is_active) {
+                    window.location.hash = `#locate?epc=${encodeURIComponent(asset.identifier)}`;
+                    onClose();
+                  }
+                }}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                  asset.is_active
+                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 cursor-not-allowed'
+                }`}
+              >
+                <Target className="w-4 h-4" />
+                Locate
+              </button>
+            )}
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 font-medium transition-colors"

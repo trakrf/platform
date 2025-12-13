@@ -22,7 +22,7 @@ export interface LocationStore {
   updateLocation: (id: number, updates: Partial<Location>) => void;
   deleteLocation: (id: number) => void;
   setLocations: (locations: Location[]) => void;
-  clearCache: () => void;
+  invalidateCache: () => void;
 
   getLocationById: (id: number) => Location | undefined;
   getLocationByIdentifier: (identifier: string) => Location | undefined;

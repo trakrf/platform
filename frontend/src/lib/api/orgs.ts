@@ -14,6 +14,11 @@ export interface MessageResponse {
   message: string;
 }
 
+export interface SetCurrentOrgResponse {
+  message: string;
+  token: string;
+}
+
 export const orgsApi = {
   // Profile
   getProfile: () => apiClient.get<{ data: UserProfile }>('/users/me'),
@@ -34,14 +39,14 @@ export const orgsApi = {
 
   // Org switching
   setCurrentOrg: (data: SetCurrentOrgRequest) =>
-    apiClient.post<MessageResponse>('/users/me/current-org', data),
+    apiClient.post<SetCurrentOrgResponse>('/users/me/current-org', data),
 
   // Members (Phase 3b)
   listMembers: (orgId: number) =>
     apiClient.get<{ data: OrgMember[] }>(`/orgs/${orgId}/members`),
 
   updateMemberRole: (orgId: number, userId: number, role: string) =>
-    apiClient.patch<MessageResponse>(`/orgs/${orgId}/members/${userId}`, { role }),
+    apiClient.put<MessageResponse>(`/orgs/${orgId}/members/${userId}`, { role }),
 
   removeMember: (orgId: number, userId: number) =>
     apiClient.delete<MessageResponse>(`/orgs/${orgId}/members/${userId}`),
@@ -61,5 +66,5 @@ export const orgsApi = {
 
   // Accept invitation (auth endpoint)
   acceptInvitation: (token: string) =>
-    apiClient.post<AcceptInvitationResponse>('/auth/invitations/accept', { token }),
+    apiClient.post<{ data: AcceptInvitationResponse }>('/auth/accept-invite', { token }),
 };

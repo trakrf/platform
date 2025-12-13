@@ -22,7 +22,7 @@ const createMockLocation = (id: number, overrides = {}): Location => ({
 
 describe('LocationStore - Cache Operations', () => {
   beforeEach(() => {
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
   });
 
   it('should add location to all indexes', () => {
@@ -125,10 +125,10 @@ describe('LocationStore - Cache Operations', () => {
     expect(cache.byId.has(3)).toBe(true);
   });
 
-  it('should clear all indexes with clearCache', () => {
+  it('should clear all indexes with invalidateCache', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().addLocation(location);
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
 
     const { cache } = useLocationStore.getState();
     expect(cache.byId.size).toBe(0);
@@ -154,7 +154,7 @@ describe('LocationStore - Cache Operations', () => {
 
 describe('LocationStore - Hierarchy Queries', () => {
   beforeEach(() => {
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
 
     const root = createMockLocation(1, { identifier: 'root' });
     const child1 = createMockLocation(2, { identifier: 'child1', parent_location_id: 1 });
@@ -248,7 +248,7 @@ describe('LocationStore - Hierarchy Queries', () => {
 
 describe('LocationStore - UI State', () => {
   beforeEach(() => {
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
   });
 
   it('should set selected location', () => {
@@ -316,7 +316,7 @@ describe('LocationStore - UI State', () => {
 
 describe('LocationStore - Filtering and Pagination', () => {
   beforeEach(() => {
-    useLocationStore.getState().clearCache();
+    useLocationStore.getState().invalidateCache();
 
     const locations = [
       createMockLocation(1, { identifier: 'usa', name: 'United States', is_active: true }),

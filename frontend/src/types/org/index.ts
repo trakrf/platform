@@ -43,7 +43,6 @@ export interface Organization {
   id: number;
   name: string;
   identifier: string;
-  is_personal: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;

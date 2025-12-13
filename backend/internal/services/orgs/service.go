@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/trakrf/platform/backend/internal/models"
@@ -36,13 +37,13 @@ func (s *Service) CreateOrgWithAdmin(ctx context.Context, name string, creatorUs
 	// Create org
 	var org organization.Organization
 	orgQuery := `
-		INSERT INTO trakrf.organizations (name, identifier, is_personal)
-		VALUES ($1, $2, false)
-		RETURNING id, name, identifier, is_personal, metadata,
+		INSERT INTO trakrf.organizations (name, identifier)
+		VALUES ($1, $2)
+		RETURNING id, name, identifier, metadata,
 		          valid_from, valid_to, is_active, created_at, updated_at
 	`
 	err = tx.QueryRow(ctx, orgQuery, name, identifier).Scan(
-		&org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
@@ -66,6 +67,7 @@ func (s *Service) CreateOrgWithAdmin(ctx context.Context, name string, creatorUs
 }
 
 // DeleteOrgWithConfirmation deletes an org if the confirmation name matches (case-insensitive).
+// It mangles the name and identifier to free them for reuse while preserving audit trail.
 func (s *Service) DeleteOrgWithConfirmation(ctx context.Context, orgID int, confirmName string) error {
 	org, err := s.storage.GetOrganizationByID(ctx, orgID)
 	if err != nil {
@@ -80,7 +82,13 @@ func (s *Service) DeleteOrgWithConfirmation(ctx context.Context, orgID int, conf
 		return fmt.Errorf("organization name does not match")
 	}
 
-	return s.storage.SoftDeleteOrganization(ctx, orgID)
+	// Mangle name and identifier to free them for reuse
+	deletedAt := time.Now().UTC()
+	prefix := fmt.Sprintf("*** DELETED %s *** ", deletedAt.Format(time.RFC3339))
+	mangledName := prefix + org.Name
+	mangledIdentifier := prefix + org.Identifier
+
+	return s.storage.SoftDeleteOrganizationWithMangle(ctx, orgID, mangledName, mangledIdentifier, deletedAt)
 }
 
 // GetUserProfile builds the enhanced /users/me response.

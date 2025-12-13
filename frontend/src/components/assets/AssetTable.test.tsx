@@ -51,8 +51,24 @@ describe('AssetTable', () => {
       getFilteredAssets: vi.fn(() => mockAssets),
       sort: { field: 'identifier', direction: 'asc' as const },
       setSort: vi.fn(),
+      cache: {
+        byId: new Map(),
+        byIdentifier: new Map(),
+        byType: new Map(),
+        activeIds: new Set(),
+        allIds: [],
+        lastFetched: 0,
+        ttl: 60 * 60 * 1000,
+      },
+      filters: {
+        type: 'all',
+        is_active: 'all',
+        search: '',
+        location_id: 'all',
+      },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
+    (useAssetStore as any).getState = vi.fn(() => mockStore);
   });
 
   it('renders desktop table with assets', () => {
@@ -86,8 +102,24 @@ describe('AssetTable', () => {
       getFilteredAssets: vi.fn(() => mockAssets),
       sort: { field: 'identifier', direction: 'asc' as const },
       setSort: mockSetSort,
+      cache: {
+        byId: new Map(),
+        byIdentifier: new Map(),
+        byType: new Map(),
+        activeIds: new Set(),
+        allIds: [],
+        lastFetched: 0,
+        ttl: 60 * 60 * 1000,
+      },
+      filters: {
+        type: 'all',
+        is_active: 'all',
+        search: '',
+        location_id: 'all',
+      },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
+    (useAssetStore as any).getState = vi.fn(() => mockStore);
 
     render(<AssetTable />);
 
@@ -103,8 +135,24 @@ describe('AssetTable', () => {
       getFilteredAssets: vi.fn(() => mockAssets),
       sort: { field: 'name', direction: 'asc' as const },
       setSort: mockSetSort,
+      cache: {
+        byId: new Map(),
+        byIdentifier: new Map(),
+        byType: new Map(),
+        activeIds: new Set(),
+        allIds: [],
+        lastFetched: 0,
+        ttl: 60 * 60 * 1000,
+      },
+      filters: {
+        type: 'all',
+        is_active: 'all',
+        search: '',
+        location_id: 'all',
+      },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
+    (useAssetStore as any).getState = vi.fn(() => mockStore);
 
     render(<AssetTable />);
 
@@ -129,8 +177,24 @@ describe('AssetTable', () => {
       getFilteredAssets: vi.fn(() => []),
       sort: { field: 'identifier', direction: 'asc' as const },
       setSort: vi.fn(),
+      cache: {
+        byId: new Map(),
+        byIdentifier: new Map(),
+        byType: new Map(),
+        activeIds: new Set(),
+        allIds: [],
+        lastFetched: 0,
+        ttl: 60 * 60 * 1000,
+      },
+      filters: {
+        type: 'all',
+        is_active: 'all',
+        search: '',
+        location_id: 'all',
+      },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
+    (useAssetStore as any).getState = vi.fn(() => mockStore);
 
     render(<AssetTable />);
 

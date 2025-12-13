@@ -84,7 +84,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
 
     try {
       const response = await orgsApi.acceptInvitation(token);
-      const { org_name, role } = response.data;
+      const { org_name, role } = response.data.data;
 
       // Refresh profile to get updated org list
       await useAuthStore.getState().fetchProfile();

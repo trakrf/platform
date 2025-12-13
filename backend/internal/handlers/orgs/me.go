@@ -10,6 +10,7 @@ import (
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/organization"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
+	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
 // GetMe returns the authenticated user's profile with orgs.
@@ -59,7 +60,18 @@ func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"message": "Current organization updated"})
+	// Generate new JWT with updated org_id
+	token, err := jwt.Generate(claims.UserID, claims.Email, &request.OrgID)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			"Failed to generate token", "", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"message": "Current organization updated",
+		"token":   token,
+	})
 }
 
 // RegisterMeRoutes registers /users/me endpoints.
