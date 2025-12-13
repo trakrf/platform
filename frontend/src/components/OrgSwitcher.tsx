@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { Menu } from '@headlessui/react';
 import { ChevronDown, Plus, Check, Settings, Users, LogOut } from 'lucide-react';
 import { useOrgStore } from '@/stores';
-import { useOrgSwitch } from '@/hooks/orgs';
 import { RoleBadge } from './RoleBadge';
 import { OrgModal } from './OrgModal';
 import type { ModalMode, TabType } from './useOrgModal';
