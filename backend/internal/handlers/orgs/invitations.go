@@ -62,7 +62,14 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.CreateInvitation(r.Context(), orgID, req, claims.UserID)
+	// Get frontend origin for building invite link
+	// Falls back to production URL if Origin header is missing
+	baseURL := r.Header.Get("Origin")
+	if baseURL == "" {
+		baseURL = "https://app.trakrf.id"
+	}
+
+	resp, err := h.service.CreateInvitation(r.Context(), orgID, req, claims.UserID, baseURL)
 	if err != nil {
 		switch err.Error() {
 		case "already_member":
@@ -120,7 +127,14 @@ func (h *Handler) ResendInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newExpiry, err := h.service.ResendInvitation(r.Context(), inviteID, orgID)
+	// Get frontend origin for building invite link
+	// Falls back to production URL if Origin header is missing
+	baseURL := r.Header.Get("Origin")
+	if baseURL == "" {
+		baseURL = "https://app.trakrf.id"
+	}
+
+	newExpiry, err := h.service.ResendInvitation(r.Context(), inviteID, orgID, baseURL)
 	if err != nil {
 		if err.Error() == "invitation not found" {
 			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,

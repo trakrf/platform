@@ -15,7 +15,8 @@ import (
 const invitationExpiryDays = 7
 
 // CreateInvitation creates an invitation and sends an email
-func (s *Service) CreateInvitation(ctx context.Context, orgID int, req organization.CreateInvitationRequest, inviterUserID int) (*organization.CreateInvitationResponse, error) {
+// baseURL is the frontend origin for building the accept link (e.g., "https://app.trakrf.id")
+func (s *Service) CreateInvitation(ctx context.Context, orgID int, req organization.CreateInvitationRequest, inviterUserID int, baseURL string) (*organization.CreateInvitationResponse, error) {
 	// Check if email is already a member
 	isMember, err := s.storage.IsEmailMember(ctx, orgID, req.Email)
 	if err != nil {
@@ -66,7 +67,7 @@ func (s *Service) CreateInvitation(ctx context.Context, orgID int, req organizat
 
 	// Send invitation email (with raw token, not hash)
 	if s.emailClient != nil {
-		if err := s.emailClient.SendInvitationEmail(req.Email, org.Name, inviter.Name, req.Role, rawToken); err != nil {
+		if err := s.emailClient.SendInvitationEmail(req.Email, org.Name, inviter.Name, req.Role, rawToken, baseURL); err != nil {
 			// Log error but don't fail the invitation creation
 			// The admin can resend if needed
 			fmt.Printf("warning: failed to send invitation email: %v\n", err)
@@ -92,7 +93,8 @@ func (s *Service) CancelInvitation(ctx context.Context, inviteID int) error {
 }
 
 // ResendInvitation generates a new token and resends the email, returns new expiry
-func (s *Service) ResendInvitation(ctx context.Context, inviteID, orgID int) (time.Time, error) {
+// baseURL is the frontend origin for building the accept link (e.g., "https://app.trakrf.id")
+func (s *Service) ResendInvitation(ctx context.Context, inviteID, orgID int, baseURL string) (time.Time, error) {
 	// Get the invitation
 	inv, err := s.storage.GetInvitationByID(ctx, inviteID)
 	if err != nil {
@@ -134,7 +136,7 @@ func (s *Service) ResendInvitation(ctx context.Context, inviteID, orgID int) (ti
 
 	// Send email with new token
 	if s.emailClient != nil {
-		if err := s.emailClient.SendInvitationEmail(inv.Email, org.Name, inviterName, inv.Role, rawToken); err != nil {
+		if err := s.emailClient.SendInvitationEmail(inv.Email, org.Name, inviterName, inv.Role, rawToken, baseURL); err != nil {
 			return time.Time{}, fmt.Errorf("failed to send email: %w", err)
 		}
 	}
