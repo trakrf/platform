@@ -1,7 +1,7 @@
-# Feature: Fix Invitation Accept Redirect Flow (TRA-183)
+# Feature: Fix Invitation Accept Redirect Flow (TRA-183, TRA-196)
 
 ## Origin
-User clicked invitation email link `https://app.trakrf.id/#accept-invite?token=...` and was redirected to home page instead of seeing the invite acceptance screen.
+User clicked invitation email link `https://app.trakrf.id/#accept-invite?token=...` and was redirected to home page instead of seeing the invite acceptance screen. This is Bug #1 in TRA-196.
 
 ## Outcome
 Users clicking invitation links will see the AcceptInviteScreen, and after logging in (if needed) will return to complete the invitation acceptance.
@@ -111,6 +111,8 @@ sessionStorage.setItem('redirectAfterLogin', `accept-invite?token=${token}`);
 - Linear issue: TRA-183
 
 ## Related
+- TRA-196: Parent issue (Organization bugs) - this spec addresses Bug #1
 - TRA-181: Members screen null crash (fixed) - same area of code
 - Backend: Invitation system, email sending already working
 - AcceptInviteScreen.tsx: Component exists and handles auth states correctly
+- Also see: `spec/active/org-soft-delete-name/spec.md` for Bug #3 in TRA-196
