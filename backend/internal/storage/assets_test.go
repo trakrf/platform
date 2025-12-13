@@ -1,10 +1,3 @@
-//go:build skip_asset_tests
-// +build skip_asset_tests
-
-// TRA-212: Asset storage tests skipped - schema mismatch
-// Multiple tests fail with "Incorrect argument number" or empty results
-// Fix the Asset model/queries to match, then remove this build tag
-
 package storage
 
 import (
@@ -45,18 +38,18 @@ func TestCreateAsset(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		1, request.OrgID, request.Identifier, request.Name,
-		request.Type, request.Description, request.ValidFrom, request.ValidTo,
+		request.Type, request.Description, nil, request.ValidFrom, request.ValidTo,
 		request.Metadata, request.IsActive, now, now, nil,
 	)
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
@@ -95,7 +88,7 @@ func TestCreateAsset_DuplicateIdentifier(t *testing.T) {
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: duplicate key value violates unique constraint"))
@@ -131,7 +124,7 @@ func TestCreateAsset_EmptyName(t *testing.T) {
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: null value in column \"name\" violates not-null constraint"))
@@ -167,7 +160,7 @@ func TestCreateAsset_EmptyIdentifier(t *testing.T) {
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: null value in column \"identifier\" violates not-null constraint"))
@@ -203,7 +196,7 @@ func TestCreateAsset_InvalidOrgID(t *testing.T) {
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: insert or update on table \"assets\" violates foreign key constraint"))
@@ -238,18 +231,18 @@ func TestCreateAsset_NullMetadata(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		1, request.OrgID, request.Identifier, request.Name,
-		request.Type, request.Description, request.ValidFrom, request.ValidTo,
+		request.Type, request.Description, nil, request.ValidFrom, request.ValidTo,
 		nil, request.IsActive, now, now, nil,
 	)
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
@@ -285,18 +278,18 @@ func TestCreateAsset_EmptyMetadata(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		1, request.OrgID, request.Identifier, request.Name,
-		request.Type, request.Description, request.ValidFrom, request.ValidTo,
+		request.Type, request.Description, nil, request.ValidFrom, request.ValidTo,
 		request.Metadata, request.IsActive, now, now, nil,
 	)
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
@@ -337,7 +330,7 @@ func TestCreateAsset_DatabaseConnectionError(t *testing.T) {
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("connection refused"))
@@ -388,18 +381,18 @@ func TestCreateAsset_ComplexMetadata(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		1, request.OrgID, request.Identifier, request.Name,
-		request.Type, request.Description, request.ValidFrom, request.ValidTo,
+		request.Type, request.Description, nil, request.ValidFrom, request.ValidTo,
 		request.Metadata, request.IsActive, now, now, nil,
 	)
 
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
-			request.Description, request.ValidFrom, request.ValidTo,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
@@ -419,7 +412,6 @@ func TestCreateAsset_ComplexMetadata(t *testing.T) {
 }
 
 func TestUpdateAsset(t *testing.T) {
-	t.Skip("TRA-212: Schema mismatch - scan columns don't match struct fields")
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -438,11 +430,11 @@ func TestUpdateAsset(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", newName, "equipment", newDescription,
-		now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
+		nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
 		now, now, nil,
 	)
 
@@ -503,7 +495,6 @@ func TestUpdateAsset_NotFound(t *testing.T) {
 }
 
 func TestUpdateAsset_PartialUpdate(t *testing.T) {
-	t.Skip("TRA-212: Schema mismatch - scan columns don't match struct fields")
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -520,11 +511,11 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
-		now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), false,
+		nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), false,
 		now, now, nil,
 	)
 
@@ -542,7 +533,6 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 }
 
 func TestGetAssetByID(t *testing.T) {
-	t.Skip("TRA-212: Schema mismatch - scan columns don't match struct fields")
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -554,11 +544,11 @@ func TestGetAssetByID(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
-		now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
+		nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
 		now, now, nil,
 	)
 
@@ -598,7 +588,6 @@ func TestGetAssetByID_NotFound(t *testing.T) {
 }
 
 func TestGetAssetByID_WithNullMetadata(t *testing.T) {
-	t.Skip("TRA-212: Schema mismatch - scan columns don't match struct fields")
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -610,11 +599,11 @@ func TestGetAssetByID_WithNullMetadata(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
-		now, timePtr(now.Add(24*time.Hour)), nil, true,
+		nil, now, timePtr(now.Add(24*time.Hour)), nil, true,
 		now, now, nil,
 	)
 
@@ -653,7 +642,6 @@ func TestGetAssetByID_DatabaseError(t *testing.T) {
 }
 
 func TestListAllAssets(t *testing.T) {
-	t.Skip("TRA-212: Schema mismatch - scan columns don't match struct fields")
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -667,17 +655,17 @@ func TestListAllAssets(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).
 		AddRow(1, 1, "TEST-001", "Asset 1", "equipment", "Description 1",
-			now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value1"}`), true,
+			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value1"}`), true,
 			now, now, nil).
 		AddRow(2, 1, "TEST-002", "Asset 2", "device", "Description 2",
-			now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value2"}`), true,
+			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value2"}`), true,
 			now, now, nil).
 		AddRow(3, 1, "TEST-003", "Asset 3", "equipment", "Description 3",
-			now, timePtr(now.Add(24*time.Hour)), nil, false,
+			nil, now, timePtr(now.Add(24*time.Hour)), nil, false,
 			now, now, nil)
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
@@ -708,7 +696,7 @@ func TestListAllAssets_Empty(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	})
 
@@ -724,7 +712,6 @@ func TestListAllAssets_Empty(t *testing.T) {
 }
 
 func TestListAllAssets_WithPagination(t *testing.T) {
-	t.Skip("TRA-212: Schema mismatch - scan columns don't match struct fields")
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -738,14 +725,14 @@ func TestListAllAssets_WithPagination(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).
 		AddRow(6, 1, "TEST-006", "Asset 6", "equipment", "Description 6",
-			now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
+			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
 			now, now, nil).
 		AddRow(7, 1, "TEST-007", "Asset 7", "device", "Description 7",
-			now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
+			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
 			now, now, nil)
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
@@ -799,11 +786,11 @@ func TestListAllAssets_ScanError(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{
 		"id", "org_id", "identifier", "name", "type", "description",
-		"valid_from", "valid_to", "metadata", "is_active",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
 		"created_at", "updated_at", "deleted_at",
 	}).AddRow(
 		"not-an-int", 1, "TEST-001", "Asset 1", "equipment", "Description",
-		now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
+		nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
 		now, now, nil,
 	).RowError(0, errors.New("scan error: invalid type"))
 
