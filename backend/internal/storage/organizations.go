@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/organization"
@@ -113,6 +114,24 @@ func (s *Storage) UpdateOrganization(ctx context.Context, id int, request organi
 func (s *Storage) SoftDeleteOrganization(ctx context.Context, id int) error {
 	query := `UPDATE trakrf.organizations SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
 	result, err := s.pool.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete organization: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("organization not found")
+	}
+	return nil
+}
+
+// SoftDeleteOrganizationWithMangle marks an organization as deleted and mangles name/identifier
+// to free them for reuse. The mangled format preserves the original values for audit purposes.
+func (s *Storage) SoftDeleteOrganizationWithMangle(ctx context.Context, id int, mangledName, mangledIdentifier string, deletedAt time.Time) error {
+	query := `
+		UPDATE trakrf.organizations
+		SET name = $2, identifier = $3, deleted_at = $4
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	result, err := s.pool.Exec(ctx, query, id, mangledName, mangledIdentifier, deletedAt)
 	if err != nil {
 		return fmt.Errorf("failed to delete organization: %w", err)
 	}
