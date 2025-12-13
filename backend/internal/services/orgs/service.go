@@ -36,13 +36,13 @@ func (s *Service) CreateOrgWithAdmin(ctx context.Context, name string, creatorUs
 	// Create org
 	var org organization.Organization
 	orgQuery := `
-		INSERT INTO trakrf.organizations (name, identifier, is_personal)
-		VALUES ($1, $2, false)
-		RETURNING id, name, identifier, is_personal, metadata,
+		INSERT INTO trakrf.organizations (name, identifier)
+		VALUES ($1, $2)
+		RETURNING id, name, identifier, metadata,
 		          valid_from, valid_to, is_active, created_at, updated_at
 	`
 	err = tx.QueryRow(ctx, orgQuery, name, identifier).Scan(
-		&org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {

@@ -43,7 +43,6 @@ func TestSlugifyOrgName(t *testing.T) {
 }
 
 // TODO: Add integration test for Signup() that:
-// 1. Creates user + personal org in transaction
-// 2. Verifies is_personal = true
-// 3. Verifies identifier matches expected format
-// 4. Verifies user is owner in org_users table
+// 1. Creates user + org in transaction
+// 2. Verifies identifier matches expected format (slugified org name)
+// 3. Verifies user is admin in org_users table

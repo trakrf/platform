@@ -40,8 +40,8 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Auto-generate org name and identifier from email
-	orgName := request.Email
+	// Use provided org name and generate identifier from it
+	orgName := strings.TrimSpace(request.OrgName)
 	orgIdentifier := slugifyOrgName(orgName)
 
 	tx, err := s.db.Begin(ctx)
@@ -66,15 +66,15 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Create personal organization with is_personal=true
+	// Create organization with user-provided name
 	var org organization.Organization
 	orgQuery := `
-		INSERT INTO trakrf.organizations (name, identifier, is_personal)
-		VALUES ($1, $2, true)
-		RETURNING id, name, identifier, is_personal, metadata, valid_from, valid_to, is_active, created_at, updated_at
+		INSERT INTO trakrf.organizations (name, identifier)
+		VALUES ($1, $2)
+		RETURNING id, name, identifier, metadata, valid_from, valid_to, is_active, created_at, updated_at
 	`
 	err = tx.QueryRow(ctx, orgQuery, orgName, orgIdentifier).Scan(
-		&org.ID, &org.Name, &org.Identifier, &org.IsPersonal, &org.Metadata,
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive,
 		&org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
