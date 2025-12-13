@@ -46,7 +46,7 @@ export const orgsApi = {
     apiClient.get<{ data: OrgMember[] }>(`/orgs/${orgId}/members`),
 
   updateMemberRole: (orgId: number, userId: number, role: string) =>
-    apiClient.patch<MessageResponse>(`/orgs/${orgId}/members/${userId}`, { role }),
+    apiClient.put<MessageResponse>(`/orgs/${orgId}/members/${userId}`, { role }),
 
   removeMember: (orgId: number, userId: number) =>
     apiClient.delete<MessageResponse>(`/orgs/${orgId}/members/${userId}`),
