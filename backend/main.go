@@ -24,6 +24,7 @@ import (
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
+	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
@@ -96,6 +97,7 @@ func setupRouter(
 	locationsHandler *locationshandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
+	testHandler *testhandler.Handler,
 	store *storage.Storage,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -128,6 +130,11 @@ func setupRouter(
 		assetsHandler.RegisterRoutes(r)
 		locationsHandler.RegisterRoutes(r)
 	})
+
+	// Register test routes only in non-production environments
+	if os.Getenv("APP_ENV") != "production" {
+		testHandler.RegisterRoutes(r)
+	}
 
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
 		frontendHandler.ServeSPA(w, r, "frontend/dist/index.html")
@@ -176,9 +183,10 @@ func main() {
 	locationsHandler := locationshandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
+	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, healthHandler, frontendHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
