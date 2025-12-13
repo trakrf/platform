@@ -1,3 +1,9 @@
+//go:build integration
+// +build integration
+
+// TRA-212: Skipped by default - requires database setup
+// Run with: go test -tags=integration ./...
+
 package bulkimport
 
 import (
