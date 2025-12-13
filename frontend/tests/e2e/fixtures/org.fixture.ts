@@ -37,15 +37,18 @@ export async function clearAuthState(page: Page): Promise<void> {
 
 /**
  * Sign up a new test user
- * Creates user and their personal org automatically (backend creates personal org on signup)
+ * Creates user and their org automatically
  */
 export async function signupTestUser(
   page: Page,
   email: string,
-  password: string
+  password: string,
+  orgName?: string
 ): Promise<void> {
   await page.goto('/#signup');
   await page.locator('input#email').fill(email);
+  // Organization name is required on signup
+  await page.locator('input#orgName').fill(orgName || `Test Org ${uniqueId()}`);
   await page.locator('input#password').fill(password);
   await page.locator('button[type="submit"]').click();
   // Wait for redirect to home after successful signup
@@ -99,9 +102,10 @@ export async function openOrgSwitcher(page: Page): Promise<void> {
  */
 export async function switchToOrg(page: Page, orgName: string): Promise<void> {
   await openOrgSwitcher(page);
-  await page.getByRole('menuitem', { name: orgName }).click();
-  // Wait for the org switcher to update with the new org name
-  await page.waitForSelector(`[data-testid="org-switcher"]:has-text("${orgName}")`, { timeout: 5000 });
+  // Click the org in the dropdown menu
+  await page.locator(`button:has-text("${orgName}")`).click();
+  // Wait for dropdown to close (menu items disappear)
+  await page.waitForSelector('[role="menu"]', { state: 'hidden', timeout: 5000 });
 }
 
 // =============================================================================
@@ -111,21 +115,32 @@ export async function switchToOrg(page: Page, orgName: string): Promise<void> {
 
 /**
  * Get the auth token from localStorage
+ * Token is stored in zustand's auth-storage persist key
  */
 export async function getAuthToken(page: Page): Promise<string> {
-  const token = await page.evaluate(() => localStorage.getItem('token'));
+  const token = await page.evaluate(() => {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (!authStorage) return null;
+    try {
+      const { state } = JSON.parse(authStorage);
+      return state?.token || null;
+    } catch {
+      return null;
+    }
+  });
   if (!token) {
-    throw new Error('No auth token found in localStorage');
+    throw new Error('No auth token found in localStorage (auth-storage)');
   }
   return token;
 }
 
 /**
- * Get the base API URL from the page
+ * Get the base API URL for E2E tests
+ * Always uses localhost:8080 since E2E tests require the backend to be running locally
  */
-function getApiBaseUrl(page: Page): string {
-  const url = new URL(page.url());
-  return `${url.protocol}//${url.host}/api/v1`;
+function getApiBaseUrl(_page: Page): string {
+  // E2E tests always run against local backend
+  return 'http://localhost:8080/api/v1';
 }
 
 /**
@@ -133,8 +148,8 @@ function getApiBaseUrl(page: Page): string {
  * Only works in non-production environments
  */
 export async function getInviteToken(page: Page, inviteId: number): Promise<string> {
-  const url = new URL(page.url());
-  const testEndpoint = `${url.protocol}//${url.host}/test/invitations/${inviteId}/token`;
+  // E2E tests always run against local backend
+  const testEndpoint = `http://localhost:8080/test/invitations/${inviteId}/token`;
 
   const response = await page.request.get(testEndpoint);
   if (!response.ok()) {
@@ -177,18 +192,24 @@ export async function createInviteViaAPI(
 
 /**
  * Accept invitation via API
- * Must be called when logged in as the invited user
+ * @param page Playwright page
+ * @param inviteToken The invitation token
+ * @param userAuthToken Optional auth token - if not provided, reads from localStorage
  */
-export async function acceptInviteViaAPI(page: Page, token: string): Promise<void> {
+export async function acceptInviteViaAPI(
+  page: Page,
+  inviteToken: string,
+  userAuthToken?: string
+): Promise<void> {
   const baseUrl = getApiBaseUrl(page);
-  const authToken = await getAuthToken(page);
+  const authToken = userAuthToken || (await getAuthToken(page));
 
   const response = await page.request.post(`${baseUrl}/auth/accept-invite`, {
     headers: {
       Authorization: `Bearer ${authToken}`,
       'Content-Type': 'application/json',
     },
-    data: { token },
+    data: { token: inviteToken },
   });
 
   if (!response.ok()) {
@@ -204,7 +225,8 @@ export async function acceptInviteViaAPI(page: Page, token: string): Promise<voi
 async function signupViaAPI(
   page: Page,
   email: string,
-  password: string
+  password: string,
+  orgName: string
 ): Promise<string> {
   const baseUrl = getApiBaseUrl(page);
 
@@ -212,7 +234,7 @@ async function signupViaAPI(
     headers: {
       'Content-Type': 'application/json',
     },
-    data: { email, password },
+    data: { email, password, org_name: orgName },
   });
 
   if (!response.ok()) {
@@ -251,20 +273,12 @@ export async function addTestMemberToOrg(
   // Get the token from test endpoint
   const inviteToken = await getInviteToken(page, inviteId);
 
-  // Save current auth state
-  const currentToken = await getAuthToken(page);
+  // Signup new user via API (creates their personal org)
+  const memberOrgName = `Member Org ${id}`;
+  const newUserToken = await signupViaAPI(page, email, password, memberOrgName);
 
-  // Signup new user via API
-  const newUserToken = await signupViaAPI(page, email, password);
-
-  // Set new user's token temporarily
-  await page.evaluate((t) => localStorage.setItem('token', t), newUserToken);
-
-  // Accept invitation as new user
-  await acceptInviteViaAPI(page, inviteToken);
-
-  // Restore original user's token
-  await page.evaluate((t) => localStorage.setItem('token', t), currentToken);
+  // Accept invitation as new user (pass token directly, no localStorage manipulation needed)
+  await acceptInviteViaAPI(page, inviteToken, newUserToken);
 
   return { email, password };
 }
@@ -273,7 +287,7 @@ export async function addTestMemberToOrg(
  * Navigate to members page for current org
  */
 export async function goToMembersPage(page: Page): Promise<void> {
-  await page.goto('/#members');
+  await page.goto('/#org-members');
   // Wait for members table to be visible
   await page.waitForSelector('th:has-text("Name")', { timeout: 10000 });
 }
