@@ -13,10 +13,10 @@ import {
   clearAuthState,
   signupTestUser,
   loginTestUser,
-  switchToOrg,
   goToMembersPage,
   addTestMemberToOrg,
-  getCurrentOrgId,
+  createOrgViaAPI,
+  switchOrgViaAPI,
 } from './fixtures/org.fixture';
 
 test.describe('Member Management', () => {
@@ -41,17 +41,12 @@ test.describe('Member Management', () => {
     // Signup creates personal org automatically
     await signupTestUser(page, adminEmail, adminPassword);
 
-    // Create team org for testing members
-    await page.goto('/#create-org');
-    await page.locator('input#name').fill(testOrgName);
-    await page.locator('button[type="submit"]').click();
-    await page.waitForURL(/#home/, { timeout: 10000 });
+    // Create team org via API (avoids UI race conditions)
+    const newOrg = await createOrgViaAPI(page, testOrgName);
+    testOrgId = newOrg.id;
 
-    // Switch to the team org
-    await switchToOrg(page, testOrgName);
-
-    // Get the org ID for API operations
-    testOrgId = await getCurrentOrgId(page);
+    // Switch to the team org via API
+    await switchOrgViaAPI(page, testOrgId);
 
     await page.close();
   });
@@ -62,8 +57,10 @@ test.describe('Member Management', () => {
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, adminEmail, adminPassword);
-    // Switch to the test org
-    await switchToOrg(page, testOrgName);
+    // Switch to the test org via API (more reliable than UI)
+    await switchOrgViaAPI(page, testOrgId);
+    // Reload to sync UI state with the new token
+    await page.reload({ waitUntil: 'networkidle' });
   });
 
   // Task 5: View Members Tests
@@ -92,10 +89,8 @@ test.describe('Member Management', () => {
   });
 
   // Task 6: Role Management Tests
-  // NOTE: Tests using addTestMemberToOrg are skipped pending TRA-211
   test.describe('Role Management', () => {
-    test.skip('admin can change member role', async ({ page }) => {
-      // SKIP: TRA-211 - addTestMemberToOrg fixture fails with 409 conflict
+    test('admin can change member role', async ({ page }) => {
       const member = await addTestMemberToOrg(page, testOrgId, 'viewer');
 
       await goToMembersPage(page);
@@ -110,8 +105,7 @@ test.describe('Member Management', () => {
       });
     });
 
-    test.skip('role change persists after reload', async ({ page }) => {
-      // SKIP: TRA-211 - addTestMemberToOrg fixture fails with 409 conflict
+    test('role change persists after reload', async ({ page }) => {
       const member = await addTestMemberToOrg(page, testOrgId, 'viewer');
       await goToMembersPage(page);
 
@@ -132,25 +126,24 @@ test.describe('Member Management', () => {
     });
 
     test.skip('cannot demote last admin - shows error', async ({ page }) => {
-      // SKIP: Needs investigation - error message format unknown
+      // SKIP: TRA-213 - Error message doesn't appear in UI
+      // Backend returns 400 correctly, but error div doesn't populate
       await goToMembersPage(page);
 
       // Admin's own row - try to change role to viewer
       const adminRow = page.locator(`tr:has-text("${adminEmail}")`);
       await adminRow.locator('select').selectOption('viewer');
 
-      // Should show error about last admin
-      await expect(
-        page.locator('text=/[Cc]annot|[Ll]ast.*admin|[Oo]nly.*admin/')
-      ).toBeVisible({ timeout: 5000 });
+      // Should show error in the red error div: "Cannot remove or demote the last admin"
+      await expect(page.locator('.text-red-400')).toContainText('last admin', {
+        timeout: 5000,
+      });
     });
   });
 
   // Task 7: Remove Members Tests
-  // NOTE: Tests using addTestMemberToOrg are skipped pending TRA-211
   test.describe('Remove Members', () => {
-    test.skip('admin can remove member', async ({ page }) => {
-      // SKIP: TRA-211 - addTestMemberToOrg fixture fails with 409 conflict
+    test('admin can remove member', async ({ page }) => {
       const member = await addTestMemberToOrg(page, testOrgId, 'viewer');
       await goToMembersPage(page);
 
@@ -179,29 +172,28 @@ test.describe('Member Management', () => {
   });
 
   // Task 8: Non-Admin RBAC Tests (deferred from TRA-172)
-  // NOTE: All tests using addTestMemberToOrg are skipped pending TRA-211
   test.describe('Non-Admin RBAC', () => {
-    test.skip('viewer cannot see role dropdown', async ({ page }) => {
-      // SKIP: TRA-211 - addTestMemberToOrg fixture fails with 409 conflict
+    test('viewer cannot see role dropdown', async ({ page }) => {
       const viewer = await addTestMemberToOrg(page, testOrgId, 'viewer');
       await clearAuthState(page);
       await loginTestUser(page, viewer.email, viewer.password);
-      await switchToOrg(page, testOrgName);
+      await switchOrgViaAPI(page, testOrgId);
+      await page.reload({ waitUntil: 'networkidle' });
 
       await goToMembersPage(page);
 
       // Should see text role, not dropdown
       await expect(page.locator('select')).not.toBeVisible();
-      // Should see capitalized role text
-      await expect(page.locator('td span.capitalize')).toBeVisible();
+      // Should see capitalized role text (multiple spans exist, use first)
+      await expect(page.locator('td span.capitalize').first()).toBeVisible();
     });
 
-    test.skip('viewer cannot see remove button', async ({ page }) => {
-      // SKIP: TRA-211 - addTestMemberToOrg fixture fails with 409 conflict
+    test('viewer cannot see remove button', async ({ page }) => {
       const viewer = await addTestMemberToOrg(page, testOrgId, 'viewer');
       await clearAuthState(page);
       await loginTestUser(page, viewer.email, viewer.password);
-      await switchToOrg(page, testOrgName);
+      await switchOrgViaAPI(page, testOrgId);
+      await page.reload({ waitUntil: 'networkidle' });
 
       await goToMembersPage(page);
 
@@ -211,12 +203,12 @@ test.describe('Member Management', () => {
       ).not.toBeVisible();
     });
 
-    test.skip('viewer cannot see org delete option in settings', async ({ page }) => {
-      // SKIP: TRA-211 - addTestMemberToOrg fixture fails with 409 conflict
+    test('viewer cannot see org delete option in settings', async ({ page }) => {
       const viewer = await addTestMemberToOrg(page, testOrgId, 'viewer');
       await clearAuthState(page);
       await loginTestUser(page, viewer.email, viewer.password);
-      await switchToOrg(page, testOrgName);
+      await switchOrgViaAPI(page, testOrgId);
+      await page.reload({ waitUntil: 'networkidle' });
 
       await page.goto('/#org-settings');
 
@@ -226,17 +218,17 @@ test.describe('Member Management', () => {
       ).not.toBeVisible();
     });
 
-    test.skip('viewer cannot see org name edit form', async ({ page }) => {
-      // SKIP: TRA-211 - addTestMemberToOrg fixture fails with 409 conflict
+    test('viewer cannot edit org name', async ({ page }) => {
       const viewer = await addTestMemberToOrg(page, testOrgId, 'viewer');
       await clearAuthState(page);
       await loginTestUser(page, viewer.email, viewer.password);
-      await switchToOrg(page, testOrgName);
+      await switchOrgViaAPI(page, testOrgId);
+      await page.reload({ waitUntil: 'networkidle' });
 
       await page.goto('/#org-settings');
 
-      // Should not see the edit form (input#org-name)
-      await expect(page.locator('input#org-name')).not.toBeVisible();
+      // Input is visible but disabled for viewers
+      await expect(page.locator('input#org-name')).toBeDisabled();
     });
   });
 });

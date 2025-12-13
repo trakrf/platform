@@ -289,6 +289,15 @@ func (s *Service) AcceptInvitation(ctx context.Context, token string, userID int
 		return nil, fmt.Errorf("invalid_token")
 	}
 
+	// Verify accepting user's email matches invitation
+	usr, err := s.storage.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	if !strings.EqualFold(usr.Email, inv.Email) {
+		return nil, fmt.Errorf("email_mismatch:%s", inv.Email)
+	}
+
 	// Check if expired
 	if time.Now().After(inv.ExpiresAt) {
 		return nil, fmt.Errorf("expired")

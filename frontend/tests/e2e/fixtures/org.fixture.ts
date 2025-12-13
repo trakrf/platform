@@ -99,6 +99,7 @@ export async function openOrgSwitcher(page: Page): Promise<void> {
 
 /**
  * Switch to a specific org via the org switcher dropdown
+ * Waits for the switcher to update to show the new org name
  */
 export async function switchToOrg(page: Page, orgName: string): Promise<void> {
   await openOrgSwitcher(page);
@@ -106,6 +107,11 @@ export async function switchToOrg(page: Page, orgName: string): Promise<void> {
   await page.locator(`button:has-text("${orgName}")`).click();
   // Wait for dropdown to close (menu items disappear)
   await page.waitForSelector('[role="menu"]', { state: 'hidden', timeout: 5000 });
+
+  // Wait for UI to reflect the new org - the switcher button should show the org name
+  await page.waitForSelector(`[data-testid="org-switcher"]:has-text("${orgName}")`, {
+    timeout: 10000,
+  });
 }
 
 // =============================================================================
@@ -191,6 +197,67 @@ export async function createInviteViaAPI(
 }
 
 /**
+ * Create organization via API
+ * Returns the created org with ID - avoids need to switch and query
+ */
+export async function createOrgViaAPI(
+  page: Page,
+  name: string
+): Promise<{ id: number; name: string }> {
+  const baseUrl = getApiBaseUrl(page);
+  const token = await getAuthToken(page);
+
+  const response = await page.request.post(`${baseUrl}/orgs`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    data: { name },
+  });
+
+  if (!response.ok()) {
+    const text = await response.text();
+    throw new Error(`Failed to create org: ${response.status()} - ${text}`);
+  }
+
+  const data = await response.json();
+  return { id: data.data.id, name: data.data.name };
+}
+
+/**
+ * Switch to org via API (more reliable than UI for test setup)
+ * Updates localStorage with new token
+ */
+export async function switchOrgViaAPI(page: Page, orgId: number): Promise<void> {
+  const baseUrl = getApiBaseUrl(page);
+  const token = await getAuthToken(page);
+
+  const response = await page.request.post(`${baseUrl}/users/me/current-org`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    data: { org_id: orgId },
+  });
+
+  if (!response.ok()) {
+    const text = await response.text();
+    throw new Error(`Failed to switch org: ${response.status()} - ${text}`);
+  }
+
+  // Update localStorage with new token
+  const data = await response.json();
+  await page.evaluate((newToken: string) => {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      const parsed = JSON.parse(authStorage);
+      parsed.state.token = newToken;
+      localStorage.setItem('auth-storage', JSON.stringify(parsed));
+    }
+  }, data.token);
+}
+
+/**
  * Accept invitation via API
  * @param page Playwright page
  * @param inviteToken The invitation token
@@ -243,7 +310,7 @@ async function signupViaAPI(
   }
 
   const data = await response.json();
-  return data.token;
+  return data.data.token;
 }
 
 /**
