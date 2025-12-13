@@ -45,6 +45,10 @@ test-race:
 test-coverage:
     go test -cover ./...
 
+# Resync vendor directory with go.mod
+vendor:
+    go mod vendor
+
 # Build backend binary with version injection
 build:
     go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .

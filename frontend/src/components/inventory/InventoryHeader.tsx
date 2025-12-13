@@ -115,7 +115,7 @@ export function InventoryHeader({
       <div className="hidden md:flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
           <Package2 className="w-5 h-5 mr-2" />
-          Scanned Items ({filteredCount}{filteredCount !== totalCount && ` of ${totalCount}`})
+          Scanned ({filteredCount}{filteredCount !== totalCount && ` of ${totalCount}`})
         </h3>
         <div className="flex items-center space-x-4 flex-1 justify-center mx-8">
           <InventorySearchBar
