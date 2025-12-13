@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -224,7 +225,15 @@ func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 
 	response, err := handler.service.AcceptInvitation(r.Context(), request.Token, claims.UserID)
 	if err != nil {
-		switch err.Error() {
+		errMsg := err.Error()
+		// Check for email mismatch (format: "email_mismatch:{invited_email}")
+		if strings.HasPrefix(errMsg, "email_mismatch:") {
+			invitedEmail := strings.TrimPrefix(errMsg, "email_mismatch:")
+			httputil.WriteJSONError(w, r, http.StatusForbidden, errors.ErrForbidden,
+				fmt.Sprintf(apierrors.InvitationAcceptEmailMismatch, invitedEmail), "", middleware.GetRequestID(r.Context()))
+			return
+		}
+		switch errMsg {
 		case "invalid_token":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
 				apierrors.InvitationInvalidToken, "", middleware.GetRequestID(r.Context()))

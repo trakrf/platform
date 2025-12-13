@@ -12,6 +12,7 @@ const (
 	ErrInternal     ErrorType = "internal_error"
 	ErrBadRequest   ErrorType = "bad_request"
 	ErrUnauthorized ErrorType = "unauthorized"
+	ErrForbidden    ErrorType = "forbidden"
 )
 
 // ErrorResponse implements RFC 7807 Problem Details

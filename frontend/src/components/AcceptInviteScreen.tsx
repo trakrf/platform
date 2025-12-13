@@ -202,6 +202,12 @@ function extractErrorMessage(err: unknown): string {
   if (detail.toLowerCase().includes('already a member') || title.toLowerCase().includes('already a member')) {
     return 'You are already a member of this organization.';
   }
+  if (detail.toLowerCase().includes('was sent to') || title.toLowerCase().includes('was sent to')) {
+    // Extract email from message like "This invitation was sent to bob@example.com"
+    const emailMatch = (detail || title).match(/sent to\s+(\S+@\S+)/i);
+    const invitedEmail = emailMatch ? emailMatch[1] : 'another email address';
+    return `This invitation was sent to ${invitedEmail}. Please log in with that account to accept.`;
+  }
   if (detail.toLowerCase().includes('expired') || title.toLowerCase().includes('expired')) {
     return 'This invitation has expired. Please request a new invitation.';
   }

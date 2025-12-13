@@ -146,5 +146,6 @@ const (
 	InvitationAcceptFailed        = "Failed to accept invitation"
 	InvitationAcceptAlreadyMember = "You are already a member of this organization"
 	InvitationAcceptAlreadyUsed   = "This invitation has already been accepted"
+	InvitationAcceptEmailMismatch = "This invitation was sent to %s"
 	InvitationInvalidToken        = "Invalid invitation token"
 )
