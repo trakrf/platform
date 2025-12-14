@@ -135,9 +135,10 @@ func (s *Service) ResendInvitation(ctx context.Context, inviteID, orgID int, bas
 	}
 
 	// Send email with new token
+	// Log error but don't fail - admin can retry if needed (matches CreateInvitation behavior)
 	if s.emailClient != nil {
 		if err := s.emailClient.SendInvitationEmail(inv.Email, org.Name, inviterName, inv.Role, rawToken, baseURL); err != nil {
-			return time.Time{}, fmt.Errorf("failed to send email: %w", err)
+			fmt.Printf("warning: failed to send invitation email: %v\n", err)
 		}
 	}
 
