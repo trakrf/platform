@@ -383,3 +383,86 @@ export async function getCurrentOrgId(page: Page): Promise<number> {
   }
   return data.data.current_org.id;
 }
+
+// =============================================================================
+// Invitation Management Helpers (TRA-174)
+// These helpers enable invitation lifecycle tests
+// =============================================================================
+
+/**
+ * Cancel invitation via API
+ */
+export async function cancelInviteViaAPI(
+  page: Page,
+  orgId: number,
+  inviteId: number
+): Promise<void> {
+  const baseUrl = getApiBaseUrl(page);
+  const token = await getAuthToken(page);
+
+  const response = await page.request.delete(
+    `${baseUrl}/orgs/${orgId}/invitations/${inviteId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok()) {
+    const text = await response.text();
+    throw new Error(`Failed to cancel invitation: ${response.status()} - ${text}`);
+  }
+}
+
+/**
+ * Resend invitation via API
+ */
+export async function resendInviteViaAPI(
+  page: Page,
+  orgId: number,
+  inviteId: number
+): Promise<void> {
+  const baseUrl = getApiBaseUrl(page);
+  const token = await getAuthToken(page);
+
+  const response = await page.request.post(
+    `${baseUrl}/orgs/${orgId}/invitations/${inviteId}/resend`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok()) {
+    const text = await response.text();
+    throw new Error(`Failed to resend invitation: ${response.status()} - ${text}`);
+  }
+}
+
+/**
+ * Get invitations list via API
+ */
+export async function getInvitationsViaAPI(
+  page: Page,
+  orgId: number
+): Promise<Array<{ id: number; email: string; role: string; expires_at: string }>> {
+  const baseUrl = getApiBaseUrl(page);
+  const token = await getAuthToken(page);
+
+  const response = await page.request.get(`${baseUrl}/orgs/${orgId}/invitations`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok()) {
+    const text = await response.text();
+    throw new Error(`Failed to get invitations: ${response.status()} - ${text}`);
+  }
+
+  const data = await response.json();
+  return data.data ?? [];
+}
