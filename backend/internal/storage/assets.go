@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
 func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.Asset, error) {
@@ -296,4 +297,107 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	}
 
 	return fields, nil
+}
+
+func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
+	identifiersJSON, err := identifiersToJSON(request.Identifiers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
+	}
+
+	query := `SELECT * FROM trakrf.create_asset_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+
+	var assetID int
+	var identifierIDs []int
+
+	err = s.pool.QueryRow(ctx, query,
+		request.OrgID,
+		request.Identifier,
+		request.Name,
+		request.Type,
+		request.Description,
+		request.CurrentLocationID,
+		request.ValidFrom,
+		request.ValidTo,
+		request.IsActive,
+		request.Metadata,
+		identifiersJSON,
+	).Scan(&assetID, &identifierIDs)
+
+	if err != nil {
+		return nil, parseAssetWithIdentifiersError(err, request.Identifier)
+	}
+
+	return s.GetAssetViewByID(ctx, assetID)
+}
+
+func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetView, error) {
+	baseAsset, err := s.GetAssetByID(ctx, &id)
+	if err != nil {
+		return nil, err
+	}
+	if baseAsset == nil {
+		return nil, nil
+	}
+
+	identifiers, err := s.GetIdentifiersByAssetID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &asset.AssetView{
+		Asset:       *baseAsset,
+		Identifiers: identifiers,
+	}, nil
+}
+
+func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) ([]asset.AssetView, error) {
+	assets, err := s.ListAllAssets(ctx, orgID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(assets) == 0 {
+		return []asset.AssetView{}, nil
+	}
+
+	assetIDs := make([]int, len(assets))
+	for i, a := range assets {
+		assetIDs[i] = a.ID
+	}
+
+	identifierMap, err := s.getIdentifiersForAssets(ctx, assetIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]asset.AssetView, len(assets))
+	for i, a := range assets {
+		ids := identifierMap[a.ID]
+		if ids == nil {
+			ids = []shared.TagIdentifier{}
+		}
+		views[i] = asset.AssetView{
+			Asset:       a,
+			Identifiers: ids,
+		}
+	}
+
+	return views, nil
+}
+
+func parseAssetWithIdentifiersError(err error, identifier string) error {
+	errStr := err.Error()
+
+	if strings.Contains(errStr, "assets_org_id_identifier") ||
+		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "assets")) {
+		return fmt.Errorf("asset with identifier %s already exists", identifier)
+	}
+
+	if strings.Contains(errStr, "identifiers_org_id_type_value") ||
+		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "identifiers")) {
+		return fmt.Errorf("one or more tag identifiers already exist")
+	}
+
+	return fmt.Errorf("failed to create asset with identifiers: %w", err)
 }

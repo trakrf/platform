@@ -55,3 +55,18 @@ type AssetListResponse struct {
 	Data       []Asset           `json:"data"`
 	Pagination shared.Pagination `json:"pagination"`
 }
+
+type AssetView struct {
+	Asset
+	Identifiers []shared.TagIdentifier `json:"identifiers"`
+}
+
+type CreateAssetWithIdentifiersRequest struct {
+	CreateAssetRequest
+	Identifiers []shared.TagIdentifierRequest `json:"identifiers,omitempty" validate:"omitempty,dive"`
+}
+
+type AssetViewListResponse struct {
+	Data       []AssetView       `json:"data"`
+	Pagination shared.Pagination `json:"pagination"`
+}
