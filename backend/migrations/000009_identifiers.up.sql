@@ -6,7 +6,7 @@ CREATE SEQUENCE identifier_seq;
 CREATE TABLE identifiers (
     id INT PRIMARY KEY,
     org_id INT NOT NULL REFERENCES organizations(id),
-    type VARCHAR(50) NOT NULL,  -- 'rfid', 'ble' (future: 'barcode', 'serial', 'mac', 'qr', 'nfc')
+    type VARCHAR(50) NOT NULL,  -- 'rfid', 'ble' (future: 'barcode', 'serial', 'mac', 'qr', 'nfc') -- default rfid
     value VARCHAR(255) NOT NULL,  -- the actual identifier (EPC, MAC, serial number, etc.)
     asset_id INT REFERENCES assets(id),  -- nullable
     location_id INT REFERENCES locations(id),  -- nullable
