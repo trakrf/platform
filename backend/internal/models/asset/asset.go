@@ -56,20 +56,16 @@ type AssetListResponse struct {
 	Pagination shared.Pagination `json:"pagination"`
 }
 
-// AssetView is the API response model that includes embedded tag identifiers.
-// GET endpoints return this instead of raw Asset.
 type AssetView struct {
 	Asset
 	Identifiers []shared.TagIdentifier `json:"identifiers"`
 }
 
-// CreateAssetWithIdentifiersRequest extends CreateAssetRequest with optional identifiers.
 type CreateAssetWithIdentifiersRequest struct {
 	CreateAssetRequest
 	Identifiers []shared.TagIdentifierRequest `json:"identifiers,omitempty" validate:"omitempty,dive"`
 }
 
-// AssetViewListResponse wraps a list of AssetViews with pagination.
 type AssetViewListResponse struct {
 	Data       []AssetView       `json:"data"`
 	Pagination shared.Pagination `json:"pagination"`

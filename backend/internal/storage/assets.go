@@ -299,16 +299,12 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	return fields, nil
 }
 
-// CreateAssetWithIdentifiers atomically creates an asset with its tag identifiers
-// using a PostgreSQL function. All-or-nothing operation.
 func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
-	// Convert identifiers to JSON for the function
 	identifiersJSON, err := identifiersToJSON(request.Identifiers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
 	}
 
-	// Call PostgreSQL function
 	query := `SELECT * FROM trakrf.create_asset_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 	var assetID int
@@ -332,13 +328,10 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		return nil, parseAssetWithIdentifiersError(err, request.Identifier)
 	}
 
-	// Fetch the complete asset view
 	return s.GetAssetViewByID(ctx, assetID)
 }
 
-// GetAssetViewByID returns an asset with its embedded identifiers.
 func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetView, error) {
-	// Get base asset
 	baseAsset, err := s.GetAssetByID(ctx, &id)
 	if err != nil {
 		return nil, err
@@ -347,7 +340,6 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetVie
 		return nil, nil
 	}
 
-	// Get identifiers
 	identifiers, err := s.GetIdentifiersByAssetID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -359,9 +351,7 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetVie
 	}, nil
 }
 
-// ListAssetViews returns paginated assets with their identifiers.
 func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) ([]asset.AssetView, error) {
-	// Get base assets
 	assets, err := s.ListAllAssets(ctx, orgID, limit, offset)
 	if err != nil {
 		return nil, err
@@ -371,19 +361,16 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 		return []asset.AssetView{}, nil
 	}
 
-	// Collect asset IDs for batch identifier fetch
 	assetIDs := make([]int, len(assets))
 	for i, a := range assets {
 		assetIDs[i] = a.ID
 	}
 
-	// Batch fetch all identifiers
 	identifierMap, err := s.getIdentifiersForAssets(ctx, assetIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build AssetViews
 	views := make([]asset.AssetView, len(assets))
 	for i, a := range assets {
 		ids := identifierMap[a.ID]
@@ -399,17 +386,14 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 	return views, nil
 }
 
-// parseAssetWithIdentifiersError converts PostgreSQL errors to user-friendly messages.
 func parseAssetWithIdentifiersError(err error, identifier string) error {
 	errStr := err.Error()
 
-	// Check for duplicate asset identifier
 	if strings.Contains(errStr, "assets_org_id_identifier") ||
 		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "assets")) {
 		return fmt.Errorf("asset with identifier %s already exists", identifier)
 	}
 
-	// Check for duplicate tag identifier
 	if strings.Contains(errStr, "identifiers_org_id_type_value") ||
 		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "identifiers")) {
 		return fmt.Errorf("one or more tag identifiers already exist")

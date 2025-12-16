@@ -10,7 +10,6 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
-// GetIdentifiersByAssetID retrieves all active identifiers for an asset.
 func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, assetID int) ([]shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
@@ -38,7 +37,6 @@ func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, assetID int) ([]s
 		return nil, fmt.Errorf("error iterating identifiers: %w", err)
 	}
 
-	// Return empty slice instead of nil for consistent JSON
 	if identifiers == nil {
 		identifiers = []shared.TagIdentifier{}
 	}
@@ -46,7 +44,6 @@ func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, assetID int) ([]s
 	return identifiers, nil
 }
 
-// GetIdentifiersByLocationID retrieves all active identifiers for a location.
 func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, locationID int) ([]shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
@@ -81,7 +78,6 @@ func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, locationID int
 	return identifiers, nil
 }
 
-// AddIdentifierToAsset adds a single identifier to an existing asset.
 func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
 	query := `
 		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
@@ -89,7 +85,7 @@ func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, 
 		RETURNING id, type, value, is_active
 	`
 
-	identifierType := req.GetType() // defaults to "rfid" if empty
+	identifierType := req.GetType()
 
 	var identifier shared.TagIdentifier
 	err := s.pool.QueryRow(ctx, query, orgID, identifierType, req.Value, assetID).Scan(
@@ -103,7 +99,6 @@ func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, 
 	return &identifier, nil
 }
 
-// AddIdentifierToLocation adds a single identifier to an existing location.
 func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
 	query := `
 		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active)
@@ -111,7 +106,7 @@ func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID
 		RETURNING id, type, value, is_active
 	`
 
-	identifierType := req.GetType() // defaults to "rfid" if empty
+	identifierType := req.GetType()
 
 	var identifier shared.TagIdentifier
 	err := s.pool.QueryRow(ctx, query, orgID, identifierType, req.Value, locationID).Scan(
@@ -125,7 +120,6 @@ func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID
 	return &identifier, nil
 }
 
-// RemoveIdentifier soft-deletes an identifier by ID.
 func (s *Storage) RemoveIdentifier(ctx context.Context, identifierID int) (bool, error) {
 	query := `UPDATE trakrf.identifiers SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
 
@@ -137,7 +131,6 @@ func (s *Storage) RemoveIdentifier(ctx context.Context, identifierID int) (bool,
 	return result.RowsAffected() > 0, nil
 }
 
-// GetIdentifierByID retrieves a single identifier by ID.
 func (s *Storage) GetIdentifierByID(ctx context.Context, identifierID int) (*shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
@@ -160,7 +153,6 @@ func (s *Storage) GetIdentifierByID(ctx context.Context, identifierID int) (*sha
 	return &identifier, nil
 }
 
-// parseIdentifierError converts PostgreSQL errors to user-friendly messages.
 func parseIdentifierError(err error, identifierType, value string) error {
 	if pgErr, ok := err.(*pgconn.PgError); ok {
 		switch pgErr.ConstraintName {
@@ -178,18 +170,15 @@ func parseIdentifierError(err error, identifierType, value string) error {
 	return fmt.Errorf("failed to create identifier: %w", err)
 }
 
-// identifiersToJSON converts TagIdentifierRequest slice to JSONB for stored function.
-// Applies default type ("rfid") for any identifier without a type specified.
 func identifiersToJSON(identifiers []shared.TagIdentifierRequest) ([]byte, error) {
 	if len(identifiers) == 0 {
 		return []byte("[]"), nil
 	}
 
-	// Apply defaults before serializing
 	normalized := make([]shared.TagIdentifierRequest, len(identifiers))
 	for i, id := range identifiers {
 		normalized[i] = shared.TagIdentifierRequest{
-			Type:  id.GetType(), // defaults to "rfid" if empty
+			Type:  id.GetType(),
 			Value: id.Value,
 		}
 	}
@@ -197,7 +186,6 @@ func identifiersToJSON(identifiers []shared.TagIdentifierRequest) ([]byte, error
 	return json.Marshal(normalized)
 }
 
-// getIdentifiersForAssets batch fetches identifiers for multiple assets.
 func (s *Storage) getIdentifiersForAssets(ctx context.Context, assetIDs []int) (map[int][]shared.TagIdentifier, error) {
 	query := `
 		SELECT asset_id, id, type, value, is_active
@@ -213,7 +201,6 @@ func (s *Storage) getIdentifiersForAssets(ctx context.Context, assetIDs []int) (
 	defer rows.Close()
 
 	result := make(map[int][]shared.TagIdentifier)
-	// Initialize with empty slices for all asset IDs
 	for _, id := range assetIDs {
 		result[id] = []shared.TagIdentifier{}
 	}
@@ -234,7 +221,6 @@ func (s *Storage) getIdentifiersForAssets(ctx context.Context, assetIDs []int) (
 	return result, nil
 }
 
-// getIdentifiersForLocations batch fetches identifiers for multiple locations.
 func (s *Storage) getIdentifiersForLocations(ctx context.Context, locationIDs []int) (map[int][]shared.TagIdentifier, error) {
 	query := `
 		SELECT location_id, id, type, value, is_active
@@ -250,7 +236,6 @@ func (s *Storage) getIdentifiersForLocations(ctx context.Context, locationIDs []
 	defer rows.Close()
 
 	result := make(map[int][]shared.TagIdentifier)
-	// Initialize with empty slices for all location IDs
 	for _, id := range locationIDs {
 		result[id] = []shared.TagIdentifier{}
 	}
