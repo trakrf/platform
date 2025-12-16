@@ -49,11 +49,13 @@ UNIQUE(org_id, type, value, valid_from)
 // backend/internal/models/shared/identifier.go
 type TagIdentifier struct {
     ID       int    `json:"id,omitempty"`
-    Type     string `json:"type" validate:"required,oneof=rfid ble barcode"`
+    Type     string `json:"type" validate:"omitempty,oneof=rfid ble barcode"`  // default: "rfid"
     Value    string `json:"value" validate:"required,min=1,max=255"`
     IsActive bool   `json:"is_active"`
 }
 ```
+
+**Default Type**: If `type` is not provided, it defaults to `"rfid"`.
 
 #### Asset Models (internal vs view)
 

@@ -437,6 +437,37 @@ func TestIdentifiersToJSON(t *testing.T) {
 		assert.NoError(t, err)
 		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"},{"type":"ble","value":"AA:BB:CC:DD:EE:FF"}]`, string(result))
 	})
+
+	t.Run("applies default type when empty", func(t *testing.T) {
+		input := []shared.TagIdentifierRequest{
+			{Value: "E20000001234"}, // no type specified
+		}
+		result, err := identifiersToJSON(input)
+		assert.NoError(t, err)
+		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"}]`, string(result)) // defaults to rfid
+	})
+
+	t.Run("mixed explicit and default types", func(t *testing.T) {
+		input := []shared.TagIdentifierRequest{
+			{Type: "ble", Value: "AA:BB:CC:DD:EE:FF"},
+			{Value: "E20000001234"}, // no type, defaults to rfid
+		}
+		result, err := identifiersToJSON(input)
+		assert.NoError(t, err)
+		assert.JSONEq(t, `[{"type":"ble","value":"AA:BB:CC:DD:EE:FF"},{"type":"rfid","value":"E20000001234"}]`, string(result))
+	})
+}
+
+func TestTagIdentifierRequestGetType(t *testing.T) {
+	t.Run("returns explicit type", func(t *testing.T) {
+		req := shared.TagIdentifierRequest{Type: "ble", Value: "test"}
+		assert.Equal(t, "ble", req.GetType())
+	})
+
+	t.Run("returns default rfid when empty", func(t *testing.T) {
+		req := shared.TagIdentifierRequest{Value: "test"}
+		assert.Equal(t, "rfid", req.GetType())
+	})
 }
 
 func TestParseIdentifierError(t *testing.T) {

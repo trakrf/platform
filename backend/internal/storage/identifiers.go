@@ -89,13 +89,15 @@ func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, 
 		RETURNING id, type, value, is_active
 	`
 
+	identifierType := req.GetType() // defaults to "rfid" if empty
+
 	var identifier shared.TagIdentifier
-	err := s.pool.QueryRow(ctx, query, orgID, req.Type, req.Value, assetID).Scan(
+	err := s.pool.QueryRow(ctx, query, orgID, identifierType, req.Value, assetID).Scan(
 		&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
 	)
 
 	if err != nil {
-		return nil, parseIdentifierError(err, req.Type, req.Value)
+		return nil, parseIdentifierError(err, identifierType, req.Value)
 	}
 
 	return &identifier, nil
@@ -109,13 +111,15 @@ func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID
 		RETURNING id, type, value, is_active
 	`
 
+	identifierType := req.GetType() // defaults to "rfid" if empty
+
 	var identifier shared.TagIdentifier
-	err := s.pool.QueryRow(ctx, query, orgID, req.Type, req.Value, locationID).Scan(
+	err := s.pool.QueryRow(ctx, query, orgID, identifierType, req.Value, locationID).Scan(
 		&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
 	)
 
 	if err != nil {
-		return nil, parseIdentifierError(err, req.Type, req.Value)
+		return nil, parseIdentifierError(err, identifierType, req.Value)
 	}
 
 	return &identifier, nil
@@ -175,11 +179,22 @@ func parseIdentifierError(err error, identifierType, value string) error {
 }
 
 // identifiersToJSON converts TagIdentifierRequest slice to JSONB for stored function.
+// Applies default type ("rfid") for any identifier without a type specified.
 func identifiersToJSON(identifiers []shared.TagIdentifierRequest) ([]byte, error) {
 	if len(identifiers) == 0 {
 		return []byte("[]"), nil
 	}
-	return json.Marshal(identifiers)
+
+	// Apply defaults before serializing
+	normalized := make([]shared.TagIdentifierRequest, len(identifiers))
+	for i, id := range identifiers {
+		normalized[i] = shared.TagIdentifierRequest{
+			Type:  id.GetType(), // defaults to "rfid" if empty
+			Value: id.Value,
+		}
+	}
+
+	return json.Marshal(normalized)
 }
 
 // getIdentifiersForAssets batch fetches identifiers for multiple assets.
