@@ -49,7 +49,7 @@ Complete TRA-214 by implementing the location-side mirror of Step 1 and updating
 
 ## Task Breakdown
 
-### Task 1: Location Models + Storage
+### Task 1: Location Models + Storage ✅ DONE
 
 **Files**: `models/location/location.go`, `storage/locations.go`
 **Action**: MODIFY
@@ -99,7 +99,7 @@ func (s *Storage) ListLocationViews(ctx context.Context, orgID, limit, offset in
 
 ---
 
-### Task 2: Lookup Storage
+### Task 2: Lookup Storage ✅ DONE
 
 **File**: `storage/identifiers.go`
 **Action**: MODIFY
@@ -154,7 +154,7 @@ func (s *Storage) LookupByTagValue(ctx context.Context, orgID int, tagType, valu
 
 ---
 
-### Task 3: Update All Handlers
+### Task 3: Update All Handlers ✅ DONE
 
 **Files**: `handlers/assets/assets.go`, `handlers/locations/locations.go`
 **Action**: MODIFY
@@ -222,7 +222,7 @@ r.Delete("/api/v1/assets/{id}/identifiers/{identifierId}", handler.RemoveIdentif
 
 ---
 
-### Task 4: Lookup Handler
+### Task 4: Lookup Handler ✅ DONE
 
 **File**: `handlers/lookup/lookup.go` (NEW)
 **Action**: CREATE

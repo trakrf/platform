@@ -12,6 +12,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/services/bulkimport"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -32,12 +33,12 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 // @Summary Create asset
-// @Description Create a new asset
+// @Description Create a new asset, optionally with tag identifiers
 // @Tags assets
 // @Accept json
 // @Produce json
-// @Param request body asset.Asset true "Asset to create"
-// @Success 201 {object} map[string]any "data: asset.Asset"
+// @Param request body asset.CreateAssetWithIdentifiersRequest true "Asset to create with optional identifiers"
+// @Success 201 {object} map[string]any "data: asset.AssetView"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid JSON or validation error"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security BearerAuth
@@ -53,7 +54,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	orgID := *claims.CurrentOrgID
 
-	var request asset.Asset
+	var request asset.CreateAssetWithIdentifiersRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			apierrors.InvalidJSON, err.Error(), requestID)
@@ -68,7 +69,33 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	request.OrgID = orgID
 
-	result, err := handler.storage.CreateAsset(r.Context(), request)
+	var result *asset.AssetView
+	var err error
+
+	if len(request.Identifiers) > 0 {
+		result, err = handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
+	} else {
+		// Convert CreateAssetRequest to Asset for storage
+		assetToCreate := asset.Asset{
+			OrgID:             request.OrgID,
+			Identifier:        request.Identifier,
+			Name:              request.Name,
+			Type:              request.Type,
+			Description:       request.Description,
+			CurrentLocationID: request.CurrentLocationID,
+			ValidFrom:         request.ValidFrom,
+			ValidTo:           request.ValidTo,
+			Metadata:          request.Metadata,
+			IsActive:          request.IsActive,
+		}
+		baseAsset, createErr := handler.storage.CreateAsset(r.Context(), assetToCreate)
+		if createErr != nil {
+			err = createErr
+		} else {
+			result = &asset.AssetView{Asset: *baseAsset, Identifiers: []shared.TagIdentifier{}}
+		}
+	}
+
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetCreateFailed, err.Error(), requestID)
@@ -128,12 +155,12 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary Get asset
-// @Description Get an asset by ID
+// @Description Get an asset by ID with its tag identifiers
 // @Tags assets
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"
-// @Success 202 {object} map[string]any "data: asset.Asset"
+// @Success 202 {object} map[string]any "data: asset.AssetView"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid asset ID"
 // @Failure 404 {object} modelerrors.ErrorResponse "Asset not found"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
@@ -150,7 +177,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := handler.storage.GetAssetByID(req.Context(), &id)
+	result, err := handler.storage.GetAssetViewByID(req.Context(), id)
 
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -164,7 +191,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string]*asset.Asset{"data": result})
+	httputil.WriteJSON(w, http.StatusAccepted, map[string]*asset.AssetView{"data": result})
 }
 
 // @Summary Delete asset
@@ -201,14 +228,14 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 }
 
 type ListAssetsResponse struct {
-	Data       []asset.Asset `json:"data"`
-	Count      int           `json:"count" example:"10"`
-	Offset     int           `json:"offset" example:"0"`
-	TotalCount int           `json:"total_count" example:"100"`
+	Data       []asset.AssetView `json:"data"`
+	Count      int               `json:"count" example:"10"`
+	Offset     int               `json:"offset" example:"0"`
+	TotalCount int               `json:"total_count" example:"100"`
 }
 
 // @Summary List assets
-// @Description Get a paginated list of all assets with pagination metadata
+// @Description Get a paginated list of all assets with their tag identifiers
 // @Tags assets
 // @Accept json
 // @Produce json
@@ -244,7 +271,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	assets, err := handler.storage.ListAllAssets(req.Context(), orgID, limit, offset)
+	assets, err := handler.storage.ListAssetViews(req.Context(), orgID, limit, offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetListFailed, err.Error(), ctx)
@@ -268,12 +295,123 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, response)
 }
 
+// @Summary Add identifier to asset
+// @Description Add a tag identifier (RFID, BLE, barcode) to an existing asset
+// @Tags assets
+// @Accept json
+// @Produce json
+// @Param id path int true "Asset ID"
+// @Param request body shared.TagIdentifierRequest true "Tag identifier to add"
+// @Success 201 {object} map[string]any "data: shared.TagIdentifier"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
+// @Failure 404 {object} modelerrors.ErrorResponse "Asset not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/assets/{id}/identifiers [post]
+func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
+	requestID := middleware.GetRequestID(r.Context())
+
+	claims := middleware.GetUserClaims(r)
+	if claims == nil || claims.CurrentOrgID == nil {
+		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetCreateFailed, "missing organization context", requestID)
+		return
+	}
+	orgID := *claims.CurrentOrgID
+
+	idParam := chi.URLParam(r, "id")
+	assetID, err := strconv.Atoi(idParam)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
+		return
+	}
+
+	existingAsset, err := handler.storage.GetAssetByID(r.Context(), &assetID)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), requestID)
+		return
+	}
+	if existingAsset == nil {
+		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", requestID)
+		return
+	}
+
+	var request shared.TagIdentifierRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			apierrors.InvalidJSON, err.Error(), requestID)
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			apierrors.ValidationFailed, err.Error(), requestID)
+		return
+	}
+
+	identifier, err := handler.storage.AddIdentifierToAsset(r.Context(), orgID, assetID, request)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetCreateFailed, err.Error(), requestID)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": identifier})
+}
+
+// @Summary Remove identifier from asset
+// @Description Remove a tag identifier from an asset
+// @Tags assets
+// @Accept json
+// @Produce json
+// @Param id path int true "Asset ID"
+// @Param identifierId path int true "Identifier ID"
+// @Success 202 {object} map[string]bool "deleted: true/false"
+// @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
+// @Failure 404 {object} modelerrors.ErrorResponse "Asset or identifier not found"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/assets/{id}/identifiers/{identifierId} [delete]
+func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
+	requestID := middleware.GetRequestID(r.Context())
+
+	idParam := chi.URLParam(r, "id")
+	_, err := strconv.Atoi(idParam)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
+		return
+	}
+
+	identifierIDParam := chi.URLParam(r, "identifierId")
+	identifierID, err := strconv.Atoi(identifierIDParam)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			"invalid identifier ID", err.Error(), requestID)
+		return
+	}
+
+	deleted, err := handler.storage.RemoveIdentifier(r.Context(), identifierID)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetDeleteFailed, err.Error(), requestID)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
+}
+
 func (handler *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/v1/assets", handler.ListAssets)
 	r.Get("/api/v1/assets/{id}", handler.GetAsset)
 	r.Post("/api/v1/assets", handler.Create)
 	r.Put("/api/v1/assets/{id}", handler.UpdateAsset)
 	r.Delete("/api/v1/assets/{id}", handler.DeleteAsset)
+	r.Post("/api/v1/assets/{id}/identifiers", handler.AddIdentifier)
+	r.Delete("/api/v1/assets/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	r.Post("/api/v1/assets/bulk", handler.UploadCSV)
 	r.Get("/api/v1/assets/bulk/{jobId}", handler.GetJobStatus)
 }
