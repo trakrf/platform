@@ -100,6 +100,12 @@ const (
 	IdentifierInvalidID      = "Invalid identifier ID: %s"
 )
 
+// Lookup error messages
+const (
+	LookupFailed   = "Failed to lookup tag"
+	LookupNotFound = "No entity found with this tag"
+)
+
 // Organization error messages
 const (
 	OrgListFailed           = "Failed to list organizations"

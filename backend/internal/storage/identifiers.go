@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
@@ -254,4 +256,48 @@ func (s *Storage) getIdentifiersForLocations(ctx context.Context, locationIDs []
 	}
 
 	return result, nil
+}
+
+// LookupResult contains the entity found by tag lookup
+type LookupResult struct {
+	EntityType string             `json:"entity_type"` // "asset" or "location"
+	EntityID   int                `json:"entity_id"`
+	Asset      *asset.Asset       `json:"asset,omitempty"`
+	Location   *location.Location `json:"location,omitempty"`
+}
+
+// LookupByTagValue finds an asset or location by its tag identifier value
+func (s *Storage) LookupByTagValue(ctx context.Context, orgID int, tagType, value string) (*LookupResult, error) {
+	query := `
+		SELECT asset_id, location_id
+		FROM trakrf.identifiers
+		WHERE org_id = $1 AND type = $2 AND value = $3 AND deleted_at IS NULL
+	`
+
+	var assetID, locationID *int
+	err := s.pool.QueryRow(ctx, query, orgID, tagType, value).Scan(&assetID, &locationID)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to lookup tag: %w", err)
+	}
+
+	if assetID != nil {
+		a, err := s.GetAssetByID(ctx, assetID)
+		if err != nil {
+			return nil, err
+		}
+		return &LookupResult{EntityType: "asset", EntityID: *assetID, Asset: a}, nil
+	}
+
+	if locationID != nil {
+		loc, err := s.GetLocationByID(ctx, *locationID)
+		if err != nil {
+			return nil, err
+		}
+		return &LookupResult{EntityType: "location", EntityID: *locationID, Location: loc}, nil
+	}
+
+	return nil, nil
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/location"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
 func (s *Storage) CreateLocation(ctx context.Context, request location.Location) (*location.Location, error) {
@@ -363,6 +365,119 @@ func (s *Storage) GetChildren(ctx context.Context, id int) ([]location.Location,
 	}
 
 	return locations, nil
+}
+
+// CreateLocationWithIdentifiers creates a location with tag identifiers in a single transaction
+func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationView, error) {
+	identifiersJSON, err := identifiersToJSON(request.Identifiers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
+	}
+
+	// Convert FlexibleDate to time.Time
+	validFrom := request.ValidFrom.ToTime()
+	var validTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		validTo = &t
+	}
+
+	query := `SELECT * FROM trakrf.create_location_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+
+	var locationID int
+	var identifierIDs []int
+
+	err = s.pool.QueryRow(ctx, query,
+		orgID,
+		request.Identifier,
+		request.Name,
+		request.Description,
+		request.ParentLocationID,
+		validFrom,
+		validTo,
+		request.IsActive,
+		nil, // metadata - not used in CreateLocationRequest
+		identifiersJSON,
+	).Scan(&locationID, &identifierIDs)
+
+	if err != nil {
+		return nil, parseLocationWithIdentifiersError(err, request.Identifier)
+	}
+
+	return s.GetLocationViewByID(ctx, locationID)
+}
+
+// GetLocationViewByID fetches a location with its tag identifiers
+func (s *Storage) GetLocationViewByID(ctx context.Context, id int) (*location.LocationView, error) {
+	baseLoc, err := s.GetLocationByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if baseLoc == nil {
+		return nil, nil
+	}
+
+	identifiers, err := s.GetIdentifiersByLocationID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &location.LocationView{
+		Location:    *baseLoc,
+		Identifiers: identifiers,
+	}, nil
+}
+
+// ListLocationViews fetches locations with their tag identifiers for an org
+func (s *Storage) ListLocationViews(ctx context.Context, orgID, limit, offset int) ([]location.LocationView, error) {
+	locations, err := s.ListAllLocations(ctx, orgID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(locations) == 0 {
+		return []location.LocationView{}, nil
+	}
+
+	locationIDs := make([]int, len(locations))
+	for i, loc := range locations {
+		locationIDs[i] = loc.ID
+	}
+
+	identifierMap, err := s.getIdentifiersForLocations(ctx, locationIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]location.LocationView, len(locations))
+	for i, loc := range locations {
+		ids := identifierMap[loc.ID]
+		if ids == nil {
+			ids = []shared.TagIdentifier{}
+		}
+		views[i] = location.LocationView{
+			Location:    loc,
+			Identifiers: ids,
+		}
+	}
+
+	return views, nil
+}
+
+func parseLocationWithIdentifiersError(err error, identifier string) error {
+	errStr := err.Error()
+
+	if strings.Contains(errStr, "locations_org_id_identifier") ||
+		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "locations")) {
+		return fmt.Errorf("location with identifier %s already exists", identifier)
+	}
+
+	if strings.Contains(errStr, "identifiers_org_id_type_value") ||
+		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "identifiers")) {
+		return fmt.Errorf("one or more tag identifiers already exist")
+	}
+
+	return fmt.Errorf("failed to create location with identifiers: %w", err)
 }
 
 func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any, error) {
