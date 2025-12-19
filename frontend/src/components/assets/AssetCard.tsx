@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target, Radio } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
+import { TagCountBadge } from './TagCountBadge';
 
 interface AssetCardProps {
   asset: Asset;
@@ -113,17 +114,7 @@ export function AssetCard({
 
         {/* Tags */}
         <td className="px-4 py-3">
-          {asset.identifiers && asset.identifiers.length > 0 ? (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
-              title={`${asset.identifiers.length} RFID tag${asset.identifiers.length !== 1 ? 's' : ''} linked`}
-            >
-              <Radio className="w-3 h-3" />
-              {asset.identifiers.length} tag{asset.identifiers.length !== 1 ? 's' : ''}
-            </span>
-          ) : (
-            <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
-          )}
+          <TagCountBadge identifiers={asset.identifiers} />
         </td>
 
         {/* Status */}
@@ -202,14 +193,11 @@ export function AssetCard({
               {asset.identifier}
             </h3>
             {asset.identifiers && asset.identifiers.length > 0 && (
-              <button
+              <TagCountBadge
+                identifiers={asset.identifiers}
                 onClick={handleToggleTags}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40 transition-colors flex-shrink-0"
-                title={`${asset.identifiers.length} RFID tag${asset.identifiers.length !== 1 ? 's' : ''} linked - click to ${tagsExpanded ? 'collapse' : 'expand'}`}
-              >
-                <Radio className="w-3 h-3" />
-                {asset.identifiers.length} tag{asset.identifiers.length !== 1 ? 's' : ''}
-              </button>
+                expanded={tagsExpanded}
+              />
             )}
           </div>
           <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{asset.name}</p>
