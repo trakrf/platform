@@ -1,6 +1,7 @@
 package locations
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,6 +29,32 @@ func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{
 		storage: storage,
 	}
+}
+
+func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationView, error) {
+	var validTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		validTo = &t
+	}
+
+	loc := location.Location{
+		OrgID:            orgID,
+		Name:             request.Name,
+		Identifier:       request.Identifier,
+		ParentLocationID: request.ParentLocationID,
+		Description:      request.Description,
+		ValidFrom:        request.ValidFrom.ToTime(),
+		ValidTo:          validTo,
+		IsActive:         request.IsActive,
+	}
+
+	baseLoc, err := handler.storage.CreateLocation(ctx, loc)
+	if err != nil {
+		return nil, err
+	}
+
+	return &location.LocationView{Location: *baseLoc, Identifiers: []shared.TagIdentifier{}}, nil
 }
 
 // @Summary Create location
@@ -71,29 +98,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if len(request.Identifiers) > 0 {
 		result, err = handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
 	} else {
-		var validTo *time.Time
-		if request.ValidTo != nil {
-			t := request.ValidTo.ToTime()
-			validTo = &t
-		}
-
-		loc := location.Location{
-			OrgID:            orgID,
-			Name:             request.Name,
-			Identifier:       request.Identifier,
-			ParentLocationID: request.ParentLocationID,
-			Description:      request.Description,
-			ValidFrom:        request.ValidFrom.ToTime(),
-			ValidTo:          validTo,
-			IsActive:         request.IsActive,
-		}
-
-		baseLoc, createErr := handler.storage.CreateLocation(r.Context(), loc)
-		if createErr != nil {
-			err = createErr
-		} else {
-			result = &location.LocationView{Location: *baseLoc, Identifiers: []shared.TagIdentifier{}}
-		}
+		result, err = handler.createLocationWithoutIdentifiers(r.Context(), orgID, request)
 	}
 
 	if err != nil {

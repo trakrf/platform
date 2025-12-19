@@ -1,6 +1,7 @@
 package assets
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,6 +31,28 @@ func NewHandler(storage *storage.Storage) *Handler {
 		storage:           storage,
 		bulkImportService: bulkimport.NewService(storage),
 	}
+}
+
+func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
+	assetToCreate := asset.Asset{
+		OrgID:             request.OrgID,
+		Identifier:        request.Identifier,
+		Name:              request.Name,
+		Type:              request.Type,
+		Description:       request.Description,
+		CurrentLocationID: request.CurrentLocationID,
+		ValidFrom:         request.ValidFrom,
+		ValidTo:           request.ValidTo,
+		Metadata:          request.Metadata,
+		IsActive:          request.IsActive,
+	}
+
+	baseAsset, err := handler.storage.CreateAsset(ctx, assetToCreate)
+	if err != nil {
+		return nil, err
+	}
+
+	return &asset.AssetView{Asset: *baseAsset, Identifiers: []shared.TagIdentifier{}}, nil
 }
 
 // @Summary Create asset
@@ -75,25 +98,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if len(request.Identifiers) > 0 {
 		result, err = handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
 	} else {
-		// Convert CreateAssetRequest to Asset for storage
-		assetToCreate := asset.Asset{
-			OrgID:             request.OrgID,
-			Identifier:        request.Identifier,
-			Name:              request.Name,
-			Type:              request.Type,
-			Description:       request.Description,
-			CurrentLocationID: request.CurrentLocationID,
-			ValidFrom:         request.ValidFrom,
-			ValidTo:           request.ValidTo,
-			Metadata:          request.Metadata,
-			IsActive:          request.IsActive,
-		}
-		baseAsset, createErr := handler.storage.CreateAsset(r.Context(), assetToCreate)
-		if createErr != nil {
-			err = createErr
-		} else {
-			result = &asset.AssetView{Asset: *baseAsset, Identifiers: []shared.TagIdentifier{}}
-		}
+		result, err = handler.createAssetWithoutIdentifiers(r.Context(), request)
 	}
 
 	if err != nil {
