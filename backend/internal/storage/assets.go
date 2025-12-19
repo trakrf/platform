@@ -32,6 +32,9 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, fmt.Errorf("asset with identifier %s already exists", request.Identifier)
 		}
+		if strings.Contains(err.Error(), "current_location_id_fkey") {
+			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
+		}
 		return nil, fmt.Errorf("failed to create asset: %w", err)
 	}
 
@@ -78,6 +81,9 @@ func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateA
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
+		}
+		if strings.Contains(err.Error(), "current_location_id_fkey") {
+			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
 		}
 		return nil, fmt.Errorf("failed to update asset: %w", err)
 	}

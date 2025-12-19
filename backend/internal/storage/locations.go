@@ -31,8 +31,8 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, fmt.Errorf("location with identifier %s already exists", request.Identifier)
 		}
-		if strings.Contains(err.Error(), "foreign key constraint") {
-			return nil, fmt.Errorf("invalid parent location ID or organization ID")
+		if strings.Contains(err.Error(), "parent_location_id_fkey") {
+			return nil, fmt.Errorf("invalid parent_location_id: parent location does not exist")
 		}
 		return nil, fmt.Errorf("failed to create location: %w", err)
 	}
@@ -80,8 +80,8 @@ func (s *Storage) UpdateLocation(ctx context.Context, id int, request location.U
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
-		if strings.Contains(err.Error(), "foreign key constraint") {
-			return nil, fmt.Errorf("invalid parent location ID")
+		if strings.Contains(err.Error(), "parent_location_id_fkey") {
+			return nil, fmt.Errorf("invalid parent_location_id: parent location does not exist")
 		}
 		return nil, fmt.Errorf("failed to update location: %w", err)
 	}
