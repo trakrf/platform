@@ -26,29 +26,29 @@ type Asset struct {
 }
 
 type CreateAssetRequest struct {
-	OrgID             int        `json:"org_id" validate:"omitempty,min=1"`
-	Identifier        string     `json:"identifier" validate:"required,min=1,max=255"`
-	Name              string     `json:"name" validate:"required,min=1,max=255"`
-	Type              string     `json:"type" validate:"oneof=asset"`
-	Description       string     `json:"description" validate:"omitempty,max=1024"`
-	CurrentLocationID *int       `json:"current_location_id" validate:"omitempty,min=1"`
-	ValidFrom         time.Time  `json:"valid_from"`
-	ValidTo           *time.Time `json:"valid_to"`
-	Metadata          any        `json:"metadata"`
-	IsActive          bool       `json:"is_active"`
+	OrgID             int                  `json:"-" swaggerignore:"true"`
+	Identifier        string               `json:"identifier" validate:"required,min=1,max=255"`
+	Name              string               `json:"name" validate:"required,min=1,max=255"`
+	Type              string               `json:"type" validate:"oneof=asset"`
+	Description       string               `json:"description" validate:"omitempty,max=1024"`
+	CurrentLocationID *int                 `json:"current_location_id" validate:"omitempty,min=1"`
+	ValidFrom         shared.FlexibleDate  `json:"valid_from" swaggertype:"string" example:"2025-01-01"`
+	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
+	Metadata          any                  `json:"metadata"`
+	IsActive          bool                 `json:"is_active"`
 }
 
 type UpdateAssetRequest struct {
-	OrgID             *int       `json:"org_id" validate:"omitempty,min=1"`
-	Identifier        *string    `json:"identifier" validate:"omitempty,min=1,max=255"`
-	Name              *string    `json:"name" validate:"omitempty,min=1,max=255"`
-	Type              *string    `json:"type" validate:"omitempty,oneof=asset"`
-	Description       *string    `json:"description" validate:"omitempty,max=1024"`
-	CurrentLocationID *int       `json:"current_location_id"`
-	ValidFrom         *time.Time `json:"valid_from"`
-	ValidTo           *time.Time `json:"valid_to"`
-	Metadata          *any       `json:"metadata"`
-	IsActive          *bool      `json:"is_active"`
+	OrgID             *int                 `json:"-" swaggerignore:"true"`
+	Identifier        *string              `json:"identifier" validate:"omitempty,min=1,max=255"`
+	Name              *string              `json:"name" validate:"omitempty,min=1,max=255"`
+	Type              *string              `json:"type" validate:"omitempty,oneof=asset"`
+	Description       *string              `json:"description" validate:"omitempty,max=1024"`
+	CurrentLocationID *int                 `json:"current_location_id"`
+	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`
+	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
+	Metadata          *any                 `json:"metadata"`
+	IsActive          *bool                `json:"is_active"`
 }
 
 type AssetListResponse struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -34,6 +35,12 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
+	var validTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		validTo = &t
+	}
+
 	assetToCreate := asset.Asset{
 		OrgID:             request.OrgID,
 		Identifier:        request.Identifier,
@@ -41,8 +48,8 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 		Type:              request.Type,
 		Description:       request.Description,
 		CurrentLocationID: request.CurrentLocationID,
-		ValidFrom:         request.ValidFrom,
-		ValidTo:           request.ValidTo,
+		ValidFrom:         request.ValidFrom.ToTime(),
+		ValidTo:           validTo,
 		Metadata:          request.Metadata,
 		IsActive:          request.IsActive,
 	}

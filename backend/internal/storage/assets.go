@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/asset"
@@ -30,6 +31,9 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, fmt.Errorf("asset with identifier %s already exists", request.Identifier)
+		}
+		if strings.Contains(err.Error(), "current_location_id_fkey") {
+			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
 		}
 		return nil, fmt.Errorf("failed to create asset: %w", err)
 	}
@@ -77,6 +81,9 @@ func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateA
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
+		}
+		if strings.Contains(err.Error(), "current_location_id_fkey") {
+			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
 		}
 		return nil, fmt.Errorf("failed to update asset: %w", err)
 	}
@@ -305,6 +312,14 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
 	}
 
+	// Convert FlexibleDate to time.Time for database
+	validFrom := request.ValidFrom.ToTime()
+	var validTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		validTo = &t
+	}
+
 	query := `SELECT * FROM trakrf.create_asset_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 	var assetID int
@@ -317,8 +332,8 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		request.Type,
 		request.Description,
 		request.CurrentLocationID,
-		request.ValidFrom,
-		request.ValidTo,
+		validFrom,
+		validTo,
 		request.IsActive,
 		request.Metadata,
 		identifiersJSON,
@@ -397,6 +412,10 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 	if strings.Contains(errStr, "identifiers_org_id_type_value") ||
 		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "identifiers")) {
 		return fmt.Errorf("one or more tag identifiers already exist")
+	}
+
+	if strings.Contains(errStr, "current_location_id_fkey") {
+		return fmt.Errorf("invalid current_location_id: location does not exist")
 	}
 
 	return fmt.Errorf("failed to create asset with identifiers: %w", err)

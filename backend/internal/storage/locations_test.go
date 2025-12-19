@@ -173,13 +173,13 @@ func TestCreateLocation_InvalidParentID(t *testing.T) {
 			request.Description, request.ValidFrom, request.ValidTo,
 			request.IsActive, request.OrgID,
 		).
-		WillReturnError(errors.New("ERROR: insert or update on table \"locations\" violates foreign key constraint"))
+		WillReturnError(errors.New("ERROR: insert or update on table \"locations\" violates foreign key constraint \"locations_parent_location_id_fkey\""))
 
 	result, err := storage.CreateLocation(context.Background(), request)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "invalid parent location ID or organization ID")
+	assert.Contains(t, err.Error(), "invalid parent_location_id: parent location does not exist")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
