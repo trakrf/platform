@@ -105,7 +105,7 @@ func TestFlexibleDate_UnmarshalJSON(t *testing.T) {
 			},
 		},
 		{
-			name:        "invalid format",
+			name:        "invalid format shows user-friendly error",
 			input:       `"not-a-date"`,
 			expectError: true,
 		},
@@ -118,6 +118,7 @@ func TestFlexibleDate_UnmarshalJSON(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "Supported formats")
 			} else {
 				require.NoError(t, err)
 				if tt.checkFunc != nil {

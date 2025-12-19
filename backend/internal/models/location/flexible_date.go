@@ -35,17 +35,15 @@ func (fd *FlexibleDate) UnmarshalJSON(b []byte) error {
 	}
 
 	// Try each format
-	var lastErr error
 	for _, format := range dateFormats {
 		t, err := time.Parse(format, s)
 		if err == nil {
 			fd.Time = t
 			return nil
 		}
-		lastErr = err
 	}
 
-	return fmt.Errorf("unable to parse date '%s' with any supported format: %w", s, lastErr)
+	return fmt.Errorf("invalid date format '%s'. Supported formats: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ, MM/DD/YYYY, DD/MM/YYYY", s)
 }
 
 // MarshalJSON implements custom JSON marshaling (uses RFC3339 for output)
