@@ -1,4 +1,4 @@
-package location
+package shared
 
 import (
 	"encoding/json"
@@ -29,12 +29,10 @@ var dateFormats = []string{
 func (fd *FlexibleDate) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), "\"")
 
-	// Handle empty string
 	if s == "null" || s == "" {
 		return nil
 	}
 
-	// Try each format
 	for _, format := range dateFormats {
 		t, err := time.Parse(format, s)
 		if err == nil {

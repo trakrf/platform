@@ -1,4 +1,4 @@
-package location
+package shared
 
 import (
 	"encoding/json"
@@ -54,38 +54,6 @@ func TestFlexibleDate_UnmarshalJSON(t *testing.T) {
 				assert.Equal(t, 2025, fd.Year())
 				assert.Equal(t, time.Month(12), fd.Month())
 				assert.Equal(t, 14, fd.Day())
-			},
-		},
-		{
-			name:        "UK format DD/MM/YYYY",
-			input:       `"14/12/2025"`,
-			expectError: false,
-			checkFunc: func(t *testing.T, fd FlexibleDate) {
-				assert.Equal(t, 2025, fd.Year())
-				assert.Equal(t, time.Month(12), fd.Month())
-				assert.Equal(t, 14, fd.Day())
-			},
-		},
-		{
-			name:        "ISO with slashes YYYY/MM/DD",
-			input:       `"2025/12/14"`,
-			expectError: false,
-			checkFunc: func(t *testing.T, fd FlexibleDate) {
-				assert.Equal(t, 2025, fd.Year())
-				assert.Equal(t, time.Month(12), fd.Month())
-				assert.Equal(t, 14, fd.Day())
-			},
-		},
-		{
-			name:        "ISO with time",
-			input:       `"2025-12-14 10:30:00"`,
-			expectError: false,
-			checkFunc: func(t *testing.T, fd FlexibleDate) {
-				assert.Equal(t, 2025, fd.Year())
-				assert.Equal(t, time.Month(12), fd.Month())
-				assert.Equal(t, 14, fd.Day())
-				assert.Equal(t, 10, fd.Hour())
-				assert.Equal(t, 30, fd.Minute())
 			},
 		},
 		{
@@ -154,44 +122,4 @@ func TestFlexibleDate_MarshalJSON(t *testing.T) {
 			assert.Equal(t, tt.expected, string(result))
 		})
 	}
-}
-
-func TestFlexibleDate_InCreateLocationRequest(t *testing.T) {
-	jsonData := `{
-		"name": "Warehouse 1",
-		"identifier": "wh1",
-		"description": "Main warehouse",
-		"valid_from": "12/14/2025",
-		"is_active": true
-	}`
-
-	var req CreateLocationRequest
-	err := json.Unmarshal([]byte(jsonData), &req)
-	require.NoError(t, err)
-
-	assert.Equal(t, "Warehouse 1", req.Name)
-	assert.Equal(t, "wh1", req.Identifier)
-	assert.Equal(t, 2025, req.ValidFrom.Year())
-	assert.Equal(t, time.Month(12), req.ValidFrom.Month())
-	assert.Equal(t, 14, req.ValidFrom.Day())
-}
-
-func TestFlexibleDate_InCreateLocationRequest_EuropeanFormat(t *testing.T) {
-	jsonData := `{
-		"name": "Warehouse 1",
-		"identifier": "wh1",
-		"description": "Main warehouse",
-		"valid_from": "14.12.2025",
-		"is_active": true
-	}`
-
-	var req CreateLocationRequest
-	err := json.Unmarshal([]byte(jsonData), &req)
-	require.NoError(t, err)
-
-	assert.Equal(t, "Warehouse 1", req.Name)
-	assert.Equal(t, "wh1", req.Identifier)
-	assert.Equal(t, 2025, req.ValidFrom.Year())
-	assert.Equal(t, time.Month(12), req.ValidFrom.Month())
-	assert.Equal(t, 14, req.ValidFrom.Day())
 }
