@@ -5,6 +5,8 @@
  * All types match backend API responses exactly.
  */
 
+import type { TagIdentifier } from '@/types/shared';
+
 // ============ Core Entity Types ============
 
 /**
@@ -19,7 +21,7 @@ export type AssetType = 'person' | 'device' | 'asset' | 'inventory' | 'other';
 export interface Asset {
   id: number; // Go: int
   org_id: number; // Go: int
-  identifier: string; // Go: string
+  identifier: string; // Go: string - Customer identifier (e.g., "LAP-001")
   name: string; // Go: string
   type: AssetType; // Go: string with validation
   description: string; // Go: string
@@ -31,6 +33,7 @@ export interface Asset {
   created_at: string; // Go: time.Time → ISO 8601 string
   updated_at: string; // Go: time.Time → ISO 8601 string
   deleted_at: string | null; // Go: *time.Time → ISO 8601 string or null
+  identifiers: TagIdentifier[]; // Tag identifiers (RFID) linked to this asset
 }
 
 // ============ Request/Response Types ============

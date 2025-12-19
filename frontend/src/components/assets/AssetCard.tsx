@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target } from 'lucide-react';
+import React, { useState } from 'react';
+import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target, Radio } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
 
@@ -34,6 +34,13 @@ export function AssetCard({
   const getLocationById = useLocationStore((state) => state.getLocationById);
   const locationData = asset.current_location_id ? getLocationById(asset.current_location_id) : null;
   const locationName = locationData?.name;
+
+  const [tagsExpanded, setTagsExpanded] = useState(false);
+
+  const handleToggleTags = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTagsExpanded(!tagsExpanded);
+  };
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -98,6 +105,21 @@ export function AssetCard({
             <span className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
               <MapPin className="h-3.5 w-3.5" />
               {locationName}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
+          )}
+        </td>
+
+        {/* Tags */}
+        <td className="px-4 py-3">
+          {asset.identifiers && asset.identifiers.length > 0 ? (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
+              title={`${asset.identifiers.length} RFID tag${asset.identifiers.length !== 1 ? 's' : ''} linked`}
+            >
+              <Radio className="w-3 h-3" />
+              {asset.identifiers.length} tag{asset.identifiers.length !== 1 ? 's' : ''}
             </span>
           ) : (
             <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
@@ -175,12 +197,55 @@ export function AssetCard({
       <div className="flex items-start gap-3 mb-3">
         <TypeIcon className="h-6 w-6 text-gray-500 dark:text-gray-400 mt-1" />
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
-            {asset.identifier}
-          </h3>
+          <div className="flex items-center gap-2 mb-0.5">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
+              {asset.identifier}
+            </h3>
+            {asset.identifiers && asset.identifiers.length > 0 && (
+              <button
+                onClick={handleToggleTags}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40 transition-colors flex-shrink-0"
+                title={`${asset.identifiers.length} RFID tag${asset.identifiers.length !== 1 ? 's' : ''} linked - click to ${tagsExpanded ? 'collapse' : 'expand'}`}
+              >
+                <Radio className="w-3 h-3" />
+                {asset.identifiers.length} tag{asset.identifiers.length !== 1 ? 's' : ''}
+              </button>
+            )}
+          </div>
           <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{asset.name}</p>
         </div>
       </div>
+
+      {/* Expanded Tag List */}
+      {tagsExpanded && asset.identifiers && asset.identifiers.length > 0 && (
+        <div className="mb-3 space-y-1.5 pl-9">
+          {asset.identifiers.map((identifier) => (
+            <div
+              key={identifier.id}
+              className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded px-2 py-1"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Radio className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                <span
+                  className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate"
+                  title={identifier.value}
+                >
+                  {identifier.value}
+                </span>
+              </div>
+              <span
+                className={`ml-2 text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                  identifier.is_active
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {identifier.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Location */}
       {locationName && (

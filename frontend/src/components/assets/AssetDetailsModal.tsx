@@ -1,4 +1,4 @@
-import { X, MapPin, Target } from 'lucide-react';
+import { X, MapPin, Target, Radio } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
 
@@ -98,6 +98,46 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                     )
                   }
                 />
+              </div>
+
+              {/* Linked Identifiers */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  Linked Identifiers
+                </h3>
+                {asset.identifiers && asset.identifiers.length > 0 ? (
+                  <div className="space-y-2">
+                    {asset.identifiers.map((identifier) => (
+                      <div
+                        key={identifier.id}
+                        className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg px-3 py-2"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Radio className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                          <span
+                            className="text-sm font-mono text-gray-900 dark:text-gray-100 truncate"
+                            title={identifier.value}
+                          >
+                            {identifier.value}
+                          </span>
+                        </div>
+                        <span
+                          className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                            identifier.is_active
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                          }`}
+                        >
+                          {identifier.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                    No tag identifiers linked
+                  </p>
+                )}
               </div>
 
               {/* Description */}

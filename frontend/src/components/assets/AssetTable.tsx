@@ -24,6 +24,7 @@ const columns: Column<Asset>[] = [
   { key: 'identifier', label: 'Identifier', sortable: true },
   { key: 'name', label: 'Name', sortable: true },
   { key: 'location', label: 'Location', sortable: false },
+  { key: 'tags', label: 'Tags', sortable: false },
   { key: 'is_active', label: 'Status', sortable: true },
   { key: 'actions', label: 'Actions', sortable: false },
 ];
