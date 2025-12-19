@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target, Radio } from 'lucide-react';
+import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
 import { TagCountBadge } from './TagCountBadge';
+import { TagIdentifierList } from './TagIdentifierList';
 
 interface AssetCardProps {
   asset: Asset;
@@ -205,34 +206,12 @@ export function AssetCard({
       </div>
 
       {/* Expanded Tag List */}
-      {tagsExpanded && asset.identifiers && asset.identifiers.length > 0 && (
-        <div className="mb-3 space-y-1.5 pl-9">
-          {asset.identifiers.map((identifier) => (
-            <div
-              key={identifier.id}
-              className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded px-2 py-1"
-            >
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Radio className="w-3 h-3 text-blue-500 flex-shrink-0" />
-                <span
-                  className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate"
-                  title={identifier.value}
-                >
-                  {identifier.value}
-                </span>
-              </div>
-              <span
-                className={`ml-2 text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
-                  identifier.is_active
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {identifier.is_active ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-          ))}
-        </div>
+      {asset.identifiers && (
+        <TagIdentifierList
+          identifiers={asset.identifiers}
+          expanded={tagsExpanded}
+          className="mb-3 pl-9"
+        />
       )}
 
       {/* Location */}
