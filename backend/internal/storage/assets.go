@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/asset"
@@ -305,6 +306,14 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
 	}
 
+	// Convert FlexibleDate to time.Time for database
+	validFrom := request.ValidFrom.ToTime()
+	var validTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		validTo = &t
+	}
+
 	query := `SELECT * FROM trakrf.create_asset_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 	var assetID int
@@ -317,8 +326,8 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		request.Type,
 		request.Description,
 		request.CurrentLocationID,
-		request.ValidFrom,
-		request.ValidTo,
+		validFrom,
+		validTo,
 		request.IsActive,
 		request.Metadata,
 		identifiersJSON,
