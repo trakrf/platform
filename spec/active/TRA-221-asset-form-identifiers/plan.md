@@ -139,8 +139,34 @@ Pass `asset.id` to TagIdentifiersModal, handle `onIdentifierRemoved` to refresh 
 
 **Validation**:
 - `just frontend validate` (all checks)
-- Manual testing of create form with identifiers
-- Manual testing of remove in modal
+
+---
+
+### Task 7: Playwright MCP UI Screenshots
+**Action**: VALIDATE WITH SCREENSHOTS
+**Output**: `frontend/dist/screenshots/`
+
+**Steps**:
+1. Build frontend: `just frontend build`
+2. Serve built files: `python3 -m http.server 3001 --directory frontend/dist`
+3. Login with Playwright MCP (test1@test.com / password)
+4. Capture screenshots:
+
+**Screenshots to capture**:
+
+| Screenshot | Description | Filename |
+|------------|-------------|----------|
+| Create Form | Asset create form with tag identifiers section visible | `20-create-form-tag-section.png` |
+| Create Form + Tag | Form with one tag identifier added | `21-create-form-with-tag.png` |
+| Edit Form | Asset edit form showing existing identifiers | `22-edit-form-identifiers.png` |
+| Tags Modal | Tag identifiers modal with remove buttons | `23-tags-modal-remove.png` |
+| Confirm Dialog | Confirmation dialog before deletion | `24-confirm-delete-dialog.png` |
+| After Delete | Modal after identifier removed | `25-after-delete.png` |
+
+**Validation**:
+- All 6 screenshots captured successfully
+- UI matches spec wireframe
+- Mobile responsive (test at 375px width for key screens)
 
 ## Risk Assessment
 
@@ -187,3 +213,17 @@ Final validation: `just frontend validate`
 **Estimated one-pass success probability**: 90%
 
 **Reasoning**: All patterns exist in codebase, backend API is ready, scope is limited to 2 files to modify and 1 small component to create.
+
+## Task Summary
+
+| Task | Description | Type |
+|------|-------------|------|
+| 1 | Add removeIdentifier API function | CODE |
+| 2 | Create TagIdentifierInputRow component | CODE |
+| 3 | Add tag identifiers to AssetForm | CODE |
+| 4 | Add remove functionality to TagIdentifiersModal | CODE |
+| 5 | Update AssetCard to pass assetId | CODE |
+| 6 | Final validation | VALIDATE |
+| 7 | Playwright MCP UI Screenshots | SCREENSHOTS |
+
+**Total Tasks**: 7
