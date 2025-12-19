@@ -408,5 +408,9 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 		return fmt.Errorf("one or more tag identifiers already exist")
 	}
 
+	if strings.Contains(errStr, "current_location_id_fkey") {
+		return fmt.Errorf("invalid current_location_id: location does not exist")
+	}
+
 	return fmt.Errorf("failed to create asset with identifiers: %w", err)
 }

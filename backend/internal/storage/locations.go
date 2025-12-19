@@ -477,6 +477,10 @@ func parseLocationWithIdentifiersError(err error, identifier string) error {
 		return fmt.Errorf("one or more tag identifiers already exist")
 	}
 
+	if strings.Contains(errStr, "parent_location_id_fkey") {
+		return fmt.Errorf("invalid parent_location_id: parent location does not exist")
+	}
+
 	return fmt.Errorf("failed to create location with identifiers: %w", err)
 }
 
