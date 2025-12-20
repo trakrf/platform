@@ -162,9 +162,18 @@ Pass `asset.id` to TagIdentifiersModal, handle `onIdentifierRemoved` to refresh 
 | Tags Modal | Tag identifiers modal with remove buttons | `23-tags-modal-remove.png` |
 | Confirm Dialog | Confirmation dialog before deletion | `24-confirm-delete-dialog.png` |
 | After Delete | Modal after identifier removed | `25-after-delete.png` |
+| Edit + New Tag | Asset edit form after adding new identifier | `26-edit-form-add-new-tag.png` |
+| After Save | Asset details showing newly added identifier | `27-after-save-new-tag.png` |
+
+**Action Tests to perform**:
+
+| Test | Steps | Expected Result |
+|------|-------|-----------------|
+| Add identifier during edit | 1. Open existing asset edit form<br>2. Add new identifier (type: RFID, value: TEST123)<br>3. Click "Update Asset"<br>4. Re-open asset to verify | New identifier appears in asset identifiers list |
 
 **Validation**:
-- All 6 screenshots captured successfully
+- All 8 screenshots captured successfully
+- Action test confirms identifier saved correctly
 - UI matches spec wireframe
 - Mobile responsive (test at 375px width for key screens)
 
