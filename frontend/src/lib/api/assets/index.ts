@@ -91,4 +91,21 @@ export const assetsApi = {
    */
   getJobStatus: (jobId: string) =>
     apiClient.get<JobStatusResponse>(`/assets/bulk/${jobId}`),
+
+  /**
+   * Remove a tag identifier from an asset
+   * DELETE /api/v1/assets/:assetId/identifiers/:identifierId
+   */
+  removeIdentifier: (assetId: number, identifierId: number) =>
+    apiClient.delete<DeleteResponse>(`/assets/${assetId}/identifiers/${identifierId}`),
+
+  /**
+   * Add a tag identifier to an asset
+   * POST /api/v1/assets/:assetId/identifiers
+   */
+  addIdentifier: (assetId: number, identifier: { type: string; value: string }) =>
+    apiClient.post<{ data: { id: number; type: string; value: string; is_active: boolean } }>(
+      `/assets/${assetId}/identifiers`,
+      identifier
+    ),
 };

@@ -19,3 +19,6 @@ export type {
   OrgMember,
   Invitation,
 } from './org';
+
+// Re-export shared types
+export type { TagIdentifier, IdentifierType } from './shared';
