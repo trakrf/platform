@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { Asset, CreateAssetRequest, UpdateAssetRequest } from '@/types/assets';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagIdentifierInput } from '@/types/assets';
 import { AssetForm } from './AssetForm';
 import { assetsApi } from '@/lib/api/assets';
 import { useAssetStore } from '@/stores';
@@ -36,13 +36,43 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         addAsset(response.data.data);
         toast.success(`Asset "${response.data.data.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
-        const response = await assetsApi.update(asset.id, data as UpdateAssetRequest);
+        // Extract new identifiers (those without an id) from the request
+        const identifiers = (data as UpdateAssetRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
+        const newIdentifiers = identifiers.filter(id => !id.id);
+
+        // Remove identifiers from the update request (backend doesn't support it)
+        const { identifiers: _, ...updateData } = data as UpdateAssetRequest & { identifiers?: TagIdentifierInput[] };
+
+        // Update the asset first
+        const response = await assetsApi.update(asset.id, updateData);
 
         if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
           throw new Error('Invalid response from server. Asset API may not be available.');
         }
 
-        updateCachedAsset(asset.id, response.data.data);
+        // Add new identifiers one by one
+        for (const identifier of newIdentifiers) {
+          try {
+            await assetsApi.addIdentifier(asset.id, {
+              type: identifier.type,
+              value: identifier.value,
+            });
+          } catch (idErr: any) {
+            // If adding identifier fails, show a warning but don't fail the whole operation
+            console.error('Failed to add identifier:', idErr);
+            toast.error(`Failed to add tag "${identifier.value}": ${idErr.message || 'Unknown error'}`);
+          }
+        }
+
+        // Fetch fresh asset data with all identifiers
+        const freshResponse = await assetsApi.get(asset.id);
+        if (freshResponse.data?.data) {
+          updateCachedAsset(asset.id, freshResponse.data.data);
+        } else {
+          // Fall back to the update response if get fails
+          updateCachedAsset(asset.id, response.data.data);
+        }
+
         toast.success(`Asset "${response.data.data.identifier}" updated successfully`);
       }
 

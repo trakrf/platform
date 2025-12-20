@@ -71,6 +71,15 @@ export interface UpdateAssetRequest {
 }
 
 /**
+ * Tag identifier input for forms - may not have an id if new
+ */
+export interface TagIdentifierInput {
+  id?: number; // Present if existing identifier, undefined if new
+  type: 'rfid' | 'ble' | 'barcode';
+  value: string;
+}
+
+/**
  * List response with pagination - matches ListAssetsResponse
  * Reference: backend/internal/handlers/assets/assets.go lines 191-196
  */
