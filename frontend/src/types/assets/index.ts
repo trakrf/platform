@@ -75,7 +75,7 @@ export interface UpdateAssetRequest {
  */
 export interface TagIdentifierInput {
   id?: number; // Present if existing identifier, undefined if new
-  type: 'rfid' | 'ble' | 'barcode';
+  type: 'rfid';
   value: string;
 }
 

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target } from 'lucide-react';
 import type { Asset } from '@/types/assets';
+import type { TagIdentifier } from '@/types/shared';
 import { useLocationStore } from '@/stores';
 import { TagCountBadge } from './TagCountBadge';
 import { TagIdentifiersModal } from './TagIdentifiersModal';
@@ -38,12 +39,22 @@ export function AssetCard({
   const locationName = locationData?.name;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
+  const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>(asset.identifiers || []);
+
+  // Sync local identifiers when asset prop changes
+  useEffect(() => {
+    setLocalIdentifiers(asset.identifiers || []);
+  }, [asset.identifiers]);
 
   const handleOpenTagsModal = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (asset.identifiers && asset.identifiers.length > 0) {
+    if (localIdentifiers.length > 0) {
       setTagsModalOpen(true);
     }
+  };
+
+  const handleIdentifierRemoved = (identifierId: number) => {
+    setLocalIdentifiers((prev) => prev.filter((i) => i.id !== identifierId));
   };
 
   const handleEdit = (e: React.MouseEvent) => {
@@ -119,8 +130,8 @@ export function AssetCard({
           {/* Tags */}
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <TagCountBadge
-              identifiers={asset.identifiers}
-              onClick={asset.identifiers?.length ? handleOpenTagsModal : undefined}
+              identifiers={localIdentifiers}
+              onClick={localIdentifiers.length ? handleOpenTagsModal : undefined}
             />
           </td>
 
@@ -181,10 +192,12 @@ export function AssetCard({
 
         {/* Tag Identifiers Modal */}
         <TagIdentifiersModal
-          identifiers={asset.identifiers || []}
+          identifiers={localIdentifiers}
+          assetId={asset.id}
           assetName={asset.identifier}
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
+          onIdentifierRemoved={handleIdentifierRemoved}
         />
       </>
     );
@@ -210,9 +223,9 @@ export function AssetCard({
               <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white truncate">
                 {asset.identifier}
               </h3>
-              {asset.identifiers && asset.identifiers.length > 0 && (
+              {localIdentifiers.length > 0 && (
                 <TagCountBadge
-                  identifiers={asset.identifiers}
+                  identifiers={localIdentifiers}
                   onClick={handleOpenTagsModal}
                 />
               )}
@@ -285,10 +298,12 @@ export function AssetCard({
 
       {/* Tag Identifiers Modal */}
       <TagIdentifiersModal
-        identifiers={asset.identifiers || []}
+        identifiers={localIdentifiers}
+        assetId={asset.id}
         assetName={asset.identifier}
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}
+        onIdentifierRemoved={handleIdentifierRemoved}
       />
     </>
   );

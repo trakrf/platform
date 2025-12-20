@@ -27,13 +27,44 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
     try {
       if (mode === 'create') {
-        const response = await assetsApi.create(data as CreateAssetRequest);
+        // Extract identifiers from the request (they need to be added separately after creation)
+        const identifiers = (data as CreateAssetRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
+        const { identifiers: _, ...createData } = data as CreateAssetRequest & { identifiers?: TagIdentifierInput[] };
+
+        const response = await assetsApi.create(createData as CreateAssetRequest);
 
         if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
           throw new Error('Invalid response from server. Asset API may not be available.');
         }
 
-        addAsset(response.data.data);
+        const newAssetId = response.data.data.id;
+
+        // Add identifiers to the newly created asset
+        const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
+        for (const identifier of validIdentifiers) {
+          try {
+            await assetsApi.addIdentifier(newAssetId, {
+              type: identifier.type,
+              value: identifier.value,
+            });
+          } catch (idErr: any) {
+            console.error('Failed to add identifier:', idErr);
+            toast.error(`Failed to add tag "${identifier.value}": ${idErr.message || 'Unknown error'}`);
+          }
+        }
+
+        // Fetch fresh asset data with all identifiers if any were added
+        if (validIdentifiers.length > 0) {
+          const freshResponse = await assetsApi.get(newAssetId);
+          if (freshResponse.data?.data) {
+            addAsset(freshResponse.data.data);
+          } else {
+            addAsset(response.data.data);
+          }
+        } else {
+          addAsset(response.data.data);
+        }
+
         toast.success(`Asset "${response.data.data.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
         // Extract new identifiers (those without an id) from the request
