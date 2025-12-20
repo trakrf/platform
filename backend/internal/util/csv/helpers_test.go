@@ -368,3 +368,98 @@ func TestMapCSVRowToAsset_InvalidDates(t *testing.T) {
 		t.Errorf("Expected date validation error, got: %v", err)
 	}
 }
+
+func TestParseCSVTags(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{"empty string", "", []string{}},
+		{"single tag", "E280119020004F3D94E00C91", []string{"E280119020004F3D94E00C91"}},
+		{"multiple tags", "TAG1,TAG2,TAG3", []string{"TAG1", "TAG2", "TAG3"}},
+		{"with whitespace", " TAG1 , TAG2 ", []string{"TAG1", "TAG2"}},
+		{"empty values filtered", "TAG1,,TAG2,", []string{"TAG1", "TAG2"}},
+		{"only whitespace", "   ", []string{}},
+		{"only commas", ",,,", []string{}},
+		{"mixed empty and valid", ",TAG1,,TAG2,", []string{"TAG1", "TAG2"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ParseCSVTags(tt.input)
+			if len(result) != len(tt.expected) {
+				t.Errorf("ParseCSVTags(%q) = %v, expected %v", tt.input, result, tt.expected)
+				return
+			}
+			for i, v := range result {
+				if v != tt.expected[i] {
+					t.Errorf("ParseCSVTags(%q)[%d] = %q, expected %q", tt.input, i, v, tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestMapCSVRowToAssetWithTags_WithTags(t *testing.T) {
+	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active", "tags"}
+	row := []string{"ASSET-001", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1,TAG2"}
+
+	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if result.Asset.Identifier != "ASSET-001" {
+		t.Errorf("Expected identifier ASSET-001, got %s", result.Asset.Identifier)
+	}
+
+	if len(result.TagValues) != 2 {
+		t.Errorf("Expected 2 tags, got %d", len(result.TagValues))
+	}
+	if result.TagValues[0] != "TAG1" || result.TagValues[1] != "TAG2" {
+		t.Errorf("Unexpected tags: %v", result.TagValues)
+	}
+}
+
+func TestMapCSVRowToAssetWithTags_NoTagsColumn(t *testing.T) {
+	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active"}
+	row := []string{"ASSET-001", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true"}
+
+	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if result.Asset.Identifier != "ASSET-001" {
+		t.Errorf("Expected identifier ASSET-001, got %s", result.Asset.Identifier)
+	}
+
+	if len(result.TagValues) != 0 {
+		t.Errorf("Expected 0 tags, got %d", len(result.TagValues))
+	}
+}
+
+func TestMapCSVRowToAssetWithTags_EmptyTags(t *testing.T) {
+	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active", "tags"}
+	row := []string{"ASSET-001", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true", ""}
+
+	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(result.TagValues) != 0 {
+		t.Errorf("Expected 0 tags, got %d", len(result.TagValues))
+	}
+}
+
+func TestMapCSVRowToAssetWithTags_InvalidAssetData(t *testing.T) {
+	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active", "tags"}
+	row := []string{"", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1"}
+
+	_, err := MapCSVRowToAssetWithTags(row, headers, 1)
+	if err == nil {
+		t.Error("Expected error for empty identifier")
+	}
+}

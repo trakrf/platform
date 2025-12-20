@@ -389,3 +389,212 @@ func mustParseUUID(t *testing.T, s string) uuid.UUID {
 	}
 	return id
 }
+
+// TRA-222: Tests for tags column in bulk import
+
+func TestProcessCSVAsync_WithValidTags(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	// CSV with tags column
+	csvFactory := testutil.NewCSVFactory().
+		AddRowWithTags("TAGS-001", "Asset with Tags", "device", "Has RFID tags", "2024-01-01", "2024-12-31", "true", "E280119020004F3D94E00C91,E280119020004F3D94E00C92").
+		AddRowWithTags("TAGS-002", "Another Asset", "device", "Single tag", "2024-01-01", "2024-12-31", "true", "E280119020004F3D94E00C93")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+
+	assert.Equal(t, "completed", jobStatus.Status)
+	assert.Equal(t, 2, jobStatus.ProcessedRows)
+	assert.Equal(t, 0, jobStatus.FailedRows)
+	assert.Equal(t, 3, jobStatus.TagsCreated, "Should have created 3 tags (2 + 1)")
+}
+
+func TestProcessCSVAsync_WithEmptyTags(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	// CSV with tags column but empty values
+	csvFactory := testutil.NewCSVFactory().
+		AddRowWithTags("NOTAGS-001", "Asset No Tags", "device", "No tags here", "2024-01-01", "2024-12-31", "true", "").
+		AddRowWithTags("NOTAGS-002", "Another No Tags", "device", "Also no tags", "2024-01-01", "2024-12-31", "true", "")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+
+	assert.Equal(t, "completed", jobStatus.Status)
+	assert.Equal(t, 2, jobStatus.ProcessedRows)
+	assert.Equal(t, 0, jobStatus.TagsCreated, "Should have 0 tags created for empty tags")
+}
+
+func TestProcessCSVAsync_DuplicateTagsWithinCSV(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	// CSV with duplicate tag across rows
+	csvFactory := testutil.NewCSVFactory().
+		AddRowWithTags("DUP-TAG-001", "First Asset", "device", "Has a tag", "2024-01-01", "2024-12-31", "true", "SAME_TAG_123").
+		AddRowWithTags("DUP-TAG-002", "Second Asset", "device", "Same tag", "2024-01-01", "2024-12-31", "true", "SAME_TAG_123")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+
+	// Should fail because of duplicate tags
+	assert.Equal(t, "failed", jobStatus.Status)
+	assert.True(t, len(jobStatus.Errors) > 0, "Should have errors for duplicate tags")
+
+	// Find error mentioning duplicate tag
+	foundTagError := false
+	for _, e := range jobStatus.Errors {
+		if strings.Contains(e.Error, "duplicate tag") {
+			foundTagError = true
+			break
+		}
+	}
+	assert.True(t, foundTagError, "Should have error message about duplicate tag")
+}
+
+func TestProcessCSVAsync_MixedWithAndWithoutTags(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	// CSV with tags column, some rows have tags, some don't
+	csvFactory := testutil.NewCSVFactory().
+		AddRowWithTags("MIX-001", "Has Tags", "device", "With tags", "2024-01-01", "2024-12-31", "true", "TAG_A,TAG_B").
+		AddRowWithTags("MIX-002", "No Tags", "device", "Without tags", "2024-01-01", "2024-12-31", "true", "").
+		AddRowWithTags("MIX-003", "More Tags", "device", "With one tag", "2024-01-01", "2024-12-31", "true", "TAG_C")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+
+	assert.Equal(t, "completed", jobStatus.Status)
+	assert.Equal(t, 3, jobStatus.ProcessedRows)
+	assert.Equal(t, 3, jobStatus.TagsCreated, "Should have created 3 tags (2 + 0 + 1)")
+}
+
+func TestProcessCSVAsync_WithoutTagsColumn(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	ctx := context.Background()
+	service := NewService(store)
+
+	// Standard CSV without tags column (backward compatibility)
+	csvFactory := testutil.NewCSVFactory().
+		AddRow("LEGACY-001", "Legacy Asset", "device", "No tags column", "2024-01-01", "2024-12-31", "true").
+		AddRow("LEGACY-002", "Another Legacy", "device", "Still no tags", "2024-01-01", "2024-12-31", "true")
+	records := csvFactory.Build()
+
+	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
+	require.NoError(t, err)
+
+	service.processCSVAsync(ctx, job.ID, orgID, records, records[0])
+
+	jobStatus, err := store.GetBulkImportJobByID(ctx, job.ID, orgID)
+	require.NoError(t, err)
+
+	assert.Equal(t, "completed", jobStatus.Status)
+	assert.Equal(t, 2, jobStatus.ProcessedRows)
+	assert.Equal(t, 0, jobStatus.TagsCreated, "Should have 0 tags when no tags column")
+}
+
+func TestProcessUpload_ValidCSVWithTags(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	service := NewService(store)
+
+	csv := `identifier,name,type,description,valid_from,valid_to,is_active,tags
+ASSET-TAG-001,Tagged Asset 1,device,Has tags,2024-01-01,2024-12-31,true,RFID_001
+ASSET-TAG-002,Tagged Asset 2,device,More tags,2024-01-01,2024-12-31,true,"RFID_002,RFID_003"`
+
+	file, header := createTestCSV(t, csv)
+	defer file.Close()
+
+	ctx := context.Background()
+
+	response, err := service.ProcessUpload(ctx, orgID, file, header)
+	require.NoError(t, err)
+
+	assert.Equal(t, "accepted", response.Status)
+	assert.NotEmpty(t, response.JobID)
+
+	jobIDInt, err := strconv.Atoi(response.JobID)
+	require.NoError(t, err)
+	job, err := store.GetBulkImportJobByID(ctx, jobIDInt, orgID)
+	require.NoError(t, err)
+	assert.NotNil(t, job)
+	assert.Equal(t, 2, job.TotalRows)
+}

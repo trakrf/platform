@@ -92,7 +92,8 @@ func (f *AssetFactory) BuildBatch(count int) []asset.Asset {
 }
 
 type CSVFactory struct {
-	rows [][]string
+	rows     [][]string
+	withTags bool
 }
 
 func NewCSVFactory() *CSVFactory {
@@ -100,11 +101,32 @@ func NewCSVFactory() *CSVFactory {
 		rows: [][]string{
 			{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active"},
 		},
+		withTags: false,
 	}
 }
 
+func (f *CSVFactory) WithTags() *CSVFactory {
+	if !f.withTags {
+		f.withTags = true
+		f.rows[0] = append(f.rows[0], "tags")
+	}
+	return f
+}
+
 func (f *CSVFactory) AddRow(identifier, name, assetType, description, validFrom, validTo, isActive string) *CSVFactory {
-	f.rows = append(f.rows, []string{identifier, name, assetType, description, validFrom, validTo, isActive})
+	row := []string{identifier, name, assetType, description, validFrom, validTo, isActive}
+	if f.withTags {
+		row = append(row, "") // Empty tags by default
+	}
+	f.rows = append(f.rows, row)
+	return f
+}
+
+func (f *CSVFactory) AddRowWithTags(identifier, name, assetType, description, validFrom, validTo, isActive, tags string) *CSVFactory {
+	if !f.withTags {
+		f.WithTags()
+	}
+	f.rows = append(f.rows, []string{identifier, name, assetType, description, validFrom, validTo, isActive, tags})
 	return f
 }
 
