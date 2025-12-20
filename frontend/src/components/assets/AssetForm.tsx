@@ -61,16 +61,17 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
       });
-      // Initialize tag identifiers from existing asset
-      if (asset.identifiers && asset.identifiers.length > 0) {
-        setTagIdentifiers(
-          asset.identifiers.map((id) => ({
-            id: id.id,
-            type: 'rfid' as const,
-            value: id.value,
-          }))
-        );
-      }
+      // Initialize tag identifiers from existing asset (always refresh)
+      setTagIdentifiers(
+        (asset.identifiers || []).map((id) => ({
+          id: id.id,
+          type: 'rfid' as const,
+          value: id.value,
+        }))
+      );
+    } else if (mode === 'create') {
+      // Reset tag identifiers for create mode
+      setTagIdentifiers([]);
     }
   }, [asset, mode]);
 

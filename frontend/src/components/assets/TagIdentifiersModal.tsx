@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Trash2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { TagIdentifier } from '@/types/shared';
@@ -61,7 +62,8 @@ export function TagIdentifiersModal({
 
   const canRemove = assetId !== undefined && onIdentifierRemoved !== undefined;
 
-  return (
+  // Use portal to render modal to body to avoid DOM nesting issues (e.g., inside table)
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -182,6 +184,7 @@ export function TagIdentifiersModal({
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

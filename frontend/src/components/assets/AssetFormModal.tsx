@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagIdentifierInput } from '@/types/assets';
 import { AssetForm } from './AssetForm';
@@ -17,6 +17,32 @@ interface AssetFormModalProps {
 export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier }: AssetFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [freshAsset, setFreshAsset] = useState<Asset | undefined>(asset);
+  const [loadingAsset, setLoadingAsset] = useState(false);
+
+  // Fetch fresh asset data when modal opens in edit mode
+  useEffect(() => {
+    if (isOpen && mode === 'edit' && asset?.id) {
+      setLoadingAsset(true);
+      assetsApi.get(asset.id)
+        .then((response) => {
+          if (response.data?.data) {
+            setFreshAsset(response.data.data);
+          } else {
+            setFreshAsset(asset);
+          }
+        })
+        .catch(() => {
+          // Fall back to passed asset if fetch fails
+          setFreshAsset(asset);
+        })
+        .finally(() => {
+          setLoadingAsset(false);
+        });
+    } else if (isOpen && mode === 'create') {
+      setFreshAsset(undefined);
+    }
+  }, [isOpen, mode, asset?.id]);
 
   const addAsset = useAssetStore((state) => state.addAsset);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
@@ -154,15 +180,22 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         </div>
 
         <div className="px-6 py-6">
-          <AssetForm
-            mode={mode}
-            asset={asset}
-            onSubmit={handleSubmit}
-            onCancel={() => onClose()}
-            loading={loading}
-            error={error}
-            initialIdentifier={initialIdentifier}
-          />
+          {loadingAsset ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              <span className="ml-3 text-gray-600 dark:text-gray-400">Loading asset data...</span>
+            </div>
+          ) : (
+            <AssetForm
+              mode={mode}
+              asset={freshAsset}
+              onSubmit={handleSubmit}
+              onCancel={() => onClose()}
+              loading={loading}
+              error={error}
+              initialIdentifier={initialIdentifier}
+            />
+          )}
         </div>
       </div>
     </div>

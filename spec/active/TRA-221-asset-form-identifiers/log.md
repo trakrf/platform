@@ -83,6 +83,36 @@ Status: COMPLETED
 
 ---
 
+### Task 9: Fix deleted tag cache sync issue
+Status: COMPLETED
+- Issue: Deleted tags still appeared when opening asset form or viewing asset
+- Root cause: AssetCard only updated local state, not the store cache
+- Fix: Updated `handleIdentifierRemoved` in AssetCard.tsx to also call `updateCachedAsset`
+- Added `updateCachedAsset` from useAssetStore
+- TypeCheck: PASS, Lint: PASS (warnings only)
+
+---
+
+### Task 10: Fix DOM nesting warning
+Status: COMPLETED
+- Issue: React warning "div cannot appear as child of tbody"
+- Root cause: TagIdentifiersModal rendered inside table row fragment
+- Fix: Wrapped modal content in `createPortal(...)` to render to document.body
+- Updated TagIdentifiersModal.tsx with react-dom createPortal
+- TypeCheck: PASS, Console errors: None (DOM nesting warning resolved)
+
+---
+
+### Task 11: Add unit tests for new functionality
+Status: COMPLETED
+- Added 8 tests for addIdentifier/removeIdentifier API functions in assets.test.ts
+- Created TagIdentifierInputRow.test.tsx with 12 tests
+- Created TagIdentifiersModal.test.tsx with 17 tests
+- Total new tests: 37
+- All tests pass: 769 passing, 2 pre-existing failures (unrelated missing test data files)
+
+---
+
 ## Additional Changes
 
 ### RFID-only tag type

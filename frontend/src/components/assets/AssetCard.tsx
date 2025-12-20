@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { TagIdentifier } from '@/types/shared';
-import { useLocationStore } from '@/stores';
+import { useLocationStore, useAssetStore } from '@/stores';
 import { TagCountBadge } from './TagCountBadge';
 import { TagIdentifiersModal } from './TagIdentifiersModal';
 
@@ -40,6 +40,7 @@ export function AssetCard({
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>(asset.identifiers || []);
+  const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
 
   // Sync local identifiers when asset prop changes
   useEffect(() => {
@@ -54,7 +55,15 @@ export function AssetCard({
   };
 
   const handleIdentifierRemoved = (identifierId: number) => {
-    setLocalIdentifiers((prev) => prev.filter((i) => i.id !== identifierId));
+    // Update local state
+    const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
+    setLocalIdentifiers(updatedIdentifiers);
+
+    // Update the asset store cache so the change persists when opening forms
+    updateCachedAsset(asset.id, {
+      ...asset,
+      identifiers: updatedIdentifiers,
+    });
   };
 
   const handleEdit = (e: React.MouseEvent) => {
