@@ -1,6 +1,7 @@
-import { X, MapPin, Target } from 'lucide-react';
+import { X, MapPin, Target, HelpCircle } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
+import { TagIdentifierList } from './TagIdentifierList';
 
 interface AssetDetailsModalProps {
   asset: Asset | null;
@@ -68,7 +69,20 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
             <div className="space-y-6">
               {/* Primary Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <InfoField label="Identifier" value={asset.identifier} />
+                <InfoField
+                  label={
+                    <span className="inline-flex items-center gap-1.5">
+                      Customer Identifier
+                      <span className="group relative">
+                        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
+                        <span className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg z-10 font-normal">
+                          Your business identifier for this asset (e.g., serial number, asset tag). Different from RFID tag IDs used for scanning.
+                        </span>
+                      </span>
+                    </span>
+                  }
+                  value={asset.identifier}
+                />
                 <InfoField label="Name" value={asset.name} />
                 <InfoField label="Type" value={asset.type} />
                 <InfoField
@@ -99,6 +113,14 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                   }
                 />
               </div>
+
+              {/* Tag Identifiers */}
+              <TagIdentifierList
+                identifiers={asset.identifiers || []}
+                size="md"
+                showHeader
+                className="border-t border-gray-200 dark:border-gray-700 pt-4"
+              />
 
               {/* Description */}
               {asset.description && (
@@ -195,7 +217,7 @@ function InfoField({
   value,
   className = '',
 }: {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   className?: string;
 }) {

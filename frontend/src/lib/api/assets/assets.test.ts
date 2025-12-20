@@ -345,4 +345,116 @@ describe('assetsApi', () => {
       expect(result.data.errors).toHaveLength(2);
     });
   });
+
+  describe('addIdentifier()', () => {
+    it('should call POST /assets/:assetId/identifiers with identifier data', async () => {
+      const mockResponse = {
+        data: { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
+
+      await assetsApi.addIdentifier(1, { type: 'rfid', value: 'TAG-001' });
+
+      expect(apiClient.post).toHaveBeenCalledWith('/assets/1/identifiers', {
+        type: 'rfid',
+        value: 'TAG-001',
+      });
+    });
+
+    it('should return the created identifier', async () => {
+      const mockResponse = {
+        data: { id: 42, type: 'rfid', value: 'NEW-TAG', is_active: true },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
+
+      const result = await assetsApi.addIdentifier(5, {
+        type: 'rfid',
+        value: 'NEW-TAG',
+      });
+
+      expect(result.data.data.id).toBe(42);
+      expect(result.data.data.value).toBe('NEW-TAG');
+      expect(result.data.data.is_active).toBe(true);
+    });
+
+    it('should handle duplicate identifier errors', async () => {
+      const mockError = {
+        response: {
+          status: 409,
+          data: { error: { detail: 'Identifier already exists' } },
+        },
+      };
+
+      vi.mocked(apiClient.post).mockRejectedValue(mockError);
+
+      await expect(
+        assetsApi.addIdentifier(1, { type: 'rfid', value: 'DUP-TAG' })
+      ).rejects.toMatchObject(mockError);
+    });
+
+    it('should handle asset not found errors', async () => {
+      const mockError = {
+        response: {
+          status: 404,
+          data: { error: { detail: 'Asset not found' } },
+        },
+      };
+
+      vi.mocked(apiClient.post).mockRejectedValue(mockError);
+
+      await expect(
+        assetsApi.addIdentifier(999, { type: 'rfid', value: 'TAG-001' })
+      ).rejects.toMatchObject(mockError);
+    });
+  });
+
+  describe('removeIdentifier()', () => {
+    it('should call DELETE /assets/:assetId/identifiers/:identifierId', async () => {
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
+
+      await assetsApi.removeIdentifier(1, 42);
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/assets/1/identifiers/42');
+    });
+
+    it('should return deletion status', async () => {
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
+
+      const result = await assetsApi.removeIdentifier(5, 10);
+
+      expect(result.data.deleted).toBe(true);
+    });
+
+    it('should handle identifier not found errors', async () => {
+      const mockError = {
+        response: {
+          status: 404,
+          data: { error: { detail: 'Identifier not found' } },
+        },
+      };
+
+      vi.mocked(apiClient.delete).mockRejectedValue(mockError);
+
+      await expect(assetsApi.removeIdentifier(1, 999)).rejects.toMatchObject(
+        mockError
+      );
+    });
+
+    it('should handle asset not found errors', async () => {
+      const mockError = {
+        response: {
+          status: 404,
+          data: { error: { detail: 'Asset not found' } },
+        },
+      };
+
+      vi.mocked(apiClient.delete).mockRejectedValue(mockError);
+
+      await expect(assetsApi.removeIdentifier(999, 1)).rejects.toMatchObject(
+        mockError
+      );
+    });
+  });
 });

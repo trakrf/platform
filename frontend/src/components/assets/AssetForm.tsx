@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType } from '@/types/assets';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType, TagIdentifierInput } from '@/types/assets';
 import { validateDateRange, validateAssetType } from '@/lib/asset/validators';
 import { ErrorBanner } from '@/components/shared';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { useDeviceStore, useLocationStore } from '@/stores';
 import { useLocations } from '@/hooks/locations';
-import { ScanLine, QrCode, X } from 'lucide-react';
+import { ScanLine, QrCode, X, Plus } from 'lucide-react';
+import { TagIdentifierInputRow } from './TagIdentifierInputRow';
 
 interface AssetFormProps {
   mode: 'create' | 'edit';
@@ -34,6 +35,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
 
   // Load locations for dropdown
   useLocations({ enabled: true });
@@ -59,6 +61,17 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
       });
+      // Initialize tag identifiers from existing asset (always refresh)
+      setTagIdentifiers(
+        (asset.identifiers || []).map((id) => ({
+          id: id.id,
+          type: 'rfid' as const,
+          value: id.value,
+        }))
+      );
+    } else if (mode === 'create') {
+      // Reset tag identifiers for create mode
+      setTagIdentifiers([]);
     }
   }, [asset, mode]);
 
@@ -107,6 +120,9 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       return dateStr;
     };
 
+    // Filter out empty tag identifiers and include in request
+    const validIdentifiers = tagIdentifiers.filter((id) => id.value.trim() !== '');
+
     const data: CreateAssetRequest | UpdateAssetRequest = {
       identifier: formData.identifier,
       name: formData.name,
@@ -119,7 +135,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       metadata: {},
     };
 
-    await onSubmit(data);
+    // Include identifiers for the modal to handle (modal extracts and processes separately)
+    await onSubmit({ ...data, identifiers: validIdentifiers } as unknown as CreateAssetRequest | UpdateAssetRequest);
   };
 
   const handleChange = (field: string, value: any) => {
@@ -331,6 +348,56 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.valid_to}</p>
           )}
         </div>
+      </div>
+
+      {/* Tag Identifiers Section */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Tag Identifiers
+          </label>
+          <button
+            type="button"
+            onClick={() =>
+              setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }])
+            }
+            disabled={loading}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            Add Tag
+          </button>
+        </div>
+
+        {tagIdentifiers.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+            No tag identifiers added. Click &quot;Add Tag&quot; to link RFID tags.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {tagIdentifiers.map((identifier, index) => (
+              <TagIdentifierInputRow
+                key={identifier.id ?? `new-${index}`}
+                type={identifier.type}
+                value={identifier.value}
+                onTypeChange={(type) => {
+                  const updated = [...tagIdentifiers];
+                  updated[index] = { ...updated[index], type };
+                  setTagIdentifiers(updated);
+                }}
+                onValueChange={(value) => {
+                  const updated = [...tagIdentifiers];
+                  updated[index] = { ...updated[index], value };
+                  setTagIdentifiers(updated);
+                }}
+                onRemove={() => {
+                  setTagIdentifiers(tagIdentifiers.filter((_, i) => i !== index));
+                }}
+                disabled={loading}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
