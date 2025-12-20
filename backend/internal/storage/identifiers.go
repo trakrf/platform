@@ -6,21 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
-
-// setOrgContext sets the app.current_org_id session variable for RLS policies.
-// This must be called within a transaction before querying RLS-protected tables.
-func setOrgContext(ctx context.Context, tx interface{ Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error) }, orgID int) error {
-	_, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL app.current_org_id = %d", orgID))
-	if err != nil {
-		return fmt.Errorf("failed to set org context: %w", err)
-	}
-	return nil
-}
 
 func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, assetID int) ([]shared.TagIdentifier, error) {
 	query := `
@@ -91,18 +82,6 @@ func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, locationID int
 }
 
 func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
-	// Use transaction to set org context for RLS
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// Set org context for RLS policies
-	if err := setOrgContext(ctx, tx, orgID); err != nil {
-		return nil, err
-	}
-
 	query := `
 		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
 		VALUES ($1, $2, $3, $4, TRUE)
@@ -110,36 +89,22 @@ func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, 
 	`
 
 	identifierType := req.GetType()
-
 	var identifier shared.TagIdentifier
-	err = tx.QueryRow(ctx, query, orgID, identifierType, req.Value, assetID).Scan(
-		&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
-	)
+
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, identifierType, req.Value, assetID).Scan(
+			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		)
+	})
 
 	if err != nil {
 		return nil, parseIdentifierError(err, identifierType, req.Value)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return &identifier, nil
 }
 
 func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
-	// Use transaction to set org context for RLS
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// Set org context for RLS policies
-	if err := setOrgContext(ctx, tx, orgID); err != nil {
-		return nil, err
-	}
-
 	query := `
 		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active)
 		VALUES ($1, $2, $3, $4, TRUE)
@@ -147,18 +112,16 @@ func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID
 	`
 
 	identifierType := req.GetType()
-
 	var identifier shared.TagIdentifier
-	err = tx.QueryRow(ctx, query, orgID, identifierType, req.Value, locationID).Scan(
-		&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
-	)
+
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, identifierType, req.Value, locationID).Scan(
+			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		)
+	})
 
 	if err != nil {
 		return nil, parseIdentifierError(err, identifierType, req.Value)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return &identifier, nil
