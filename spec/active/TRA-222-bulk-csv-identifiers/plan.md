@@ -510,6 +510,132 @@ After each task: `just backend lint && just backend build && just backend test`
 
 Final validation: `just validate`
 
+---
+
+## Test Credentials
+
+**For all manual testing and E2E validation:**
+- **Username**: `test1@test.com`
+- **Password**: `password`
+
+---
+
+## Backend API Validation (curl)
+
+After backend tasks are complete, validate the API endpoints with curl:
+
+**1. Login to get JWT token:**
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test1@test.com", "password": "password"}' | jq -r '.token')
+echo $TOKEN
+```
+
+**2. Test bulk upload with tags (create test CSV first):**
+```bash
+# Create test CSV with tags
+cat > /tmp/test_bulk_with_tags.csv << 'EOF'
+identifier,name,type,description,valid_from,valid_to,is_active,tags
+TEST-BULK-001,Test Asset 1,device,Test description,2024-01-01,2025-12-31,true,"E280119020004F3D94E00C91,E280119020004F3D94E00C92"
+TEST-BULK-002,Test Asset 2,device,Test description,2024-01-01,2025-12-31,true,E280119020004F3D94E00C93
+TEST-BULK-003,Test Asset 3,device,No tags asset,2024-01-01,2025-12-31,true,
+EOF
+
+# Upload CSV
+curl -X POST http://localhost:8080/api/v1/assets/bulk \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/tmp/test_bulk_with_tags.csv"
+```
+
+**3. Check job status (replace JOB_ID with actual ID):**
+```bash
+curl -s http://localhost:8080/api/v1/assets/bulk/{JOB_ID} \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+**4. Verify assets created with tags:**
+```bash
+curl -s "http://localhost:8080/api/v1/assets?limit=10" \
+  -H "Authorization: Bearer $TOKEN" | jq '.data[] | {identifier, name, identifiers}'
+```
+
+**5. Test duplicate tag rejection:**
+```bash
+# Create CSV with duplicate tag (should fail that row)
+cat > /tmp/test_duplicate_tag.csv << 'EOF'
+identifier,name,type,description,valid_from,valid_to,is_active,tags
+TEST-DUP-001,Duplicate Tag Asset,device,Should fail,2024-01-01,2025-12-31,true,E280119020004F3D94E00C91
+EOF
+
+curl -X POST http://localhost:8080/api/v1/assets/bulk \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/tmp/test_duplicate_tag.csv"
+# Should show error for duplicate tag
+```
+
+**6. Test backward compatibility (CSV without tags column):**
+```bash
+cat > /tmp/test_no_tags.csv << 'EOF'
+identifier,name,type,description,valid_from,valid_to,is_active
+TEST-NOTAG-001,No Tags Asset,device,Should work,2024-01-01,2025-12-31,true
+EOF
+
+curl -X POST http://localhost:8080/api/v1/assets/bulk \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/tmp/test_no_tags.csv"
+# Should succeed without tags
+```
+
+---
+
+## Frontend Validation (Playwright MCP)
+
+After frontend tasks are complete, use Playwright MCP to validate the UI:
+
+**1. Navigate to bulk upload modal:**
+```
+Use mcp__playwright__playwright_navigate to go to http://localhost:5173/assets
+Use mcp__playwright__playwright_click to click "Bulk Upload" button
+```
+
+**2. Verify updated help text:**
+```
+Use mcp__playwright__playwright_get_visible_text to verify:
+- "Optional columns: description, is_active, valid_from, valid_to, tags"
+- "Tags: comma-separated RFID values"
+```
+
+**3. Download and verify sample CSV:**
+```
+Use mcp__playwright__playwright_click on "Download Sample" link
+Verify downloaded file contains "tags" column header
+```
+
+**4. Test file upload flow:**
+```
+Use mcp__playwright__playwright_upload_file to upload test CSV
+Use mcp__playwright__playwright_click on "Upload" button
+Verify success toast appears
+```
+
+**5. Verify assets list shows tags:**
+```
+Use mcp__playwright__playwright_navigate to assets list
+Use mcp__playwright__playwright_get_visible_text to verify imported assets appear
+Click on an asset to verify identifiers/tags are displayed
+```
+
+**Playwright MCP Test Sequence:**
+1. Login with test credentials
+2. Navigate to /assets
+3. Open Bulk Upload modal
+4. Verify help text includes tags documentation
+5. Download sample CSV and verify tags column
+6. Upload test CSV with tags
+7. Wait for job completion
+8. Verify assets created with associated tags
+
 ## Plan Quality Assessment
 
 **Complexity Score**: 5/10 (MEDIUM-LOW)
