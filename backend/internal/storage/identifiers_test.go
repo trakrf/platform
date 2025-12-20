@@ -150,9 +150,13 @@ func TestAddIdentifierToAsset(t *testing.T) {
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
 		AddRow(301, "rfid", "E20000009999", true)
 
+	// Expect transaction flow for RLS context
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.identifiers`).
 		WithArgs(orgID, req.Type, req.Value, assetID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.AddIdentifierToAsset(context.Background(), orgID, assetID, req)
 
@@ -179,9 +183,13 @@ func TestAddIdentifierToAsset_Duplicate(t *testing.T) {
 		Value: "E20000009999",
 	}
 
+	// Expect transaction flow for RLS context - with rollback on error
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.identifiers`).
 		WithArgs(orgID, req.Type, req.Value, assetID).
 		WillReturnError(errors.New("duplicate key value violates unique constraint"))
+	mock.ExpectRollback()
 
 	result, err := storage.AddIdentifierToAsset(context.Background(), orgID, assetID, req)
 
@@ -208,9 +216,13 @@ func TestAddIdentifierToLocation(t *testing.T) {
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
 		AddRow(401, "barcode", "LOC-SHELF-01", true)
 
+	// Expect transaction flow for RLS context
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.identifiers`).
 		WithArgs(orgID, req.Type, req.Value, locationID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.AddIdentifierToLocation(context.Background(), orgID, locationID, req)
 
