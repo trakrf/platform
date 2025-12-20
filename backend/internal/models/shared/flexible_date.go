@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -55,4 +56,13 @@ func (fd FlexibleDate) MarshalJSON() ([]byte, error) {
 // ToTime converts FlexibleDate to time.Time
 func (fd FlexibleDate) ToTime() time.Time {
 	return fd.Time
+}
+
+// Value implements driver.Valuer interface for database storage.
+// Returns time.Time which pgx/pq drivers handle correctly for PostgreSQL.
+func (fd FlexibleDate) Value() (driver.Value, error) {
+	if fd.Time.IsZero() {
+		return nil, nil
+	}
+	return fd.Time, nil
 }
