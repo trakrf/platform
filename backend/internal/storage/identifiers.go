@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	"github.com/trakrf/platform/backend/internal/models/location"
@@ -88,11 +89,13 @@ func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, 
 	`
 
 	identifierType := req.GetType()
-
 	var identifier shared.TagIdentifier
-	err := s.pool.QueryRow(ctx, query, orgID, identifierType, req.Value, assetID).Scan(
-		&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
-	)
+
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, identifierType, req.Value, assetID).Scan(
+			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		)
+	})
 
 	if err != nil {
 		return nil, parseIdentifierError(err, identifierType, req.Value)
@@ -109,11 +112,13 @@ func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID
 	`
 
 	identifierType := req.GetType()
-
 	var identifier shared.TagIdentifier
-	err := s.pool.QueryRow(ctx, query, orgID, identifierType, req.Value, locationID).Scan(
-		&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
-	)
+
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, identifierType, req.Value, locationID).Scan(
+			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		)
+	})
 
 	if err != nil {
 		return nil, parseIdentifierError(err, identifierType, req.Value)
