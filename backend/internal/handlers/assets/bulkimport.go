@@ -64,6 +64,7 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		TotalRows:     job.TotalRows,
 		ProcessedRows: job.ProcessedRows,
 		FailedRows:    job.FailedRows,
+		TagsCreated:   job.TagsCreated,
 		CreatedAt:     job.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		Errors:        job.Errors,
 	}
