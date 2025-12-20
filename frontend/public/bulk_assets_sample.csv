@@ -1,21 +1,21 @@
 identifier,name,type,description,valid_from,valid_to,is_active,tags
-LAPTOP-001,Dell XPS 15 - Engineering,device,Development laptop for software engineering team,2024-01-15,2026-12-31,true,E280119020004F3D94E00C91
-LAPTOP-002,MacBook Pro 16 - Design,device,High-performance laptop for graphic design team,2024-02-01,2026-12-31,yes,E280119020004F3D94E00C92
-RFID-TAG-1001,RFID Tag #1001,inventory,Passive RFID tag for asset tracking,2024-01-01,2027-12-31,1,
-RFID-TAG-1002,RFID Tag #1002,inventory,Passive RFID tag for asset tracking,2024-01-01,2027-12-31,true,
+LAPTOP-001,Dell XPS 15 - Engineering,asset,Development laptop for software engineering team,2024-01-15,2026-12-31,true,E280119020004F3D94E00C91
+LAPTOP-002,MacBook Pro 16 - Design,asset,High-performance laptop for graphic design team,2024-02-01,2026-12-31,yes,E280119020004F3D94E00C92
+RFID-TAG-1001,RFID Tag #1001,asset,Passive RFID tag for asset tracking,2024-01-01,2027-12-31,1,
+RFID-TAG-1002,RFID Tag #1002,asset,Passive RFID tag for asset tracking,2024-01-01,2027-12-31,true,
 DESK-A-101,Standing Desk - Office A101,asset,Ergonomic standing desk in office suite A,2024-03-15,2029-12-31,yes,E280119020004F3D94E00C93
 CHAIR-A-101,Herman Miller Aeron - A101,asset,Ergonomic office chair,2024-03-15,2029-12-31,1,E280119020004F3D94E00C94
-MONITOR-LG-001,LG UltraWide 34 inch,device,Curved ultrawide monitor for development,2024-04-10,2027-06-30,true,
-SCANNER-WH-001,Zebra MC3300 Handheld Scanner,device,Mobile barcode and RFID scanner for warehouse,2024-01-20,2028-01-20,yes,E280119020004F3D94E00C95
-PALLET-WH-1001,Warehouse Pallet #1001,inventory,Standard 48x40 wooden pallet,2024-01-01,2026-12-31,1,
-PALLET-WH-1002,Warehouse Pallet #1002,inventory,Standard 48x40 wooden pallet,2024-01-01,2026-12-31,true,
-BADGE-EMP-001,Employee Badge - John Doe,person,RFID-enabled employee access badge,2024-02-15,2025-02-15,yes,"E280119020004F3D94E00C96,E280119020004F3D94E00C97"
-BADGE-EMP-002,Employee Badge - Jane Smith,person,RFID-enabled employee access badge,2024-03-01,2025-03-01,true,E280119020004F3D94E00C98
-SERVER-RACK-A01,Dell PowerEdge R750,device,Production database server in rack A01,2024-01-10,2029-01-10,1,E280119020004F3D94E00C99
-VEHICLE-FORK-001,Toyota Forklift 5000lb,device,Electric forklift for warehouse operations,2023-06-15,2028-06-15,yes,
-CONTAINER-001,Shipping Container 40ft,inventory,Standard shipping container for storage,2024-01-05,2030-01-05,true,E280119020004F3D94E00C9A
+MONITOR-LG-001,LG UltraWide 34 inch,asset,Curved ultrawide monitor for development,2024-04-10,2027-06-30,true,
+SCANNER-WH-001,Zebra MC3300 Handheld Scanner,asset,Mobile barcode and RFID scanner for warehouse,2024-01-20,2028-01-20,yes,E280119020004F3D94E00C95
+PALLET-WH-1001,Warehouse Pallet #1001,asset,Standard 48x40 wooden pallet,2024-01-01,2026-12-31,1,
+PALLET-WH-1002,Warehouse Pallet #1002,asset,Standard 48x40 wooden pallet,2024-01-01,2026-12-31,true,
+BADGE-EMP-001,Employee Badge - John Doe,asset,RFID-enabled employee access badge,2024-02-15,2025-02-15,yes,"E280119020004F3D94E00C96,E280119020004F3D94E00C97"
+BADGE-EMP-002,Employee Badge - Jane Smith,asset,RFID-enabled employee access badge,2024-03-01,2025-03-01,true,E280119020004F3D94E00C98
+SERVER-RACK-A01,Dell PowerEdge R750,asset,Production database server in rack A01,2024-01-10,2029-01-10,1,E280119020004F3D94E00C99
+VEHICLE-FORK-001,Toyota Forklift 5000lb,asset,Electric forklift for warehouse operations,2023-06-15,2028-06-15,yes,
+CONTAINER-001,Shipping Container 40ft,asset,Standard shipping container for storage,2024-01-05,2030-01-05,true,E280119020004F3D94E00C9A
 TOOLS-SET-001,Mechanic Tool Set - Craftsman,asset,Complete mechanic tool set with rolling cabinet,2024-02-20,2029-02-20,1,
-PHONE-IP-001,Cisco IP Phone 8861,device,VoIP desk phone for conference room A,2024-03-10,2027-03-10,yes,
-TABLET-IPAD-001,iPad Pro 12.9 - Warehouse,device,Tablet for warehouse inventory management,2024-04-05,2027-04-05,true,E280119020004F3D94E00C9B
-CART-SHOP-001,Shopping Cart - Retail,inventory,Standard retail shopping cart,2024-01-01,2026-12-31,1,
-PRINTER-HP-001,HP LaserJet Enterprise M507,device,Network printer for office floor 2,2024-02-15,2027-02-15,yes,E280119020004F3D94E00C9C
+PHONE-IP-001,Cisco IP Phone 8861,asset,VoIP desk phone for conference room A,2024-03-10,2027-03-10,yes,
+TABLET-IPAD-001,iPad Pro 12.9 - Warehouse,asset,Tablet for warehouse inventory management,2024-04-05,2027-04-05,true,E280119020004F3D94E00C9B
+CART-SHOP-001,Shopping Cart - Retail,asset,Standard retail shopping cart,2024-01-01,2026-12-31,1,
+PRINTER-HP-001,HP LaserJet Enterprise M507,asset,Network printer for office floor 2,2024-02-15,2027-02-15,yes,E280119020004F3D94E00C9C
