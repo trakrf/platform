@@ -20,6 +20,7 @@ export function GlobalUploadAlert() {
     data: jobStatus,
     error,
     refetch,
+    isFetching,
   } = useQuery({
     queryKey: ['job-status', activeJobId],
     queryFn: async () => {
@@ -77,6 +78,7 @@ export function GlobalUploadAlert() {
         error={error as Error}
         onDismiss={handleDismiss}
         onRetry={handleRetry}
+        isRetrying={isFetching}
       />
     );
   }
@@ -116,6 +118,7 @@ export function GlobalUploadAlert() {
             onDismiss={handleDismiss}
             onRetry={handleRetry}
             onViewDetails={jobStatus.errors ? handleViewErrors : undefined}
+            isRetrying={isFetching}
           />
           {jobStatus.errors && (
             <ErrorDetailsModal

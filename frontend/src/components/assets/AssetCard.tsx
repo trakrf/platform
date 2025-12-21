@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin, Target } from 'lucide-react';
+import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { TagIdentifier } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
 import { TagCountBadge } from './TagCountBadge';
 import { TagIdentifiersModal } from './TagIdentifiersModal';
+import { LocateTagPopover } from './LocateTagPopover';
 
 interface AssetCardProps {
   asset: Asset;
@@ -76,15 +77,7 @@ export function AssetCard({
     onDelete?.(asset);
   };
 
-  const handleLocate = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (asset.is_active && asset.identifier) {
-      window.location.hash = `#locate?epc=${encodeURIComponent(asset.identifier)}`;
-    }
-  };
-
-  const hasIdentifier = !!asset.identifier;
-  const canLocate = asset.is_active && hasIdentifier;
+  const hasIdentifiers = localIdentifiers.length > 0;
 
   const handleClick = () => {
     onClick?.();
@@ -165,20 +158,13 @@ export function AssetCard({
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             {showActions && (
               <div className="flex items-center gap-1 sm:gap-2">
-                {hasIdentifier && (
-                  <button
-                    onClick={handleLocate}
-                    disabled={!canLocate}
-                    data-testid="locate-button"
-                    className={`p-1 sm:p-1.5 rounded transition-colors ${
-                      canLocate
-                        ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
-                        : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                    }`}
-                    aria-label={`Locate ${asset.identifier}`}
-                  >
-                    <Target className="h-4 w-4" />
-                  </button>
+                {hasIdentifiers && (
+                  <LocateTagPopover
+                    identifiers={localIdentifiers}
+                    assetIdentifier={asset.identifier}
+                    isActive={asset.is_active}
+                    variant="icon"
+                  />
                 )}
                 <button
                   onClick={handleEdit}
@@ -272,20 +258,13 @@ export function AssetCard({
         {/* Actions */}
         {showActions && (
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
-            {hasIdentifier && (
-              <button
-                onClick={handleLocate}
-                disabled={!canLocate}
-                data-testid="locate-button"
-                className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors border ${
-                  canLocate
-                    ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border-blue-200 dark:border-blue-800'
-                    : 'text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-not-allowed'
-                }`}
-              >
-                <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden xs:inline">Locate</span>
-              </button>
+            {hasIdentifiers && (
+              <LocateTagPopover
+                identifiers={localIdentifiers}
+                assetIdentifier={asset.identifier}
+                isActive={asset.is_active}
+                variant="button"
+              />
             )}
             <button
               onClick={handleEdit}

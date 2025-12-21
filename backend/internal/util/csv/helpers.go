@@ -85,6 +85,26 @@ func ParseCSVBool(boolStr string) (bool, error) {
 	}
 }
 
+// ParseCSVTags splits a comma-separated tags string into individual values.
+// Returns empty slice for empty input. Trims whitespace from each tag.
+// Filters out empty values after trim.
+func ParseCSVTags(tagsStr string) []string {
+	tagsStr = strings.TrimSpace(tagsStr)
+	if tagsStr == "" {
+		return []string{}
+	}
+
+	parts := strings.Split(tagsStr, ",")
+	tags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	return tags
+}
+
 // Required CSV columns for asset bulk import
 var requiredCSVHeaders = []string{
 	"identifier",
@@ -220,5 +240,38 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 		ValidFrom:   validFrom,
 		ValidTo:     &validTo,
 		IsActive:    isActive,
+	}, nil
+}
+
+// AssetWithTags holds a parsed asset and its associated tag values from CSV.
+// TagValues contains raw tag values from the CSV "tags" column.
+type AssetWithTags struct {
+	Asset     *asset.Asset
+	TagValues []string
+}
+
+// MapCSVRowToAssetWithTags parses a CSV row into an asset with optional tags.
+// The "tags" column is optional - if missing, TagValues will be empty.
+func MapCSVRowToAssetWithTags(row []string, headers []string, orgID int) (*AssetWithTags, error) {
+	// Reuse existing MapCSVRowToAsset logic
+	parsedAsset, err := MapCSVRowToAsset(row, headers, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract tags if column exists
+	headerIdx := make(map[string]int)
+	for i, h := range headers {
+		headerIdx[strings.ToLower(strings.TrimSpace(h))] = i
+	}
+
+	var tagValues []string
+	if tagsIdx, ok := headerIdx["tags"]; ok && tagsIdx < len(row) {
+		tagValues = ParseCSVTags(row[tagsIdx])
+	}
+
+	return &AssetWithTags{
+		Asset:     parsedAsset,
+		TagValues: tagValues,
 	}, nil
 }

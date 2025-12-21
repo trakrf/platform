@@ -19,6 +19,7 @@ type BulkImportJob struct {
 	TotalRows     int           `json:"total_rows"`
 	ProcessedRows int           `json:"processed_rows"`
 	FailedRows    int           `json:"failed_rows"`
+	TagsCreated   int           `json:"tags_created"`
 	Errors        []ErrorDetail `json:"errors,omitempty"`
 	CreatedAt     time.Time     `json:"created_at"`
 	CompletedAt   *time.Time    `json:"completed_at,omitempty"`
@@ -45,6 +46,7 @@ type JobStatusResponse struct {
 	ProcessedRows  int           `json:"processed_rows"`
 	FailedRows     int           `json:"failed_rows"`
 	SuccessfulRows int           `json:"successful_rows,omitempty"` // Calculated: processed - failed
+	TagsCreated    int           `json:"tags_created,omitempty"`
 	CreatedAt      string        `json:"created_at"`
 	CompletedAt    string        `json:"completed_at,omitempty"`
 	Errors         []ErrorDetail `json:"errors,omitempty"`

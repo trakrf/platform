@@ -14,7 +14,7 @@ func (s *Storage) CreateBulkImportJob(ctx context.Context, orgID int, totalRows 
 	query := `
 		INSERT INTO trakrf.bulk_import_jobs (org_id, status, total_rows)
 		VALUES ($1, 'pending', $2)
-		RETURNING id, org_id, status, total_rows, processed_rows, failed_rows, errors, created_at, completed_at
+		RETURNING id, org_id, status, total_rows, processed_rows, failed_rows, tags_created, errors, created_at, completed_at
 	`
 
 	var job bulkimport.BulkImportJob
@@ -22,7 +22,7 @@ func (s *Storage) CreateBulkImportJob(ctx context.Context, orgID int, totalRows 
 
 	err := s.pool.QueryRow(ctx, query, orgID, totalRows).Scan(
 		&job.ID, &job.OrgID, &job.Status, &job.TotalRows,
-		&job.ProcessedRows, &job.FailedRows, &errorsJSON,
+		&job.ProcessedRows, &job.FailedRows, &job.TagsCreated, &errorsJSON,
 		&job.CreatedAt, &job.CompletedAt,
 	)
 
@@ -41,7 +41,7 @@ func (s *Storage) CreateBulkImportJob(ctx context.Context, orgID int, totalRows 
 // GetBulkImportJobByID retrieves a job by ID and org_id (tenant isolation)
 func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID int, orgID int) (*bulkimport.BulkImportJob, error) {
 	query := `
-		SELECT id, org_id, status, total_rows, processed_rows, failed_rows, errors, created_at, completed_at
+		SELECT id, org_id, status, total_rows, processed_rows, failed_rows, tags_created, errors, created_at, completed_at
 		FROM trakrf.bulk_import_jobs
 		WHERE id = $1 AND org_id = $2
 	`
@@ -51,7 +51,7 @@ func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID int, orgID int
 
 	err := s.pool.QueryRow(ctx, query, jobID, orgID).Scan(
 		&job.ID, &job.OrgID, &job.Status, &job.TotalRows,
-		&job.ProcessedRows, &job.FailedRows, &errorsJSON,
+		&job.ProcessedRows, &job.FailedRows, &job.TagsCreated, &errorsJSON,
 		&job.CreatedAt, &job.CompletedAt,
 	)
 
@@ -70,23 +70,23 @@ func (s *Storage) GetBulkImportJobByID(ctx context.Context, jobID int, orgID int
 	return &job, nil
 }
 
-// UpdateBulkImportJobProgress updates job progress and errors
-func (s *Storage) UpdateBulkImportJobProgress(ctx context.Context, jobID int, processedRows, failedRows int, errors []bulkimport.ErrorDetail) error {
+// UpdateBulkImportJobProgress updates job progress, tags created, and errors
+func (s *Storage) UpdateBulkImportJobProgress(ctx context.Context, jobID int, processedRows, failedRows, tagsCreated int, errors []bulkimport.ErrorDetail) error {
 	errorsJSON, err := json.Marshal(errors)
 	if err != nil {
 		return fmt.Errorf("failed to marshal errors: %w", err)
 	}
 
-	fmt.Printf("UpdateBulkImportJobProgress called for job %d: processedRows=%d, failedRows=%d, errors=%d, errorsJSON=%s\n",
-		jobID, processedRows, failedRows, len(errors), string(errorsJSON))
+	fmt.Printf("UpdateBulkImportJobProgress called for job %d: processedRows=%d, failedRows=%d, tagsCreated=%d, errors=%d\n",
+		jobID, processedRows, failedRows, tagsCreated, len(errors))
 
 	query := `
 		UPDATE trakrf.bulk_import_jobs
-		SET processed_rows = $2, failed_rows = $3, errors = $4
+		SET processed_rows = $2, failed_rows = $3, tags_created = $4, errors = $5
 		WHERE id = $1
 	`
 
-	result, err := s.pool.Exec(ctx, query, jobID, processedRows, failedRows, errorsJSON)
+	result, err := s.pool.Exec(ctx, query, jobID, processedRows, failedRows, tagsCreated, errorsJSON)
 	if err != nil {
 		fmt.Printf("UpdateBulkImportJobProgress FAILED for job %d: %v\n", jobID, err)
 		return fmt.Errorf("failed to update job progress: %w", err)

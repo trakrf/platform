@@ -148,8 +148,9 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
             </div>
             <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1 list-disc list-inside">
               <li>Required columns: identifier, name, type</li>
-              <li>Optional columns: description, is_active, valid_from, valid_to</li>
-              <li>Type must be one of: person, device, asset, inventory, other</li>
+              <li>Optional columns: description, is_active, valid_from, valid_to, tags</li>
+              <li>Type must be: asset</li>
+              <li>Tags: comma-separated RFID tag values (e.g., TAG1,TAG2)</li>
               <li>Maximum file size: 5MB</li>
             </ul>
           </div>
