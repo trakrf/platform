@@ -553,6 +553,81 @@ just frontend test
 
 ---
 
+### Task 10: E2E Testing with Playwright MCP
+**Action**: MANUAL TESTING via Playwright MCP
+**Credentials**: test1@test.com / password
+
+**Test Scenarios**:
+
+1. **Login and Navigate to Locations**:
+   - Navigate to http://localhost:5173
+   - Login with test1@test.com / password
+   - Navigate to Locations page
+
+2. **Create Location with Tag Identifiers**:
+   - Click "Create Location" button
+   - Fill in: identifier, name, description
+   - Add 2 tag identifiers using "Add Tag" button
+   - Submit form
+   - Verify location appears in list with tag count badge
+
+3. **View Location Details with Identifiers**:
+   - Click on a location with identifiers
+   - Verify Tag Identifiers section appears in modal
+   - Verify identifiers are displayed with type, value, status
+
+4. **Test Tag Count Badge**:
+   - In location list, verify tag count badge shows correct count
+   - Click badge to open TagIdentifiersModal
+   - Verify modal shows all identifiers
+
+5. **Test Locate Popover**:
+   - For location with active identifiers, click Locate button
+   - Verify popover shows list of active tags
+   - Click a tag to trigger locate mode
+
+6. **Edit Location - Add/Remove Identifiers**:
+   - Edit existing location
+   - Add new identifier
+   - Remove existing identifier
+   - Save and verify changes persist
+
+7. **Remove Identifier from Modal**:
+   - Open TagIdentifiersModal for a location
+   - Click remove on an identifier
+   - Confirm removal
+   - Verify identifier is removed from list
+
+**Playwright MCP Commands**:
+```
+# Login flow
+playwright_navigate: http://localhost:5173
+playwright_fill: [email field] test1@test.com
+playwright_fill: [password field] password
+playwright_click: [login button]
+
+# Navigate to locations
+playwright_click: [locations nav item]
+
+# Create location with identifiers
+playwright_click: [create location button]
+playwright_fill: [identifier input] TEST-LOC-001
+playwright_fill: [name input] Test Location
+playwright_click: [Add Tag button]
+playwright_fill: [tag value input] E200000001234567
+playwright_click: [submit button]
+
+# Verify in list
+playwright_screenshot: verify location in list with tag badge
+```
+
+**Validation**:
+- All test scenarios pass visually
+- No console errors during interactions
+- Tag identifiers persist after page refresh
+
+---
+
 ## Risk Assessment
 
 - **Risk**: TagIdentifiersModal prop rename breaks AssetCard
