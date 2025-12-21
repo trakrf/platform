@@ -19,10 +19,11 @@ describe('EPC Validation', () => {
     expect(result.warning).toContain('Empty EPC');
   });
 
-  it('validates hex characters only', () => {
+  it('accepts non-hex characters with warning', () => {
     const result = validateEPC('ZZZZ');
-    expect(result.isValid).toBe(false);
-    expect(result.error).toContain('hexadecimal characters');
+    expect(result.isValid).toBe(true);
+    expect(result.normalizedValue).toBe('ZZZZ');
+    expect(result.warning).toContain('non-hex characters');
   });
 
   it('allows odd number of characters (due to leading zero stripping)', () => {
@@ -31,10 +32,10 @@ describe('EPC Validation', () => {
     expect(result.normalizedValue).toBe('ABC');
   });
 
-  it('enforces maximum length', () => {
+  it('warns about excessive length', () => {
     const result = validateEPC('A'.repeat(34)); // 34 > 32 max
-    expect(result.isValid).toBe(false);
-    expect(result.error).toContain('too long');
+    expect(result.isValid).toBe(true);
+    expect(result.warning).toContain('exceeds standard maximum');
   });
 
   it('normalizes valid EPC to uppercase', () => {
@@ -43,16 +44,17 @@ describe('EPC Validation', () => {
     expect(result.normalizedValue).toBe('ABCD1234');
   });
 
-  it('strips leading zeros from EPC', () => {
-    const result = validateEPC(EPC_FORMATS.toCustomerInput(PRIMARY_TEST_TAG));
+  it('preserves EPC value as-is (uppercase only)', () => {
+    const input = EPC_FORMATS.toCustomerInput(PRIMARY_TEST_TAG);
+    const result = validateEPC(input);
     expect(result.isValid).toBe(true);
-    expect(result.normalizedValue).toBe(PRIMARY_TEST_TAG);
+    expect(result.normalizedValue).toBe(input.toUpperCase());
   });
 
-  it('preserves at least one zero if all zeros', () => {
+  it('preserves zeros as entered', () => {
     const result = validateEPC('0000');
     expect(result.isValid).toBe(true);
-    expect(result.normalizedValue).toBe('0');
+    expect(result.normalizedValue).toBe('0000');
   });
 
   it('warns about non-standard lengths', () => {
@@ -122,18 +124,18 @@ describe('validateAndNormalize helper', () => {
     expect(result).toBe('ABCD');
   });
 
-  it('throws on validation failure', () => {
-    expect(() => {
-      validateAndNormalize('ZZZZ', validateEPC, 'testEPC');
-    }).toThrow('hexadecimal characters');
+  it('returns value for non-hex EPC (relaxed validation)', () => {
+    const result = validateAndNormalize('ZZZZ', validateEPC, 'testEPC');
+    expect(result).toBe('ZZZZ');
   });
 });
 
 describe('validateDefensive helper', () => {
-  it('returns validation result without throwing', () => {
+  it('returns success with warning for non-hex input', () => {
     const result = validateDefensive('ZZZZ', validateEPC, 'testEPC');
-    expect(result.isValid).toBe(false);
-    expect(result.error).toContain('hexadecimal characters');
+    expect(result.isValid).toBe(true);
+    expect(result.normalizedValue).toBe('ZZZZ');
+    expect(result.warning).toContain('non-hex characters');
   });
 
   it('returns success result for valid input', () => {
