@@ -8,9 +8,8 @@
 import type { Location } from '@/types/locations';
 
 /**
- * Validates identifier is ltree-safe
- * Rule: lowercase alphanumeric + underscores only
- * Reference: PostgreSQL ltree extension requirements
+ * Validates identifier format
+ * Rule: letters (upper/lower), numbers, hyphens, underscores only (no spaces)
  *
  * @param identifier - Location identifier to validate
  * @returns Error message or null if valid
@@ -24,9 +23,9 @@ export function validateIdentifier(identifier: string): string | null {
     return 'Identifier must be 255 characters or less';
   }
 
-  const ltreePattern = /^[a-z0-9_]+$/;
-  if (!ltreePattern.test(identifier)) {
-    return 'Identifier must be lowercase letters, numbers, and underscores only';
+  const identifierPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!identifierPattern.test(identifier)) {
+    return 'Identifier must contain only letters, numbers, hyphens, and underscores (no spaces)';
   }
 
   return null;

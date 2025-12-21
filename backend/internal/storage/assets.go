@@ -315,7 +315,7 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 	// Convert FlexibleDate to time.Time for database
 	validFrom := request.ValidFrom.ToTime()
 	var validTo *time.Time
-	if request.ValidTo != nil {
+	if request.ValidTo != nil && !request.ValidTo.IsZero() {
 		t := request.ValidTo.ToTime()
 		validTo = &t
 	}

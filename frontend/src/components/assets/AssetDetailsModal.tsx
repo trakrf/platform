@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { X, MapPin, HelpCircle } from 'lucide-react';
 import type { Asset } from '@/types/assets';
-import { useLocationStore } from '@/stores';
+import type { TagIdentifier } from '@/types/shared';
+import { useLocationStore, useAssetStore } from '@/stores';
 import { TagIdentifierList } from './TagIdentifierList';
 
 interface AssetDetailsModalProps {
@@ -11,7 +13,28 @@ interface AssetDetailsModalProps {
 
 export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalProps) {
   const getLocationById = useLocationStore((state) => state.getLocationById);
+  const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
   const location = asset?.current_location_id ? getLocationById(asset.current_location_id) : null;
+
+  const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>([]);
+
+  useEffect(() => {
+    if (asset) {
+      setLocalIdentifiers(asset.identifiers || []);
+    }
+  }, [asset]);
+
+  const handleIdentifierRemoved = (identifierId: number) => {
+    const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
+    setLocalIdentifiers(updatedIdentifiers);
+
+    if (asset) {
+      updateCachedAsset(asset.id, {
+        ...asset,
+        identifiers: updatedIdentifiers,
+      });
+    }
+  };
 
   if (!isOpen || !asset) return null;
 
@@ -107,10 +130,13 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                 />
               </div>
               <TagIdentifierList
-                identifiers={asset.identifiers || []}
+                identifiers={localIdentifiers}
                 size="md"
                 showHeader
                 className="border-t border-gray-200 dark:border-gray-700 pt-4"
+                entityId={asset.id}
+                entityType="asset"
+                onIdentifierRemoved={handleIdentifierRemoved}
               />
               {asset.description && (
                 <div>

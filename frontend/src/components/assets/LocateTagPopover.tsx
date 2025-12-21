@@ -5,7 +5,7 @@ import type { TagIdentifier } from '@/types/shared';
 
 interface LocateTagPopoverProps {
   identifiers: TagIdentifier[];
-  assetIdentifier: string;
+  entityIdentifier: string;
   isActive: boolean;
   triggerClassName?: string;
   variant?: 'icon' | 'button';
@@ -13,7 +13,7 @@ interface LocateTagPopoverProps {
 
 export function LocateTagPopover({
   identifiers,
-  assetIdentifier,
+  entityIdentifier,
   isActive,
   triggerClassName = '',
   variant = 'icon',
@@ -109,7 +109,7 @@ export function LocateTagPopover({
         disabled={!canLocate}
         data-testid="locate-button"
         className={`${baseButtonClass} ${triggerClassName}`}
-        aria-label={`Locate ${assetIdentifier}`}
+        aria-label={`Locate ${entityIdentifier}`}
         aria-expanded={isOpen}
         aria-haspopup="true"
       >

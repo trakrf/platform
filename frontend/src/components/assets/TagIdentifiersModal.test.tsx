@@ -64,8 +64,8 @@ describe('TagIdentifiersModal', () => {
       expect(backdrop?.parentElement).toBe(document.body);
     });
 
-    it('displays asset name when provided', () => {
-      render(<TagIdentifiersModal {...defaultProps} assetName="LAPTOP-001" />);
+    it('displays entity name when provided', () => {
+      render(<TagIdentifiersModal {...defaultProps} entityName="LAPTOP-001" />);
 
       expect(screen.getByText('LAPTOP-001')).toBeInTheDocument();
     });
@@ -145,7 +145,7 @@ describe('TagIdentifiersModal', () => {
   });
 
   describe('remove functionality', () => {
-    it('does not show remove buttons when assetId is not provided', () => {
+    it('does not show remove buttons when entityId is not provided', () => {
       render(<TagIdentifiersModal {...defaultProps} />);
 
       expect(
@@ -154,18 +154,18 @@ describe('TagIdentifiersModal', () => {
     });
 
     it('does not show remove buttons when onIdentifierRemoved is not provided', () => {
-      render(<TagIdentifiersModal {...defaultProps} assetId={1} />);
+      render(<TagIdentifiersModal {...defaultProps} entityId={1} />);
 
       expect(
         screen.queryByLabelText('Remove tag identifier')
       ).not.toBeInTheDocument();
     });
 
-    it('shows remove buttons when both assetId and onIdentifierRemoved are provided', () => {
+    it('shows remove buttons when both entityId and onIdentifierRemoved are provided', () => {
       render(
         <TagIdentifiersModal
           {...defaultProps}
-          assetId={1}
+          entityId={1}
           onIdentifierRemoved={vi.fn()}
         />
       );
@@ -178,7 +178,7 @@ describe('TagIdentifiersModal', () => {
       render(
         <TagIdentifiersModal
           {...defaultProps}
-          assetId={1}
+          entityId={1}
           onIdentifierRemoved={vi.fn()}
         />
       );
@@ -201,7 +201,7 @@ describe('TagIdentifiersModal', () => {
       render(
         <TagIdentifiersModal
           {...defaultProps}
-          assetId={1}
+          entityId={1}
           onIdentifierRemoved={vi.fn()}
         />
       );
@@ -224,7 +224,8 @@ describe('TagIdentifiersModal', () => {
       render(
         <TagIdentifiersModal
           {...defaultProps}
-          assetId={5}
+          entityId={5}
+          entityType="asset"
           onIdentifierRemoved={onIdentifierRemoved}
         />
       );
@@ -257,7 +258,8 @@ describe('TagIdentifiersModal', () => {
       render(
         <TagIdentifiersModal
           {...defaultProps}
-          assetId={1}
+          entityId={1}
+          entityType="asset"
           onIdentifierRemoved={vi.fn()}
         />
       );

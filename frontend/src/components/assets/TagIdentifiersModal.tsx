@@ -4,6 +4,7 @@ import { X, Trash2, Loader2, Target } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { TagIdentifier } from '@/types/shared';
 import { assetsApi } from '@/lib/api/assets';
+import { locationsApi } from '@/lib/api/locations';
 
 const handleLocateTag = (tagValue: string) => {
   window.location.hash = `#locate?epc=${encodeURIComponent(tagValue)}`;
@@ -11,8 +12,9 @@ const handleLocateTag = (tagValue: string) => {
 
 interface TagIdentifiersModalProps {
   identifiers: TagIdentifier[];
-  assetId?: number;
-  assetName?: string;
+  entityId?: number;
+  entityName?: string;
+  entityType?: 'asset' | 'location';
   isOpen: boolean;
   onClose: () => void;
   onIdentifierRemoved?: (identifierId: number) => void;
@@ -24,8 +26,9 @@ const TAG_TYPE_LABELS: Record<string, string> = {
 
 export function TagIdentifiersModal({
   identifiers,
-  assetId,
-  assetName,
+  entityId,
+  entityName,
+  entityType = 'asset',
   isOpen,
   onClose,
   onIdentifierRemoved,
@@ -40,11 +43,15 @@ export function TagIdentifiersModal({
   };
 
   const handleConfirmRemove = async () => {
-    if (!assetId || !confirmingId) return;
+    if (!entityId || !confirmingId) return;
 
     setRemovingId(confirmingId);
     try {
-      await assetsApi.removeIdentifier(assetId, confirmingId);
+      if (entityType === 'location') {
+        await locationsApi.removeIdentifier(entityId, confirmingId);
+      } else {
+        await assetsApi.removeIdentifier(entityId, confirmingId);
+      }
       toast.success('Tag identifier removed');
       onIdentifierRemoved?.(confirmingId);
     } catch (err) {
@@ -59,7 +66,7 @@ export function TagIdentifiersModal({
     setConfirmingId(null);
   };
 
-  const canRemove = assetId !== undefined && onIdentifierRemoved !== undefined;
+  const canRemove = entityId !== undefined && onIdentifierRemoved !== undefined;
 
   return createPortal(
     <>
@@ -78,9 +85,9 @@ export function TagIdentifiersModal({
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
                 Tag Identifiers
               </h2>
-              {assetName && (
+              {entityName && (
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  {assetName}
+                  {entityName}
                 </p>
               )}
             </div>
@@ -95,7 +102,7 @@ export function TagIdentifiersModal({
           <div className="px-4 sm:px-6 py-4 overflow-y-auto max-h-[calc(80vh-8rem)] sm:max-h-[calc(60vh-8rem)]">
             {identifiers.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No tag identifiers linked to this asset.
+                No tag identifiers linked to this {entityType}.
               </p>
             ) : (
               <div className="space-y-2">

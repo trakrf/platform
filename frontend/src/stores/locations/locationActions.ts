@@ -133,6 +133,72 @@ export function createCacheActions(
         return { cache };
       }),
 
+    /**
+     * Update a location in cache, silently returning if not found.
+     * Use this for optimistic updates from UI components where the location
+     * may not be in cache yet. Does not throw errors.
+     */
+    updateCachedLocation: (id: number, updates: Partial<Location>) =>
+      set((state: any) => {
+        const existing = state.cache.byId.get(id);
+        if (!existing) {
+          // Silently return if location not in cache
+          return state;
+        }
+
+        const updated = { ...existing, ...updates };
+        const cache = { ...state.cache };
+        cache.byId = new Map(state.cache.byId);
+        cache.byIdentifier = new Map(state.cache.byIdentifier);
+        cache.byParentId = new Map(state.cache.byParentId);
+        cache.rootIds = new Set(state.cache.rootIds);
+        cache.activeIds = new Set(state.cache.activeIds);
+        cache.allIds = [...state.cache.allIds];
+        cache.allIdentifiers = [...state.cache.allIdentifiers];
+
+        cache.byId.set(id, updated);
+
+        if (updates.identifier && updates.identifier !== existing.identifier) {
+          cache.byIdentifier.delete(existing.identifier);
+          cache.byIdentifier.set(updates.identifier, updated);
+          rebuildOrderedLists(cache);
+        } else {
+          cache.byIdentifier.set(existing.identifier, updated);
+        }
+
+        const hasParentChanged =
+          updates.parent_location_id !== undefined &&
+          updates.parent_location_id !== existing.parent_location_id;
+
+        if (hasParentChanged) {
+          removeFromParentChildren(cache, id, existing.parent_location_id);
+
+          const newParentId = updates.parent_location_id!;
+          ensureParentChildrenSet(cache, newParentId);
+          cache.byParentId.get(newParentId)!.add(id);
+
+          if (existing.parent_location_id === null) {
+            cache.rootIds.delete(id);
+          }
+          if (newParentId === null) {
+            cache.rootIds.add(id);
+          }
+        }
+
+        const hasActiveStatusChanged =
+          updates.is_active !== undefined && updates.is_active !== existing.is_active;
+
+        if (hasActiveStatusChanged) {
+          if (updated.is_active) {
+            cache.activeIds.add(id);
+          } else {
+            cache.activeIds.delete(id);
+          }
+        }
+
+        return { cache };
+      }),
+
     deleteLocation: (id: number) =>
       set((state: any) => {
         const location = state.cache.byId.get(id);

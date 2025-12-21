@@ -197,7 +197,7 @@ func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, of
 		       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 		FROM trakrf.locations
 		WHERE org_id = $1 AND deleted_at IS NULL
-		ORDER BY path
+		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`
 	rows, err := s.pool.Query(ctx, query, orgID, limit, offset)
@@ -377,7 +377,7 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 	// Convert FlexibleDate to time.Time
 	validFrom := request.ValidFrom.ToTime()
 	var validTo *time.Time
-	if request.ValidTo != nil {
+	if request.ValidTo != nil && !request.ValidTo.IsZero() {
 		t := request.ValidTo.ToTime()
 		validTo = &t
 	}

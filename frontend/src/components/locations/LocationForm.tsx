@@ -1,10 +1,11 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { validateIdentifier, validateName } from '@/lib/location/validators';
 import { LocationParentSelector } from './LocationParentSelector';
-import type { Location } from '@/types/locations';
+import type { Location, TagIdentifierInput } from '@/types/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { useDeviceStore } from '@/stores';
-import { ScanLine, QrCode, X } from 'lucide-react';
+import { ScanLine, QrCode, X, Plus } from 'lucide-react';
+import { TagIdentifierInputRow } from '@/components/assets';
 
 interface LocationFormData {
   identifier: string;
@@ -67,6 +68,7 @@ export function LocationForm({
   });
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
 
   // Scanner integration
   const isConnected = useDeviceStore((s) => s.isConnected);
@@ -86,6 +88,26 @@ export function LocationForm({
         valid_to: formatDateForInput(location.valid_to),
         is_active: location.is_active,
       });
+      // Initialize tag identifiers from existing location
+      setTagIdentifiers(
+        (location.identifiers || []).map((id) => ({
+          id: id.id,
+          type: 'rfid' as const,
+          value: id.value,
+        }))
+      );
+    } else if (mode === 'create') {
+      // Reset form data and tag identifiers for create mode
+      setFormData({
+        identifier: '',
+        name: '',
+        description: '',
+        parent_location_id: null,
+        valid_from: '',
+        valid_to: '',
+        is_active: true,
+      });
+      setTagIdentifiers([]);
     }
   }, [mode, location]);
 
@@ -129,13 +151,17 @@ export function LocationForm({
       return;
     }
 
-    const submitData: LocationFormData = {
+    // Filter out empty tag identifiers
+    const validIdentifiers = tagIdentifiers.filter((id) => id.value.trim() !== '');
+
+    const submitData = {
       ...formData,
       valid_from: formData.valid_from ? formatDateToRFC3339(formData.valid_from) : '',
       valid_to: formData.valid_to ? formatDateToRFC3339(formData.valid_to) : '',
+      identifiers: validIdentifiers,
     };
 
-    onSubmit(submitData);
+    onSubmit(submitData as LocationFormData);
   };
 
   return (
@@ -217,7 +243,7 @@ export function LocationForm({
 
           {mode === 'create' && !isScanning && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Lowercase letters, numbers, and underscores only
+              Letters, numbers, hyphens, and underscores only (no spaces)
             </p>
           )}
         </div>
@@ -331,6 +357,56 @@ export function LocationForm({
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.valid_to}</p>
           )}
         </div>
+      </div>
+
+      {/* Tag Identifiers Section */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Tag Identifiers
+          </label>
+          <button
+            type="button"
+            onClick={() =>
+              setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }])
+            }
+            disabled={loading}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            Add Tag
+          </button>
+        </div>
+
+        {tagIdentifiers.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+            No tag identifiers added. Click &quot;Add Tag&quot; to link RFID tags.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {tagIdentifiers.map((identifier, index) => (
+              <TagIdentifierInputRow
+                key={identifier.id ?? `new-${index}`}
+                type={identifier.type}
+                value={identifier.value}
+                onTypeChange={(type) => {
+                  const updated = [...tagIdentifiers];
+                  updated[index] = { ...updated[index], type };
+                  setTagIdentifiers(updated);
+                }}
+                onValueChange={(value) => {
+                  const updated = [...tagIdentifiers];
+                  updated[index] = { ...updated[index], value };
+                  setTagIdentifiers(updated);
+                }}
+                onRemove={() => {
+                  setTagIdentifiers(tagIdentifiers.filter((_, i) => i !== index));
+                }}
+                disabled={loading}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

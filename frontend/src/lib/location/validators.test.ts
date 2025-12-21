@@ -15,11 +15,28 @@ import type { Location } from '@/types/locations';
 
 describe('Validators', () => {
   describe('validateIdentifier()', () => {
-    it('should accept valid ltree identifiers', () => {
+    it('should accept valid identifiers with lowercase letters', () => {
       expect(validateIdentifier('usa')).toBeNull();
       expect(validateIdentifier('warehouse_1')).toBeNull();
       expect(validateIdentifier('section_a_001')).toBeNull();
       expect(validateIdentifier('a1b2c3')).toBeNull();
+    });
+
+    it('should accept uppercase letters', () => {
+      expect(validateIdentifier('USA')).toBeNull();
+      expect(validateIdentifier('Warehouse_1')).toBeNull();
+      expect(validateIdentifier('SECTION_A')).toBeNull();
+    });
+
+    it('should accept hyphens', () => {
+      expect(validateIdentifier('warehouse-1')).toBeNull();
+      expect(validateIdentifier('section-a-001')).toBeNull();
+      expect(validateIdentifier('my-location')).toBeNull();
+    });
+
+    it('should accept mixed case with hyphens and underscores', () => {
+      expect(validateIdentifier('Warehouse-A_1')).toBeNull();
+      expect(validateIdentifier('Section_B-2')).toBeNull();
     });
 
     it('should reject empty identifiers', () => {
@@ -27,29 +44,19 @@ describe('Validators', () => {
       expect(validateIdentifier('   ')).toBe('Identifier is required');
     });
 
-    it('should reject uppercase letters', () => {
-      const error = validateIdentifier('USA');
-      expect(error).toContain('lowercase');
-    });
-
-    it('should reject hyphens', () => {
-      const error = validateIdentifier('warehouse-1');
-      expect(error).toContain('lowercase');
-    });
-
     it('should reject spaces', () => {
       const error = validateIdentifier('warehouse 1');
-      expect(error).toContain('lowercase');
+      expect(error).toContain('no spaces');
     });
 
     it('should reject special characters', () => {
       const error = validateIdentifier('warehouse@1');
-      expect(error).toContain('lowercase');
+      expect(error).toContain('no spaces');
     });
 
-    it('should reject dots (ltree separators)', () => {
+    it('should reject dots', () => {
       const error = validateIdentifier('usa.california');
-      expect(error).toContain('lowercase');
+      expect(error).toContain('no spaces');
     });
 
     it('should reject too long identifiers', () => {
