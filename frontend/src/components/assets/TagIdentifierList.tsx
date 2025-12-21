@@ -1,5 +1,9 @@
-import { Radio, HelpCircle, Target } from 'lucide-react';
+import { useState } from 'react';
+import { Radio, HelpCircle, Target, Trash2 } from 'lucide-react';
 import type { TagIdentifier } from '@/types/shared';
+import { assetsApi } from '@/lib/api/assets';
+import { locationsApi } from '@/lib/api/locations';
+import toast from 'react-hot-toast';
 
 interface TagIdentifierListProps {
   identifiers: TagIdentifier[];
@@ -7,6 +11,9 @@ interface TagIdentifierListProps {
   size?: 'sm' | 'md';
   showHeader?: boolean;
   className?: string;
+  entityId?: number;
+  entityType?: 'asset' | 'location';
+  onIdentifierRemoved?: (identifierId: number) => void;
 }
 
 export function TagIdentifierList({
@@ -15,6 +22,9 @@ export function TagIdentifierList({
   size = 'sm',
   showHeader = false,
   className = '',
+  entityId,
+  entityType,
+  onIdentifierRemoved,
 }: TagIdentifierListProps) {
   if (!expanded || identifiers.length === 0) {
     if (showHeader) {
@@ -32,12 +42,21 @@ export function TagIdentifierList({
 
   const spacing = size === 'md' ? 'space-y-2' : 'space-y-1.5';
 
+  const canDelete = entityId !== undefined && entityType !== undefined && onIdentifierRemoved !== undefined;
+
   return (
     <div className={className}>
       {showHeader && <TagIdentifierHeader />}
       <div className={spacing}>
         {identifiers.map((identifier) => (
-          <TagIdentifierRow key={identifier.id} identifier={identifier} size={size} />
+          <TagIdentifierRow
+            key={identifier.id}
+            identifier={identifier}
+            size={size}
+            entityId={entityId}
+            entityType={entityType}
+            onDelete={canDelete ? onIdentifierRemoved : undefined}
+          />
         ))}
       </div>
     </div>
@@ -64,6 +83,9 @@ function TagIdentifierHeader() {
 interface TagIdentifierRowProps {
   identifier: TagIdentifier;
   size?: 'sm' | 'md';
+  entityId?: number;
+  entityType?: 'asset' | 'location';
+  onDelete?: (identifierId: number) => void;
 }
 
 function getTypeLabel(type: string): string {
@@ -79,11 +101,32 @@ function getTypeLabel(type: string): string {
   }
 }
 
-export function TagIdentifierRow({ identifier, size = 'sm' }: TagIdentifierRowProps) {
+export function TagIdentifierRow({ identifier, size = 'sm', entityId, entityType, onDelete }: TagIdentifierRowProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
   const isSmall = size === 'sm';
 
   const handleLocate = () => {
     window.location.hash = `#locate?epc=${encodeURIComponent(identifier.value)}`;
+  };
+
+  const handleDelete = async () => {
+    if (!entityId || !entityType || !onDelete) return;
+
+    setIsDeleting(true);
+    try {
+      if (entityType === 'asset') {
+        await assetsApi.removeIdentifier(entityId, identifier.id);
+      } else {
+        await locationsApi.removeIdentifier(entityId, identifier.id);
+      }
+      toast.success('Tag identifier removed');
+      onDelete(identifier.id);
+    } catch (err) {
+      console.error('Failed to remove identifier:', err);
+      toast.error('Failed to remove tag identifier');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const containerClasses = isSmall
@@ -148,6 +191,17 @@ export function TagIdentifierRow({ identifier, size = 'sm' }: TagIdentifierRowPr
         >
           <Target className={isSmall ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
         </button>
+        {onDelete && (
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className={`${isSmall ? 'p-1' : 'p-1.5'} rounded transition-colors flex-shrink-0 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50`}
+            aria-label={`Remove tag ${identifier.value}`}
+            title="Remove this tag"
+          >
+            <Trash2 className={isSmall ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
+          </button>
+        )}
       </div>
     </div>
   );

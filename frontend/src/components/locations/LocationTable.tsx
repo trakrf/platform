@@ -24,6 +24,7 @@ const columns: Column<Location>[] = [
   { key: 'identifier', label: 'Identifier', sortable: true },
   { key: 'name', label: 'Name', sortable: true },
   { key: 'description', label: 'Description', sortable: false },
+  { key: 'tags', label: 'Tags', sortable: false },
   { key: 'status', label: 'Status', sortable: false },
   { key: 'actions', label: 'Actions', sortable: false },
 ];

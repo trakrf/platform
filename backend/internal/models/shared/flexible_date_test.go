@@ -97,6 +97,67 @@ func TestFlexibleDate_UnmarshalJSON(t *testing.T) {
 	}
 }
 
+// TestFlexibleDatePointer_EmptyString verifies that when a *FlexibleDate field
+// receives an empty string in JSON, the pointer is non-nil but IsZero() returns true.
+// This is important because our handlers check both conditions to avoid inserting
+// zero dates (0001-01-01) into the database.
+func TestFlexibleDatePointer_EmptyString(t *testing.T) {
+	type TestStruct struct {
+		ValidTo *FlexibleDate `json:"valid_to,omitempty"`
+	}
+
+	tests := []struct {
+		name       string
+		input      string
+		expectNil  bool
+		expectZero bool
+	}{
+		{
+			name:       "omitted field results in nil pointer",
+			input:      `{}`,
+			expectNil:  true,
+			expectZero: false, // can't check IsZero on nil
+		},
+		{
+			name:       "null value results in nil pointer",
+			input:      `{"valid_to": null}`,
+			expectNil:  true,
+			expectZero: false,
+		},
+		{
+			name:       "empty string results in non-nil pointer with zero time",
+			input:      `{"valid_to": ""}`,
+			expectNil:  false,
+			expectZero: true,
+		},
+		{
+			name:       "valid date results in non-nil pointer with non-zero time",
+			input:      `{"valid_to": "2025-12-14"}`,
+			expectNil:  false,
+			expectZero: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ts TestStruct
+			err := json.Unmarshal([]byte(tt.input), &ts)
+			require.NoError(t, err)
+
+			if tt.expectNil {
+				assert.Nil(t, ts.ValidTo, "expected ValidTo to be nil")
+			} else {
+				require.NotNil(t, ts.ValidTo, "expected ValidTo to be non-nil")
+				if tt.expectZero {
+					assert.True(t, ts.ValidTo.IsZero(), "expected ValidTo.IsZero() to be true")
+				} else {
+					assert.False(t, ts.ValidTo.IsZero(), "expected ValidTo.IsZero() to be false")
+				}
+			}
+		})
+	}
+}
+
 func TestFlexibleDate_MarshalJSON(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -77,8 +77,6 @@ export function AssetCard({
     onDelete?.(asset);
   };
 
-  const hasIdentifiers = localIdentifiers.length > 0;
-
   const handleClick = () => {
     onClick?.();
   };
@@ -158,14 +156,12 @@ export function AssetCard({
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             {showActions && (
               <div className="flex items-center gap-1 sm:gap-2">
-                {hasIdentifiers && (
-                  <LocateTagPopover
-                    identifiers={localIdentifiers}
-                    assetIdentifier={asset.identifier}
-                    isActive={asset.is_active}
-                    variant="icon"
-                  />
-                )}
+                <LocateTagPopover
+                  identifiers={localIdentifiers}
+                  entityIdentifier={asset.identifier}
+                  isActive={asset.is_active}
+                  variant="icon"
+                />
                 <button
                   onClick={handleEdit}
                   className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
@@ -188,8 +184,9 @@ export function AssetCard({
         {/* Tag Identifiers Modal */}
         <TagIdentifiersModal
           identifiers={localIdentifiers}
-          assetId={asset.id}
-          assetName={asset.identifier}
+          entityId={asset.id}
+          entityName={asset.identifier}
+          entityType="asset"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
           onIdentifierRemoved={handleIdentifierRemoved}
@@ -258,14 +255,12 @@ export function AssetCard({
         {/* Actions */}
         {showActions && (
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
-            {hasIdentifiers && (
-              <LocateTagPopover
-                identifiers={localIdentifiers}
-                assetIdentifier={asset.identifier}
-                isActive={asset.is_active}
-                variant="button"
-              />
-            )}
+            <LocateTagPopover
+              identifiers={localIdentifiers}
+              entityIdentifier={asset.identifier}
+              isActive={asset.is_active}
+              variant="button"
+            />
             <button
               onClick={handleEdit}
               className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-lg transition-colors"
@@ -287,8 +282,9 @@ export function AssetCard({
       {/* Tag Identifiers Modal */}
       <TagIdentifiersModal
         identifiers={localIdentifiers}
-        assetId={asset.id}
-        assetName={asset.identifier}
+        entityId={asset.id}
+        entityName={asset.identifier}
+        entityType="asset"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}
         onIdentifierRemoved={handleIdentifierRemoved}

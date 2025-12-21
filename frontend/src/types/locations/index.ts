@@ -6,8 +6,10 @@
  * Backend handlers at: backend/internal/handlers/locations/locations.go
  */
 
+import type { TagIdentifier } from '@/types/shared';
+
 /**
- * Core Location entity - matches backend Location struct
+ * Core Location entity - matches backend LocationView struct
  * Reference: backend/internal/models/location/location.go
  */
 export interface Location {
@@ -25,6 +27,7 @@ export interface Location {
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+  identifiers?: TagIdentifier[];
 }
 
 /**
@@ -90,6 +93,15 @@ export interface ListLocationsResponse {
  */
 export interface DeleteResponse {
   deleted: boolean;
+}
+
+/**
+ * Tag identifier input for forms - may not have an id if new
+ */
+export interface TagIdentifierInput {
+  id?: number;
+  type: 'rfid';
+  value: string;
 }
 
 /**

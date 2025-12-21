@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { Location, CreateLocationRequest, UpdateLocationRequest } from '@/types/locations';
+import type { Location, CreateLocationRequest, UpdateLocationRequest, TagIdentifierInput } from '@/types/locations';
 import { LocationForm } from './LocationForm';
 import { locationsApi } from '@/lib/api/locations';
 import { useLocationStore } from '@/stores/locations/locationStore';
@@ -26,22 +26,74 @@ export function LocationFormModal({ isOpen, mode, location, onClose }: LocationF
 
     try {
       if (mode === 'create') {
-        const response = await locationsApi.create(data as CreateLocationRequest);
+        // Identifiers must be added separately after creation
+        const identifiers = (data as CreateLocationRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
+        const { identifiers: _, ...createData } = data as CreateLocationRequest & { identifiers?: TagIdentifierInput[] };
+
+        const response = await locationsApi.create(createData as CreateLocationRequest);
 
         if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
           throw new Error('Invalid response from server. Location API may not be available.');
         }
 
-        addLocation(response.data.data);
+        const newLocationId = response.data.data.id;
+        const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
+        for (const identifier of validIdentifiers) {
+          try {
+            await locationsApi.addIdentifier(newLocationId, {
+              type: identifier.type,
+              value: identifier.value,
+            });
+          } catch (idErr) {
+            console.error('Failed to add identifier:', idErr);
+          }
+        }
+
+        // Refetch to get identifiers included in response
+        if (validIdentifiers.length > 0) {
+          const freshResponse = await locationsApi.get(newLocationId);
+          if (freshResponse.data?.data) {
+            addLocation(freshResponse.data.data);
+          } else {
+            addLocation(response.data.data);
+          }
+        } else {
+          addLocation(response.data.data);
+        }
+
         toast.success(`Location "${response.data.data.identifier}" created successfully`);
       } else if (mode === 'edit' && location) {
-        const response = await locationsApi.update(location.id, data as UpdateLocationRequest);
+        // New identifiers (without id) need to be added after update
+        const identifiers = (data as UpdateLocationRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
+        const newIdentifiers = identifiers.filter(id => !id.id);
+
+        // Backend doesn't support identifiers in update request
+        const { identifiers: _, ...updateData } = data as UpdateLocationRequest & { identifiers?: TagIdentifierInput[] };
+
+        const response = await locationsApi.update(location.id, updateData);
 
         if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
           throw new Error('Invalid response from server. Location API may not be available.');
         }
 
-        updateLocation(location.id, response.data.data);
+        for (const identifier of newIdentifiers) {
+          try {
+            await locationsApi.addIdentifier(location.id, {
+              type: identifier.type,
+              value: identifier.value,
+            });
+          } catch (idErr) {
+            console.error('Failed to add identifier:', idErr);
+          }
+        }
+
+        const freshResponse = await locationsApi.get(location.id);
+        if (freshResponse.data?.data) {
+          updateLocation(location.id, freshResponse.data.data);
+        } else {
+          updateLocation(location.id, response.data.data);
+        }
+
         toast.success(`Location "${response.data.data.identifier}" updated successfully`);
       }
 

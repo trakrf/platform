@@ -20,6 +20,7 @@ export interface LocationStore {
 
   addLocation: (location: Location) => void;
   updateLocation: (id: number, updates: Partial<Location>) => void;
+  updateCachedLocation: (id: number, updates: Partial<Location>) => void;
   deleteLocation: (id: number) => void;
   setLocations: (locations: Location[]) => void;
   invalidateCache: () => void;

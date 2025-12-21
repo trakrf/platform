@@ -1,7 +1,10 @@
+import { useState, useEffect } from 'react';
 import { X, MapPin, Building2, Calendar, CheckCircle, XCircle } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
+import { TagIdentifierList } from '@/components/assets';
 import type { Location } from '@/types/locations';
+import type { TagIdentifier } from '@/types/shared';
 
 interface LocationDetailsModalProps {
   isOpen: boolean;
@@ -24,6 +27,23 @@ export function LocationDetailsModal({
 }: LocationDetailsModalProps) {
   const getChildren = useLocationStore((state) => state.getChildren);
   const getDescendants = useLocationStore((state) => state.getDescendants);
+  const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
+
+  const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>([]);
+
+  useEffect(() => {
+    setLocalIdentifiers(location.identifiers || []);
+  }, [location.identifiers]);
+
+  const handleIdentifierRemoved = (identifierId: number) => {
+    const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
+    setLocalIdentifiers(updatedIdentifiers);
+
+    updateCachedLocation(location.id, {
+      ...location,
+      identifiers: updatedIdentifiers,
+    });
+  };
 
   const children = getChildren(location.id);
   const descendants = getDescendants(location.id);
@@ -113,6 +133,16 @@ export function LocationDetailsModal({
                 )}
               </span>
             </div>
+
+            {/* Tag Identifiers */}
+            <TagIdentifierList
+              identifiers={localIdentifiers}
+              size="md"
+              showHeader
+              entityId={location.id}
+              entityType="location"
+              onIdentifierRemoved={handleIdentifierRemoved}
+            />
           </div>
 
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">

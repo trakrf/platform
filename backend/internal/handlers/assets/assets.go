@@ -36,7 +36,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 
 func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
 	var validTo *time.Time
-	if request.ValidTo != nil {
+	if request.ValidTo != nil && !request.ValidTo.IsZero() {
 		t := request.ValidTo.ToTime()
 		validTo = &t
 	}
