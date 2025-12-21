@@ -418,5 +418,9 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 		return fmt.Errorf("invalid current_location_id: location does not exist")
 	}
 
+	if strings.Contains(errStr, "assets_type_check") {
+		return fmt.Errorf("invalid asset type: type must be 'asset'")
+	}
+
 	return fmt.Errorf("failed to create asset with identifiers: %w", err)
 }

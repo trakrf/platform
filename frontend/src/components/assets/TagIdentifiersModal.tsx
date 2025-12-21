@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Trash2, Loader2 } from 'lucide-react';
+import { X, Trash2, Loader2, Target } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { TagIdentifier } from '@/types/shared';
 import { assetsApi } from '@/lib/api/assets';
+
+const handleLocateTag = (tagValue: string) => {
+  window.location.hash = `#locate?epc=${encodeURIComponent(tagValue)}`;
+};
 
 interface TagIdentifiersModalProps {
   identifiers: TagIdentifier[];
@@ -18,11 +22,6 @@ const TAG_TYPE_LABELS: Record<string, string> = {
   rfid: 'RFID',
 };
 
-/**
- * Modal displaying tag identifiers for an asset.
- * Mobile-friendly with full-screen on small devices.
- * Supports removing identifiers when assetId is provided.
- */
 export function TagIdentifiersModal({
   identifiers,
   assetId,
@@ -62,23 +61,18 @@ export function TagIdentifiersModal({
 
   const canRemove = assetId !== undefined && onIdentifierRemoved !== undefined;
 
-  // Use portal to render modal to body to avoid DOM nesting issues (e.g., inside table)
   return createPortal(
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 z-50 animate-fadeIn"
         onClick={onClose}
         aria-hidden="true"
       />
-
-      {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div
           className="bg-white dark:bg-gray-800 w-full sm:max-w-md sm:rounded-lg shadow-2xl max-h-[80vh] sm:max-h-[60vh] overflow-hidden animate-slideUp rounded-t-2xl sm:rounded-b-lg"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -98,8 +92,6 @@ export function TagIdentifiersModal({
               <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
-
-          {/* Content */}
           <div className="px-4 sm:px-6 py-4 overflow-y-auto max-h-[calc(80vh-8rem)] sm:max-h-[calc(60vh-8rem)]">
             {identifiers.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
@@ -112,17 +104,12 @@ export function TagIdentifiersModal({
                     key={identifier.id}
                     className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                   >
-                    {/* Type badge */}
                     <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 flex-shrink-0">
                       {TAG_TYPE_LABELS[identifier.type] || identifier.type.toUpperCase()}
                     </span>
-
-                    {/* Value */}
                     <span className="flex-1 text-sm font-mono text-gray-900 dark:text-gray-100 truncate min-w-0">
                       {identifier.value}
                     </span>
-
-                    {/* Status badge */}
                     <span
                       className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded flex-shrink-0 ${
                         identifier.is_active
@@ -132,8 +119,19 @@ export function TagIdentifiersModal({
                     >
                       {identifier.is_active ? 'Active' : 'Inactive'}
                     </span>
-
-                    {/* Delete button */}
+                    <button
+                      onClick={() => handleLocateTag(identifier.value)}
+                      disabled={!identifier.is_active}
+                      className={`p-1.5 rounded transition-colors flex-shrink-0 ${
+                        identifier.is_active
+                          ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
+                          : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                      }`}
+                      aria-label={`Locate tag ${identifier.value}`}
+                      title={identifier.is_active ? 'Locate this tag' : 'Tag is inactive'}
+                    >
+                      <Target className="w-4 h-4" />
+                    </button>
                     {canRemove && (
                       <div className="flex-shrink-0">
                         {confirmingId === identifier.id ? (
@@ -172,8 +170,6 @@ export function TagIdentifiersModal({
               </div>
             )}
           </div>
-
-          {/* Footer */}
           <div className="flex justify-end px-4 sm:px-6 py-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={onClose}

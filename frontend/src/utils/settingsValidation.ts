@@ -15,6 +15,10 @@ export interface ValidationResult {
 /**
  * EPC Validation following RFID standards
  * Supports SGTIN-96, SGTIN-128, and other common EPC formats
+ *
+ * Note: Validation is relaxed to allow any alphanumeric tag identifier
+ * for use with the locate feature. Strict hex validation only applies
+ * when the value will be used for hardware filtering.
  */
 export function validateEPC(epc: string): ValidationResult {
   if (epc === '') {
@@ -26,35 +30,34 @@ export function validateEPC(epc: string): ValidationResult {
   }
 
   // Remove spaces and normalize for validation
-  const cleanEpc = epc.replace(/\\s/g, '');
+  const cleanEpc = epc.replace(/\s/g, '');
 
-  // Check for valid hex characters only (0-9, A-F, a-f)
+  // Uppercase the value for consistent storage
+  const normalizedValue = cleanEpc.toUpperCase();
+
+  // Check for valid hex characters (0-9, A-F, a-f)
   const hexRegex = /^[0-9A-Fa-f]+$/;
-  if (!hexRegex.test(cleanEpc)) {
+  const isValidHex = hexRegex.test(cleanEpc);
+
+  // If not valid hex, accept but warn (allows tag identifiers from database)
+  if (!isValidHex) {
     return {
-      isValid: false,
-      error: 'EPC must contain only hexadecimal characters (0-9, A-F)'
+      isValid: true,
+      normalizedValue,
+      warning: 'Tag identifier contains non-hex characters. Hardware filtering may not work.'
     };
   }
-
-  // Note: We allow odd number of characters due to leading zero stripping rules
-  // For example, a 6-char input can become 5 chars after leading zero removal
-  // The validation focuses on hex format rather than strict byte alignment
 
   // Check maximum length (32 hex chars = 128 bits)
   if (cleanEpc.length > 32) {
     return {
-      isValid: false,
-      error: 'EPC too long. Maximum length is 32 hex characters (128 bits)'
+      isValid: true,
+      normalizedValue,
+      warning: 'EPC exceeds standard maximum length of 32 hex characters (128 bits)'
     };
   }
 
-  // Strip leading zeros for consistent storage
-  // Worker will pad as needed for hardware
-  const trimmedEpc = cleanEpc.replace(/^0+/, '') || '0'; // Keep at least one '0' if all zeros
-  const normalizedValue = trimmedEpc.toUpperCase();
-
-  // Check against common EPC lengths (after trimming)
+  // Check against common EPC lengths
   const standardLengths = [12, 24, 32];
   const isStandardLength = standardLengths.includes(cleanEpc.length);
 

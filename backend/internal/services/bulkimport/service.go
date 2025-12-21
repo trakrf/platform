@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mime/multipart"
+	"strings"
 
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	"github.com/trakrf/platform/backend/internal/models/bulkimport"
@@ -11,6 +12,16 @@ import (
 	"github.com/trakrf/platform/backend/internal/storage"
 	csvutil "github.com/trakrf/platform/backend/internal/util/csv"
 )
+
+// isEmptyRow checks if a CSV row is empty (all fields are empty or whitespace)
+func isEmptyRow(row []string) bool {
+	for _, field := range row {
+		if strings.TrimSpace(field) != "" {
+			return false
+		}
+	}
+	return true
+}
 
 const ProgressUpdateInterval = 10
 
@@ -95,8 +106,7 @@ func (s *Service) processCSVAsync(
 	}
 
 	dataRows := records[1:]
-	totalDataRows := len(dataRows)
-	fmt.Printf("Validating %d data rows for job %d\n", totalDataRows, jobID)
+	fmt.Printf("Processing %d raw data rows for job %d\n", len(dataRows), jobID)
 
 	// PHASE 1: Parse all rows with tags and collect ALL parse errors
 	type parsedRow struct {
@@ -107,9 +117,16 @@ func (s *Service) processCSVAsync(
 
 	var allErrors []bulkimport.ErrorDetail
 	validRows := make([]parsedRow, 0, len(dataRows))
+	var emptyRowCount int
 
 	for rowIdx, row := range dataRows {
 		rowNumber := rowIdx + 2 // +1 for 0-index, +1 for header row
+
+		// Skip empty rows silently
+		if isEmptyRow(row) {
+			emptyRowCount++
+			continue
+		}
 
 		result, err := csvutil.MapCSVRowToAssetWithTags(row, headers, orgID)
 		if err != nil {
@@ -128,6 +145,13 @@ func (s *Service) processCSVAsync(
 			tagValues: result.TagValues,
 		})
 	}
+
+	// Calculate actual data rows (excluding empty rows)
+	totalDataRows := len(dataRows) - emptyRowCount
+	if emptyRowCount > 0 {
+		fmt.Printf("Skipped %d empty rows for job %d\n", emptyRowCount, jobID)
+	}
+	fmt.Printf("Validating %d data rows for job %d\n", totalDataRows, jobID)
 
 	// PHASE 2: Check for duplicate identifiers WITHIN the CSV batch
 	identifierToRows := make(map[string][]int)
@@ -173,7 +197,8 @@ func (s *Service) processCSVAsync(
 	// PHASE 4: If ANY errors found, report them all and fail
 	if len(allErrors) > 0 {
 		fmt.Printf("Found %d total errors for job %d, marking as failed\n", len(allErrors), jobID)
-		s.storage.UpdateBulkImportJobProgress(ctx, jobID, totalDataRows, totalDataRows, 0, allErrors)
+		// processed_rows = 0 (no successful inserts), failed_rows = total (all rows failed validation)
+		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, totalDataRows, 0, allErrors)
 		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
 		return
 	}

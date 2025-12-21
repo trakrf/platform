@@ -1,4 +1,4 @@
-import { X, MapPin, Target, HelpCircle } from 'lucide-react';
+import { X, MapPin, HelpCircle } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import { useLocationStore } from '@/stores';
 import { TagIdentifierList } from './TagIdentifierList';
@@ -37,20 +37,16 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
 
   return (
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 z-50 animate-fadeIn"
         onClick={onClose}
         aria-hidden="true"
       />
-
-      {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
           className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-slideUp"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
               Asset Details
@@ -63,11 +59,8 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
               <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
-
-          {/* Content */}
           <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-6">
-              {/* Primary Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <InfoField
                   label={
@@ -113,16 +106,12 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                   }
                 />
               </div>
-
-              {/* Tag Identifiers */}
               <TagIdentifierList
                 identifiers={asset.identifiers || []}
                 size="md"
                 showHeader
                 className="border-t border-gray-200 dark:border-gray-700 pt-4"
               />
-
-              {/* Description */}
               {asset.description && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -133,14 +122,10 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                   </p>
                 </div>
               )}
-
-              {/* Validity Period */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <InfoField label="Valid From" value={formatDate(asset.valid_from)} />
                 <InfoField label="Valid To" value={formatDate(asset.valid_to)} />
               </div>
-
-              {/* Metadata */}
               {asset.metadata && Object.keys(asset.metadata).length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -153,8 +138,6 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                   </div>
                 </div>
               )}
-
-              {/* System Information */}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   System Information
@@ -175,29 +158,7 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
               </div>
             </div>
           </div>
-
-          {/* Footer */}
           <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-            {asset.identifier && (
-              <button
-                data-testid="locate-button"
-                disabled={!asset.is_active}
-                onClick={() => {
-                  if (asset.is_active) {
-                    window.location.hash = `#locate?epc=${encodeURIComponent(asset.identifier)}`;
-                    onClose();
-                  }
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                  asset.is_active
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 cursor-not-allowed'
-                }`}
-              >
-                <Target className="w-4 h-4" />
-                Locate
-              </button>
-            )}
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 font-medium transition-colors"

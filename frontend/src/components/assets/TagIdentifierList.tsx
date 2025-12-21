@@ -1,4 +1,4 @@
-import { Radio, HelpCircle } from 'lucide-react';
+import { Radio, HelpCircle, Target } from 'lucide-react';
 import type { TagIdentifier } from '@/types/shared';
 
 interface TagIdentifierListProps {
@@ -9,10 +9,6 @@ interface TagIdentifierListProps {
   className?: string;
 }
 
-/**
- * Displays a list of tag identifiers with optional header and help text.
- * Supports two sizes: 'sm' for compact card view, 'md' for modal/detail view.
- */
 export function TagIdentifierList({
   identifiers,
   expanded = true,
@@ -48,9 +44,6 @@ export function TagIdentifierList({
   );
 }
 
-/**
- * Header with title and help tooltip explaining tag identifiers.
- */
 function TagIdentifierHeader() {
   return (
     <div className="flex items-center gap-2 mb-3">
@@ -73,9 +66,6 @@ interface TagIdentifierRowProps {
   size?: 'sm' | 'md';
 }
 
-/**
- * Get display label for tag type
- */
 function getTypeLabel(type: string): string {
   switch (type.toLowerCase()) {
     case 'rfid':
@@ -89,13 +79,12 @@ function getTypeLabel(type: string): string {
   }
 }
 
-/**
- * Single row displaying a tag identifier with type, icon, value, and status badge.
- * - sm: Compact for card views (smaller text, tighter padding)
- * - md: Comfortable for modals (larger text, more padding)
- */
 export function TagIdentifierRow({ identifier, size = 'sm' }: TagIdentifierRowProps) {
   const isSmall = size === 'sm';
+
+  const handleLocate = () => {
+    window.location.hash = `#locate?epc=${encodeURIComponent(identifier.value)}`;
+  };
 
   const containerClasses = isSmall
     ? 'flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded px-2 py-1.5 gap-2'
@@ -125,6 +114,18 @@ export function TagIdentifierRow({ identifier, size = 'sm' }: TagIdentifierRowPr
           : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
       }`;
 
+  const locateButtonClasses = isSmall
+    ? `p-1 rounded transition-colors flex-shrink-0 ${
+        identifier.is_active
+          ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
+          : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+      }`
+    : `p-1.5 rounded transition-colors flex-shrink-0 ${
+        identifier.is_active
+          ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
+          : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+      }`;
+
   return (
     <div className={containerClasses}>
       <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -134,9 +135,20 @@ export function TagIdentifierRow({ identifier, size = 'sm' }: TagIdentifierRowPr
           {identifier.value}
         </span>
       </div>
-      <span className={statusBadgeClasses}>
-        {identifier.is_active ? 'Active' : 'Inactive'}
-      </span>
+      <div className="flex items-center gap-1.5">
+        <span className={statusBadgeClasses}>
+          {identifier.is_active ? 'Active' : 'Inactive'}
+        </span>
+        <button
+          onClick={handleLocate}
+          disabled={!identifier.is_active}
+          className={locateButtonClasses}
+          aria-label={`Locate tag ${identifier.value}`}
+          title={identifier.is_active ? 'Locate this tag' : 'Tag is inactive'}
+        >
+          <Target className={isSmall ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
+        </button>
+      </div>
     </div>
   );
 }
