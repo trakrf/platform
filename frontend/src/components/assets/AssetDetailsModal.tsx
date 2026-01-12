@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, MapPin, HelpCircle } from 'lucide-react';
+import { X, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { TagIdentifier } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
@@ -85,20 +85,7 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
           <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <InfoField
-                  label={
-                    <span className="inline-flex items-center gap-1.5">
-                      Customer Identifier
-                      <span className="group relative">
-                        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
-                        <span className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg z-10 font-normal">
-                          Your business identifier for this asset (e.g., serial number, asset tag). Different from RFID tag IDs used for scanning.
-                        </span>
-                      </span>
-                    </span>
-                  }
-                  value={asset.identifier}
-                />
+                <InfoField label="Asset ID" value={asset.identifier} />
                 <InfoField label="Name" value={asset.name} />
                 <InfoField label="Type" value={asset.type} />
                 <InfoField
