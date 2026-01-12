@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, MapPin, HelpCircle } from 'lucide-react';
+import { X, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { TagIdentifier } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
@@ -85,22 +85,8 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
           <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <InfoField
-                  label={
-                    <span className="inline-flex items-center gap-1.5">
-                      Customer Identifier
-                      <span className="group relative">
-                        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
-                        <span className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg z-10 font-normal">
-                          Your business identifier for this asset (e.g., serial number, asset tag). Different from RFID tag IDs used for scanning.
-                        </span>
-                      </span>
-                    </span>
-                  }
-                  value={asset.identifier}
-                />
+                <InfoField label="Asset ID" value={asset.identifier} />
                 <InfoField label="Name" value={asset.name} />
-                <InfoField label="Type" value={asset.type} />
                 <InfoField
                   label="Status"
                   value={
@@ -165,17 +151,12 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                 </div>
               )}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                  System Information
-                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <InfoField label="Asset ID" value={asset.id.toString()} />
-                  <InfoField label="Organization ID" value={asset.org_id.toString()} />
-                  <InfoField label="Created At" value={formatDateTime(asset.created_at)} />
-                  <InfoField label="Updated At" value={formatDateTime(asset.updated_at)} />
+                  <InfoField label="Created" value={formatDateTime(asset.created_at)} />
+                  <InfoField label="Last Updated" value={formatDateTime(asset.updated_at)} />
                   {asset.deleted_at && (
                     <InfoField
-                      label="Deleted At"
+                      label="Deleted"
                       value={formatDateTime(asset.deleted_at)}
                       className="md:col-span-2"
                     />

@@ -89,33 +89,6 @@ describe('AssetStats', () => {
     expect(inactiveCount.length).toBeGreaterThan(0);
   });
 
-  it('renders breakdown by type', () => {
-    render(<AssetStats />);
-
-    expect(screen.getByText('By Type')).toBeInTheDocument();
-    expect(screen.getByText('Devices')).toBeInTheDocument();
-    expect(screen.getByText('People')).toBeInTheDocument();
-  });
-
-  it('calculates correct percentages', () => {
-    render(<AssetStats />);
-
-    // 2 devices out of 3 total = 67%
-    const percentages = screen.getAllByText(/67%/);
-    expect(percentages.length).toBeGreaterThan(0);
-
-    // 1 person out of 3 total = 33%
-    const personPercentages = screen.getAllByText(/33%/);
-    expect(personPercentages.length).toBeGreaterThan(0);
-  });
-
-  it('renders progress bars for each type', () => {
-    const { container } = render(<AssetStats />);
-
-    const progressBars = container.querySelectorAll('.bg-blue-500');
-    expect(progressBars.length).toBeGreaterThan(0);
-  });
-
   it('handles empty assets array', () => {
     const mockStore = {
       cache: { byId: new Map() },

@@ -47,13 +47,13 @@ describe('TagIdentifiersModal', () => {
     it('renders nothing when isOpen is false', () => {
       render(<TagIdentifiersModal {...defaultProps} isOpen={false} />);
 
-      expect(screen.queryByText('Tag Identifiers')).not.toBeInTheDocument();
+      expect(screen.queryByText('RFID Tags')).not.toBeInTheDocument();
     });
 
     it('renders modal when isOpen is true', () => {
       render(<TagIdentifiersModal {...defaultProps} />);
 
-      expect(screen.getByText('Tag Identifiers')).toBeInTheDocument();
+      expect(screen.getByText('RFID Tags')).toBeInTheDocument();
     });
 
     it('renders in a portal (attached to document.body)', () => {
@@ -99,7 +99,7 @@ describe('TagIdentifiersModal', () => {
       render(<TagIdentifiersModal {...defaultProps} identifiers={[]} />);
 
       expect(
-        screen.getByText('No tag identifiers linked to this asset.')
+        screen.getByText('No RFID tags linked to this asset.')
       ).toBeInTheDocument();
     });
   });
@@ -149,7 +149,7 @@ describe('TagIdentifiersModal', () => {
       render(<TagIdentifiersModal {...defaultProps} />);
 
       expect(
-        screen.queryByLabelText('Remove tag identifier')
+        screen.queryByLabelText('Remove tag')
       ).not.toBeInTheDocument();
     });
 
@@ -157,7 +157,7 @@ describe('TagIdentifiersModal', () => {
       render(<TagIdentifiersModal {...defaultProps} entityId={1} />);
 
       expect(
-        screen.queryByLabelText('Remove tag identifier')
+        screen.queryByLabelText('Remove tag')
       ).not.toBeInTheDocument();
     });
 
@@ -170,7 +170,7 @@ describe('TagIdentifiersModal', () => {
         />
       );
 
-      const removeButtons = screen.getAllByLabelText('Remove tag identifier');
+      const removeButtons = screen.getAllByLabelText('Remove tag');
       expect(removeButtons).toHaveLength(3);
     });
 
@@ -184,7 +184,7 @@ describe('TagIdentifiersModal', () => {
       );
 
       // Click the first remove button
-      const removeButtons = screen.getAllByLabelText('Remove tag identifier');
+      const removeButtons = screen.getAllByLabelText('Remove tag');
       fireEvent.click(removeButtons[0]);
 
       // Should show Cancel and Remove confirmation buttons
@@ -207,7 +207,7 @@ describe('TagIdentifiersModal', () => {
       );
 
       // Click remove, then cancel
-      const removeButtons = screen.getAllByLabelText('Remove tag identifier');
+      const removeButtons = screen.getAllByLabelText('Remove tag');
       fireEvent.click(removeButtons[0]);
       fireEvent.click(screen.getByText('Cancel'));
 
@@ -231,7 +231,7 @@ describe('TagIdentifiersModal', () => {
       );
 
       // Click remove button for first identifier (id: 1)
-      const removeButtons = screen.getAllByLabelText('Remove tag identifier');
+      const removeButtons = screen.getAllByLabelText('Remove tag');
       fireEvent.click(removeButtons[0]);
 
       // Find and click the confirmation Remove button
@@ -265,7 +265,7 @@ describe('TagIdentifiersModal', () => {
       );
 
       // Click remove and confirm
-      const removeButtons = screen.getAllByLabelText('Remove tag identifier');
+      const removeButtons = screen.getAllByLabelText('Remove tag');
       fireEvent.click(removeButtons[0]);
 
       const allButtons = screen.getAllByRole('button');
@@ -278,7 +278,7 @@ describe('TagIdentifiersModal', () => {
 
       await waitFor(() => {
         expect(toast.default.error).toHaveBeenCalledWith(
-          'Failed to remove tag identifier'
+          'Failed to remove tag'
         );
       });
     });

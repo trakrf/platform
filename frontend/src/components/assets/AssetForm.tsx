@@ -18,10 +18,6 @@ interface AssetFormProps {
   initialIdentifier?: string;
 }
 
-const ASSET_TYPES: Array<{ value: AssetType; label: string }> = [
-  { value: 'asset', label: 'Asset' },
-];
-
 export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
   const [formData, setFormData] = useState({
     identifier: asset?.identifier || initialIdentifier || '',
@@ -80,9 +76,9 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
     // Required fields
     if (!formData.identifier.trim()) {
-      errors.identifier = 'Identifier is required';
+      errors.identifier = 'Asset ID is required';
     } else if (!/^[a-zA-Z0-9-_]+$/.test(formData.identifier)) {
-      errors.identifier = 'Identifier must contain only letters, numbers, hyphens, and underscores';
+      errors.identifier = 'Asset ID must contain only letters, numbers, hyphens, and underscores';
     }
 
     if (!formData.name.trim()) {
@@ -157,7 +153,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Identifier <span className="text-red-500">*</span>
+            Asset ID <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -240,26 +236,24 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
           />
           {fieldErrors.name && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.name}</p>}
         </div>
+      </div>
 
-        <div>
-          <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="type"
-            value={formData.type}
-            onChange={(e) => handleChange('type', e.target.value as AssetType)}
-            disabled={loading}
-            className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            {ASSET_TYPES.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div>
+        <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Description
+        </label>
+        <textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => handleChange('description', e.target.value)}
+          disabled={loading}
+          rows={3}
+          className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          placeholder="Optional description..."
+        />
+      </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label htmlFor="location" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Location
@@ -296,21 +290,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             Active
           </label>
         </div>
-      </div>
-
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Description
-        </label>
-        <textarea
-          id="description"
-          value={formData.description}
-          onChange={(e) => handleChange('description', e.target.value)}
-          disabled={loading}
-          rows={3}
-          className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          placeholder="Optional description..."
-        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -350,11 +329,11 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         </div>
       </div>
 
-      {/* Tag Identifiers Section */}
+      {/* RFID Tags Section */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
         <div className="flex items-center justify-between mb-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Tag Identifiers
+            RFID Tags
           </label>
           <button
             type="button"
@@ -371,7 +350,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
         {tagIdentifiers.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-            No tag identifiers added. Click &quot;Add Tag&quot; to link RFID tags.
+            No RFID tags linked. Click &quot;Add Tag&quot; to associate RFID tag IDs.
           </p>
         ) : (
           <div className="space-y-3">

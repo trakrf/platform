@@ -32,7 +32,7 @@ export function TagIdentifierList({
         <div className={className}>
           <TagIdentifierHeader />
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-            No tag identifiers linked
+            No RFID tags linked
           </p>
         </div>
       );
@@ -67,13 +67,13 @@ function TagIdentifierHeader() {
   return (
     <div className="flex items-center gap-2 mb-3">
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-        Tag Identifiers
+        RFID Tags
       </h3>
       <div className="group relative">
         <HelpCircle className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
         <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg z-10">
-          <p className="font-medium mb-1">What are Tag Identifiers?</p>
-          <p>RFID tags, barcodes, or BLE beacons physically attached to this asset for scanning and tracking.</p>
+          <p className="font-medium mb-1">What are RFID Tags?</p>
+          <p>Physical RFID tags attached to this asset for scanning and tracking. Each tag has a unique number.</p>
         </div>
       </div>
     </div>
@@ -119,11 +119,11 @@ export function TagIdentifierRow({ identifier, size = 'sm', entityId, entityType
       } else {
         await locationsApi.removeIdentifier(entityId, identifier.id);
       }
-      toast.success('Tag identifier removed');
+      toast.success('Tag removed');
       onDelete(identifier.id);
     } catch (err) {
-      console.error('Failed to remove identifier:', err);
-      toast.error('Failed to remove tag identifier');
+      console.error('Failed to remove tag:', err);
+      toast.error('Failed to remove tag');
     } finally {
       setIsDeleting(false);
     }

@@ -24,7 +24,7 @@ describe('TagIdentifierInputRow', () => {
   it('renders input field with placeholder', () => {
     render(<TagIdentifierInputRow {...defaultProps} />);
 
-    expect(screen.getByPlaceholderText('Enter tag value...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter tag number...')).toBeInTheDocument();
   });
 
   it('displays the provided value', () => {
@@ -38,7 +38,7 @@ describe('TagIdentifierInputRow', () => {
     const onValueChange = vi.fn();
     render(<TagIdentifierInputRow {...defaultProps} onValueChange={onValueChange} />);
 
-    const input = screen.getByPlaceholderText('Enter tag value...');
+    const input = screen.getByPlaceholderText('Enter tag number...');
     fireEvent.change(input, { target: { value: 'NEW-TAG' } });
 
     expect(onValueChange).toHaveBeenCalledWith('NEW-TAG');
@@ -47,21 +47,21 @@ describe('TagIdentifierInputRow', () => {
   it('does not render remove button when onRemove is not provided', () => {
     render(<TagIdentifierInputRow {...defaultProps} />);
 
-    expect(screen.queryByLabelText('Remove tag identifier')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Remove tag')).not.toBeInTheDocument();
   });
 
   it('renders remove button when onRemove is provided', () => {
     const onRemove = vi.fn();
     render(<TagIdentifierInputRow {...defaultProps} onRemove={onRemove} />);
 
-    expect(screen.getByLabelText('Remove tag identifier')).toBeInTheDocument();
+    expect(screen.getByLabelText('Remove tag')).toBeInTheDocument();
   });
 
   it('calls onRemove when remove button is clicked', () => {
     const onRemove = vi.fn();
     render(<TagIdentifierInputRow {...defaultProps} onRemove={onRemove} />);
 
-    fireEvent.click(screen.getByLabelText('Remove tag identifier'));
+    fireEvent.click(screen.getByLabelText('Remove tag'));
 
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
@@ -69,7 +69,7 @@ describe('TagIdentifierInputRow', () => {
   it('disables input when disabled prop is true', () => {
     render(<TagIdentifierInputRow {...defaultProps} disabled={true} />);
 
-    const input = screen.getByPlaceholderText('Enter tag value...');
+    const input = screen.getByPlaceholderText('Enter tag number...');
     expect(input).toBeDisabled();
   });
 
@@ -77,7 +77,7 @@ describe('TagIdentifierInputRow', () => {
     const onRemove = vi.fn();
     render(<TagIdentifierInputRow {...defaultProps} onRemove={onRemove} disabled={true} />);
 
-    const removeButton = screen.getByLabelText('Remove tag identifier');
+    const removeButton = screen.getByLabelText('Remove tag');
     expect(removeButton).toBeDisabled();
   });
 
