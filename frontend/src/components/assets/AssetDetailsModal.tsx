@@ -87,7 +87,6 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <InfoField label="Asset ID" value={asset.identifier} />
                 <InfoField label="Name" value={asset.name} />
-                <InfoField label="Type" value={asset.type} />
                 <InfoField
                   label="Status"
                   value={
