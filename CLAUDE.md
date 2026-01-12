@@ -158,6 +158,7 @@ just backend test        # ✅ Space instead of hyphen
 2. **Always create a feature/fix branch** for your work
 3. **Use conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`
 4. **Branch naming**: `feature/add-xyz`, `fix/broken-xyz`, `docs/update-xyz`
+5. **Prefer incremental commits over amending** - Create new commits for follow-up changes rather than amending previous commits. The incremental history is valuable, even for small fixes.
 
 ## Architecture Principles
 
