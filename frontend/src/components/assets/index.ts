@@ -12,7 +12,6 @@ export { AssetSearchSort } from './AssetSearchSort';
 export { AssetForm } from './AssetForm';
 export { AssetFormModal } from './AssetFormModal';
 export { AssetDetailsModal } from './AssetDetailsModal';
-export { AssetCreateChoice } from './AssetCreateChoice';
 export { BulkUploadModal } from './BulkUploadModal';
 export { LocateTagPopover } from './LocateTagPopover';
 

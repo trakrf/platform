@@ -165,17 +165,12 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
                 </div>
               )}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                  System Information
-                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <InfoField label="Asset ID" value={asset.id.toString()} />
-                  <InfoField label="Organization ID" value={asset.org_id.toString()} />
-                  <InfoField label="Created At" value={formatDateTime(asset.created_at)} />
-                  <InfoField label="Updated At" value={formatDateTime(asset.updated_at)} />
+                  <InfoField label="Created" value={formatDateTime(asset.created_at)} />
+                  <InfoField label="Last Updated" value={formatDateTime(asset.updated_at)} />
                   {asset.deleted_at && (
                     <InfoField
-                      label="Deleted At"
+                      label="Deleted"
                       value={formatDateTime(asset.deleted_at)}
                       className="md:col-span-2"
                     />

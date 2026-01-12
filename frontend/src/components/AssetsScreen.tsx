@@ -9,7 +9,6 @@ import { AssetSearchSort } from '@/components/assets/AssetSearchSort';
 import { AssetTable } from '@/components/assets/AssetTable';
 import { AssetCard } from '@/components/assets/AssetCard';
 import { AssetFormModal } from '@/components/assets/AssetFormModal';
-import { AssetCreateChoice } from '@/components/assets/AssetCreateChoice';
 import { BulkUploadModal } from '@/components/assets/BulkUploadModal';
 import { AssetDetailsModal } from '@/components/assets/AssetDetailsModal';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -17,7 +16,6 @@ import { GlobalUploadAlert } from '@/components/shared/GlobalUploadAlert';
 import type { Asset } from '@/types/assets';
 
 export default function AssetsScreen() {
-  const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
@@ -84,17 +82,7 @@ export default function AssetsScreen() {
   };
 
   const handleCreateClick = () => {
-    setIsChoiceModalOpen(true);
-  };
-
-  const handleSingleCreate = () => {
-    setIsChoiceModalOpen(false);
     setIsCreateModalOpen(true);
-  };
-
-  const handleBulkUpload = () => {
-    setIsChoiceModalOpen(false);
-    setIsBulkUploadOpen(true);
   };
 
   const handleBulkUploadSuccess = () => {
@@ -168,13 +156,6 @@ export default function AssetsScreen() {
           icon={Plus}
           onClick={handleCreateClick}
           ariaLabel="Create new asset"
-        />
-
-        <AssetCreateChoice
-          isOpen={isChoiceModalOpen}
-          onClose={() => setIsChoiceModalOpen(false)}
-          onSingleCreate={handleSingleCreate}
-          onBulkUpload={handleBulkUpload}
         />
 
         <BulkUploadModal
