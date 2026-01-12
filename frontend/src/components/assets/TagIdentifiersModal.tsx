@@ -52,10 +52,10 @@ export function TagIdentifiersModal({
       } else {
         await assetsApi.removeIdentifier(entityId, confirmingId);
       }
-      toast.success('Tag identifier removed');
+      toast.success('Tag removed');
       onIdentifierRemoved?.(confirmingId);
     } catch (err) {
-      toast.error('Failed to remove tag identifier');
+      toast.error('Failed to remove tag');
     } finally {
       setRemovingId(null);
       setConfirmingId(null);
@@ -83,7 +83,7 @@ export function TagIdentifiersModal({
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                Tag Identifiers
+                RFID Tags
               </h2>
               {entityName && (
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
@@ -102,7 +102,7 @@ export function TagIdentifiersModal({
           <div className="px-4 sm:px-6 py-4 overflow-y-auto max-h-[calc(80vh-8rem)] sm:max-h-[calc(60vh-8rem)]">
             {identifiers.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No tag identifiers linked to this {entityType}.
+                No RFID tags linked to this {entityType}.
               </p>
             ) : (
               <div className="space-y-2">
@@ -165,7 +165,7 @@ export function TagIdentifiersModal({
                           <button
                             onClick={() => handleRemoveClick(identifier.id)}
                             className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
-                            aria-label="Remove tag identifier"
+                            aria-label="Remove tag"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

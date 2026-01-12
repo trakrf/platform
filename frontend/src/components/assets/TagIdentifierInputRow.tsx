@@ -13,8 +13,7 @@ interface TagIdentifierInputRowProps {
 }
 
 /**
- * Input row for a single tag identifier.
- * Currently only supports RFID tag type.
+ * Input row for a single RFID tag number.
  */
 export function TagIdentifierInputRow({
   value,
@@ -37,7 +36,7 @@ export function TagIdentifierInputRow({
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
           disabled={disabled}
-          placeholder="Enter tag value..."
+          placeholder="Enter tag number..."
           className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 ${
             error
               ? 'border-red-500 focus:ring-red-500'
@@ -52,7 +51,7 @@ export function TagIdentifierInputRow({
             onClick={onRemove}
             disabled={disabled}
             className="p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
-            aria-label="Remove tag identifier"
+            aria-label="Remove tag"
           >
             <Trash2 className="w-4 h-4" />
           </button>
