@@ -10,6 +10,12 @@ interface TagIdentifierInputRowProps {
   onRemove?: () => void;
   disabled?: boolean;
   error?: string;
+  /** Called when input gains focus */
+  onFocus?: () => void;
+  /** Called when input loses focus */
+  onBlur?: () => void;
+  /** True when this input is focused (for styling) */
+  isFocused?: boolean;
 }
 
 /**
@@ -21,6 +27,9 @@ export function TagIdentifierInputRow({
   onRemove,
   disabled = false,
   error,
+  onFocus,
+  onBlur,
+  isFocused = false,
 }: TagIdentifierInputRowProps) {
   return (
     <div className="space-y-1">
@@ -35,12 +44,16 @@ export function TagIdentifierInputRow({
           type="text"
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
+          onFocus={onFocus}
+          onBlur={onBlur}
           disabled={disabled}
           placeholder="Enter tag number..."
           className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 ${
             error
               ? 'border-red-500 focus:ring-red-500'
-              : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+              : isFocused
+                ? 'border-green-500 focus:ring-green-500'
+                : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
           }`}
         />
 

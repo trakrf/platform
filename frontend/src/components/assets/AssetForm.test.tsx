@@ -175,6 +175,7 @@ describe('AssetForm - Scanner Integration', () => {
       stopScan: mockStopScan,
       isScanning: false,
       scanType: null,
+      setFocused: vi.fn(),
     });
   });
 
@@ -281,6 +282,7 @@ describe('AssetForm - Scanner Integration', () => {
       stopScan: mockStopScan,
       isScanning: true,
       scanType: 'rfid',
+      setFocused: vi.fn(),
     });
 
     render(
@@ -308,6 +310,7 @@ describe('AssetForm - Scanner Integration', () => {
       stopScan: mockStopScan,
       isScanning: true,
       scanType: 'barcode',
+      setFocused: vi.fn(),
     });
 
     render(
@@ -329,6 +332,7 @@ describe('AssetForm - Scanner Integration', () => {
       stopScan: mockStopScan,
       isScanning: true,
       scanType: 'rfid',
+      setFocused: vi.fn(),
     });
 
     render(
