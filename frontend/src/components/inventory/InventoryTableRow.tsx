@@ -78,11 +78,10 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
                 {isHovering && asset && (
                   <div className="absolute left-0 top-full mt-1 z-10 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg p-3 min-w-[250px] pointer-events-none">
                     <div className="space-y-1">
-                      <div><span className="font-semibold">Type:</span> {asset.type}</div>
+                      <div><span className="font-semibold">Asset ID:</span> {asset.identifier}</div>
                       {asset.description && (
                         <div><span className="font-semibold">Description:</span> {asset.description}</div>
                       )}
-                      <div><span className="font-semibold">Status:</span> {asset.is_active ? 'Active' : 'Inactive'}</div>
                     </div>
                     <div className="text-xs text-gray-400 mt-2">Click to view full details</div>
                   </div>
