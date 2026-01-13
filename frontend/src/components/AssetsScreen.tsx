@@ -191,6 +191,7 @@ export default function AssetsScreen() {
           asset={viewingAsset}
           isOpen={!!viewingAsset}
           onClose={() => setViewingAsset(null)}
+          onEdit={handleEditAsset}
         />
 
         {/* {isFiltersOpen && (
