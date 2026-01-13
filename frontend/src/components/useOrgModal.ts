@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useOrgStore, useAuthStore } from '@/stores';
+import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { orgsApi } from '@/lib/api/orgs';
 import { extractErrorMessage } from '@/lib/asset/helpers';
 import type { OrgMember, OrgRole } from '@/types/org';
@@ -17,7 +18,8 @@ interface UseOrgModalProps {
 }
 
 export function useOrgModal({ isOpen, onClose, mode, defaultTab }: UseOrgModalProps) {
-  const { currentOrg, currentRole, createOrg, isLoading: isOrgLoading } = useOrgStore();
+  const { currentOrg, currentRole, isLoading: isOrgLoading } = useOrgStore();
+  const { createOrg } = useOrgSwitch();
   const { profile, fetchProfile } = useAuthStore();
 
   // Manage mode state

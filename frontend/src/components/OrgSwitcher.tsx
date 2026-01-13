@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Menu } from '@headlessui/react';
 import { ChevronDown, Plus, Check, Settings, Users, LogOut } from 'lucide-react';
 import { useOrgStore } from '@/stores';
+import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { RoleBadge } from './RoleBadge';
 import { OrgModal } from './OrgModal';
 import type { ModalMode, TabType } from './useOrgModal';
@@ -21,7 +22,8 @@ function getFirstLetter(email: string): string {
 }
 
 export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
-  const { currentOrg, currentRole, orgs, isLoading, switchOrg } = useOrgStore();
+  const { currentOrg, currentRole, orgs, isLoading } = useOrgStore();
+  const { switchOrg } = useOrgSwitch();
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>('manage');
   const [modalTab, setModalTab] = useState<TabType>('members');
