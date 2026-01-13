@@ -9,9 +9,10 @@ interface AssetDetailsModalProps {
   asset: Asset | null;
   isOpen: boolean;
   onClose: () => void;
+  onEdit?: (asset: Asset) => void;
 }
 
-export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalProps) {
+export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetailsModalProps) {
   const getLocationById = useLocationStore((state) => state.getLocationById);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
   const location = asset?.current_location_id ? getLocationById(asset.current_location_id) : null;
@@ -166,6 +167,17 @@ export function AssetDetailsModal({ asset, isOpen, onClose }: AssetDetailsModalP
             </div>
           </div>
           <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+            {onEdit && asset && (
+              <button
+                onClick={() => {
+                  onEdit(asset);
+                  onClose();
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors"
+              >
+                Edit
+              </button>
+            )}
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 font-medium transition-colors"

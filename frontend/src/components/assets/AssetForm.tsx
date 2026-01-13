@@ -82,11 +82,11 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         value: id.value,
       }));
       setTagIdentifiers([...existingTags, { type: 'rfid', value: '' }]);
-      setAutoFocusIndex(existingTags.length); // Focus the new blank row
+      // Auto-focus removed - only Add Tag button triggers focus
     } else if (mode === 'create') {
       // Start with one blank tag row for create mode
       setTagIdentifiers([{ type: 'rfid', value: '' }]);
-      setAutoFocusIndex(0);
+      // Auto-focus removed - only Add Tag button triggers focus
     }
   }, [asset, mode]);
 
