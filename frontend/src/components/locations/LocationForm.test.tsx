@@ -21,6 +21,7 @@ describe('LocationForm - Scanner Integration', () => {
       stopScan: mockStopScan,
       isScanning: false,
       scanType: null,
+      setFocused: vi.fn(),
     });
   });
 
@@ -60,7 +61,7 @@ describe('LocationForm - Scanner Integration', () => {
     expect(screen.getByText('Add Tag')).toBeInTheDocument();
   });
 
-  it('should use green styling for scan button', () => {
+  it('should auto-add tag row and enable scan button in create mode', () => {
     useDeviceStore.setState({ isConnected: true });
 
     render(
@@ -71,8 +72,13 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
+    // Form auto-adds a blank tag row in create mode
+    expect(screen.getByPlaceholderText('Enter tag number...')).toBeInTheDocument();
+
+    // Button starts enabled with green styling due to auto-focus
     const scanButton = screen.getByText('Scan').closest('button');
     expect(scanButton?.className).toContain('text-green-600');
+    expect(scanButton).not.toBeDisabled();
   });
 
   it('should show scanner button in edit mode as well', () => {
@@ -106,7 +112,7 @@ describe('LocationForm - Scanner Integration', () => {
     expect(screen.getByText('Scan')).toBeInTheDocument();
   });
 
-  it('should start barcode scan when scan button is clicked', () => {
+  it('should disable scan button when tag field loses focus', async () => {
     useDeviceStore.setState({ isConnected: true });
 
     render(
@@ -117,7 +123,16 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Scan'));
-    expect(mockStartBarcodeScan).toHaveBeenCalledTimes(1);
+    // Button starts enabled (auto-focus on blank row)
+    const scanButton = screen.getByText('Scan').closest('button');
+    expect(scanButton).not.toBeDisabled();
+
+    // Blur the tag input
+    const tagInput = screen.getByPlaceholderText('Enter tag number...');
+    fireEvent.blur(tagInput);
+
+    // Button should now be disabled with gray styling
+    expect(scanButton).toBeDisabled();
+    expect(scanButton?.className).toContain('text-gray-400');
   });
 });

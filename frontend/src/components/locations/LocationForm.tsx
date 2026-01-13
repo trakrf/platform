@@ -81,11 +81,19 @@ export function LocationForm({
     assignedTo: string;
   } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [focusedTagIndex, setFocusedTagIndex] = useState<number | null>(null);
+  const [autoFocusIndex, setAutoFocusIndex] = useState<number | null>(null);
 
-  const { startBarcodeScan, stopScan } = useScanToInput({
+  const { startBarcodeScan, stopScan, setFocused } = useScanToInput({
     onScan: (epc) => handleBarcodeScan(epc),
     autoStop: true,
+    triggerEnabled: true,
   });
+
+  // Sync focus state with hook for trigger scanning
+  useEffect(() => {
+    setFocused(focusedTagIndex !== null);
+  }, [focusedTagIndex, setFocused]);
 
   useEffect(() => {
     if (mode === 'edit' && location) {
@@ -98,16 +106,16 @@ export function LocationForm({
         valid_to: formatDateForInput(location.valid_to),
         is_active: location.is_active,
       });
-      // Initialize tag identifiers from existing location
-      setTagIdentifiers(
-        (location.identifiers || []).map((id) => ({
-          id: id.id,
-          type: 'rfid' as const,
-          value: id.value,
-        }))
-      );
+      // Initialize tag identifiers from existing location + add blank row for new entry
+      const existingTags = (location.identifiers || []).map((id) => ({
+        id: id.id,
+        type: 'rfid' as const,
+        value: id.value,
+      }));
+      setTagIdentifiers([...existingTags, { type: 'rfid', value: '' }]);
+      setAutoFocusIndex(existingTags.length); // Focus the new blank row
     } else if (mode === 'create') {
-      // Reset form data and tag identifiers for create mode
+      // Reset form data for create mode
       setFormData({
         identifier: '',
         name: '',
@@ -117,7 +125,9 @@ export function LocationForm({
         valid_to: '',
         is_active: true,
       });
-      setTagIdentifiers([]);
+      // Start with one blank tag row for create mode
+      setTagIdentifiers([{ type: 'rfid', value: '' }]);
+      setAutoFocusIndex(0);
     }
   }, [mode, location]);
 
@@ -125,6 +135,37 @@ export function LocationForm({
   const handleBarcodeScan = async (epc: string) => {
     setIsScanning(false);
 
+    // If a tag row is focused (trigger scan), update that row's value
+    if (focusedTagIndex !== null && tagIdentifiers[focusedTagIndex]) {
+      // Local duplicate check (excluding current row)
+      if (tagIdentifiers.some((t, i) => i !== focusedTagIndex && t.value === epc)) {
+        toast.error('This tag is already in the list');
+        return;
+      }
+
+      // Cross-entity duplicate check
+      try {
+        const response = await lookupApi.byTag('rfid', epc);
+        const result = response.data.data;
+        const name =
+          result.asset?.name || result.location?.name || `${result.entity_type} #${result.entity_id}`;
+        setConfirmModal({ isOpen: true, epc, assignedTo: name });
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number } };
+        if (axiosError.response?.status === 404) {
+          // Not found = no duplicate, update focused row directly
+          const updated = [...tagIdentifiers];
+          updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: epc };
+          setTagIdentifiers(updated);
+          toast.success('Tag updated');
+        } else {
+          toast.error('Failed to check tag assignment');
+        }
+      }
+      return;
+    }
+
+    // Original behavior: append new row (button-initiated scan)
     // Local duplicate check
     if (tagIdentifiers.some((t) => t.value === epc)) {
       toast.error('This tag is already in the list');
@@ -153,8 +194,17 @@ export function LocationForm({
 
   const handleConfirmReassign = () => {
     if (confirmModal) {
-      setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: confirmModal.epc }]);
-      toast.success('Tag added (will be reassigned on save)');
+      if (focusedTagIndex !== null && tagIdentifiers[focusedTagIndex]) {
+        // Update focused row
+        const updated = [...tagIdentifiers];
+        updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: confirmModal.epc };
+        setTagIdentifiers(updated);
+        toast.success('Tag updated (will be reassigned on save)');
+      } else {
+        // Original: append new row
+        setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: confirmModal.epc }]);
+        toast.success('Tag added (will be reassigned on save)');
+      }
     }
     setConfirmModal(null);
   };
@@ -384,12 +434,15 @@ export function LocationForm({
               <button
                 type="button"
                 onClick={isScanning ? handleStopScan : handleStartScan}
-                disabled={loading}
+                disabled={loading || (!isScanning && focusedTagIndex === null)}
                 className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
                   isScanning
                     ? 'text-red-600 hover:text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
-                    : 'text-green-600 hover:text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
+                    : focusedTagIndex !== null
+                      ? 'text-green-600 hover:text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
+                      : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 }`}
+                title={focusedTagIndex === null && !isScanning ? 'Click in a tag field first' : undefined}
               >
                 {isScanning ? (
                   <>
@@ -406,9 +459,11 @@ export function LocationForm({
             )}
             <button
               type="button"
-              onClick={() =>
-                setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }])
-              }
+              onClick={() => {
+                const newIndex = tagIdentifiers.length;
+                setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }]);
+                setAutoFocusIndex(newIndex);
+              }}
               disabled={loading}
               className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
             >
@@ -439,6 +494,13 @@ export function LocationForm({
                 key={identifier.id ?? `new-${index}`}
                 type={identifier.type}
                 value={identifier.value}
+                autoFocus={index === autoFocusIndex}
+                onFocus={() => {
+                  setFocusedTagIndex(index);
+                  setAutoFocusIndex(null); // Clear after focus fires
+                }}
+                onBlur={() => setFocusedTagIndex(null)}
+                isFocused={focusedTagIndex === index}
                 onTypeChange={(type) => {
                   const updated = [...tagIdentifiers];
                   updated[index] = { ...updated[index], type };

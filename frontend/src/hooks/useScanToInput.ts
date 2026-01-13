@@ -19,10 +19,21 @@
  * ```
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTagStore, useBarcodeStore, useDeviceStore } from '@/stores';
 import { DeviceManager } from '@/lib/device/device-manager';
 import { ReaderMode } from '@/worker/types/reader';
+
+/**
+ * Strip AIM symbology identifiers from barcode data.
+ * AIM IDs follow the pattern: ]<symbology><modifier> (e.g., ]C1 for Code 128, ]Q1 for QR)
+ * Some scanners also prepend a symbology character before the AIM ID (e.g., Q]Q1...)
+ */
+function stripAimIdentifier(data: string): string {
+  // Pattern: optional leading char + ]<letter><digit> at start
+  // Examples: "]C1E200...", "Q]Q1E200...", "]Q1E200..."
+  return data.replace(/^.?\][A-Za-z]\d/, '');
+}
 
 interface UseScanToInputOptions {
   /** Callback when a scan is captured */
@@ -33,6 +44,9 @@ interface UseScanToInputOptions {
 
   /** Return to this mode after scanning completes (default: IDLE) */
   returnMode?: typeof ReaderMode[keyof typeof ReaderMode];
+
+  /** Enable hardware trigger scanning (default: false) */
+  triggerEnabled?: boolean;
 }
 
 interface UseScanToInputReturn {
@@ -50,16 +64,27 @@ interface UseScanToInputReturn {
 
   /** Current scan type (null if not scanning) */
   scanType: 'rfid' | 'barcode' | null;
+
+  /** True when ready for trigger (connected + focused + not scanning) */
+  isTriggerArmed: boolean;
+
+  /** Call on input focus/blur to enable/disable trigger scanning */
+  setFocused: (focused: boolean) => void;
 }
 
 export function useScanToInput({
   onScan,
   autoStop = true,
-  returnMode = ReaderMode.IDLE
+  returnMode = ReaderMode.IDLE,
+  triggerEnabled = false
 }: UseScanToInputOptions): UseScanToInputReturn {
   const scanTypeRef = useRef<'rfid' | 'barcode' | null>(null);
   const isScanningRef = useRef(false);
   const isConnected = useDeviceStore((s) => s.isConnected);
+  const triggerState = useDeviceStore((s) => s.triggerState);
+
+  // Focus state for trigger scanning
+  const [isFocused, setIsFocused] = useState(false);
 
   // Listen to tag store for RFID scans
   useEffect(() => {
@@ -90,7 +115,8 @@ export function useScanToInput({
       // Check if new barcode was added
       if (state.barcodes.length > prevState.barcodes.length) {
         const latestBarcode = state.barcodes[0]; // Most recent barcode
-        onScan(latestBarcode.data);
+        const cleanedData = stripAimIdentifier(latestBarcode.data);
+        onScan(cleanedData);
 
         if (autoStop) {
           stopScan();
@@ -112,6 +138,36 @@ export function useScanToInput({
       }
     };
   }, [returnMode]);
+
+  // Trigger-based barcode scanning (when triggerEnabled and focused)
+  useEffect(() => {
+    if (!triggerEnabled || !isFocused || !isConnected) return;
+
+    const handleTrigger = async () => {
+      if (triggerState && !isScanningRef.current) {
+        // Trigger pressed - start barcode scan
+        const dm = DeviceManager.getInstance();
+        if (dm) {
+          scanTypeRef.current = 'barcode';
+          isScanningRef.current = true;
+          await dm.setMode(ReaderMode.BARCODE);
+        }
+      } else if (!triggerState && isScanningRef.current) {
+        // Trigger released - stop scan
+        const dm = DeviceManager.getInstance();
+        if (dm) {
+          isScanningRef.current = false;
+          scanTypeRef.current = null;
+          await dm.setMode(returnMode);
+        }
+      }
+    };
+
+    handleTrigger();
+  }, [triggerState, triggerEnabled, isFocused, isConnected, returnMode]);
+
+  // Compute armed state for UI feedback
+  const isTriggerArmed = triggerEnabled && isFocused && isConnected && !isScanningRef.current;
 
   const startRfidScan = useCallback(async () => {
     if (!isConnected) {
@@ -160,6 +216,8 @@ export function useScanToInput({
     startBarcodeScan,
     stopScan,
     isScanning: isScanningRef.current,
-    scanType: scanTypeRef.current
+    scanType: scanTypeRef.current,
+    isTriggerArmed,
+    setFocused: setIsFocused
   };
 }
