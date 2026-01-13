@@ -94,6 +94,12 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   const handleBarcodeScan = async (epc: string) => {
     setIsScanning(false);
 
+    // Validate EPC is non-empty (can happen if scanner returns only AIM identifier)
+    if (!epc || epc.trim() === '') {
+      toast.error('No tag data received from scanner');
+      return;
+    }
+
     // If a tag row is focused (trigger scan), update that row's value
     if (focusedTagIndex !== null && tagIdentifiers[focusedTagIndex]) {
       // Local duplicate check (excluding current row)
