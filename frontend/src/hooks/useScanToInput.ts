@@ -139,13 +139,20 @@ export function useScanToInput({
     };
   }, [returnMode]);
 
+  // Track timeout for delayed scan stop
+  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Trigger-based barcode scanning (when triggerEnabled and focused)
   useEffect(() => {
     if (!triggerEnabled || !isFocused || !isConnected) return;
 
     const handleTrigger = async () => {
       if (triggerState && !isScanningRef.current) {
-        // Trigger pressed - start barcode scan
+        // Trigger pressed - cancel any pending stop and start barcode scan
+        if (stopTimeoutRef.current) {
+          clearTimeout(stopTimeoutRef.current);
+          stopTimeoutRef.current = null;
+        }
         const dm = DeviceManager.getInstance();
         if (dm) {
           scanTypeRef.current = 'barcode';
@@ -153,18 +160,32 @@ export function useScanToInput({
           await dm.setMode(ReaderMode.BARCODE);
         }
       } else if (!triggerState && isScanningRef.current) {
-        // Trigger released - stop scan
+        // Trigger released - delay stop to allow barcode data to arrive
+        // This fixes a race condition where trigger release was processed
+        // before the barcode store subscription could fire
         const dm = DeviceManager.getInstance();
         if (dm) {
-          isScanningRef.current = false;
-          scanTypeRef.current = null;
-          await dm.setMode(returnMode);
+          stopTimeoutRef.current = setTimeout(async () => {
+            isScanningRef.current = false;
+            scanTypeRef.current = null;
+            await dm.setMode(returnMode);
+            stopTimeoutRef.current = null;
+          }, 150);
         }
       }
     };
 
     handleTrigger();
   }, [triggerState, triggerEnabled, isFocused, isConnected, returnMode]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (stopTimeoutRef.current) {
+        clearTimeout(stopTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Compute armed state for UI feedback
   const isTriggerArmed = triggerEnabled && isFocused && isConnected && !isScanningRef.current;
