@@ -135,12 +135,20 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
       onClose(true);
     } catch (err: any) {
+      // Extract error detail from API response if available
+      const apiError = err.response?.data?.error?.detail;
+
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
         setError('Cannot connect to server. Please check your connection and try again.');
       } else if (err.response?.status === 404) {
         setError('Asset API endpoint not found. The backend may not be running.');
+      } else if (err.response?.status === 409) {
+        // Conflict - duplicate identifier
+        setError(apiError || 'An asset with this identifier already exists.');
       } else if (err.response?.status >= 500) {
-        setError('Server error. Please try again later.');
+        setError(apiError || 'Server error. Please try again later.');
+      } else if (err.response?.status >= 400) {
+        setError(apiError || err.message || 'Invalid request. Please check your input.');
       } else {
         setError(err.message || 'An error occurred. Please try again.');
       }

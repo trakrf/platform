@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -109,6 +110,12 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		// Check for duplicate identifier error (user error, not server error)
+		if strings.Contains(err.Error(), "already exists") {
+			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
+				apierrors.AssetCreateFailed, err.Error(), requestID)
+			return
+		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetCreateFailed, err.Error(), requestID)
 		return
