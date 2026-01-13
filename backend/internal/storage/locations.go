@@ -110,6 +110,45 @@ func (s *Storage) GetLocationByID(ctx context.Context, id int) (*location.Locati
 	return &loc, nil
 }
 
+// GetLocationsByIDs fetches multiple locations by their IDs (batch fetch)
+func (s *Storage) GetLocationsByIDs(ctx context.Context, ids []int) ([]*location.Location, error) {
+	if len(ids) == 0 {
+		return []*location.Location{}, nil
+	}
+
+	query := `
+	SELECT id, org_id, name, identifier, parent_location_id, path, depth,
+	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
+	FROM trakrf.locations
+	WHERE id = ANY($1) AND deleted_at IS NULL
+	`
+
+	rows, err := s.pool.Query(ctx, query, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch fetch locations: %w", err)
+	}
+	defer rows.Close()
+
+	var locations []*location.Location
+	for rows.Next() {
+		var loc location.Location
+		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name,
+			&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan location: %w", err)
+		}
+		locations = append(locations, &loc)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating locations: %w", err)
+	}
+
+	return locations, nil
+}
+
 func (s *Storage) GetLocationWithRelations(ctx context.Context, id int) (*location.Location, error) {
 	query := `
 	WITH target AS (

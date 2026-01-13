@@ -6,8 +6,8 @@ import { persist } from 'zustand/middleware';
 import type { ReconciliationItem } from '@/utils/reconciliationUtils';
 import { normalizeEpc, removeLeadingZeros } from '@/utils/reconciliationUtils';
 import { useSettingsStore } from './settingsStore';
-import { useAssetStore } from './assets/assetStore';
 import { createStoreWithTracking } from './createStore';
+import { lookupApi } from '@/lib/api/lookup';
 
 // Define tag info type
 export interface TagInfo {
@@ -41,23 +41,27 @@ interface TagState {
   tags: TagInfo[];
   selectedTag: TagInfo | null;
   displayFormat: 'hex' | 'decimal';
-  
+
   // Sorting state
   sortColumn: string | null;
   sortDirection: 'asc' | 'desc';
-  
+
   // Pagination state
   currentPage: number;
   pageSize: number;
   totalPages: number;
-  
+
   // Locate data
   searchRunning: boolean;
   searchRSSI: number;
   searchTargetEPC: string;
   lastRSSIUpdateTime: number;
-  
-  
+
+  // Internal lookup queue state (not persisted)
+  _lookupQueue: Set<string>;
+  _lookupTimer: ReturnType<typeof setTimeout> | null;
+  _isLookupInProgress: boolean;
+
   // Actions
   setTags: (tags: TagInfo[]) => void;
   addTag: (tag: Partial<TagInfo>) => void;  // Add single tag
@@ -75,13 +79,17 @@ interface TagState {
   goToPreviousPage: () => void;
   goToFirstPage: () => void;
   goToLastPage: () => void;
-  
+
   // Locate actions
   setSearchRunning: (running: boolean) => void;
   updateSearchRSSI: (rssi: number) => void;
 
-  // Asset enrichment
-  refreshAssetEnrichment: () => void;
+  // Asset enrichment (async via API lookup)
+  refreshAssetEnrichment: () => Promise<void>;
+
+  // Internal lookup queue actions
+  _queueForLookup: (epc: string) => void;
+  _flushLookupQueue: () => Promise<void>;
 }
 
 export const useTagStore = create<TagState>()(
@@ -91,21 +99,26 @@ export const useTagStore = create<TagState>()(
   tags: [],
   selectedTag: null,
   displayFormat: 'decimal', // Default to decimal format
-  
+
   // Sorting initial state - default to timestamp descending
   sortColumn: 'timestamp',
   sortDirection: 'desc',
-  
+
   // Pagination initial state
   currentPage: 1,
   pageSize: 10, // Default page size
   totalPages: 1,
-  
+
   // Locate initial state
   searchRunning: false,
   searchRSSI: -120, // Default to very low signal - UI interprets ≤ -120 as "not found"
   searchTargetEPC: '',
   lastRSSIUpdateTime: 0,
+
+  // Internal lookup queue state (not persisted)
+  _lookupQueue: new Set<string>(),
+  _lookupTimer: null,
+  _isLookupInProgress: false,
   
   
   // Actions
@@ -230,63 +243,60 @@ export const useTagStore = create<TagState>()(
     };
   }),
   
-  addTag: (tag) => set((state) => {
-    const now = Date.now();
-    const existingIndex = state.tags.findIndex(t => t.epc === tag.epc);
+  addTag: (tag) => {
+    const epc = tag.epc || '';
+    const state = get();
+    const existingIndex = state.tags.findIndex(t => t.epc === epc);
+    const isNewTag = existingIndex < 0;
 
-    const displayEpc = removeLeadingZeros(tag.epc || '');
+    set((state) => {
+      const now = Date.now();
+      const displayEpc = removeLeadingZeros(epc);
 
-    const assetStore = useAssetStore.getState();
-    let asset = assetStore.getAssetByIdentifier(tag.epc || '');
-    if (!asset) {
-      asset = assetStore.getAssetByIdentifier(displayEpc);
-    }
+      let newTags;
+      if (existingIndex >= 0) {
+        // Update existing tag (don't re-enrich, keep existing asset data)
+        newTags = [...state.tags];
+        newTags[existingIndex] = {
+          ...newTags[existingIndex],
+          ...tag,
+          displayEpc,
+          lastSeenTime: now,
+          readCount: (newTags[existingIndex].readCount || 0) + 1,
+          count: (newTags[existingIndex].count || 0) + 1,
+          timestamp: now
+        };
+      } else {
+        // Create new tag without asset data (will be enriched via API)
+        const newTag: TagInfo = {
+          epc,
+          displayEpc,
+          count: 1,
+          source: 'rfid',
+          firstSeenTime: now,
+          lastSeenTime: now,
+          readCount: 1,
+          timestamp: now,
+          ...tag,
+        };
+        newTags = [...state.tags, newTag];
+      }
 
-    const assetData = asset ? {
-      assetId: asset.id,
-      assetName: asset.name,
-      assetIdentifier: asset.identifier,
-      description: asset.description || undefined,
-    } : {};
+      const totalPages = Math.max(1, Math.ceil(newTags.length / state.pageSize));
+      const validCurrentPage = state.currentPage > totalPages ? totalPages : state.currentPage;
 
-    let newTags;
-    if (existingIndex >= 0) {
-      newTags = [...state.tags];
-      newTags[existingIndex] = {
-        ...newTags[existingIndex],
-        ...tag,
-        ...assetData,
-        displayEpc,
-        lastSeenTime: now,
-        readCount: (newTags[existingIndex].readCount || 0) + 1,
-        count: (newTags[existingIndex].count || 0) + 1,
-        timestamp: now
+      return {
+        tags: newTags,
+        totalPages,
+        currentPage: validCurrentPage
       };
-    } else {
-      const newTag: TagInfo = {
-        epc: tag.epc || '',
-        displayEpc,
-        count: 1,
-        source: 'rfid',
-        firstSeenTime: now,
-        lastSeenTime: now,
-        readCount: 1,
-        timestamp: now,
-        ...tag,
-        ...assetData,
-      };
-      newTags = [...state.tags, newTag];
+    });
+
+    // Queue new tags for batch lookup
+    if (isNewTag && epc) {
+      get()._queueForLookup(epc);
     }
-
-    const totalPages = Math.max(1, Math.ceil(newTags.length / state.pageSize));
-    const validCurrentPage = state.currentPage > totalPages ? totalPages : state.currentPage;
-
-    return {
-      tags: newTags,
-      totalPages,
-      currentPage: validCurrentPage
-    };
-  }),
+  },
 
   // Locate actions
   setSearchRunning: (running) => set((state) => {
@@ -311,32 +321,83 @@ export const useTagStore = create<TagState>()(
     lastRSSIUpdateTime: Date.now()
   }),
 
-  // Re-enrich all tags with current asset data
-  refreshAssetEnrichment: () => set((state) => {
-    const assetStore = useAssetStore.getState();
+  // Re-enrich all tags with current asset data via API lookup
+  refreshAssetEnrichment: async () => {
+    const state = get();
+    // Get all EPCs that don't have assetId yet
+    const unenriched = state.tags
+      .filter(t => t.assetId === undefined)
+      .map(t => t.epc)
+      .filter(Boolean);
 
-    const enrichedTags = state.tags.map(tag => {
-      // Try to find asset by EPC or displayEpc
-      let asset = assetStore.getAssetByIdentifier(tag.epc);
-      if (!asset && tag.displayEpc) {
-        asset = assetStore.getAssetByIdentifier(tag.displayEpc);
-      }
+    if (unenriched.length === 0) return;
 
-      if (asset) {
-        return {
-          ...tag,
-          assetId: asset.id,
-          assetName: asset.name,
-          assetIdentifier: asset.identifier,
-          description: asset.description || undefined,
-        };
-      }
+    // Add to queue and flush immediately
+    unenriched.forEach(epc => get()._lookupQueue.add(epc));
+    await get()._flushLookupQueue();
+  },
 
-      return tag;
+  // Queue an EPC for batch lookup with debounce
+  _queueForLookup: (epc: string) => {
+    const state = get();
+    state._lookupQueue.add(epc);
+
+    // Clear existing timer and set new one (debounce at 500ms)
+    if (state._lookupTimer) {
+      clearTimeout(state._lookupTimer);
+    }
+
+    const timer = setTimeout(() => {
+      get()._flushLookupQueue();
+    }, 500);
+
+    set({ _lookupTimer: timer });
+  },
+
+  // Flush the lookup queue and call the batch API
+  _flushLookupQueue: async () => {
+    const state = get();
+
+    // Don't run if already in progress or queue is empty
+    if (state._isLookupInProgress || state._lookupQueue.size === 0) {
+      return;
+    }
+
+    // Take snapshot of queue and clear it
+    const epcs = Array.from(state._lookupQueue);
+    set({
+      _lookupQueue: new Set<string>(),
+      _isLookupInProgress: true,
+      _lookupTimer: null,
     });
 
-    return { tags: enrichedTags };
-  })
+    try {
+      const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
+      const results = response.data.data;
+
+      // Update tags with asset info from lookup results
+      set((state) => ({
+        tags: state.tags.map(tag => {
+          const result = results[tag.epc];
+          if (result?.asset) {
+            return {
+              ...tag,
+              assetId: result.asset.id,
+              assetName: result.asset.name,
+              assetIdentifier: result.asset.identifier,
+              description: result.asset.description || undefined,
+            };
+          }
+          return tag;
+        })
+      }));
+    } catch (error) {
+      // On error, re-queue the EPCs for retry on next batch
+      epcs.forEach(epc => get()._lookupQueue.add(epc));
+    } finally {
+      set({ _isLookupInProgress: false });
+    }
+  },
   }), 'TagStore'),
   {
     name: 'tag-storage',

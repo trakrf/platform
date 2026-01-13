@@ -158,6 +158,45 @@ func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, erro
 	return &asset, nil
 }
 
+// GetAssetsByIDs fetches multiple assets by their IDs (batch fetch)
+func (s *Storage) GetAssetsByIDs(ctx context.Context, ids []int) ([]*asset.Asset, error) {
+	if len(ids) == 0 {
+		return []*asset.Asset{}, nil
+	}
+
+	query := `
+	SELECT id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
+	       metadata, is_active, created_at, updated_at, deleted_at
+	FROM trakrf.assets
+	WHERE id = ANY($1) AND deleted_at IS NULL
+	`
+
+	rows, err := s.pool.Query(ctx, query, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch fetch assets: %w", err)
+	}
+	defer rows.Close()
+
+	var assets []*asset.Asset
+	for rows.Next() {
+		var a asset.Asset
+		err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
+			&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+			&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan asset: %w", err)
+		}
+		assets = append(assets, &a)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating assets: %w", err)
+	}
+
+	return assets, nil
+}
+
 func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offset int) ([]asset.Asset, error) {
 	query := `
 		select id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
