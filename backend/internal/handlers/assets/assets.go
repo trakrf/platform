@@ -165,6 +165,12 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	result, err := handler.storage.UpdateAsset(req.Context(), id, request)
 
 	if err != nil {
+		// Check for duplicate identifier error (user error, not server error)
+		if strings.Contains(err.Error(), "already exists") {
+			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
+				apierrors.AssetUpdateFailed, err.Error(), ctx)
+			return
+		}
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetUpdateFailed, err.Error(), ctx)
 		return

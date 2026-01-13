@@ -159,7 +159,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             id="identifier"
             value={formData.identifier}
             onChange={(e) => handleChange('identifier', e.target.value)}
-            disabled={loading || mode === 'edit' || isScanning}
+            disabled={loading || isScanning}
             className={`block w-full px-3 py-2 border rounded-lg ${
               fieldErrors.identifier
                 ? 'border-red-500 focus:ring-red-500'
