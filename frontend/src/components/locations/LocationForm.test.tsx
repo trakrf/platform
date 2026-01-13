@@ -61,7 +61,7 @@ describe('LocationForm - Scanner Integration', () => {
     expect(screen.getByText('Add Tag')).toBeInTheDocument();
   });
 
-  it('should show gray/disabled scan button when no tag field focused', () => {
+  it('should auto-add tag row and enable scan button in create mode', () => {
     useDeviceStore.setState({ isConnected: true });
 
     render(
@@ -72,9 +72,13 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
+    // Form auto-adds a blank tag row in create mode
+    expect(screen.getByPlaceholderText('Enter tag number...')).toBeInTheDocument();
+
+    // Button starts enabled with green styling due to auto-focus
     const scanButton = screen.getByText('Scan').closest('button');
-    expect(scanButton?.className).toContain('text-gray-400');
-    expect(scanButton).toBeDisabled();
+    expect(scanButton?.className).toContain('text-green-600');
+    expect(scanButton).not.toBeDisabled();
   });
 
   it('should show scanner button in edit mode as well', () => {
@@ -108,7 +112,7 @@ describe('LocationForm - Scanner Integration', () => {
     expect(screen.getByText('Scan')).toBeInTheDocument();
   });
 
-  it('should enable scan button when tag field is focused', async () => {
+  it('should disable scan button when tag field loses focus', async () => {
     useDeviceStore.setState({ isConnected: true });
 
     render(
@@ -119,19 +123,16 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
-    // Button starts disabled
+    // Button starts enabled (auto-focus on blank row)
     const scanButton = screen.getByText('Scan').closest('button');
-    expect(scanButton).toBeDisabled();
-
-    // Add a tag row
-    fireEvent.click(screen.getByText('Add Tag'));
-
-    // Focus the tag input
-    const tagInput = screen.getByPlaceholderText('Enter tag number...');
-    fireEvent.focus(tagInput);
-
-    // Button should now be enabled with green styling
     expect(scanButton).not.toBeDisabled();
-    expect(scanButton?.className).toContain('text-green-600');
+
+    // Blur the tag input
+    const tagInput = screen.getByPlaceholderText('Enter tag number...');
+    fireEvent.blur(tagInput);
+
+    // Button should now be disabled with gray styling
+    expect(scanButton).toBeDisabled();
+    expect(scanButton?.className).toContain('text-gray-400');
   });
 });

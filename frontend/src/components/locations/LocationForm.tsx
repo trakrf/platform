@@ -82,6 +82,7 @@ export function LocationForm({
   } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [focusedTagIndex, setFocusedTagIndex] = useState<number | null>(null);
+  const [autoFocusIndex, setAutoFocusIndex] = useState<number | null>(null);
 
   const { startBarcodeScan, stopScan, setFocused } = useScanToInput({
     onScan: (epc) => handleBarcodeScan(epc),
@@ -105,16 +106,16 @@ export function LocationForm({
         valid_to: formatDateForInput(location.valid_to),
         is_active: location.is_active,
       });
-      // Initialize tag identifiers from existing location
-      setTagIdentifiers(
-        (location.identifiers || []).map((id) => ({
-          id: id.id,
-          type: 'rfid' as const,
-          value: id.value,
-        }))
-      );
+      // Initialize tag identifiers from existing location + add blank row for new entry
+      const existingTags = (location.identifiers || []).map((id) => ({
+        id: id.id,
+        type: 'rfid' as const,
+        value: id.value,
+      }));
+      setTagIdentifiers([...existingTags, { type: 'rfid', value: '' }]);
+      setAutoFocusIndex(existingTags.length); // Focus the new blank row
     } else if (mode === 'create') {
-      // Reset form data and tag identifiers for create mode
+      // Reset form data for create mode
       setFormData({
         identifier: '',
         name: '',
@@ -124,7 +125,9 @@ export function LocationForm({
         valid_to: '',
         is_active: true,
       });
-      setTagIdentifiers([]);
+      // Start with one blank tag row for create mode
+      setTagIdentifiers([{ type: 'rfid', value: '' }]);
+      setAutoFocusIndex(0);
     }
   }, [mode, location]);
 
@@ -456,9 +459,11 @@ export function LocationForm({
             )}
             <button
               type="button"
-              onClick={() =>
-                setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }])
-              }
+              onClick={() => {
+                const newIndex = tagIdentifiers.length;
+                setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }]);
+                setAutoFocusIndex(newIndex);
+              }}
               disabled={loading}
               className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
             >
@@ -489,7 +494,11 @@ export function LocationForm({
                 key={identifier.id ?? `new-${index}`}
                 type={identifier.type}
                 value={identifier.value}
-                onFocus={() => setFocusedTagIndex(index)}
+                autoFocus={index === autoFocusIndex}
+                onFocus={() => {
+                  setFocusedTagIndex(index);
+                  setAutoFocusIndex(null); // Clear after focus fires
+                }}
                 onBlur={() => setFocusedTagIndex(null)}
                 isFocused={focusedTagIndex === index}
                 onTypeChange={(type) => {

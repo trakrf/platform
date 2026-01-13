@@ -16,6 +16,8 @@ interface TagIdentifierInputRowProps {
   onBlur?: () => void;
   /** True when this input is focused (for styling) */
   isFocused?: boolean;
+  /** Auto-focus this input on mount */
+  autoFocus?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export function TagIdentifierInputRow({
   onFocus,
   onBlur,
   isFocused = false,
+  autoFocus = false,
 }: TagIdentifierInputRowProps) {
   return (
     <div className="space-y-1">
@@ -47,6 +50,7 @@ export function TagIdentifierInputRow({
           onFocus={onFocus}
           onBlur={onBlur}
           disabled={disabled}
+          autoFocus={autoFocus}
           placeholder="Enter tag number..."
           className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 ${
             error
