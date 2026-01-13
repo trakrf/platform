@@ -8,16 +8,15 @@ import * as useScanToInputModule from '@/hooks/useScanToInput';
 describe('LocationForm - Scanner Integration', () => {
   const mockOnSubmit = vi.fn();
   const mockOnCancel = vi.fn();
-  const mockStartRfidScan = vi.fn();
   const mockStartBarcodeScan = vi.fn();
   const mockStopScan = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Mock useScanToInput
+    // Mock useScanToInput - only barcode scanning for tag identifiers
     vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
-      startRfidScan: mockStartRfidScan,
+      startRfidScan: vi.fn(),
       startBarcodeScan: mockStartBarcodeScan,
       stopScan: mockStopScan,
       isScanning: false,
@@ -29,7 +28,7 @@ describe('LocationForm - Scanner Integration', () => {
     cleanup();
   });
 
-  it('should show scanner buttons when device connected in create mode', () => {
+  it('should show scanner button in Tag Identifiers section when device connected', () => {
     useDeviceStore.setState({ isConnected: true });
 
     render(
@@ -40,12 +39,13 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
-    expect(screen.getByText('Scan RFID')).toBeInTheDocument();
-    expect(screen.getByText('Scan Barcode')).toBeInTheDocument();
+    // Find the Scan button in Tag Identifiers section
+    expect(screen.getByText('Scan')).toBeInTheDocument();
+    expect(screen.getByText('Add Tag')).toBeInTheDocument();
   });
 
-  it('should use consistent styling with AssetForm', () => {
-    useDeviceStore.setState({ isConnected: true });
+  it('should hide scanner button when device not connected', () => {
+    useDeviceStore.setState({ isConnected: false });
 
     render(
       <LocationForm
@@ -55,22 +55,13 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
-    const rfidButton = screen.getByText('Scan RFID').closest('button');
-    expect(rfidButton).toHaveClass('bg-blue-600');
-
-    const barcodeButton = screen.getByText('Scan Barcode').closest('button');
-    expect(barcodeButton).toHaveClass('bg-green-600');
+    // Scan button should not be present, but Add Tag should still be there
+    expect(screen.queryByText('Scan')).not.toBeInTheDocument();
+    expect(screen.getByText('Add Tag')).toBeInTheDocument();
   });
 
-  it('should show scanning state feedback', () => {
+  it('should use green styling for scan button', () => {
     useDeviceStore.setState({ isConnected: true });
-    vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
-      startRfidScan: mockStartRfidScan,
-      startBarcodeScan: mockStartBarcodeScan,
-      stopScan: mockStopScan,
-      isScanning: true,
-      scanType: 'rfid',
-    });
 
     render(
       <LocationForm
@@ -80,16 +71,42 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
-    expect(screen.getByText('Scanning for RFID tag...')).toBeInTheDocument();
-    // Look for the cancel button with red background (scanning cancel button)
-    const cancelButtons = screen.getAllByText('Cancel');
-    const scanningCancelButton = cancelButtons.find(
-      btn => btn.closest('button')?.className.includes('bg-red-600')
-    );
-    expect(scanningCancelButton).toBeInTheDocument();
+    const scanButton = screen.getByText('Scan').closest('button');
+    expect(scanButton?.className).toContain('text-green-600');
   });
 
-  it('should call scanner functions correctly', () => {
+  it('should show scanner button in edit mode as well', () => {
+    useDeviceStore.setState({ isConnected: true });
+
+    const mockLocation = {
+      id: 1,
+      org_id: 1,
+      identifier: 'loc-1',
+      name: 'Test Location',
+      description: '',
+      parent_location_id: null,
+      valid_from: '2025-01-01T00:00:00Z',
+      valid_to: '2099-12-31T00:00:00Z',
+      is_active: true,
+      created_at: '2025-01-01T00:00:00Z',
+      updated_at: '2025-01-01T00:00:00Z',
+      identifiers: [],
+    };
+
+    render(
+      <LocationForm
+        mode="edit"
+        location={mockLocation}
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    // Scanner should be available in edit mode
+    expect(screen.getByText('Scan')).toBeInTheDocument();
+  });
+
+  it('should start barcode scan when scan button is clicked', () => {
     useDeviceStore.setState({ isConnected: true });
 
     render(
@@ -100,10 +117,7 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Scan RFID'));
-    expect(mockStartRfidScan).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByText('Scan Barcode'));
+    fireEvent.click(screen.getByText('Scan'));
     expect(mockStartBarcodeScan).toHaveBeenCalledTimes(1);
   });
 });

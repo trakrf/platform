@@ -4,7 +4,10 @@ import { LocationParentSelector } from './LocationParentSelector';
 import type { Location, TagIdentifierInput } from '@/types/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { useDeviceStore } from '@/stores';
-import { ScanLine, QrCode, X, Plus } from 'lucide-react';
+import { lookupApi } from '@/lib/api/lookup';
+import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
+import { Plus, QrCode, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { TagIdentifierInputRow } from '@/components/assets';
 
 interface LocationFormData {
@@ -70,10 +73,17 @@ export function LocationForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
 
-  // Scanner integration
+  // Barcode scanning for tag identifiers
   const isConnected = useDeviceStore((s) => s.isConnected);
-  const { startRfidScan, startBarcodeScan, stopScan, isScanning, scanType } = useScanToInput({
-    onScan: (value) => handleChange('identifier', value),
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    epc: string;
+    assignedTo: string;
+  } | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+
+  const { startBarcodeScan, stopScan } = useScanToInput({
+    onScan: (epc) => handleBarcodeScan(epc),
     autoStop: true,
   });
 
@@ -110,6 +120,54 @@ export function LocationForm({
       setTagIdentifiers([]);
     }
   }, [mode, location]);
+
+  // Handle barcode scan for tag identifiers
+  const handleBarcodeScan = async (epc: string) => {
+    setIsScanning(false);
+
+    // Local duplicate check
+    if (tagIdentifiers.some((t) => t.value === epc)) {
+      toast.error('This tag is already in the list');
+      return;
+    }
+
+    // Cross-entity duplicate check via lookup API
+    try {
+      const response = await lookupApi.byTag('rfid', epc);
+      // 200 = found, show reassign confirmation
+      const result = response.data.data;
+      const name =
+        result.asset?.name || result.location?.name || `${result.entity_type} #${result.entity_id}`;
+      setConfirmModal({ isOpen: true, epc, assignedTo: name });
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status: number } };
+      if (axiosError.response?.status === 404) {
+        // Not found = no duplicate, add directly
+        setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: epc }]);
+        toast.success('Tag added');
+      } else {
+        toast.error('Failed to check tag assignment');
+      }
+    }
+  };
+
+  const handleConfirmReassign = () => {
+    if (confirmModal) {
+      setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: confirmModal.epc }]);
+      toast.success('Tag added (will be reassigned on save)');
+    }
+    setConfirmModal(null);
+  };
+
+  const handleStartScan = () => {
+    setIsScanning(true);
+    startBarcodeScan();
+  };
+
+  const handleStopScan = () => {
+    setIsScanning(false);
+    stopScan();
+  };
 
   const validateForm = (): boolean => {
     const errors: FieldErrors = {};
@@ -185,63 +243,19 @@ export function LocationForm({
             id="identifier"
             value={formData.identifier}
             onChange={(e) => handleChange('identifier', e.target.value)}
-            disabled={loading || mode === 'edit' || isScanning}
+            disabled={loading || mode === 'edit'}
             className={`block w-full px-3 py-2 border rounded-lg ${
               fieldErrors.identifier
                 ? 'border-red-500 focus:ring-red-500'
                 : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
             } bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50`}
-            placeholder={isScanning
-              ? (scanType === 'rfid' ? 'Scanning RFID...' : 'Scanning barcode...')
-              : 'e.g., warehouse_a'
-            }
+            placeholder="e.g., warehouse_a"
           />
           {fieldErrors.identifier && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.identifier}</p>
           )}
 
-          {/* Scanner buttons - only show in create mode when device connected */}
-          {mode === 'create' && isConnected && !isScanning && (
-            <div className="flex gap-2 mt-2">
-              <button
-                type="button"
-                onClick={startRfidScan}
-                disabled={loading}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 transition-colors"
-              >
-                <ScanLine className="w-4 h-4" />
-                Scan RFID
-              </button>
-              <button
-                type="button"
-                onClick={startBarcodeScan}
-                disabled={loading}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 transition-colors"
-              >
-                <QrCode className="w-4 h-4" />
-                Scan Barcode
-              </button>
-            </div>
-          )}
-
-          {/* Scanning state feedback */}
-          {isScanning && (
-            <div className="flex items-center gap-2 mt-2">
-              <p className="text-sm text-blue-600 dark:text-blue-400">
-                {scanType === 'rfid' ? 'Scanning for RFID tag...' : 'Scanning for barcode...'}
-              </p>
-              <button
-                type="button"
-                onClick={stopScan}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-              >
-                <X className="w-3 h-3" />
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {mode === 'create' && !isScanning && (
+          {mode === 'create' && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Letters, numbers, hyphens, and underscores only (no spaces)
             </p>
@@ -365,18 +379,54 @@ export function LocationForm({
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Tag Identifiers
           </label>
-          <button
-            type="button"
-            onClick={() =>
-              setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }])
-            }
-            disabled={loading}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4" />
-            Add Tag
-          </button>
+          <div className="flex items-center gap-2">
+            {isConnected && (
+              <button
+                type="button"
+                onClick={isScanning ? handleStopScan : handleStartScan}
+                disabled={loading}
+                className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
+                  isScanning
+                    ? 'text-red-600 hover:text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                    : 'text-green-600 hover:text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
+                }`}
+              >
+                {isScanning ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <QrCode className="w-4 h-4" />
+                    Scan
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() =>
+                setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }])
+              }
+              disabled={loading}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              Add Tag
+            </button>
+          </div>
         </div>
+
+        {/* Scanning feedback */}
+        {isScanning && (
+          <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
+            <span className="text-sm text-blue-600 dark:text-blue-400">
+              Scanning barcode... Point at tag barcode
+            </span>
+          </div>
+        )}
 
         {tagIdentifiers.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
@@ -426,6 +476,18 @@ export function LocationForm({
           {loading ? 'Saving...' : mode === 'create' ? 'Create Location' : 'Update Location'}
         </button>
       </div>
+
+      {/* Reassign confirmation modal */}
+      {confirmModal && (
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          title="Tag Already Assigned"
+          message={`This tag is currently assigned to "${confirmModal.assignedTo}". Do you want to reassign it to this location?`}
+          confirmText="Reassign"
+          onConfirm={handleConfirmReassign}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
     </form>
   );
 }
