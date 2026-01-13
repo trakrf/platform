@@ -271,16 +271,150 @@ type LookupResult struct {
 	Location   *location.Location `json:"location,omitempty"`
 }
 
+// normalizeEPC strips leading zeros from an EPC value for comparison
+func normalizeEPC(epc string) string {
+	return strings.TrimLeft(epc, "0")
+}
+
+// LookupByTagValues finds assets/locations for multiple tag values (batch)
+// Returns a map of value -> LookupResult (nil if not found)
+// Note: Comparison is done with leading zeros stripped (normalized) to handle
+// cases where scanner returns EPCs with different leading zero counts than stored.
+func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType string, values []string) (map[string]*LookupResult, error) {
+	if len(values) == 0 {
+		return make(map[string]*LookupResult), nil
+	}
+
+	// Build map of normalized EPC -> original input values
+	// Multiple originals could normalize to the same value (e.g., "00ABC" and "ABC")
+	normalizedToOriginals := make(map[string][]string)
+	normalizedValues := make([]string, 0, len(values))
+	for _, v := range values {
+		norm := normalizeEPC(v)
+		if _, exists := normalizedToOriginals[norm]; !exists {
+			normalizedValues = append(normalizedValues, norm)
+		}
+		normalizedToOriginals[norm] = append(normalizedToOriginals[norm], v)
+	}
+
+	// Query using LTRIM to normalize stored values for comparison
+	query := `
+		SELECT value, asset_id, location_id
+		FROM trakrf.identifiers
+		WHERE org_id = $1 AND type = $2 AND LTRIM(value, '0') = ANY($3) AND deleted_at IS NULL
+	`
+
+	rows, err := s.pool.Query(ctx, query, orgID, tagType, normalizedValues)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch lookup tags: %w", err)
+	}
+	defer rows.Close()
+
+	// Collect identifier data with normalized value for mapping
+	type identifierRow struct {
+		value      string // Original value from DB
+		normalized string // Normalized for matching back to input
+		assetID    *int
+		locationID *int
+	}
+	var identifierRows []identifierRow
+
+	for rows.Next() {
+		var row identifierRow
+		if err := rows.Scan(&row.value, &row.assetID, &row.locationID); err != nil {
+			return nil, fmt.Errorf("failed to scan identifier row: %w", err)
+		}
+		row.normalized = normalizeEPC(row.value)
+		identifierRows = append(identifierRows, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating identifier rows: %w", err)
+	}
+
+	// Collect unique asset and location IDs for batch fetch
+	assetIDs := make([]int, 0)
+	locationIDs := make([]int, 0)
+	for _, row := range identifierRows {
+		if row.assetID != nil {
+			assetIDs = append(assetIDs, *row.assetID)
+		}
+		if row.locationID != nil {
+			locationIDs = append(locationIDs, *row.locationID)
+		}
+	}
+
+	// Batch fetch assets
+	assetMap := make(map[int]*asset.Asset)
+	if len(assetIDs) > 0 {
+		assets, err := s.GetAssetsByIDs(ctx, assetIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch fetch assets: %w", err)
+		}
+		for _, a := range assets {
+			assetMap[a.ID] = a
+		}
+	}
+
+	// Batch fetch locations
+	locationMap := make(map[int]*location.Location)
+	if len(locationIDs) > 0 {
+		locations, err := s.GetLocationsByIDs(ctx, locationIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch fetch locations: %w", err)
+		}
+		for _, loc := range locations {
+			locationMap[loc.ID] = loc
+		}
+	}
+
+	// Build result map keyed by ORIGINAL input values
+	result := make(map[string]*LookupResult)
+	for _, row := range identifierRows {
+		var lookupResult *LookupResult
+
+		if row.assetID != nil {
+			if a, ok := assetMap[*row.assetID]; ok {
+				lookupResult = &LookupResult{
+					EntityType: "asset",
+					EntityID:   *row.assetID,
+					Asset:      a,
+				}
+			}
+		} else if row.locationID != nil {
+			if loc, ok := locationMap[*row.locationID]; ok {
+				lookupResult = &LookupResult{
+					EntityType: "location",
+					EntityID:   *row.locationID,
+					Location:   loc,
+				}
+			}
+		}
+
+		if lookupResult != nil {
+			// Map result to ALL original input values that normalize to this match
+			for _, originalValue := range normalizedToOriginals[row.normalized] {
+				result[originalValue] = lookupResult
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // LookupByTagValue finds an asset or location by its tag identifier value
+// Note: Comparison is done with leading zeros stripped (normalized)
 func (s *Storage) LookupByTagValue(ctx context.Context, orgID int, tagType, value string) (*LookupResult, error) {
+	normalizedValue := normalizeEPC(value)
+
 	query := `
 		SELECT asset_id, location_id
 		FROM trakrf.identifiers
-		WHERE org_id = $1 AND type = $2 AND value = $3 AND deleted_at IS NULL
+		WHERE org_id = $1 AND type = $2 AND LTRIM(value, '0') = $3 AND deleted_at IS NULL
 	`
 
 	var assetID, locationID *int
-	err := s.pool.QueryRow(ctx, query, orgID, tagType, value).Scan(&assetID, &locationID)
+	err := s.pool.QueryRow(ctx, query, orgID, tagType, normalizedValue).Scan(&assetID, &locationID)
 	if err != nil {
 		if err.Error() == "no rows in result set" {
 			return nil, nil
