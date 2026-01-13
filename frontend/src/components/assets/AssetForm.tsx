@@ -74,10 +74,9 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    // Required fields
-    if (!formData.identifier.trim()) {
-      errors.identifier = 'Asset ID is required';
-    } else if (!/^[a-zA-Z0-9-_]+$/.test(formData.identifier)) {
+    // Asset ID is optional - backend auto-generates if empty
+    // Only validate format if a value is provided
+    if (formData.identifier.trim() && !/^[a-zA-Z0-9-_]+$/.test(formData.identifier)) {
       errors.identifier = 'Asset ID must contain only letters, numbers, hyphens, and underscores';
     }
 
@@ -153,7 +152,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Asset ID <span className="text-red-500">*</span>
+            Asset ID
           </label>
           <input
             type="text"
@@ -168,9 +167,15 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             } bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed`}
             placeholder={isScanning
               ? (scanType === 'rfid' ? 'Scanning RFID...' : 'Scanning barcode...')
-              : 'e.g., LAP-001'
+              : 'Leave blank to auto-generate'
             }
           />
+          {/* Show hint when field is empty and not scanning */}
+          {!formData.identifier.trim() && !isScanning && mode === 'create' && (
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Will be auto-generated as ASSET-XXXX
+            </p>
+          )}
           {fieldErrors.identifier && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.identifier}</p>
           )}
