@@ -20,8 +20,7 @@ interface AssetTableProps {
 }
 
 const columns: Column<Asset>[] = [
-  { key: 'type', label: 'Type', sortable: false },
-  { key: 'identifier', label: 'Identifier', sortable: true },
+  { key: 'identifier', label: 'Asset ID', sortable: true },
   { key: 'name', label: 'Name', sortable: true },
   { key: 'location', label: 'Location', sortable: false },
   { key: 'tags', label: 'Tags', sortable: false },

@@ -27,7 +27,7 @@ type Asset struct {
 
 type CreateAssetRequest struct {
 	OrgID             int                  `json:"-" swaggerignore:"true"`
-	Identifier        string               `json:"identifier" validate:"required,min=1,max=255"`
+	Identifier        string               `json:"identifier" validate:"omitempty,max=255"`
 	Name              string               `json:"name" validate:"required,min=1,max=255"`
 	Type              string               `json:"type" validate:"oneof=asset"`
 	Description       string               `json:"description" validate:"omitempty,max=1024"`

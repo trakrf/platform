@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,15 @@ import (
 )
 
 func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.Asset, error) {
+	// Auto-generate identifier if empty
+	if strings.TrimSpace(request.Identifier) == "" {
+		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate identifier: %w", err)
+		}
+		request.Identifier = GenerateAssetIdentifier(seq)
+	}
+
 	query := `
 	insert into trakrf.assets
 	(name, identifier, type, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
@@ -39,6 +49,34 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	}
 
 	return &asset, nil
+}
+
+// GetNextAssetSequence derives the next sequence number for auto-generated asset identifiers.
+// It queries the max sequence from existing ASSET-XXXX identifiers for the org.
+// Returns 1 if no ASSET-XXXX identifiers exist.
+func (s *Storage) GetNextAssetSequence(ctx context.Context, orgID int) (int, error) {
+	var maxSeq sql.NullInt64
+	query := `
+		SELECT MAX(CAST(SUBSTRING(identifier FROM 'ASSET-([0-9]+)') AS INT))
+		FROM trakrf.assets
+		WHERE org_id = $1
+		  AND identifier ~ '^ASSET-[0-9]+$'
+		  AND deleted_at IS NULL
+	`
+	err := s.pool.QueryRow(ctx, query, orgID).Scan(&maxSeq)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max sequence: %w", err)
+	}
+	if !maxSeq.Valid {
+		return 1, nil // Start at 1 if no existing ASSET-XXXX
+	}
+	return int(maxSeq.Int64) + 1, nil
+}
+
+// GenerateAssetIdentifier creates an identifier in format ASSET-XXXX.
+// Zero-pads to 4 digits minimum, grows naturally beyond 9999.
+func GenerateAssetIdentifier(seq int) string {
+	return fmt.Sprintf("ASSET-%04d", seq)
 }
 
 func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateAssetRequest) (*asset.Asset, error) {
@@ -81,6 +119,13 @@ func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateA
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
+		}
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			identifier := "unknown"
+			if request.Identifier != nil {
+				identifier = *request.Identifier
+			}
+			return nil, fmt.Errorf("asset with identifier %s already exists", identifier)
 		}
 		if strings.Contains(err.Error(), "current_location_id_fkey") {
 			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
@@ -181,6 +226,21 @@ func (s *Storage) DeleteAsset(ctx context.Context, id *int) (bool, error) {
 func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (int, []error) {
 	if len(assets) == 0 {
 		return 0, nil
+	}
+
+	// Auto-generate identifiers for assets with empty identifiers
+	// Assumes all assets in batch belong to same org (first asset's OrgID)
+	orgID := assets[0].OrgID
+	seq, err := s.GetNextAssetSequence(ctx, orgID)
+	if err != nil {
+		return 0, []error{fmt.Errorf("failed to get sequence for auto-generation: %w", err)}
+	}
+
+	for i := range assets {
+		if strings.TrimSpace(assets[i].Identifier) == "" {
+			assets[i].Identifier = GenerateAssetIdentifier(seq)
+			seq++
+		}
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -307,6 +367,15 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 }
 
 func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
+	// Auto-generate identifier if empty
+	if strings.TrimSpace(request.Identifier) == "" {
+		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate identifier: %w", err)
+		}
+		request.Identifier = GenerateAssetIdentifier(seq)
+	}
+
 	identifiersJSON, err := identifiersToJSON(request.Identifiers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)

@@ -43,7 +43,7 @@ export interface Asset {
  * Reference: backend/internal/models/asset/asset.go lines 27-37
  */
 export interface CreateAssetRequest {
-  identifier: string; // required, max 255
+  identifier?: string; // optional - auto-generated as ASSET-XXXX if not provided
   name: string; // required, max 255
   type: AssetType; // required, oneof
   description?: string; // optional, max 1024

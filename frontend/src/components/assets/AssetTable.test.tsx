@@ -91,7 +91,7 @@ describe('AssetTable', () => {
   it('renders sortable column headers', () => {
     render(<AssetTable />);
 
-    expect(screen.getByText('Identifier')).toBeInTheDocument();
+    expect(screen.getByText('Asset ID')).toBeInTheDocument();
     expect(screen.getByText('Name')).toBeInTheDocument();
     expect(screen.getByText('Status')).toBeInTheDocument();
   });

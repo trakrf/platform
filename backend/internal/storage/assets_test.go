@@ -137,7 +137,7 @@ func TestCreateAsset_EmptyName(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestCreateAsset_EmptyIdentifier(t *testing.T) {
+func TestCreateAsset_EmptyIdentifier_AutoGenerates(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -157,19 +157,37 @@ func TestCreateAsset_EmptyIdentifier(t *testing.T) {
 		OrgID:       1,
 	}
 
+	// First, expect the sequence derivation query (returns NULL meaning start at 1)
+	seqRows := pgxmock.NewRows([]string{"max"}).AddRow(nil)
+	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
+		WithArgs(request.OrgID).
+		WillReturnRows(seqRows)
+
+	// Then expect insert with auto-generated identifier "ASSET-0001"
+	rows := pgxmock.NewRows([]string{
+		"id", "org_id", "identifier", "name", "type", "description",
+		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
+		"created_at", "updated_at", "deleted_at",
+	}).AddRow(
+		1, request.OrgID, "ASSET-0001", request.Name,
+		request.Type, request.Description, nil, request.ValidFrom, request.ValidTo,
+		request.Metadata, request.IsActive, now, now, nil,
+	)
+
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
-			request.Name, request.Identifier, request.Type,
+			request.Name, "ASSET-0001", request.Type,
 			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo,
 			request.Metadata, request.IsActive, request.OrgID,
 		).
-		WillReturnError(errors.New("ERROR: null value in column \"identifier\" violates not-null constraint"))
+		WillReturnRows(rows)
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to create asset")
+	assert.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.ID)
+	assert.Equal(t, "ASSET-0001", result.Identifier) // Auto-generated
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -884,5 +902,111 @@ func TestDeleteAsset_DatabaseError(t *testing.T) {
 	assert.Error(t, err)
 	assert.False(t, result)
 	assert.Contains(t, err.Error(), "could not delete asset")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Tests for GenerateAssetIdentifier helper function
+
+func TestGenerateAssetIdentifier_ZeroPadding(t *testing.T) {
+	tests := []struct {
+		seq      int
+		expected string
+	}{
+		{1, "ASSET-0001"},
+		{9, "ASSET-0009"},
+		{10, "ASSET-0010"},
+		{99, "ASSET-0099"},
+		{100, "ASSET-0100"},
+		{999, "ASSET-0999"},
+		{1000, "ASSET-1000"},
+		{9999, "ASSET-9999"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			result := GenerateAssetIdentifier(tt.seq)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGenerateAssetIdentifier_Beyond9999(t *testing.T) {
+	tests := []struct {
+		seq      int
+		expected string
+	}{
+		{10000, "ASSET-10000"},
+		{10001, "ASSET-10001"},
+		{99999, "ASSET-99999"},
+		{100000, "ASSET-100000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			result := GenerateAssetIdentifier(tt.seq)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetNextAssetSequence_Empty(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+	orgID := 1
+
+	// No existing ASSET-XXXX identifiers (returns NULL)
+	rows := pgxmock.NewRows([]string{"max"}).AddRow(nil)
+	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
+		WithArgs(orgID).
+		WillReturnRows(rows)
+
+	seq, err := storage.GetNextAssetSequence(context.Background(), orgID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, seq)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetNextAssetSequence_WithExisting(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+	orgID := 1
+
+	// Existing ASSET-0042 is the highest
+	rows := pgxmock.NewRows([]string{"max"}).AddRow(int64(42))
+	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
+		WithArgs(orgID).
+		WillReturnRows(rows)
+
+	seq, err := storage.GetNextAssetSequence(context.Background(), orgID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 43, seq)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetNextAssetSequence_DatabaseError(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+	orgID := 1
+
+	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
+		WithArgs(orgID).
+		WillReturnError(errors.New("connection refused"))
+
+	seq, err := storage.GetNextAssetSequence(context.Background(), orgID)
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, seq)
+	assert.Contains(t, err.Error(), "failed to get max sequence")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
