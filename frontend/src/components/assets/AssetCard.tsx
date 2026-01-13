@@ -93,17 +93,7 @@ export function AssetCard({
             ${className}
           `}
         >
-          {/* Icon + Type */}
-          <td className="px-2 sm:px-4 py-2 sm:py-3">
-            <div className="flex items-center gap-1 sm:gap-2">
-              <TypeIcon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500 dark:text-gray-400" />
-              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 capitalize hidden sm:inline">
-                {asset.type}
-              </span>
-            </div>
-          </td>
-
-          {/* Identifier */}
+          {/* Asset ID */}
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate block max-w-[100px] sm:max-w-none">
               {asset.identifier}
