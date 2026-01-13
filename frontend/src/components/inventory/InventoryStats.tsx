@@ -8,12 +8,21 @@ interface InventoryStatsProps {
     totalScanned: number;
     hasReconciliation: boolean;
   };
+  activeFilters: Set<string>;
+  onToggleFilter: (filter: string) => void;
+  onClearFilters: () => void;
 }
 
-export function InventoryStats({ stats }: InventoryStatsProps) {
+export function InventoryStats({ stats, activeFilters, onToggleFilter, onClearFilters }: InventoryStatsProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
-      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-2 md:p-3">
+      <button
+        onClick={() => onToggleFilter('Found')}
+        className={`bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-2 md:p-3 cursor-pointer transition-shadow text-left w-full ${
+          activeFilters.has('Found') ? 'ring-2 ring-green-500 ring-offset-1 dark:ring-offset-gray-900' : ''
+        }`}
+        aria-pressed={activeFilters.has('Found')}
+      >
         <div className="flex items-center justify-between">
           <div className="w-full">
             <div className="flex items-center mb-0.5 sm:mb-1">
@@ -26,9 +35,15 @@ export function InventoryStats({ stats }: InventoryStatsProps) {
             </div>
           </div>
         </div>
-      </div>
+      </button>
 
-      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2 md:p-3">
+      <button
+        onClick={() => onToggleFilter('Missing')}
+        className={`bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2 md:p-3 cursor-pointer transition-shadow text-left w-full ${
+          activeFilters.has('Missing') ? 'ring-2 ring-red-500 ring-offset-1 dark:ring-offset-gray-900' : ''
+        }`}
+        aria-pressed={activeFilters.has('Missing')}
+      >
         <div className="flex items-center justify-between">
           <div className="w-full">
             <div className="flex items-center mb-0.5 sm:mb-1">
@@ -41,9 +56,15 @@ export function InventoryStats({ stats }: InventoryStatsProps) {
             </div>
           </div>
         </div>
-      </div>
+      </button>
 
-      <div className="bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700 rounded-lg p-2 md:p-3">
+      <button
+        onClick={() => onToggleFilter('Not Listed')}
+        className={`bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700 rounded-lg p-2 md:p-3 cursor-pointer transition-shadow text-left w-full ${
+          activeFilters.has('Not Listed') ? 'ring-2 ring-gray-500 ring-offset-1 dark:ring-offset-gray-900' : ''
+        }`}
+        aria-pressed={activeFilters.has('Not Listed')}
+      >
         <div className="flex items-center justify-between">
           <div className="w-full">
             <div className="flex items-center mb-0.5 sm:mb-1">
@@ -56,9 +77,15 @@ export function InventoryStats({ stats }: InventoryStatsProps) {
             </div>
           </div>
         </div>
-      </div>
+      </button>
 
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 md:p-3">
+      <button
+        onClick={onClearFilters}
+        className={`bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 md:p-3 cursor-pointer transition-shadow text-left w-full ${
+          activeFilters.size === 0 ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-gray-900' : ''
+        }`}
+        aria-pressed={activeFilters.size === 0}
+      >
         <div className="flex items-center justify-between">
           <div className="w-full">
             <div className="flex items-center mb-0.5 sm:mb-1 md:mb-2">
@@ -69,7 +96,7 @@ export function InventoryStats({ stats }: InventoryStatsProps) {
             <div className="text-blue-600 dark:text-blue-400 text-[10px] xs:text-xs md:text-sm truncate">Live scan results</div>
           </div>
         </div>
-      </div>
+      </button>
     </div>
   );
 }

@@ -20,7 +20,7 @@ import { InventorySettingsPanel } from '@/components/inventory/InventorySettings
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
+  const [statusFilters, setStatusFilters] = useState<Set<string>>(new Set());
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedExportFormat, setSelectedExportFormat] = useState<ExportFormat>('csv');
@@ -63,18 +63,19 @@ export default function InventoryScreen() {
       const matchesSearch = !searchTerm ||
         (tag.displayEpc || tag.epc).toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesStatus = statusFilter === 'All Status' ||
-        (statusFilter === 'Found' && tag.reconciled === true) ||
-        (statusFilter === 'Missing' && tag.reconciled === false) ||
-        (statusFilter === 'Not Listed' && (tag.reconciled === null || tag.reconciled === undefined));
+      // Multi-select: empty set = show all, otherwise OR logic
+      const matchesStatus = statusFilters.size === 0 ||
+        (statusFilters.has('Found') && tag.reconciled === true) ||
+        (statusFilters.has('Missing') && tag.reconciled === false) ||
+        (statusFilters.has('Not Listed') && (tag.reconciled === null || tag.reconciled === undefined));
 
       return matchesSearch && matchesStatus;
     });
-  }, [sortedTags, searchTerm, statusFilter]);
+  }, [sortedTags, searchTerm, statusFilters]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, setCurrentPage]);
+  }, [searchTerm, statusFilters, setCurrentPage]);
 
   const { paginatedTags, startIndex, endIndex } = usePagination(filteredTags, currentPage, pageSize);
 
@@ -109,6 +110,22 @@ export default function InventoryScreen() {
     setError(null);
   }, [clearTags, setError]);
 
+  const handleToggleFilter = useCallback((filter: string) => {
+    setStatusFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(filter)) {
+        next.delete(filter);
+      } else {
+        next.add(filter);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setStatusFilters(new Set());
+  }, []);
+
   useEffect(() => {
     const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
     const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothMocked;
@@ -138,8 +155,6 @@ export default function InventoryScreen() {
           totalCount={sortedTags.length}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
           onDownloadSample={downloadSampleReconFile}
           onUploadCSV={() => fileInputRef.current?.click()}
           onClearInventory={handleClearInventory}
@@ -210,7 +225,12 @@ export default function InventoryScreen() {
         )}
       </div>
 
-      <InventoryStats stats={stats} />
+      <InventoryStats
+        stats={stats}
+        activeFilters={statusFilters}
+        onToggleFilter={handleToggleFilter}
+        onClearFilters={handleClearFilters}
+      />
 
       <InventorySettingsPanel
         isOpen={isSettingsPanelOpen}

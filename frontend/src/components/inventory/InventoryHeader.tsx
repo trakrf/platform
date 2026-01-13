@@ -2,7 +2,6 @@ import { Download, Package2, Trash2, Upload, Volume2, VolumeX, Play, Pause } fro
 import { ShareButton } from '@/components/ShareButton';
 import type { ExportFormat } from '@/types/export';
 import { InventorySearchBar } from './InventorySearchBar';
-import { InventoryStatusFilter } from './InventoryStatusFilter';
 import { useDeviceStore } from '@/stores';
 
 interface InventoryHeaderProps {
@@ -10,8 +9,6 @@ interface InventoryHeaderProps {
   totalCount: number;
   searchTerm: string;
   onSearchChange: (value: string) => void;
-  statusFilter: string;
-  onStatusFilterChange: (value: string) => void;
   onDownloadSample: () => void;
   onUploadCSV: () => void;
   onClearInventory: () => void;
@@ -28,8 +25,6 @@ export function InventoryHeader({
   totalCount,
   searchTerm,
   onSearchChange,
-  statusFilter,
-  onStatusFilterChange,
   onDownloadSample,
   onUploadCSV,
   onClearInventory,
@@ -106,10 +101,7 @@ export function InventoryHeader({
             />
           </div>
         </div>
-        <div className="space-y-2">
-          <InventorySearchBar value={searchTerm} onChange={onSearchChange} />
-          <InventoryStatusFilter value={statusFilter} onChange={onStatusFilterChange} />
-        </div>
+        <InventorySearchBar value={searchTerm} onChange={onSearchChange} />
       </div>
 
       <div className="hidden md:flex items-center justify-between">
@@ -117,14 +109,13 @@ export function InventoryHeader({
           <Package2 className="w-5 h-5 mr-2" />
           Scanned ({filteredCount}{filteredCount !== totalCount && ` of ${totalCount}`})
         </h3>
-        <div className="flex items-center space-x-4 flex-1 justify-center mx-8">
+        <div className="flex items-center flex-1 justify-center mx-8">
           <InventorySearchBar
             value={searchTerm}
             onChange={onSearchChange}
             placeholder="Search for an item by ID..."
-            className="w-64"
+            className="w-80"
           />
-          <InventoryStatusFilter value={statusFilter} onChange={onStatusFilterChange} />
         </div>
         <div className="flex items-center space-x-2">
           <button
