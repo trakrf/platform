@@ -195,24 +195,30 @@ export function useScanToInput({
           await dm.setMode(ReaderMode.BARCODE);
         }
       } else if (!triggerState && scanSessionRef.current) {
-        // Trigger released - DON'T stop the CS108 scan immediately
-        // Let it finish transmitting data, then cleanup after timeout
-        // This prevents truncated reads when trigger is released mid-scan
+        // Trigger released - give CS108 500ms to finish transmitting data
+        // Then switch modes. Session stays open to catch late-arriving data.
         isScanningRef.current = false;
 
-        // Keep scanSessionRef active for 2 seconds to catch late-arriving data
-        // Mode switch happens in cleanup, not immediately
         sessionCleanupRef.current = setTimeout(async () => {
-          scanSessionRef.current = null;
-          scanTypeRef.current = null;
-          sessionCleanupRef.current = null;
+          // If data already arrived, session is null - nothing to do
+          if (!scanSessionRef.current) {
+            sessionCleanupRef.current = null;
+            return;
+          }
 
-          // Now safe to switch modes - data transmission complete
+          // Switch modes now - CS108 had 500ms to finish
           const dm = DeviceManager.getInstance();
           if (dm) {
             await dm.setMode(returnMode);
           }
-        }, 2000);
+
+          // Keep session open 1.5s more for any late data processing
+          sessionCleanupRef.current = setTimeout(() => {
+            scanSessionRef.current = null;
+            scanTypeRef.current = null;
+            sessionCleanupRef.current = null;
+          }, 1500);
+        }, 500);
       }
     };
 
