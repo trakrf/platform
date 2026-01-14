@@ -28,6 +28,7 @@
     "@headlessui/react": "^1.7.18",
     "@openreplay/tracker": "^16.4.7",
     "@openreplay/tracker-zustand": "^1.1.1",
+    "@sentry/react": "^10.34.0",
     "@tanstack/react-query": "^5.90.5",
     "axios": "^1.12.2",
     "clsx": "^2.1.0",

@@ -19,6 +19,9 @@ importers:
       '@openreplay/tracker-zustand':
         specifier: ^1.1.1
         version: 1.1.1(@openreplay/tracker@16.4.9)(@types/react@18.3.26)(react@18.3.1)
+      '@sentry/react':
+        specifier: ^10.34.0
+        version: 10.34.0(react@18.3.1)
       '@tanstack/react-query':
         specifier: ^5.90.5
         version: 5.90.5(react@18.3.1)
@@ -848,6 +851,36 @@ packages:
     resolution: {integrity: sha512-bf9PtUa0u8IXDVxzRToFQKsNCRz9qLYfR/MpECxl4mRoWYjAeFjgxj1XdZr2M/GNVpT05p+LgQOHopYDlUu6/w==}
     cpu: [x64]
     os: [win32]
+
+  '@sentry-internal/browser-utils@10.34.0':
+    resolution: {integrity: sha512-0YNr60rGHyedmwkO0lbDBjNx2KAmT3kWamjaqu7Aw+jsESoPLgt+fzaTVvUBvkftBDui2PeTSzXm/nqzssctYg==}
+    engines: {node: '>=18'}
+
+  '@sentry-internal/feedback@10.34.0':
+    resolution: {integrity: sha512-wgGnq+iNxsFSOe9WX/FOvtoItSTjgLJJ4dQkVYtcVM6WGBVIg4wgNYfECCnRNztUTPzpZHLjC9r+4Pym451DDQ==}
+    engines: {node: '>=18'}
+
+  '@sentry-internal/replay-canvas@10.34.0':
+    resolution: {integrity: sha512-XWH/9njtgMD+LLWjc4KKgBpb+dTCkoUEIFDxcvzG/87d+jirmzf0+r8EfpLwKG+GrqNiiGRV39zIqu0SfPl+cw==}
+    engines: {node: '>=18'}
+
+  '@sentry-internal/replay@10.34.0':
+    resolution: {integrity: sha512-Vmea0GcOg57z/S1bVSj3saFcRvDqdLzdy4wd9fQMpMgy5OCbTlo7lxVUndKzbcZnanma6zF6VxwnWER1WuN9RA==}
+    engines: {node: '>=18'}
+
+  '@sentry/browser@10.34.0':
+    resolution: {integrity: sha512-8WCsAXli5Z+eIN8dMY8KGQjrS3XgUp1np/pjdeWNrVPVR8q8XpS34qc+f+y/LFrYQC9bs2Of5aIBwRtDCIvRsg==}
+    engines: {node: '>=18'}
+
+  '@sentry/core@10.34.0':
+    resolution: {integrity: sha512-4FFpYBMf0VFdPcsr4grDYDOR87mRu6oCfb51oQjU/Pndmty7UgYo0Bst3LEC/8v0SpytBtzXq+Wx/fkwulBesg==}
+    engines: {node: '>=18'}
+
+  '@sentry/react@10.34.0':
+    resolution: {integrity: sha512-LDpg9WDrEwo6lr/YOAA54id/g5D1PGKEIiOGxqRZbBVyjzrsquwzhSG2CMqnp+YO6lz/r96LWuqm2cvfpht2zA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^16.14.0 || 17.x || 18.x || 19.x
 
   '@serialport/binding-mock@10.2.2':
     resolution: {integrity: sha512-HAFzGhk9OuFMpuor7aT5G1ChPgn5qSsklTFOTUX72Rl6p0xwcSVsRtG/xaGp6bxpN7fI9D/S8THLBWbBgS6ldw==}
@@ -4779,6 +4812,40 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.52.4':
     optional: true
+
+  '@sentry-internal/browser-utils@10.34.0':
+    dependencies:
+      '@sentry/core': 10.34.0
+
+  '@sentry-internal/feedback@10.34.0':
+    dependencies:
+      '@sentry/core': 10.34.0
+
+  '@sentry-internal/replay-canvas@10.34.0':
+    dependencies:
+      '@sentry-internal/replay': 10.34.0
+      '@sentry/core': 10.34.0
+
+  '@sentry-internal/replay@10.34.0':
+    dependencies:
+      '@sentry-internal/browser-utils': 10.34.0
+      '@sentry/core': 10.34.0
+
+  '@sentry/browser@10.34.0':
+    dependencies:
+      '@sentry-internal/browser-utils': 10.34.0
+      '@sentry-internal/feedback': 10.34.0
+      '@sentry-internal/replay': 10.34.0
+      '@sentry-internal/replay-canvas': 10.34.0
+      '@sentry/core': 10.34.0
+
+  '@sentry/core@10.34.0': {}
+
+  '@sentry/react@10.34.0(react@18.3.1)':
+    dependencies:
+      '@sentry/browser': 10.34.0
+      '@sentry/core': 10.34.0
+      react: 18.3.1
 
   '@serialport/binding-mock@10.2.2':
     dependencies:
