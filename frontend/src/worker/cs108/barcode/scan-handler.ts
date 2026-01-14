@@ -3,6 +3,13 @@
  *
  * Handles barcode scan notifications (0x9100, 0x9101) from the CS108 device.
  * Processes barcode data and good read confirmations.
+ *
+ * IMPORTANT: Barcode data emission uses a two-phase approach:
+ * 1. BARCODE_DATA (0x9100) - Buffer the data, don't emit yet
+ * 2. BARCODE_GOOD_READ (0x9101) - Confirm read, emit buffered data
+ *
+ * This ensures we have complete barcode data before emitting, avoiding
+ * truncation issues caused by BLE fragmentation or timing.
  */
 
 import type {
@@ -14,6 +21,30 @@ import type { BarcodeData, ParsedBarcodePayload } from './types';
 import type { CS108Packet } from '../type';
 import { ReaderMode, ReaderState } from '../../types/reader';
 import { postWorkerEvent, WorkerEventType } from '../../types/events';
+
+/**
+ * Shared barcode buffer between handlers
+ * Allows BARCODE_DATA to buffer and BARCODE_GOOD_READ to emit
+ */
+interface PendingBarcode {
+  data: BarcodeData;
+  timestamp: number;
+}
+
+// Module-level shared buffer for cross-handler communication
+let pendingBarcode: PendingBarcode | null = null;
+const PENDING_BARCODE_TIMEOUT_MS = 2000; // Clear stale data after 2s
+
+/**
+ * Clear any pending barcode data
+ * Call this when switching modes or disconnecting
+ */
+export function clearPendingBarcode(): void {
+  if (pendingBarcode) {
+    logger.debug('[BarcodeHandler] Clearing pending barcode buffer');
+    pendingBarcode = null;
+  }
+}
 
 /**
  * Barcode symbology mapping
@@ -37,6 +68,10 @@ const SYMBOLOGY_NAMES: Record<number, string> = {
 
 /**
  * Handler for barcode data notifications (0x9100)
+ *
+ * IMPORTANT: This handler BUFFERS data instead of emitting immediately.
+ * The BarcodeGoodReadHandler (0x9101) will emit the buffered data.
+ * This two-phase approach ensures complete barcode data even with BLE fragmentation.
  */
 export class BarcodeDataHandler implements NotificationHandler {
   private lastScanTime = 0;
@@ -66,8 +101,7 @@ export class BarcodeDataHandler implements NotificationHandler {
 
   /**
    * Handle barcode data notification
-   * Formats and emits barcode scan event
-   * Auto-stops scanning and provides vibrator feedback
+   * Buffers data and waits for BARCODE_GOOD_READ (0x9101) to emit
    */
   async handle(packet: CS108Packet, context: NotificationContext): Promise<void> {
     const payload = packet.payload as ParsedBarcodePayload;
@@ -94,30 +128,17 @@ export class BarcodeDataHandler implements NotificationHandler {
     this.lastScanTime = now;
     this.scanCount++;
 
-    // Emit barcode read event
-    postWorkerEvent({
-      type: WorkerEventType.BARCODE_READ,
-      payload: {
-        barcode: barcodeData.data,
-        symbology: barcodeData.symbology,
-        rawData: barcodeData.rawData ? Array.from(barcodeData.rawData).map(b => b.toString(16).padStart(2, '0')).join('') : undefined,
-        timestamp: barcodeData.timestamp,
-      },
-    });
+    // Buffer data for BARCODE_GOOD_READ to emit
+    // This ensures we have complete data before emitting
+    pendingBarcode = {
+      data: barcodeData,
+      timestamp: now,
+    };
 
-    // Auto-stop scanning if we're currently scanning
-    if (context.readerState === ReaderState.SCANNING) {
-      logger.debug('[BarcodeHandler] Auto-stopping barcode scan after successful read');
-
-      // Emit auto-stop request through the callback so it can be intercepted
-      context.emitNotificationEvent({
-        type: WorkerEventType.BARCODE_AUTO_STOP_REQUEST,
-        payload: {
-          barcode: barcodeData.data,
-          reason: 'Barcode successfully scanned'
-        },
-      });
-    }
+    logger.debug(
+      `[BarcodeHandler] Buffered barcode: ${barcodeData.data.substring(0, 20)}... ` +
+      `(${barcodeData.data.length} chars), waiting for GOOD_READ confirmation`
+    );
 
     // Log in debug mode
     if (context.metadata?.debug) {
@@ -178,7 +199,15 @@ export class BarcodeDataHandler implements NotificationHandler {
 
 /**
  * Handler for barcode good read confirmations (0x9101)
- * This is a simple notification that the scan was successful
+ *
+ * This handler is the EMITTER - it takes buffered data from BarcodeDataHandler
+ * and emits the complete barcode once we have confirmation.
+ *
+ * Sequence:
+ * 1. BARCODE_DATA (0x9100) buffers data in pendingBarcode
+ * 2. BARCODE_GOOD_READ (0x9101) emits the buffered data
+ *
+ * This ensures complete barcode data even with 20-byte MTU fragmentation.
  */
 export class BarcodeGoodReadHandler implements NotificationHandler {
   private confirmationCount = 0;
@@ -194,10 +223,11 @@ export class BarcodeGoodReadHandler implements NotificationHandler {
 
   /**
    * Handle good read confirmation
-   * Emits feedback event for UI/audio/haptic response
+   * Emits the buffered barcode data and triggers auto-stop
    */
   handle(_packet: CS108Packet, context: NotificationContext): void {
     this.confirmationCount++;
+    const now = Date.now();
 
     // Emit good read event for UI feedback
     postWorkerEvent({
@@ -206,6 +236,58 @@ export class BarcodeGoodReadHandler implements NotificationHandler {
         confirmationNumber: this.confirmationCount,
       },
     });
+
+    // Check for pending barcode data to emit
+    if (pendingBarcode) {
+      // Check if data is stale (shouldn't happen in normal flow)
+      const age = now - pendingBarcode.timestamp;
+      if (age > PENDING_BARCODE_TIMEOUT_MS) {
+        logger.warn(
+          `[BarcodeHandler] Discarding stale pending barcode (age: ${age}ms)`
+        );
+        pendingBarcode = null;
+        return;
+      }
+
+      const barcodeData = pendingBarcode.data;
+
+      logger.debug(
+        `[BarcodeHandler] GOOD_READ confirmed - emitting barcode: ` +
+        `${barcodeData.data.substring(0, 30)}${barcodeData.data.length > 30 ? '...' : ''} ` +
+        `(${barcodeData.data.length} chars)`
+      );
+
+      // Emit the complete barcode read event
+      postWorkerEvent({
+        type: WorkerEventType.BARCODE_READ,
+        payload: {
+          barcode: barcodeData.data,
+          symbology: barcodeData.symbology,
+          rawData: barcodeData.rawData
+            ? Array.from(barcodeData.rawData).map(b => b.toString(16).padStart(2, '0')).join('')
+            : undefined,
+          timestamp: barcodeData.timestamp,
+        },
+      });
+
+      // Auto-stop scanning if we're currently scanning
+      if (context.readerState === ReaderState.SCANNING) {
+        logger.debug('[BarcodeHandler] Auto-stopping barcode scan after confirmed read');
+
+        context.emitNotificationEvent({
+          type: WorkerEventType.BARCODE_AUTO_STOP_REQUEST,
+          payload: {
+            barcode: barcodeData.data,
+            reason: 'Barcode successfully scanned and confirmed'
+          },
+        });
+      }
+
+      // Clear the pending barcode
+      pendingBarcode = null;
+    } else {
+      logger.warn('[BarcodeHandler] GOOD_READ received but no pending barcode data');
+    }
 
     // Log in debug mode
     if (context.metadata?.debug) {
@@ -229,5 +311,6 @@ export class BarcodeGoodReadHandler implements NotificationHandler {
    */
   cleanup(): void {
     this.confirmationCount = 0;
+    pendingBarcode = null;
   }
 }

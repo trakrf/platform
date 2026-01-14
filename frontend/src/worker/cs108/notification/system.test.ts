@@ -374,10 +374,11 @@ describe('Notification System Integration', () => {
   });
 
   describe('barcode notifications', () => {
-    it('should process barcode data in BARCODE mode', () => {
+    it('should buffer barcode data and emit on GOOD_READ confirmation', () => {
       currentMode = ReaderMode.BARCODE;
 
-      const packet: CS108Packet = {
+      // Step 1: Send BARCODE_DATA - this should buffer, not emit BARCODE_READ
+      const dataPacket: CS108Packet = {
         event: {
           name: 'BARCODE_DATA',
           eventCode: 0x9100,
@@ -393,10 +394,41 @@ describe('Notification System Integration', () => {
         timestamp: Date.now(),
       };
 
-      router.handleNotification(packet);
+      router.handleNotification(dataPacket);
 
-      expect(postMessageSpy).toHaveBeenCalledTimes(1);
-      expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+      // Data is buffered, no BARCODE_READ emitted yet
+      expect(postMessageSpy).toHaveBeenCalledTimes(0);
+
+      // Step 2: Send BARCODE_GOOD_READ - this should emit the buffered BARCODE_READ
+      const goodReadPacket: CS108Packet = {
+        event: {
+          name: 'BARCODE_GOOD_READ',
+          eventCode: 0x9101,
+          module: 0x6A,
+          isCommand: false,
+          isNotification: true,
+        } as CS108Event,
+        payload: undefined,
+        rawData: new Uint8Array([]),
+        timestamp: Date.now(),
+      };
+
+      router.handleNotification(goodReadPacket);
+
+      // Now we should have 2 events: BARCODE_GOOD_READ and BARCODE_READ
+      expect(postMessageSpy).toHaveBeenCalledTimes(2);
+
+      // First call is BARCODE_GOOD_READ
+      expect(postMessageSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        type: 'BARCODE_GOOD_READ',
+        payload: {
+          confirmationNumber: 1,
+        },
+        timestamp: expect.any(Number)
+      }));
+
+      // Second call is BARCODE_READ with the buffered data
+      expect(postMessageSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
         type: 'BARCODE_READ',
         payload: expect.objectContaining({
           barcode: '123456789012',
@@ -407,9 +439,10 @@ describe('Notification System Integration', () => {
       }));
     });
 
-    it('should process barcode good read confirmation', () => {
+    it('should warn when GOOD_READ received without buffered data', () => {
       currentMode = ReaderMode.BARCODE;
 
+      // Send BARCODE_GOOD_READ without prior BARCODE_DATA
       const packet: CS108Packet = {
         event: {
           name: 'BARCODE_GOOD_READ',
@@ -425,6 +458,7 @@ describe('Notification System Integration', () => {
 
       router.handleNotification(packet);
 
+      // Should still emit BARCODE_GOOD_READ for UI feedback
       expect(postMessageSpy).toHaveBeenCalledTimes(1);
       expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
         type: 'BARCODE_GOOD_READ',
