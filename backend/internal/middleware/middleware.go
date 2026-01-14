@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -182,6 +184,24 @@ func GetUserClaims(r *http.Request) *jwt.Claims {
 		return claims
 	}
 	return nil
+}
+
+// SentryContext enriches Sentry scope with request ID and user info.
+// Should be placed AFTER RequestID and Auth middlewares in the chain.
+func SentryContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
+			hub.Scope().SetTag("request_id", GetRequestID(r.Context()))
+
+			if claims := GetUserClaims(r); claims != nil {
+				hub.Scope().SetUser(sentry.User{
+					ID:    strconv.Itoa(claims.UserID),
+					Email: claims.Email,
+				})
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func generateRequestID() string {

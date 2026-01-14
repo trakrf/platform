@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -106,6 +108,7 @@ func setupRouter(
 
 	r.Use(middleware.RequestID)
 	r.Use(logger.Middleware)
+	r.Use(sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle)
 	r.Use(middleware.Recovery)
 	r.Use(middleware.CORS)
 	r.Use(middleware.ContentType)
@@ -125,6 +128,7 @@ func setupRouter(
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
+		r.Use(middleware.SentryContext)
 
 		orgsHandler.RegisterRoutes(r, store)
 		orgsHandler.RegisterMeRoutes(r)
@@ -154,6 +158,22 @@ func main() {
 	log := logger.Get()
 
 	log.Info().Msg("Logger initialized")
+
+	// Initialize Sentry for error tracking (disabled if SENTRY_DSN is empty)
+	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:           dsn,
+			Environment:   os.Getenv("APP_ENV"),
+			Release:       version,
+			EnableTracing: false,
+		})
+		if err != nil {
+			log.Warn().Err(err).Msg("Sentry initialization failed")
+		} else {
+			log.Info().Msg("Sentry initialized")
+		}
+	}
+	defer sentry.Flush(2 * time.Second)
 
 	port := os.Getenv("BACKEND_PORT")
 	if port == "" {
