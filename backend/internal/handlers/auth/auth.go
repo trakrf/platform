@@ -67,6 +67,31 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 				apierrors.AuthSignupOrgIdentifierTaken, "", middleware.GetRequestID(r.Context()))
 			return
 		}
+		// Handle invitation-related errors
+		if strings.HasPrefix(errMsg, "email_mismatch:") {
+			invitedEmail := strings.TrimPrefix(errMsg, "email_mismatch:")
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				fmt.Sprintf(apierrors.SignupInvitationEmailMismatch, invitedEmail), "", middleware.GetRequestID(r.Context()))
+			return
+		}
+		switch errMsg {
+		case "invalid_token":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationInvalidToken, "", middleware.GetRequestID(r.Context()))
+			return
+		case "expired":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationExpired, "", middleware.GetRequestID(r.Context()))
+			return
+		case "cancelled":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationCancelled, "", middleware.GetRequestID(r.Context()))
+			return
+		case "already_accepted":
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.InvitationAcceptAlreadyUsed, "", middleware.GetRequestID(r.Context()))
+			return
+		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
 			apierrors.AuthSignupFailed, "", middleware.GetRequestID(r.Context()))
 		return
@@ -259,11 +284,48 @@ func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": response})
 }
 
+// @Summary Get invitation info
+// @Description Get invitation details (org name, role) without authentication
+// @Tags auth
+// @Produce json
+// @Param token query string true "Invitation token"
+// @Success 200 {object} map[string]any "data: auth.InvitationInfoResponse"
+// @Failure 400 {object} errors.ErrorResponse "Missing token"
+// @Failure 404 {object} errors.ErrorResponse "Invalid/expired/cancelled token"
+// @Failure 500 {object} errors.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/invitation-info [get]
+func (handler *Handler) GetInvitationInfo(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+			apierrors.InvitationInfoMissingToken, "", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	response, err := handler.service.GetInvitationInfo(r.Context(), token)
+	if err != nil {
+		errMsg := err.Error()
+		// All these cases return 404 to avoid leaking token validity
+		switch errMsg {
+		case "invalid_token", "expired", "cancelled", "already_accepted":
+			httputil.WriteJSONError(w, r, http.StatusNotFound, errors.ErrNotFound,
+				apierrors.InvitationInvalidToken, "", middleware.GetRequestID(r.Context()))
+		default:
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
+				apierrors.InvitationInfoFailed, "", middleware.GetRequestID(r.Context()))
+		}
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": response})
+}
+
 func (handler *Handler) RegisterRoutes(r chi.Router, jwtMiddleware func(http.Handler) http.Handler) {
 	r.Post("/api/v1/auth/signup", handler.Signup)
 	r.Post("/api/v1/auth/login", handler.Login)
 	r.Post("/api/v1/auth/forgot-password", handler.ForgotPassword)
 	r.Post("/api/v1/auth/reset-password", handler.ResetPassword)
+	r.Get("/api/v1/auth/invitation-info", handler.GetInvitationInfo)
 
 	// Protected auth routes
 	r.With(jwtMiddleware).Post("/api/v1/auth/accept-invite", handler.AcceptInvite)

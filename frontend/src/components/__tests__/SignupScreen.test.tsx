@@ -224,7 +224,7 @@ describe('SignupScreen', () => {
       const emailInput = screen.getByLabelText(/email/i);
       const orgNameInput = screen.getByLabelText(/organization name/i);
       const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /signing up/i });
+      const submitButton = screen.getByRole('button', { name: /creating account/i });
 
       expect(emailInput).toBeDisabled();
       expect(orgNameInput).toBeDisabled();
@@ -236,7 +236,7 @@ describe('SignupScreen', () => {
       useAuthStore.setState({ isLoading: true });
       render(<SignupScreen />);
 
-      expect(screen.getByText(/signing up/i)).toBeInTheDocument();
+      expect(screen.getByText(/creating account/i)).toBeInTheDocument();
     });
   });
 
