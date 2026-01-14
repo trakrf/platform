@@ -9,10 +9,12 @@
  * 6. Already member: "You're already a member"
  */
 
-import { useState } from 'react';
-import { Mail, LogIn, UserPlus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mail, LogIn, UserPlus, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores';
 import { orgsApi } from '@/lib/api/orgs';
+import { authApi } from '@/lib/api/auth';
+import type { InvitationInfo } from '@/lib/api/auth';
 import toast from 'react-hot-toast';
 
 interface AcceptInviteScreenProps {
@@ -24,6 +26,30 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
   const [isAccepting, setIsAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [acceptedOrg, setAcceptedOrg] = useState<{ name: string; role: string } | null>(null);
+
+  // State for unauthenticated users - invitation info
+  const [inviteInfo, setInviteInfo] = useState<InvitationInfo | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(true);
+  const [inviteFetchError, setInviteFetchError] = useState<string | null>(null);
+
+  // Fetch invitation info when not authenticated
+  useEffect(() => {
+    if (!isAuthenticated && token) {
+      setInviteLoading(true);
+      authApi
+        .getInvitationInfo(token)
+        .then((res) => {
+          setInviteInfo(res.data.data);
+          setInviteFetchError(null);
+        })
+        .catch(() => {
+          setInviteFetchError('This invitation is invalid or has expired.');
+        })
+        .finally(() => setInviteLoading(false));
+    } else {
+      setInviteLoading(false);
+    }
+  }, [isAuthenticated, token]);
 
   // No token - invalid link
   if (!token) {
@@ -104,40 +130,112 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
     window.location.hash = '#home';
   };
 
-  // Not logged in - show login/signup options
+  // Not logged in - show login/signup options with invite info
   if (!isAuthenticated) {
+    // Loading state
+    if (inviteLoading) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+          <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md text-center">
+            <Loader2 className="w-8 h-8 mx-auto mb-4 text-blue-400 animate-spin" />
+            <p className="text-gray-400">Loading invitation...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Error fetching invite info
+    if (inviteFetchError) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+          <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-900/20 flex items-center justify-center">
+              <Mail className="w-6 h-6 text-red-400" />
+            </div>
+            <h1 className="text-2xl font-semibold text-white mb-4">
+              Invalid Invitation
+            </h1>
+            <p className="text-gray-400 mb-6">{inviteFetchError}</p>
+            <a
+              href="#home"
+              className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+            >
+              Go Home
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // Show invitation details with contextual action button
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md text-center">
           <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-blue-900/20 flex items-center justify-center">
             <Mail className="w-6 h-6 text-blue-400" />
           </div>
-          <h1 className="text-2xl font-semibold text-white mb-4">
+          <h1 className="text-2xl font-semibold text-white mb-2">
             You&apos;ve Been Invited!
           </h1>
-          <p className="text-gray-400 mb-6">
-            Sign in or create an account to accept this organization invitation.
-          </p>
+          {inviteInfo && (
+            <div className="mb-6">
+              <p className="text-gray-300 text-lg">
+                Join <span className="font-semibold text-white">{inviteInfo.org_name}</span> as{' '}
+                <span className="text-blue-400 capitalize">{inviteInfo.role}</span>
+              </p>
+              {inviteInfo.inviter_name && (
+                <p className="text-gray-500 text-sm mt-1">
+                  Invited by {inviteInfo.inviter_name}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-3">
-            <a
-              href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
-              className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
-            >
-              <LogIn className="w-4 h-4" />
-              Sign In
-            </a>
-            <a
-              href={`#signup?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
-              className="flex items-center justify-center gap-2 w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg font-medium transition-colors"
-            >
-              <UserPlus className="w-4 h-4" />
-              Create Account
-            </a>
+            {inviteInfo?.user_exists ? (
+              // User already has an account - show Sign In as primary
+              <a
+                href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
+                className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In to Accept
+              </a>
+            ) : (
+              // New user - show Create Account as primary
+              <a
+                href={`#signup?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
+                className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+              >
+                <UserPlus className="w-4 h-4" />
+                Create Account
+              </a>
+            )}
+
+            {/* Secondary option */}
+            {inviteInfo?.user_exists ? (
+              <a
+                href={`#signup?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
+                className="flex items-center justify-center gap-2 w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+              >
+                <UserPlus className="w-4 h-4" />
+                Create New Account
+              </a>
+            ) : (
+              <a
+                href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
+                className="flex items-center justify-center gap-2 w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                I Have an Account
+              </a>
+            )}
           </div>
 
           <p className="text-gray-500 text-sm mt-6">
-            After signing in, you&apos;ll be able to accept or decline the invitation.
+            {inviteInfo?.user_exists
+              ? 'Sign in with your existing account to accept the invitation.'
+              : 'Create an account to join the organization.'}
           </p>
         </div>
       </div>

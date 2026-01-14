@@ -34,13 +34,19 @@ func NewService(db *pgxpool.Pool, storage *storage.Storage, emailClient *email.C
 }
 
 // Signup registers a new user with a new org in a single transaction.
+// If InvitationToken is provided, user is added to invited org without creating a personal org.
 func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPassword func(string) (string, error), generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
 	passwordHash, err := hashPassword(request.Password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Use provided org name and generate identifier from it
+	// Handle invitation-based signup
+	if request.InvitationToken != nil && *request.InvitationToken != "" {
+		return s.signupWithInvitation(ctx, request, passwordHash, generateJWT)
+	}
+
+	// Standard signup: create user + personal org
 	orgName := strings.TrimSpace(request.OrgName)
 	orgIdentifier := slugifyOrgName(orgName)
 
@@ -98,6 +104,103 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 	}
 
 	token, err := generateJWT(usr.ID, usr.Email, &org.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate JWT: %w", err)
+	}
+
+	return &auth.AuthResponse{
+		Token: token,
+		User:  usr,
+	}, nil
+}
+
+// signupWithInvitation handles signup when user has an invitation token
+// Creates user WITHOUT personal org, adds to invited org atomically
+func (s *Service) signupWithInvitation(ctx context.Context, request auth.SignupRequest, passwordHash string, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
+	// Hash the invitation token
+	hash := sha256.Sum256([]byte(*request.InvitationToken))
+	tokenHash := hex.EncodeToString(hash[:])
+
+	// Get invitation info
+	info, err := s.storage.GetInvitationInfoByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invitation: %w", err)
+	}
+	if info == nil {
+		return nil, fmt.Errorf("invalid_token")
+	}
+
+	// Validate invitation status
+	if time.Now().After(info.ExpiresAt) {
+		return nil, fmt.Errorf("expired")
+	}
+	if info.CancelledAt != nil {
+		return nil, fmt.Errorf("cancelled")
+	}
+	if info.AcceptedAt != nil {
+		return nil, fmt.Errorf("already_accepted")
+	}
+
+	// Verify email matches (case-insensitive)
+	if !strings.EqualFold(request.Email, info.Email) {
+		return nil, fmt.Errorf("email_mismatch:%s", info.Email)
+	}
+
+	// Start transaction
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Create user (NO personal org)
+	var usr user.User
+	userQuery := `
+		INSERT INTO trakrf.users (email, name, password_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at
+	`
+	err = tx.QueryRow(ctx, userQuery, request.Email, request.Email, passwordHash).Scan(
+		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
+		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			return nil, fmt.Errorf("email already exists")
+		}
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Add user to invited org
+	addOrgUserQuery := `
+		INSERT INTO trakrf.org_users (org_id, user_id, role)
+		VALUES ($1, $2, $3)
+	`
+	_, err = tx.Exec(ctx, addOrgUserQuery, info.OrgID, usr.ID, info.Role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add user to organization: %w", err)
+	}
+
+	// Mark invitation as accepted
+	acceptQuery := `
+		UPDATE trakrf.org_invitations
+		SET accepted_at = NOW()
+		WHERE token = $1 AND accepted_at IS NULL
+	`
+	result, err := tx.Exec(ctx, acceptQuery, tokenHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to accept invitation: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return nil, fmt.Errorf("already_accepted")
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Generate JWT with invited org
+	token, err := generateJWT(usr.ID, usr.Email, &info.OrgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate JWT: %w", err)
 	}
@@ -272,6 +375,52 @@ func slugifyOrgName(name string) string {
 	// Trim leading/trailing hyphens
 	slug = strings.Trim(slug, "-")
 	return slug
+}
+
+// GetInvitationInfo returns invitation details for unauthenticated users
+func (s *Service) GetInvitationInfo(ctx context.Context, token string) (*auth.InvitationInfoResponse, error) {
+	// Hash the incoming token
+	hash := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hash[:])
+
+	// Look up invitation by token hash
+	info, err := s.storage.GetInvitationInfoByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invitation info: %w", err)
+	}
+	if info == nil {
+		return nil, fmt.Errorf("invalid_token")
+	}
+
+	// Check if expired
+	if time.Now().After(info.ExpiresAt) {
+		return nil, fmt.Errorf("expired")
+	}
+
+	// Check if cancelled
+	if info.CancelledAt != nil {
+		return nil, fmt.Errorf("cancelled")
+	}
+
+	// Check if already accepted
+	if info.AcceptedAt != nil {
+		return nil, fmt.Errorf("already_accepted")
+	}
+
+	// Check if user already exists
+	userExists, err := s.storage.UserExistsByEmail(ctx, info.Email)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check user existence: %w", err)
+	}
+
+	return &auth.InvitationInfoResponse{
+		OrgName:       info.OrgName,
+		OrgIdentifier: info.OrgIdentifier,
+		Role:          info.Role,
+		Email:         info.Email,
+		UserExists:    userExists,
+		InviterName:   info.InviterName,
+	}, nil
 }
 
 // AcceptInvitation validates token and adds user to org

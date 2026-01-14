@@ -164,4 +164,9 @@ const (
 	InvitationAcceptAlreadyUsed   = "This invitation has already been accepted"
 	InvitationAcceptEmailMismatch = "This invitation was sent to %s"
 	InvitationInvalidToken        = "Invalid invitation token"
+	InvitationInfoFailed          = "Failed to get invitation info"
+	InvitationInfoMissingToken    = "Invitation token is required"
+
+	// Signup with invitation error messages
+	SignupInvitationEmailMismatch = "This invitation was sent to %s. Please sign up with that email address."
 )

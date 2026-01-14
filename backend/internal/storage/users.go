@@ -183,6 +183,17 @@ func (s *Storage) SoftDeleteUser(ctx context.Context, id int) error {
 	return nil
 }
 
+// UserExistsByEmail checks if a user exists with the given email (case-insensitive)
+func (s *Storage) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM trakrf.users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL)`
+	var exists bool
+	err := s.pool.QueryRow(ctx, query, email).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check user exists by email: %w", err)
+	}
+	return exists, nil
+}
+
 // UpdateUserLastOrg sets the user's last_org_id for org switching.
 func (s *Storage) UpdateUserLastOrg(ctx context.Context, userID, orgID int) error {
 	query := `UPDATE trakrf.users SET last_org_id = $2, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
