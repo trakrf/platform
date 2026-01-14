@@ -195,7 +195,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
             {inviteInfo?.user_exists ? (
               // User already has an account - show Sign In as primary
               <a
-                href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
+                href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}&email=${encodeURIComponent(inviteInfo.email)}`}
                 className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
               >
                 <LogIn className="w-4 h-4" />
@@ -223,7 +223,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
               </a>
             ) : (
               <a
-                href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
+                href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}&email=${encodeURIComponent(inviteInfo?.email || '')}`}
                 className="flex items-center justify-center gap-2 w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg font-medium transition-colors"
               >
                 <LogIn className="w-4 h-4" />

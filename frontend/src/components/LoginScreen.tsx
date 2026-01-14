@@ -3,19 +3,35 @@ import { useAuthStore } from '@/stores';
 import { Eye, EyeOff } from 'lucide-react';
 import { handleAuthRedirect } from '@/utils/authRedirect';
 
+// Extract email from URL params (for invite flow pre-population)
+function getEmailFromUrl(): string {
+  const hash = window.location.hash;
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex === -1) return '';
+  const searchParams = new URLSearchParams(hash.substring(queryIndex + 1));
+  return searchParams.get('email') || '';
+}
+
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const initialEmail = getEmailFromUrl();
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   const { login, isLoading } = useAuthStore();
 
-  // Auto-focus email field on mount
+  // Auto-focus appropriate field on mount
   useEffect(() => {
-    emailInputRef.current?.focus();
-  }, []);
+    if (initialEmail) {
+      // Email pre-filled, focus password
+      passwordInputRef.current?.focus();
+    } else {
+      emailInputRef.current?.focus();
+    }
+  }, [initialEmail]);
 
   // Validation on blur
   const validateEmail = (email: string) => {
@@ -109,6 +125,7 @@ export default function LoginScreen() {
             </label>
             <div className="relative">
               <input
+                ref={passwordInputRef}
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
