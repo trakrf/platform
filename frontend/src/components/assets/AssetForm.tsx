@@ -413,6 +413,12 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             {isConnected && (
               <button
                 type="button"
+                onMouseDown={(e) => {
+                  // Prevent blur from firing before click - keeps focus in tag input
+                  if (focusedTagIndex !== null) {
+                    e.preventDefault();
+                  }
+                }}
                 onClick={isScanning ? handleStopScan : handleStartScan}
                 disabled={loading || (!isScanning && focusedTagIndex === null)}
                 className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
