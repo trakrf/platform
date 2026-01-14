@@ -24,16 +24,6 @@ import { useTagStore, useBarcodeStore, useDeviceStore } from '@/stores';
 import { DeviceManager } from '@/lib/device/device-manager';
 import { ReaderMode } from '@/worker/types/reader';
 
-/**
- * Strip AIM symbology identifiers from barcode data.
- * AIM IDs follow the pattern: ]<symbology><modifier> (e.g., ]C1 for Code 128, ]Q1 for QR)
- * Some scanners also prepend a symbology character before the AIM ID (e.g., Q]Q1...)
- */
-function stripAimIdentifier(data: string): string {
-  // Pattern: optional leading char + ]<letter><digit> at start
-  // Examples: "]C1E200...", "Q]Q1E200...", "]Q1E200..."
-  return data.replace(/^.?\][A-Za-z]\d/, '');
-}
 
 interface UseScanToInputOptions {
   /** Callback when a scan is captured */
@@ -135,28 +125,28 @@ export function useScanToInput({
     return unsubscribe;
   }, [onScan, autoStop, endScanSession]);
 
-  // Listen to barcode store for barcode scans
+  // Listen to barcode store for barcode scans - use reactive state like BarcodeScreen
+  // This is more reliable on slow machines than subscription callbacks
+  const barcodes = useBarcodeStore((state) => state.barcodes);
+  const barcodeCount = barcodes.length;
+
   useEffect(() => {
-    const unsubscribe = useBarcodeStore.subscribe((state) => {
-      const session = scanSessionRef.current;
+    const session = scanSessionRef.current;
 
-      // Check if we have an active barcode scan session
-      if (!session || session.type !== 'barcode') return;
+    // Check if we have an active barcode scan session
+    if (!session || session.type !== 'barcode') return;
 
-      // Check if new barcode was added since session started (deterministic comparison)
-      if (state.barcodes.length > session.startCount) {
-        const latestBarcode = state.barcodes[0]; // Most recent barcode
-        const cleanedData = stripAimIdentifier(latestBarcode.data);
-        onScan(cleanedData);
+    // Check if new barcode was added since session started (deterministic comparison)
+    if (barcodeCount > session.startCount) {
+      const latestBarcode = barcodes[0]; // Most recent barcode
+      // Pass raw barcode data - same as BarcodeScreen displays
+      onScan(latestBarcode.data);
 
-        if (autoStop) {
-          endScanSession();
-        }
+      if (autoStop) {
+        endScanSession();
       }
-    });
-
-    return unsubscribe;
-  }, [onScan, autoStop, endScanSession]);
+    }
+  }, [barcodeCount, barcodes, onScan, autoStop, endScanSession]);
 
   // Cleanup on unmount - always return to returnMode
   useEffect(() => {
