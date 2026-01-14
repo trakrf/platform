@@ -72,6 +72,12 @@ interface UseScanToInputReturn {
   setFocused: (focused: boolean) => void;
 }
 
+// Scan session tracks when we started scanning and what count to compare against
+interface ScanSession {
+  type: 'rfid' | 'barcode';
+  startCount: number;
+}
+
 export function useScanToInput({
   onScan,
   autoStop = true,
@@ -86,50 +92,78 @@ export function useScanToInput({
   // Focus state for trigger scanning
   const [isFocused, setIsFocused] = useState(false);
 
+  // Deterministic scan session tracking - survives race conditions
+  const scanSessionRef = useRef<ScanSession | null>(null);
+  const sessionCleanupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Helper to end scan session and return to idle mode
+  const endScanSession = useCallback(async () => {
+    scanSessionRef.current = null;
+    isScanningRef.current = false;
+    scanTypeRef.current = null;
+
+    if (sessionCleanupRef.current) {
+      clearTimeout(sessionCleanupRef.current);
+      sessionCleanupRef.current = null;
+    }
+
+    const dm = DeviceManager.getInstance();
+    if (dm) {
+      await dm.setMode(returnMode);
+    }
+  }, [returnMode]);
+
   // Listen to tag store for RFID scans
   useEffect(() => {
-    const unsubscribe = useTagStore.subscribe((state, prevState) => {
-      // Only process if we're actively scanning for RFID
-      if (!isScanningRef.current || scanTypeRef.current !== 'rfid') return;
+    const unsubscribe = useTagStore.subscribe((state) => {
+      const session = scanSessionRef.current;
 
-      // Check if new tag was added
-      if (state.tags.length > prevState.tags.length) {
+      // Check if we have an active RFID scan session
+      if (!session || session.type !== 'rfid') return;
+
+      // Check if new tag was added since session started (deterministic comparison)
+      if (state.tags.length > session.startCount) {
         const latestTag = state.tags[0]; // Most recent tag
         onScan(latestTag.epc);
 
         if (autoStop) {
-          stopScan();
+          endScanSession();
         }
       }
     });
 
     return unsubscribe;
-  }, [onScan, autoStop]);
+  }, [onScan, autoStop, endScanSession]);
 
   // Listen to barcode store for barcode scans
   useEffect(() => {
-    const unsubscribe = useBarcodeStore.subscribe((state, prevState) => {
-      // Only process if we're actively scanning for barcodes
-      if (!isScanningRef.current || scanTypeRef.current !== 'barcode') return;
+    const unsubscribe = useBarcodeStore.subscribe((state) => {
+      const session = scanSessionRef.current;
 
-      // Check if new barcode was added
-      if (state.barcodes.length > prevState.barcodes.length) {
+      // Check if we have an active barcode scan session
+      if (!session || session.type !== 'barcode') return;
+
+      // Check if new barcode was added since session started (deterministic comparison)
+      if (state.barcodes.length > session.startCount) {
         const latestBarcode = state.barcodes[0]; // Most recent barcode
         const cleanedData = stripAimIdentifier(latestBarcode.data);
         onScan(cleanedData);
 
         if (autoStop) {
-          stopScan();
+          endScanSession();
         }
       }
     });
 
     return unsubscribe;
-  }, [onScan, autoStop]);
+  }, [onScan, autoStop, endScanSession]);
 
   // Cleanup on unmount - always return to returnMode
   useEffect(() => {
     return () => {
+      if (sessionCleanupRef.current) {
+        clearTimeout(sessionCleanupRef.current);
+      }
       if (isScanningRef.current) {
         const dm = DeviceManager.getInstance();
         if (dm) {
@@ -139,53 +173,48 @@ export function useScanToInput({
     };
   }, [returnMode]);
 
-  // Track timeout for delayed scan stop
-  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Trigger-based barcode scanning (when triggerEnabled and focused)
   useEffect(() => {
     if (!triggerEnabled || !isFocused || !isConnected) return;
 
     const handleTrigger = async () => {
-      if (triggerState && !isScanningRef.current) {
-        // Trigger pressed - cancel any pending stop and start barcode scan
-        if (stopTimeoutRef.current) {
-          clearTimeout(stopTimeoutRef.current);
-          stopTimeoutRef.current = null;
+      if (triggerState) {
+        // Trigger pressed - cancel any pending cleanup and start new scan session
+        if (sessionCleanupRef.current) {
+          clearTimeout(sessionCleanupRef.current);
+          sessionCleanupRef.current = null;
         }
+
         const dm = DeviceManager.getInstance();
         if (dm) {
+          // Record current barcode count for deterministic comparison
+          const currentCount = useBarcodeStore.getState().barcodes.length;
+          scanSessionRef.current = { type: 'barcode', startCount: currentCount };
           scanTypeRef.current = 'barcode';
           isScanningRef.current = true;
           await dm.setMode(ReaderMode.BARCODE);
         }
-      } else if (!triggerState && isScanningRef.current) {
-        // Trigger released - delay stop to allow barcode data to arrive
-        // This fixes a race condition where trigger release was processed
-        // before the barcode store subscription could fire
+      } else if (!triggerState && scanSessionRef.current) {
+        // Trigger released - schedule cleanup but keep session active
+        // This allows barcode data to be processed even after trigger release
         const dm = DeviceManager.getInstance();
         if (dm) {
-          stopTimeoutRef.current = setTimeout(async () => {
-            isScanningRef.current = false;
+          // Set mode back to idle immediately for device
+          isScanningRef.current = false;
+          await dm.setMode(returnMode);
+
+          // Keep scanSessionRef active for 2 seconds to catch late-arriving data
+          sessionCleanupRef.current = setTimeout(() => {
+            scanSessionRef.current = null;
             scanTypeRef.current = null;
-            await dm.setMode(returnMode);
-            stopTimeoutRef.current = null;
-          }, 150);
+            sessionCleanupRef.current = null;
+          }, 2000);
         }
       }
     };
 
     handleTrigger();
   }, [triggerState, triggerEnabled, isFocused, isConnected, returnMode]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (stopTimeoutRef.current) {
-        clearTimeout(stopTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Compute armed state for UI feedback
   const isTriggerArmed = triggerEnabled && isFocused && isConnected && !isScanningRef.current;
@@ -199,6 +228,9 @@ export function useScanToInput({
     const dm = DeviceManager.getInstance();
     if (!dm) return;
 
+    // Record current tag count for deterministic comparison
+    const currentCount = useTagStore.getState().tags.length;
+    scanSessionRef.current = { type: 'rfid', startCount: currentCount };
     scanTypeRef.current = 'rfid';
     isScanningRef.current = true;
 
@@ -214,6 +246,9 @@ export function useScanToInput({
     const dm = DeviceManager.getInstance();
     if (!dm) return;
 
+    // Record current barcode count for deterministic comparison
+    const currentCount = useBarcodeStore.getState().barcodes.length;
+    scanSessionRef.current = { type: 'barcode', startCount: currentCount };
     scanTypeRef.current = 'barcode';
     isScanningRef.current = true;
 
@@ -221,16 +256,8 @@ export function useScanToInput({
   }, [isConnected]);
 
   const stopScan = useCallback(async () => {
-    if (!isScanningRef.current) return;
-
-    const dm = DeviceManager.getInstance();
-    if (!dm) return;
-
-    isScanningRef.current = false;
-    scanTypeRef.current = null;
-
-    await dm.setMode(returnMode);
-  }, [returnMode]);
+    await endScanSession();
+  }, [endScanSession]);
 
   return {
     startRfidScan,
