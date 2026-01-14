@@ -236,6 +236,42 @@ func (s *Storage) AcceptInvitation(ctx context.Context, inviteID, userID, orgID 
 	return tx.Commit(ctx)
 }
 
+// InvitationInfo contains invitation details for unauthenticated users
+type InvitationInfo struct {
+	OrgID         int
+	OrgName       string
+	OrgIdentifier string
+	Role          string
+	Email         string
+	InviterName   *string
+	ExpiresAt     time.Time
+	CancelledAt   *time.Time
+	AcceptedAt    *time.Time
+}
+
+// GetInvitationInfoByTokenHash retrieves invitation info with org details by hashed token
+func (s *Storage) GetInvitationInfoByTokenHash(ctx context.Context, tokenHash string) (*InvitationInfo, error) {
+	query := `
+		SELECT i.org_id, o.name, o.identifier, i.role, i.email, u.name as inviter_name,
+		       i.expires_at, i.cancelled_at, i.accepted_at
+		FROM trakrf.org_invitations i
+		JOIN trakrf.organizations o ON i.org_id = o.id
+		LEFT JOIN trakrf.users u ON i.invited_by = u.id
+		WHERE i.token = $1
+	`
+	var info InvitationInfo
+	err := s.pool.QueryRow(ctx, query, tokenHash).Scan(
+		&info.OrgID, &info.OrgName, &info.OrgIdentifier, &info.Role, &info.Email, &info.InviterName,
+		&info.ExpiresAt, &info.CancelledAt, &info.AcceptedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get invitation info by token: %w", err)
+	}
+	return &info, nil
+}
+
 // IsUserMemberOfOrg checks if user is already a member (by user ID)
 func (s *Storage) IsUserMemberOfOrg(ctx context.Context, userID, orgID int) (bool, error) {
 	query := `
