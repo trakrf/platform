@@ -70,10 +70,17 @@ func (h *Handler) GetInvitationToken(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"token": rawToken})
 }
 
+// SentryTest triggers a test panic to verify Sentry integration.
+// GET /test/sentry
+func (h *Handler) SentryTest(w http.ResponseWriter, r *http.Request) {
+	panic("Sentry test panic - this should appear in Sentry dashboard")
+}
+
 // RegisterRoutes registers test routes on the given router.
 // Should only be called when APP_ENV != "production".
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/test", func(r chi.Router) {
 		r.Get("/invitations/{id}/token", h.GetInvitationToken)
+		r.Get("/sentry", h.SentryTest)
 	})
 }
