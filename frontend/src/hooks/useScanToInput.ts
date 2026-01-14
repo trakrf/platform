@@ -195,21 +195,24 @@ export function useScanToInput({
           await dm.setMode(ReaderMode.BARCODE);
         }
       } else if (!triggerState && scanSessionRef.current) {
-        // Trigger released - schedule cleanup but keep session active
-        // This allows barcode data to be processed even after trigger release
-        const dm = DeviceManager.getInstance();
-        if (dm) {
-          // Set mode back to idle immediately for device
-          isScanningRef.current = false;
-          await dm.setMode(returnMode);
+        // Trigger released - DON'T stop the CS108 scan immediately
+        // Let it finish transmitting data, then cleanup after timeout
+        // This prevents truncated reads when trigger is released mid-scan
+        isScanningRef.current = false;
 
-          // Keep scanSessionRef active for 2 seconds to catch late-arriving data
-          sessionCleanupRef.current = setTimeout(() => {
-            scanSessionRef.current = null;
-            scanTypeRef.current = null;
-            sessionCleanupRef.current = null;
-          }, 2000);
-        }
+        // Keep scanSessionRef active for 2 seconds to catch late-arriving data
+        // Mode switch happens in cleanup, not immediately
+        sessionCleanupRef.current = setTimeout(async () => {
+          scanSessionRef.current = null;
+          scanTypeRef.current = null;
+          sessionCleanupRef.current = null;
+
+          // Now safe to switch modes - data transmission complete
+          const dm = DeviceManager.getInstance();
+          if (dm) {
+            await dm.setMode(returnMode);
+          }
+        }, 2000);
       }
     };
 
