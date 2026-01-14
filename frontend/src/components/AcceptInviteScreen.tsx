@@ -2,7 +2,7 @@
  * AcceptInviteScreen - Handle invitation acceptance via token URL
  * States:
  * 1. No token: Show error "Invalid invitation link"
- * 2. Not logged in: Show invitation details with Login/Signup buttons
+ * 2. Not logged in: Auto-redirect to login (user exists) or signup (new user)
  * 3. Logged in + accepting: Loading state
  * 4. Success: Redirect to home with toast
  * 5. Invalid/expired: Error message
@@ -10,11 +10,10 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Mail, LogIn, UserPlus, Loader2 } from 'lucide-react';
+import { Mail, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores';
 import { orgsApi } from '@/lib/api/orgs';
 import { authApi } from '@/lib/api/auth';
-import type { InvitationInfo } from '@/lib/api/auth';
 import toast from 'react-hot-toast';
 
 interface AcceptInviteScreenProps {
@@ -27,27 +26,28 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [acceptedOrg, setAcceptedOrg] = useState<{ name: string; role: string } | null>(null);
 
-  // State for unauthenticated users - invitation info
-  const [inviteInfo, setInviteInfo] = useState<InvitationInfo | null>(null);
-  const [inviteLoading, setInviteLoading] = useState(true);
+  // State for unauthenticated users - error only (we auto-redirect on success)
   const [inviteFetchError, setInviteFetchError] = useState<string | null>(null);
 
-  // Fetch invitation info when not authenticated
+  // Fetch invitation info when not authenticated, then auto-redirect
   useEffect(() => {
     if (!isAuthenticated && token) {
-      setInviteLoading(true);
       authApi
         .getInvitationInfo(token)
         .then((res) => {
-          setInviteInfo(res.data.data);
-          setInviteFetchError(null);
+          const info = res.data.data;
+          // Auto-redirect based on whether user already exists
+          if (info.user_exists) {
+            // User exists - send to login with email pre-filled
+            window.location.hash = `#login?returnTo=accept-invite&token=${encodeURIComponent(token)}&email=${encodeURIComponent(info.email)}`;
+          } else {
+            // New user - send to signup
+            window.location.hash = `#signup?returnTo=accept-invite&token=${encodeURIComponent(token)}`;
+          }
         })
         .catch(() => {
           setInviteFetchError('This invitation is invalid or has expired.');
-        })
-        .finally(() => setInviteLoading(false));
-    } else {
-      setInviteLoading(false);
+        });
     }
   }, [isAuthenticated, token]);
 
@@ -130,20 +130,8 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
     window.location.hash = '#home';
   };
 
-  // Not logged in - show login/signup options with invite info
+  // Not logged in - show loading or error (success auto-redirects to login/signup)
   if (!isAuthenticated) {
-    // Loading state
-    if (inviteLoading) {
-      return (
-        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-          <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md text-center">
-            <Loader2 className="w-8 h-8 mx-auto mb-4 text-blue-400 animate-spin" />
-            <p className="text-gray-400">Loading invitation...</p>
-          </div>
-        </div>
-      );
-    }
-
     // Error fetching invite info
     if (inviteFetchError) {
       return (
@@ -167,57 +155,12 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
       );
     }
 
-    // Show invitation details with contextual action button
+    // Loading state (will auto-redirect on success)
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-blue-900/20 flex items-center justify-center">
-            <Mail className="w-6 h-6 text-blue-400" />
-          </div>
-          <h1 className="text-2xl font-semibold text-white mb-2">
-            You&apos;ve Been Invited!
-          </h1>
-          {inviteInfo && (
-            <div className="mb-6">
-              <p className="text-gray-300 text-lg">
-                Join <span className="font-semibold text-white">{inviteInfo.org_name}</span> as{' '}
-                <span className="text-blue-400 capitalize">{inviteInfo.role}</span>
-              </p>
-              {inviteInfo.inviter_name && (
-                <p className="text-gray-500 text-sm mt-1">
-                  Invited by {inviteInfo.inviter_name}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {inviteInfo?.user_exists ? (
-              // User already has an account - show Sign In only
-              <a
-                href={`#login?returnTo=accept-invite&token=${encodeURIComponent(token)}&email=${encodeURIComponent(inviteInfo.email)}`}
-                className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
-              >
-                <LogIn className="w-4 h-4" />
-                Sign In to Accept
-              </a>
-            ) : (
-              // New user - show Create Account only
-              <a
-                href={`#signup?returnTo=accept-invite&token=${encodeURIComponent(token)}`}
-                className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
-              >
-                <UserPlus className="w-4 h-4" />
-                Create Account
-              </a>
-            )}
-          </div>
-
-          <p className="text-gray-500 text-sm mt-6">
-            {inviteInfo?.user_exists
-              ? 'Sign in with your existing account to accept the invitation.'
-              : 'Create an account to join the organization.'}
-          </p>
+          <Loader2 className="w-8 h-8 mx-auto mb-4 text-blue-400 animate-spin" />
+          <p className="text-gray-400">Loading invitation...</p>
         </div>
       </div>
     );
