@@ -87,7 +87,7 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
           <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             Organizations
           </div>
-          {orgs.map(org => (
+          {(orgs ?? []).map(org => (
             <Menu.Item key={org.id}>
               {({ active }) => (
                 <button
