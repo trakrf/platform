@@ -1,3 +1,26 @@
+import * as Sentry from '@sentry/react';
+
+// Initialize Sentry for error tracking (disabled if DSN not set)
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    environment: import.meta.env.MODE,
+    enabled: true,
+  });
+}
+
+// Expose testSentry helper for manual verification in any environment
+// Usage: window.testSentry() in browser console
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(window as any).testSentry = () => {
+  if (!import.meta.env.VITE_SENTRY_DSN) {
+    console.warn('Sentry not configured (VITE_SENTRY_DSN not set)');
+    return;
+  }
+  Sentry.captureException(new Error('Manual Sentry test from browser console'));
+  console.log('✅ Test error sent to Sentry! Check dashboard for environment:', import.meta.env.MODE);
+};
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

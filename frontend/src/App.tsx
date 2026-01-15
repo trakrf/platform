@@ -8,6 +8,7 @@ import { Toaster } from 'react-hot-toast';
 import { LoadingScreen, InventoryLoadingScreen, LocateLoadingScreen, HelpLoadingScreen, SettingsLoadingScreen, BarcodeLoadingScreen } from '@/components/LoadingScreen';
 import { initOpenReplay, trackPageView } from '@/lib/openreplay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { SentryTest } from '@/components/SentryTest';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 
 const HomeScreen = lazyWithRetry(() => import('@/components/HomeScreen'));
@@ -253,6 +254,8 @@ export default function App() {
           },
         }}
       />
+
+      {import.meta.env.DEV && <SentryTest />}
 
       <div className="hidden xl:flex w-64 h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col fixed left-0 top-0 z-30">
         <ErrorBoundary name="TabNavigation">

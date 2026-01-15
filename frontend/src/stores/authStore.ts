@@ -6,6 +6,7 @@ import { orgsApi } from '@/lib/api/orgs';
 import type { User } from '@/lib/api/auth';
 import type { UserProfile } from '@/types/org';
 import { jwtDecode } from 'jwt-decode';
+import * as Sentry from '@sentry/react';
 
 interface AuthState {
   // State
@@ -52,6 +53,12 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true,
               isLoading: false,
               error: null,
+            });
+
+            // Set Sentry user context
+            Sentry.setUser({
+              id: String(user.id),
+              email: user.email,
             });
 
             // Fetch profile to populate org data after login
@@ -101,6 +108,12 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
 
+            // Set Sentry user context
+            Sentry.setUser({
+              id: String(user.id),
+              email: user.email,
+            });
+
             // Fetch profile to populate org data after signup
             get().fetchProfile();
           } catch (err: any) {
@@ -129,6 +142,9 @@ export const useAuthStore = create<AuthState>()(
         },
 
         logout: () => {
+          // Clear Sentry user context
+          Sentry.setUser(null);
+
           set({
             user: null,
             token: null,
@@ -163,6 +179,14 @@ export const useAuthStore = create<AuthState>()(
             }
 
             set({ isAuthenticated: true });
+
+            // Restore Sentry user context from persisted state
+            if (state.user) {
+              Sentry.setUser({
+                id: String(state.user.id),
+                email: state.user.email,
+              });
+            }
           } catch (error) {
             console.error('AuthStore: Failed to decode JWT, clearing auth state:', error);
             set({

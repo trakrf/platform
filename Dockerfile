@@ -2,6 +2,10 @@
 FROM node:24-alpine AS frontend-builder
 WORKDIR /app
 
+# Build-time args for Vite (must be available when frontend builds)
+ARG VITE_SENTRY_DSN
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+
 # Install pnpm
 RUN npm install -g pnpm@latest
 
