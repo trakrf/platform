@@ -4,11 +4,31 @@ import { useBarcodeStore } from '@/stores/barcodeStore';
 import { BarcodeScanMode } from '@/worker/types/reader';
 // import * as Comlink from 'comlink';
 import { SkeletonBase } from '@/components/SkeletonLoaders';
-import { Target } from 'lucide-react';
+import { Target, AlertTriangle } from 'lucide-react';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useBarcodeAudio } from '@/hooks/useBarcodeAudio';
 
 // BarcodeData interface is now imported from barcodeStore
+
+/**
+ * Validates EPC data for common issues caused by BLE truncation or corruption.
+ * Returns warning message if invalid, undefined if valid.
+ */
+function validateEPC(data: string): string | undefined {
+  // Check hex characters first (catches corruption)
+  if (!/^[0-9A-Fa-f]+$/.test(data)) {
+    return "Invalid characters detected - try again or enter manually";
+  }
+  // Check minimum length (96-bit standard)
+  if (data.length < 24) {
+    return "Scan may be incomplete - try again or enter manually";
+  }
+  // Check 32-bit word boundary alignment
+  if (data.length % 8 !== 0) {
+    return "Invalid EPC length - must be divisible by 8";
+  }
+  return undefined;
+}
 
 export default function BarcodeScreen() {
   // Initialize barcode audio feedback
@@ -226,13 +246,24 @@ export default function BarcodeScreen() {
           </div>
         ) : (
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {barcodes.map((barcode, index) => (
+            {barcodes.map((barcode, index) => {
+              const warning = validateEPC(barcode.data);
+              return (
               <div
                 key={`${barcode.timestamp}-${index}`}
                 data-testid={`barcode-${barcode.data}`}
                 className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <div className="font-medium break-all text-gray-900 dark:text-gray-100">{barcode.data}</div>
+                {warning && (
+                  <div
+                    data-testid="epc-warning"
+                    className="flex items-center gap-1.5 mt-1 text-xs text-yellow-700 dark:text-yellow-400"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{warning}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400 mt-1">
                   <div>Type: {barcode.type}</div>
                   <div className="flex items-center gap-2">
@@ -253,7 +284,8 @@ export default function BarcodeScreen() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
