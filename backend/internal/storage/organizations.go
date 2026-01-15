@@ -27,7 +27,7 @@ func (s *Storage) ListUserOrgs(ctx context.Context, userID int) ([]organization.
 	}
 	defer rows.Close()
 
-	var orgs []organization.UserOrg
+	orgs := []organization.UserOrg{}
 	for rows.Next() {
 		var org organization.UserOrg
 		if err := rows.Scan(&org.ID, &org.Name); err != nil {
