@@ -40,6 +40,13 @@ describe('EnvironmentBanner', () => {
     expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument();
   });
 
+  it('should render nothing for production environment', () => {
+    vi.stubEnv('VITE_ENVIRONMENT', 'production');
+    render(<EnvironmentBanner />);
+
+    expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument();
+  });
+
   it('should render nothing when VITE_ENVIRONMENT is empty', () => {
     vi.stubEnv('VITE_ENVIRONMENT', '');
     render(<EnvironmentBanner />);

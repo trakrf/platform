@@ -3,8 +3,8 @@ import { useEffect } from 'react';
 export function EnvironmentBanner() {
   const env = import.meta.env.VITE_ENVIRONMENT as string | undefined;
 
-  // No banner for prod, empty, or undefined
-  const isNonProd = typeof env === 'string' && env.length > 0 && env !== 'prod' && env !== 'undefined';
+  // No banner for prod/production, empty, or undefined
+  const isNonProd = typeof env === 'string' && env.length > 0 && env !== 'prod' && env !== 'production' && env !== 'undefined';
 
   // Update page title with environment prefix
   useEffect(() => {
