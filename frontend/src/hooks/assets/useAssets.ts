@@ -17,12 +17,24 @@ export function useAssets(options: UseAssetsOptions = {}) {
 
   const query = useQuery({
     queryKey: ['assets', currentOrg?.id, pagination.currentPage, pagination.pageSize],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      // Capture org ID at request time
+      const orgIdAtFetch = currentOrg?.id;
+
       const offset = (pagination.currentPage - 1) * pagination.pageSize;
       const response = await assetsApi.list({
         limit: pagination.pageSize,
         offset,
+        signal,
       });
+
+      // Validate org hasn't changed before updating store
+      const currentOrgId = useOrgStore.getState().currentOrg?.id;
+      if (currentOrgId !== orgIdAtFetch) {
+        // Return data but skip store update - org changed during fetch
+        return response.data;
+      }
+
       useAssetStore.getState().addAssets(response.data.data);
       // Re-enrich tags with newly loaded assets
       useTagStore.getState().refreshAssetEnrichment();

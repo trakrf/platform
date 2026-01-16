@@ -1,10 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAssetStore } from '@/stores/assets/assetStore';
+import { useOrgStore } from '@/stores/orgStore';
 import { assetsApi } from '@/lib/api/assets';
 import type { CreateAssetRequest, UpdateAssetRequest } from '@/types/assets';
 
 export function useAssetMutations() {
   const queryClient = useQueryClient();
+  const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateAssetRequest) => {
@@ -13,7 +15,7 @@ export function useAssetMutations() {
     },
     onSuccess: (asset) => {
       useAssetStore.getState().addAsset(asset);
-      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', currentOrg?.id] });
     },
   });
 
@@ -30,8 +32,8 @@ export function useAssetMutations() {
     },
     onSuccess: (asset) => {
       useAssetStore.getState().updateCachedAsset(asset.id, asset);
-      queryClient.invalidateQueries({ queryKey: ['assets'] });
-      queryClient.invalidateQueries({ queryKey: ['asset', asset.id] });
+      queryClient.invalidateQueries({ queryKey: ['assets', currentOrg?.id] });
+      queryClient.invalidateQueries({ queryKey: ['asset', currentOrg?.id, asset.id] });
     },
   });
 
@@ -42,8 +44,8 @@ export function useAssetMutations() {
     },
     onSuccess: (id) => {
       useAssetStore.getState().removeAsset(id);
-      queryClient.invalidateQueries({ queryKey: ['assets'] });
-      queryClient.invalidateQueries({ queryKey: ['asset', id] });
+      queryClient.invalidateQueries({ queryKey: ['assets', currentOrg?.id] });
+      queryClient.invalidateQueries({ queryKey: ['asset', currentOrg?.id, id] });
     },
   });
 

@@ -9,12 +9,13 @@ import type { Asset } from '@/types/assets';
 
 vi.mock('@/lib/api/assets');
 
-// Mock useOrgStore to provide currentOrg for query keys
+// Mock useOrgStore to provide currentOrg for query keys and getState()
+const mockOrgState = { currentOrg: { id: 1, name: 'Test Org' } };
 vi.mock('@/stores/orgStore', () => ({
-  useOrgStore: vi.fn((selector) => {
-    const state = { currentOrg: { id: 1, name: 'Test Org' } };
-    return selector ? selector(state) : state;
-  }),
+  useOrgStore: Object.assign(
+    vi.fn((selector) => (selector ? selector(mockOrgState) : mockOrgState)),
+    { getState: () => mockOrgState }
+  ),
 }));
 
 const mockAsset: Asset = {
@@ -61,10 +62,12 @@ describe('useAssets', () => {
 
     expect(result.current.assets).toHaveLength(1);
     expect(result.current.totalCount).toBe(1);
-    expect(assetsApi.list).toHaveBeenCalledWith({
-      limit: 25,
-      offset: 0,
-    });
+    expect(assetsApi.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 25,
+        offset: 0,
+      })
+    );
   });
 
   it('should not fetch when enabled is false', () => {
