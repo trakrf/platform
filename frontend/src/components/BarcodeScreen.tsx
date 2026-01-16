@@ -248,7 +248,6 @@ export default function BarcodeScreen() {
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {barcodes.map((barcode, index) => {
               const warning = validateEPC(barcode.data);
-              console.log('[EPC Debug]', { data: barcode.data, length: barcode.data.length, warning });
               return (
               <div
                 key={`${barcode.timestamp}-${index}`}
