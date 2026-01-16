@@ -74,48 +74,42 @@ describe('BarcodeScreen EPC Validation', () => {
     expect(screen.queryByTestId('epc-warning')).not.toBeInTheDocument();
   });
 
-  it('shows warning for truncated EPC (< 24 chars)', () => {
+  it('shows NO warning for truncated EPC (validation disabled)', () => {
     useBarcodeStore.setState({
       barcodes: [
         { data: 'E200341200000000', type: 'EPC', timestamp: Date.now() },
       ],
     });
     render(<BarcodeScreen />);
-    expect(screen.getByTestId('epc-warning')).toHaveTextContent(
-      'Scan may be incomplete'
-    );
+    expect(screen.queryByTestId('epc-warning')).not.toBeInTheDocument();
   });
 
-  it('shows warning for non-hex characters', () => {
+  it('shows NO warning for non-hex characters (validation disabled)', () => {
     useBarcodeStore.setState({
       barcodes: [
         { data: 'E20034120000GHIJ22440401', type: 'EPC', timestamp: Date.now() },
       ],
     });
     render(<BarcodeScreen />);
-    expect(screen.getByTestId('epc-warning')).toHaveTextContent(
-      'Invalid characters detected'
-    );
+    expect(screen.queryByTestId('epc-warning')).not.toBeInTheDocument();
   });
 
-  it('shows warning for non-aligned length (25 chars)', () => {
+  it('shows NO warning for non-aligned length (validation disabled)', () => {
     useBarcodeStore.setState({
       barcodes: [
         { data: 'E200341200000000224404012', type: 'EPC', timestamp: Date.now() },
       ],
     });
     render(<BarcodeScreen />);
-    expect(screen.getByTestId('epc-warning')).toHaveTextContent(
-      'must be divisible by 8'
-    );
+    expect(screen.queryByTestId('epc-warning')).not.toBeInTheDocument();
   });
 
-  it('does not block Locate button when warning is shown', () => {
+  it('Locate button works when validation is disabled', () => {
     useBarcodeStore.setState({
       barcodes: [{ data: 'E200341200', type: 'EPC', timestamp: Date.now() }],
     });
     render(<BarcodeScreen />);
-    expect(screen.getByTestId('epc-warning')).toBeInTheDocument();
+    expect(screen.queryByTestId('epc-warning')).not.toBeInTheDocument();
     expect(screen.getByTestId('locate-button')).toBeEnabled();
   });
 });

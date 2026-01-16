@@ -10,6 +10,9 @@ import { useBarcodeAudio } from '@/hooks/useBarcodeAudio';
 
 // BarcodeData interface is now imported from barcodeStore
 
+// DISABLED: TRA-271 feedback - rules too restrictive. Re-evaluate before enabling.
+const ENABLE_EPC_VALIDATION = false;
+
 /**
  * Validates EPC data for common issues caused by BLE truncation or corruption.
  * Returns warning message if invalid, undefined if valid.
@@ -247,7 +250,7 @@ export default function BarcodeScreen() {
         ) : (
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {barcodes.map((barcode, index) => {
-              const warning = validateEPC(barcode.data);
+              const warning = ENABLE_EPC_VALIDATION ? validateEPC(barcode.data) : undefined;
               return (
               <div
                 key={`${barcode.timestamp}-${index}`}
