@@ -54,8 +54,17 @@ Duration: ~5 minutes
 
 Files modified:
 - `frontend/src/components/BarcodeScreen.tsx` - Added validateEPC function and warning UI
+- `frontend/src/components/assets/TagIdentifierInputRow.tsx` - Added EPC validation to asset/location forms (the actual user workflow)
 
 Files created:
 - `frontend/src/components/BarcodeScreen.test.tsx` - Unit tests for EPC validation
+
+## Post-ship fix
+**Issue**: Initial implementation added warnings to BarcodeScreen tab, but user actually scans EPCs in Asset/Location forms via TagIdentifierInputRow.
+
+**Fix**: Added validateEPC and warning display to TagIdentifierInputRow.tsx:
+- Yellow border on invalid EPC input
+- Warning message with AlertTriangle icon
+- Non-blocking (user can still save)
 
 Ready for /check: YES
