@@ -1,57 +1,32 @@
 import { useEffect } from 'react';
 
-type Environment = 'dev' | 'staging' | 'prod';
-
-interface EnvConfig {
-  label: string;
-  titlePrefix: string;
-  bgColor: string;
-}
-
-const ENV_CONFIG: Record<Environment, EnvConfig | null> = {
-  dev: {
-    label: 'Development Environment',
-    titlePrefix: '[DEV]',
-    bgColor: 'bg-orange-500',
-  },
-  staging: {
-    label: 'Staging Environment',
-    titlePrefix: '[STG]',
-    bgColor: 'bg-purple-600',
-  },
-  prod: null,
-};
-
-function getEnvironment(): Environment {
-  const env = import.meta.env.VITE_ENVIRONMENT;
-  if (env === 'dev' || env === 'staging') return env;
-  return 'prod'; // Default to prod (shows nothing)
-}
-
 export function EnvironmentBanner() {
-  const environment = getEnvironment();
-  const config = ENV_CONFIG[environment];
+  const env = import.meta.env.VITE_ENVIRONMENT as string | undefined;
+
+  // No banner for prod, empty, or undefined
+  const isNonProd = typeof env === 'string' && env.length > 0 && env !== 'prod' && env !== 'undefined';
 
   // Update page title with environment prefix
   useEffect(() => {
-    if (!config) return;
+    if (!isNonProd) return;
 
     const baseTitle = 'TrakRF';
-    document.title = `${config.titlePrefix} ${baseTitle}`;
+    const prefix = env.toUpperCase().slice(0, 3);
+    document.title = `[${prefix}] ${baseTitle}`;
 
     return () => {
       document.title = baseTitle;
     };
-  }, [config]);
+  }, [env, isNonProd]);
 
-  if (!config) return null;
+  if (!isNonProd) return null;
 
   return (
     <div
-      className={`${config.bgColor} text-white text-center text-sm py-1 font-medium`}
+      className="bg-purple-600 text-white text-center text-sm py-1 font-medium"
       data-testid="environment-banner"
     >
-      {config.label}
+      {env.charAt(0).toUpperCase() + env.slice(1)} Environment
     </div>
   );
 }

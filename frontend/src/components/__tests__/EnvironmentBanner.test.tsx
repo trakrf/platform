@@ -16,24 +16,21 @@ describe('EnvironmentBanner', () => {
     vi.unstubAllEnvs();
   });
 
-  it('should show orange banner for dev environment', () => {
+  it('should show banner for any non-prod environment', () => {
+    vi.stubEnv('VITE_ENVIRONMENT', 'preview');
+    render(<EnvironmentBanner />);
+
+    const banner = screen.getByTestId('environment-banner');
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveTextContent('Preview Environment');
+    expect(banner).toHaveClass('bg-purple-600');
+  });
+
+  it('should capitalize environment name in banner', () => {
     vi.stubEnv('VITE_ENVIRONMENT', 'dev');
     render(<EnvironmentBanner />);
 
-    const banner = screen.getByTestId('environment-banner');
-    expect(banner).toBeInTheDocument();
-    expect(banner).toHaveTextContent('Development Environment');
-    expect(banner).toHaveClass('bg-orange-500');
-  });
-
-  it('should show purple banner for staging environment', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'staging');
-    render(<EnvironmentBanner />);
-
-    const banner = screen.getByTestId('environment-banner');
-    expect(banner).toBeInTheDocument();
-    expect(banner).toHaveTextContent('Staging Environment');
-    expect(banner).toHaveClass('bg-purple-600');
+    expect(screen.getByTestId('environment-banner')).toHaveTextContent('Dev Environment');
   });
 
   it('should render nothing for prod environment', () => {
@@ -57,18 +54,11 @@ describe('EnvironmentBanner', () => {
     expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument();
   });
 
-  it('should set page title with [DEV] prefix for dev environment', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'dev');
+  it('should set page title with environment prefix', () => {
+    vi.stubEnv('VITE_ENVIRONMENT', 'preview');
     render(<EnvironmentBanner />);
 
-    expect(document.title).toBe('[DEV] TrakRF');
-  });
-
-  it('should set page title with [STG] prefix for staging environment', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'staging');
-    render(<EnvironmentBanner />);
-
-    expect(document.title).toBe('[STG] TrakRF');
+    expect(document.title).toBe('[PRE] TrakRF');
   });
 
   it('should not modify page title for prod environment', () => {
