@@ -2,6 +2,9 @@ import { Trash2, AlertTriangle } from 'lucide-react';
 
 type TagType = 'rfid';
 
+// DISABLED: TRA-271 feedback - rules too restrictive. Re-evaluate before enabling.
+const ENABLE_EPC_VALIDATION = false;
+
 /**
  * Validates EPC data for common issues caused by BLE truncation or corruption.
  * Returns warning message if invalid, undefined if valid.
@@ -55,7 +58,7 @@ export function TagIdentifierInputRow({
   isFocused = false,
   autoFocus = false,
 }: TagIdentifierInputRowProps) {
-  const warning = validateEPC(value);
+  const warning = ENABLE_EPC_VALIDATION ? validateEPC(value) : undefined;
 
   return (
     <div className="space-y-1">
