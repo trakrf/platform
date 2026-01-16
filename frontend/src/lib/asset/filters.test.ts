@@ -15,7 +15,7 @@ describe('Filters', () => {
       identifier: 'LAP-001',
       name: 'Dell Laptop',
       type: 'device',
-      description: 'Test',
+      description: 'Work laptop for software development',
       valid_from: '2024-01-01',
       valid_to: null,
       metadata: {},
@@ -30,7 +30,7 @@ describe('Filters', () => {
       identifier: 'PER-001',
       name: 'John Doe',
       type: 'person',
-      description: 'Test',
+      description: 'Senior engineer in platform team',
       valid_from: '2024-01-15',
       valid_to: null,
       metadata: {},
@@ -45,7 +45,7 @@ describe('Filters', () => {
       identifier: 'LAP-002',
       name: 'HP Laptop',
       type: 'device',
-      description: 'Test',
+      description: 'Backup device for presentations',
       valid_from: '2024-02-01',
       valid_to: null,
       metadata: {},
@@ -151,41 +151,52 @@ describe('Filters', () => {
   });
 
   describe('searchAssets()', () => {
-    it('should search by identifier', () => {
+    it('should find exact identifier match', () => {
       const result = searchAssets(mockAssets, 'LAP-001');
-      expect(result).toHaveLength(1);
+      expect(result.length).toBeGreaterThanOrEqual(1);
       expect(result[0].identifier).toBe('LAP-001');
     });
 
-    it('should search by partial identifier', () => {
-      const result = searchAssets(mockAssets, 'LAP');
-      expect(result).toHaveLength(2);
+    it('should find partial matches', () => {
+      const result = searchAssets(mockAssets, 'Laptop');
+      expect(result.length).toBe(2);
+      // Both laptops should be found
+      expect(result.map((a) => a.name)).toContain('Dell Laptop');
+      expect(result.map((a) => a.name)).toContain('HP Laptop');
     });
 
-    it('should search by name', () => {
+    it('should handle typos (fuzzy matching)', () => {
+      // "laptp" should still find "Laptop"
+      const result = searchAssets(mockAssets, 'laptp');
+      expect(result.length).toBeGreaterThanOrEqual(1);
+      expect(result.some((a) => a.name.includes('Laptop'))).toBe(true);
+    });
+
+    it('should search description field', () => {
+      const result = searchAssets(mockAssets, 'development');
+      expect(result.length).toBeGreaterThanOrEqual(1);
+      expect(result[0].description).toContain('development');
+    });
+
+    it('should rank results by relevance', () => {
+      // Exact match should rank higher than partial
       const result = searchAssets(mockAssets, 'Dell');
-      expect(result).toHaveLength(1);
+      expect(result.length).toBeGreaterThanOrEqual(1);
       expect(result[0].name).toBe('Dell Laptop');
     });
 
-    it('should search by partial name', () => {
-      const result = searchAssets(mockAssets, 'Laptop');
-      expect(result).toHaveLength(2);
-    });
-
     it('should be case-insensitive', () => {
-      expect(searchAssets(mockAssets, 'dell')).toHaveLength(1);
-      expect(searchAssets(mockAssets, 'DELL')).toHaveLength(1);
-      expect(searchAssets(mockAssets, 'lap-001')).toHaveLength(1);
+      expect(searchAssets(mockAssets, 'dell').length).toBeGreaterThanOrEqual(1);
+      expect(searchAssets(mockAssets, 'DELL').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should return all for empty search', () => {
+    it('should return all assets for empty search', () => {
       expect(searchAssets(mockAssets, '')).toHaveLength(3);
       expect(searchAssets(mockAssets, '  ')).toHaveLength(3);
     });
 
     it('should return empty array for no matches', () => {
-      const result = searchAssets(mockAssets, 'nonexistent');
+      const result = searchAssets(mockAssets, 'zzzznonexistent');
       expect(result).toHaveLength(0);
     });
   });
