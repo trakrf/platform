@@ -1,3 +1,4 @@
+import Fuse, { type IFuseOptions } from 'fuse.js';
 import type {
   Asset,
   AssetFilters,
@@ -116,30 +117,38 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
   return sorted;
 }
 
+// Fuse.js configuration for fuzzy search
+const fuseOptions: IFuseOptions<Asset> = {
+  keys: [
+    { name: 'identifier', weight: 2 },
+    { name: 'name', weight: 2 },
+    { name: 'description', weight: 1 },
+  ],
+  threshold: 0.4,
+  ignoreLocation: true,
+  includeScore: true,
+};
+
 /**
- * Searches assets by identifier or name (case-insensitive)
+ * Searches assets using fuzzy matching (typo-tolerant)
  *
  * @param assets - Array of assets to search
- * @param searchTerm - Search string
- * @returns Filtered array of matching assets
+ * @param searchTerm - Search string (fuzzy matched)
+ * @returns Array of matching assets, ordered by relevance
  *
  * @example
- * searchAssets(assets, 'laptop')   // Matches identifier or name
- * searchAssets(assets, 'LAP-001')  // Case-insensitive
+ * searchAssets(assets, 'laptop')   // Matches identifier, name, or description
+ * searchAssets(assets, 'laptp')    // Handles typos
  */
 export function searchAssets(assets: Asset[], searchTerm: string): Asset[] {
-  const term = searchTerm.trim().toLowerCase();
+  const term = searchTerm.trim();
 
   if (!term) {
     return assets;
   }
 
-  return assets.filter((asset) => {
-    const identifier = asset.identifier.toLowerCase();
-    const name = asset.name.toLowerCase();
-
-    return identifier.includes(term) || name.includes(term);
-  });
+  const fuse = new Fuse(assets, fuseOptions);
+  return fuse.search(term).map((result) => result.item);
 }
 
 /**
