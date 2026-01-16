@@ -9,12 +9,13 @@ import type { Asset } from '@/types/assets';
 
 vi.mock('@/lib/api/assets');
 
-// Mock useOrgStore to provide currentOrg for query keys
+// Mock useOrgStore to provide currentOrg for query keys and getState()
+const mockOrgState = { currentOrg: { id: 1, name: 'Test Org' } };
 vi.mock('@/stores/orgStore', () => ({
-  useOrgStore: vi.fn((selector) => {
-    const state = { currentOrg: { id: 1, name: 'Test Org' } };
-    return selector ? selector(state) : state;
-  }),
+  useOrgStore: Object.assign(
+    vi.fn((selector) => (selector ? selector(mockOrgState) : mockOrgState)),
+    { getState: () => mockOrgState }
+  ),
 }));
 
 const mockAsset: Asset = {
@@ -81,7 +82,7 @@ describe('useAsset', () => {
       expect(result.current.asset).toEqual(mockAsset);
     });
 
-    expect(assetsApi.get).toHaveBeenCalledWith(mockAsset.id);
+    expect(assetsApi.get).toHaveBeenCalledWith(mockAsset.id, expect.any(Object));
   });
 
   it('should handle errors', async () => {

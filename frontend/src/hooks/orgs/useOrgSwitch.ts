@@ -25,13 +25,20 @@ export function useOrgSwitch() {
 
   // Helper to invalidate all org-scoped caches
   const invalidateOrgCaches = () => {
-    // Clear all org-scoped Zustand stores
+    // 1. Cancel all in-flight asset queries FIRST to prevent stale data writes
+    queryClient.cancelQueries({ queryKey: ['assets'] });
+    queryClient.cancelQueries({ queryKey: ['asset'] });
+
+    // 2. Clear all org-scoped Zustand stores
     useAssetStore.getState().invalidateCache();
     useLocationStore.getState().invalidateCache();
     useTagStore.getState().clearTags();
     useBarcodeStore.getState().clearBarcodes();
 
-    // Invalidate all org-scoped TanStack Query caches
+    // 3. Clear persisted localStorage cache to prevent stale data on reload
+    localStorage.removeItem('asset-store');
+
+    // 4. Invalidate all org-scoped TanStack Query caches
     // Using predicate to exclude auth-related queries
     queryClient.invalidateQueries({
       predicate: (query) => {

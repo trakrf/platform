@@ -12,6 +12,7 @@ import type {
 export interface ListAssetsOptions {
   limit?: number;
   offset?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -27,25 +28,27 @@ export const assetsApi = {
    * GET /api/v1/assets?limit={limit}&offset={offset}
    */
   list: (options: ListAssetsOptions = {}) => {
-    const params = new URLSearchParams();
-    if (options.limit !== undefined) {
-      params.append('limit', String(options.limit));
+    const { signal, ...params } = options;
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) {
+      searchParams.append('limit', String(params.limit));
     }
-    if (options.offset !== undefined) {
-      params.append('offset', String(options.offset));
+    if (params.offset !== undefined) {
+      searchParams.append('offset', String(params.offset));
     }
 
-    const queryString = params.toString();
+    const queryString = searchParams.toString();
     const url = queryString ? `/assets?${queryString}` : '/assets';
 
-    return apiClient.get<ListAssetsResponse>(url);
+    return apiClient.get<ListAssetsResponse>(url, { signal });
   },
 
   /**
    * Get single asset by ID
    * GET /api/v1/assets/:id
    */
-  get: (id: number) => apiClient.get<AssetResponse>(`/assets/${id}`),
+  get: (id: number, options?: { signal?: AbortSignal }) =>
+    apiClient.get<AssetResponse>(`/assets/${id}`, { signal: options?.signal }),
 
   /**
    * Create new asset

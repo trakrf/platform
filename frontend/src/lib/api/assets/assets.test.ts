@@ -36,7 +36,7 @@ describe('assetsApi', () => {
 
       await assetsApi.list();
 
-      expect(apiClient.get).toHaveBeenCalledWith('/assets');
+      expect(apiClient.get).toHaveBeenCalledWith('/assets', { signal: undefined });
     });
 
     it('should call GET /assets with limit param', async () => {
@@ -51,7 +51,7 @@ describe('assetsApi', () => {
 
       await assetsApi.list({ limit: 25 });
 
-      expect(apiClient.get).toHaveBeenCalledWith('/assets?limit=25');
+      expect(apiClient.get).toHaveBeenCalledWith('/assets?limit=25', { signal: undefined });
     });
 
     it('should call GET /assets with both limit and offset params', async () => {
@@ -66,7 +66,7 @@ describe('assetsApi', () => {
 
       await assetsApi.list({ limit: 25, offset: 50 });
 
-      expect(apiClient.get).toHaveBeenCalledWith('/assets?limit=25&offset=50');
+      expect(apiClient.get).toHaveBeenCalledWith('/assets?limit=25&offset=50', { signal: undefined });
     });
 
     it('should return list response with assets', async () => {
@@ -131,7 +131,7 @@ describe('assetsApi', () => {
 
       await assetsApi.get(1);
 
-      expect(apiClient.get).toHaveBeenCalledWith('/assets/1');
+      expect(apiClient.get).toHaveBeenCalledWith('/assets/1', { signal: undefined });
     });
 
     it('should handle 404 errors', async () => {
