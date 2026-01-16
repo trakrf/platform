@@ -10,6 +10,7 @@ import { initOpenReplay, trackPageView } from '@/lib/openreplay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SentryTest } from '@/components/SentryTest';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
+import { EnvironmentBanner } from '@/components/EnvironmentBanner';
 
 const HomeScreen = lazyWithRetry(() => import('@/components/HomeScreen'));
 const InventoryScreen = lazyWithRetry(() => import('@/components/InventoryScreen'));
@@ -279,6 +280,7 @@ export default function App() {
       )}
 
       <div className="flex-1 flex flex-col xl:ml-64">
+        <EnvironmentBanner />
         <ErrorBoundary name="Header">
           <Header onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)} isMobileMenuOpen={isMobileMenuOpen} />
         </ErrorBoundary>
