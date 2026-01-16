@@ -4,9 +4,10 @@ WORKDIR /app
 
 # Build-time args for Vite (must be available when frontend builds)
 ARG VITE_SENTRY_DSN
-ARG VITE_ENVIRONMENT
+ARG APP_ENV
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
-ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
+# Derive VITE_ENVIRONMENT from APP_ENV (single source of truth)
+ENV VITE_ENVIRONMENT=$APP_ENV
 
 # Install pnpm
 RUN npm install -g pnpm@latest
