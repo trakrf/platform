@@ -172,30 +172,26 @@ export function searchAssetsWithMatches(
 
   const termLower = term.toLowerCase();
 
-  // Phase 1: Exact match on asset identifier (case-insensitive)
-  // Handles searches like "asset-0020" → "ASSET-0020"
-  const exactMatch = assets.find(
-    (a) => a.identifier.toLowerCase() === termLower
-  );
-  if (exactMatch) {
-    return [
-      {
-        asset: exactMatch,
+  // Collect all matches with their source
+  const matches: SearchResult[] = [];
+  const matchedAssetIds = new Set<number>();
+
+  for (const asset of assets) {
+    const assetIdLower = asset.identifier.toLowerCase();
+
+    // 1. Asset ID: exact match (highest priority)
+    if (assetIdLower === termLower) {
+      matches.push({
+        asset,
         matchedField: 'identifier',
-        matchedValue: exactMatch.identifier,
-      },
-    ];
-  }
+        matchedValue: asset.identifier,
+      });
+      matchedAssetIds.add(asset.id);
+      continue;
+    }
 
-  // Phase 2: For identifier-like terms (hex/numeric), use precise matching:
-  // - EPC (identifiers.value): endsWith only
-  // - Asset ID (identifier): beginsWith OR endsWith
-  // Skip fuzzy search to avoid false positives like "10021" matching "ASSET-0020"
-  if (isIdentifierLikeTerm(term)) {
-    const matches: SearchResult[] = [];
-
-    for (const asset of assets) {
-      // Check EPC suffix match first (highest priority)
+    // 2. EPC: suffix match (for hex/numeric terms only)
+    if (isIdentifierLikeTerm(term)) {
       const matchingEpc = asset.identifiers?.find((id) =>
         id.value.toLowerCase().endsWith(termLower)
       );
@@ -205,33 +201,51 @@ export function searchAssetsWithMatches(
           matchedField: 'identifiers.value',
           matchedValue: matchingEpc.value,
         });
-        continue; // Don't double-add this asset
-      }
-
-      // Check asset identifier (beginsWith OR endsWith)
-      const assetIdLower = asset.identifier.toLowerCase();
-      if (assetIdLower.startsWith(termLower) || assetIdLower.endsWith(termLower)) {
-        matches.push({
-          asset,
-          matchedField: 'identifier',
-          matchedValue: asset.identifier,
-        });
+        matchedAssetIds.add(asset.id);
+        continue;
       }
     }
 
-    return matches;
+    // 3. Asset ID: prefix/suffix match
+    if (assetIdLower.startsWith(termLower) || assetIdLower.endsWith(termLower)) {
+      matches.push({
+        asset,
+        matchedField: 'identifier',
+        matchedValue: asset.identifier,
+      });
+      matchedAssetIds.add(asset.id);
+    }
   }
 
-  // Non-identifier terms: standard Fuse.js search
-  const fuse = new Fuse(assets, fuseOptions);
-  return fuse.search(term).map((result) => ({
-    asset: result.item,
-    matchedField: result.matches?.[0]?.key,
-    matchedValue:
-      typeof result.matches?.[0]?.value === 'string'
-        ? result.matches[0].value
-        : undefined,
-  }));
+  // 4. Name/Description: fuzzy match (exclude identifier from Fuse.js)
+  const fuzzyOptions: IFuseOptions<Asset> = {
+    keys: [
+      { name: 'name', weight: 2 },
+      { name: 'description', weight: 1 },
+    ],
+    threshold: 0.4,
+    ignoreLocation: true,
+    includeScore: true,
+    includeMatches: true,
+  };
+  const fuse = new Fuse(assets, fuzzyOptions);
+  const fuzzyResults = fuse.search(term);
+
+  for (const result of fuzzyResults) {
+    if (!matchedAssetIds.has(result.item.id)) {
+      matches.push({
+        asset: result.item,
+        matchedField: result.matches?.[0]?.key,
+        matchedValue:
+          typeof result.matches?.[0]?.value === 'string'
+            ? result.matches[0].value
+            : undefined,
+      });
+      matchedAssetIds.add(result.item.id);
+    }
+  }
+
+  return matches;
 }
 
 /**

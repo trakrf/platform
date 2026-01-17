@@ -425,5 +425,24 @@ describe('Filters', () => {
       const results = searchAssets(mockAssets, '99999');
       expect(results).toHaveLength(0);
     });
+
+    it('should NOT match middle of asset identifier', () => {
+      // "SET" is in the middle of "ASSET-0020" but should not match (not prefix/suffix)
+      // Note: mockAssets don't have ASSET-* identifiers, but we can test with "AP-0"
+      const results = searchAssets(mockAssets, 'AP-0');
+      // Should not match LAP-001, LAP-002 (AP-0 is not prefix or suffix)
+      expect(results.every((r) =>
+        r.identifier.startsWith('AP-0') || r.identifier.endsWith('AP-0')
+      )).toBe(true);
+    });
+
+    it('should match asset ID by prefix for non-hex terms', () => {
+      // "LAP" is not hex-only but should still match LAP-001, LAP-002 as prefix
+      const results = searchAssetsWithMatches(mockAssets, 'LAP');
+      // First results should be identifier prefix matches
+      const identifierMatches = results.filter((r) => r.matchedField === 'identifier');
+      expect(identifierMatches.length).toBe(2); // LAP-001, LAP-002
+      expect(identifierMatches.every((r) => r.asset.identifier.startsWith('LAP'))).toBe(true);
+    });
   });
 });
