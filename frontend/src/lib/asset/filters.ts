@@ -170,25 +170,40 @@ export function searchAssetsWithMatches(
     return assets.map((a) => ({ asset: a }));
   }
 
-  // For identifier-like terms (hex/numeric), ONLY return suffix matches
+  // For identifier-like terms (hex/numeric), use precise matching:
+  // - EPC (identifiers.value): endsWith only
+  // - Asset ID (identifier): beginsWith OR endsWith
   // Skip fuzzy search to avoid false positives like "10021" matching "ASSET-0020"
   if (isIdentifierLikeTerm(term)) {
-    const suffixMatches: SearchResult[] = [];
+    const matches: SearchResult[] = [];
+    const termLower = term.toLowerCase();
 
     for (const asset of assets) {
-      const matchingId = asset.identifiers?.find((id) =>
-        id.value.toLowerCase().endsWith(term.toLowerCase())
+      // Check EPC suffix match first (highest priority)
+      const matchingEpc = asset.identifiers?.find((id) =>
+        id.value.toLowerCase().endsWith(termLower)
       );
-      if (matchingId) {
-        suffixMatches.push({
+      if (matchingEpc) {
+        matches.push({
           asset,
           matchedField: 'identifiers.value',
-          matchedValue: matchingId.value,
+          matchedValue: matchingEpc.value,
+        });
+        continue; // Don't double-add this asset
+      }
+
+      // Check asset identifier (beginsWith OR endsWith)
+      const assetIdLower = asset.identifier.toLowerCase();
+      if (assetIdLower.startsWith(termLower) || assetIdLower.endsWith(termLower)) {
+        matches.push({
+          asset,
+          matchedField: 'identifier',
+          matchedValue: asset.identifier,
         });
       }
     }
 
-    return suffixMatches;
+    return matches;
   }
 
   // Non-identifier terms: standard Fuse.js search

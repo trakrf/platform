@@ -66,18 +66,35 @@ describe('Filters', () => {
       deleted_at: null,
       identifiers: [],
     },
+    {
+      id: 4,
+      org_id: 1,
+      identifier: 'A1B2C3D4',
+      name: 'Test Device',
+      type: 'device',
+      description: 'Device with hex-like identifier',
+      current_location_id: null,
+      valid_from: '2024-03-01',
+      valid_to: null,
+      metadata: {},
+      is_active: true,
+      created_at: '2024-03-01T00:00:00Z',
+      updated_at: '2024-03-01T00:00:00Z',
+      deleted_at: null,
+      identifiers: [],
+    },
   ];
 
   describe('filterAssets()', () => {
     it('should filter by type', () => {
       const result = filterAssets(mockAssets, { type: 'device' });
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3); // LAP-001, LAP-002, A1B2C3D4
       expect(result.every((a) => a.type === 'device')).toBe(true);
     });
 
     it('should filter by is_active', () => {
       const result = filterAssets(mockAssets, { is_active: true });
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3); // LAP-001, PER-001, A1B2C3D4
       expect(result.every((a) => a.is_active === true)).toBe(true);
     });
 
@@ -86,23 +103,23 @@ describe('Filters', () => {
         type: 'device',
         is_active: true,
       });
-      expect(result).toHaveLength(1);
-      expect(result[0].identifier).toBe('LAP-001');
+      expect(result).toHaveLength(2); // LAP-001, A1B2C3D4
+      expect(result.map((r) => r.identifier).sort()).toEqual(['A1B2C3D4', 'LAP-001']);
     });
 
     it('should return all when type is "all"', () => {
       const result = filterAssets(mockAssets, { type: 'all' });
-      expect(result).toHaveLength(3);
+      expect(result).toHaveLength(4);
     });
 
     it('should return all when is_active is "all"', () => {
       const result = filterAssets(mockAssets, { is_active: 'all' });
-      expect(result).toHaveLength(3);
+      expect(result).toHaveLength(4);
     });
 
     it('should return all when filters are empty', () => {
       const result = filterAssets(mockAssets, {});
-      expect(result).toHaveLength(3);
+      expect(result).toHaveLength(4);
     });
 
     it('should return empty array when no matches', () => {
@@ -120,9 +137,10 @@ describe('Filters', () => {
         field: 'identifier',
         direction: 'asc',
       });
-      expect(result[0].identifier).toBe('LAP-001');
-      expect(result[1].identifier).toBe('LAP-002');
-      expect(result[2].identifier).toBe('PER-001');
+      expect(result[0].identifier).toBe('A1B2C3D4');
+      expect(result[1].identifier).toBe('LAP-001');
+      expect(result[2].identifier).toBe('LAP-002');
+      expect(result[3].identifier).toBe('PER-001');
     });
 
     it('should sort by identifier descending', () => {
@@ -133,6 +151,7 @@ describe('Filters', () => {
       expect(result[0].identifier).toBe('PER-001');
       expect(result[1].identifier).toBe('LAP-002');
       expect(result[2].identifier).toBe('LAP-001');
+      expect(result[3].identifier).toBe('A1B2C3D4');
     });
 
     it('should sort by name ascending', () => {
@@ -143,6 +162,7 @@ describe('Filters', () => {
       expect(result[0].name).toBe('Dell Laptop');
       expect(result[1].name).toBe('HP Laptop');
       expect(result[2].name).toBe('John Doe');
+      expect(result[3].name).toBe('Test Device');
     });
 
     it('should sort by created_at descending', () => {
@@ -150,9 +170,10 @@ describe('Filters', () => {
         field: 'created_at',
         direction: 'desc',
       });
-      expect(result[0].id).toBe(3); // Feb 1
-      expect(result[1].id).toBe(2); // Jan 15
-      expect(result[2].id).toBe(1); // Jan 1
+      expect(result[0].id).toBe(4); // Mar 1
+      expect(result[1].id).toBe(3); // Feb 1
+      expect(result[2].id).toBe(2); // Jan 15
+      expect(result[3].id).toBe(1); // Jan 1
     });
 
     it('should not mutate original array', () => {
@@ -203,8 +224,8 @@ describe('Filters', () => {
     });
 
     it('should return all assets for empty search', () => {
-      expect(searchAssets(mockAssets, '')).toHaveLength(3);
-      expect(searchAssets(mockAssets, '  ')).toHaveLength(3);
+      expect(searchAssets(mockAssets, '')).toHaveLength(4);
+      expect(searchAssets(mockAssets, '  ')).toHaveLength(4);
     });
 
     it('should return empty array for no matches', () => {
@@ -272,7 +293,7 @@ describe('Filters', () => {
         totalCount: 3,
         totalPages: 1,
       });
-      expect(result).toHaveLength(3);
+      expect(result).toHaveLength(4);
     });
   });
 
@@ -353,10 +374,38 @@ describe('Filters', () => {
   });
 
   describe('searchAssets() with identifiers', () => {
-    it('should return only suffix matches for identifier-like search', () => {
+    it('should return EPC suffix match for identifier-like search', () => {
       const results = searchAssets(mockAssets, '10018');
-      expect(results).toHaveLength(1); // Only the suffix match
-      expect(results[0].id).toBe(1);
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe(1); // EPC E200000000010018
+    });
+
+    it('should match asset ID by suffix', () => {
+      // "001" should match LAP-001 and PER-001 (both end with "001")
+      const results = searchAssets(mockAssets, '001');
+      expect(results).toHaveLength(2);
+      expect(results.map((r) => r.identifier).sort()).toEqual(['LAP-001', 'PER-001']);
+    });
+
+    it('should match asset ID by prefix', () => {
+      // "A1B" is hex-like and matches start of "A1B2C3D4"
+      const results = searchAssets(mockAssets, 'A1B');
+      expect(results).toHaveLength(1);
+      expect(results[0].identifier).toBe('A1B2C3D4');
+    });
+
+    it('should match asset ID by suffix (non-EPC)', () => {
+      // "C3D4" matches end of "A1B2C3D4"
+      const results = searchAssets(mockAssets, 'C3D4');
+      expect(results).toHaveLength(1);
+      expect(results[0].identifier).toBe('A1B2C3D4');
+    });
+
+    it('should prioritize EPC match over asset ID match', () => {
+      // If same search matches both EPC and asset ID, EPC comes first
+      const results = searchAssetsWithMatches(mockAssets, '10018');
+      expect(results).toHaveLength(1);
+      expect(results[0].matchedField).toBe('identifiers.value'); // EPC, not identifier
     });
 
     it('should return all assets for search term shorter than 3 chars', () => {
@@ -365,7 +414,7 @@ describe('Filters', () => {
     });
 
     it('should return empty array for identifier-like term with no matches', () => {
-      // "99999" is identifier-like but no asset has identifier ending in it
+      // "99999" is identifier-like but no asset has identifier or EPC matching it
       const results = searchAssets(mockAssets, '99999');
       expect(results).toHaveLength(0);
     });
