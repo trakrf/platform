@@ -122,12 +122,100 @@ const fuseOptions: IFuseOptions<Asset> = {
   keys: [
     { name: 'identifier', weight: 2 },
     { name: 'name', weight: 2 },
+    { name: 'identifiers.value', weight: 2.5 }, // Highest priority for tag identifiers
     { name: 'description', weight: 1 },
   ],
   threshold: 0.4,
   ignoreLocation: true,
   includeScore: true,
+  includeMatches: true, // Needed for match source indication
 };
+
+/**
+ * Extended search result type for match tracking
+ */
+export interface SearchResult {
+  asset: Asset;
+  matchedField?: string; // 'identifier' | 'name' | 'identifiers.value' | 'description'
+  matchedValue?: string; // The actual matched identifier value
+}
+
+/**
+ * Helper to detect identifier-like terms (numeric or hex alphanumeric)
+ * Used to determine whether to prioritize suffix matching
+ */
+export function isIdentifierLikeTerm(term: string): boolean {
+  // Matches: pure numbers, or hex alphanumeric strings like "ABC123", "10018", "E200"
+  return /^[A-Fa-f0-9]+$/.test(term) && term.length >= 3;
+}
+
+/**
+ * Searches assets with match source tracking
+ *
+ * For identifier-like terms (hex/numeric), prioritizes suffix matches
+ * to handle barcode→EPC scenarios where barcodes may omit leading zeros.
+ *
+ * @param assets - Array of assets to search
+ * @param searchTerm - Search string
+ * @returns Array of SearchResult with match metadata
+ */
+export function searchAssetsWithMatches(
+  assets: Asset[],
+  searchTerm: string
+): SearchResult[] {
+  const term = searchTerm.trim();
+
+  // Minimum 3 characters for identifier search, return all for shorter terms
+  if (!term || term.length < 3) {
+    return assets.map((a) => ({ asset: a }));
+  }
+
+  // For identifier-like terms, prioritize suffix matches
+  if (isIdentifierLikeTerm(term)) {
+    // Phase 1: Exact suffix matches on identifiers (highest priority)
+    const suffixMatches: SearchResult[] = [];
+    const nonSuffixAssets: Asset[] = [];
+
+    for (const asset of assets) {
+      const matchingId = asset.identifiers?.find((id) =>
+        id.value.toLowerCase().endsWith(term.toLowerCase())
+      );
+      if (matchingId) {
+        suffixMatches.push({
+          asset,
+          matchedField: 'identifiers.value',
+          matchedValue: matchingId.value,
+        });
+      } else {
+        nonSuffixAssets.push(asset);
+      }
+    }
+
+    // Phase 2: Fuse.js fuzzy for remaining assets
+    const fuse = new Fuse(nonSuffixAssets, fuseOptions);
+    const fuzzyResults = fuse.search(term).map((result) => ({
+      asset: result.item,
+      matchedField: result.matches?.[0]?.key,
+      matchedValue:
+        typeof result.matches?.[0]?.value === 'string'
+          ? result.matches[0].value
+          : undefined,
+    }));
+
+    return [...suffixMatches, ...fuzzyResults];
+  }
+
+  // Non-identifier terms: standard Fuse.js search
+  const fuse = new Fuse(assets, fuseOptions);
+  return fuse.search(term).map((result) => ({
+    asset: result.item,
+    matchedField: result.matches?.[0]?.key,
+    matchedValue:
+      typeof result.matches?.[0]?.value === 'string'
+        ? result.matches[0].value
+        : undefined,
+  }));
+}
 
 /**
  * Searches assets using fuzzy matching (typo-tolerant)
@@ -139,16 +227,10 @@ const fuseOptions: IFuseOptions<Asset> = {
  * @example
  * searchAssets(assets, 'laptop')   // Matches identifier, name, or description
  * searchAssets(assets, 'laptp')    // Handles typos
+ * searchAssets(assets, '10018')    // Matches EPC ending in 10018 (suffix priority)
  */
 export function searchAssets(assets: Asset[], searchTerm: string): Asset[] {
-  const term = searchTerm.trim();
-
-  if (!term) {
-    return assets;
-  }
-
-  const fuse = new Fuse(assets, fuseOptions);
-  return fuse.search(term).map((result) => result.item);
+  return searchAssetsWithMatches(assets, searchTerm).map((r) => r.asset);
 }
 
 /**

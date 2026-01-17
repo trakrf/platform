@@ -10,7 +10,7 @@ import type {
 import {
   filterAssets,
   sortAssets,
-  searchAssets,
+  searchAssetsWithMatches,
   paginateAssets,
 } from '@/lib/asset/filters';
 import { createCacheActions, createUIActions, createUploadActions } from './assetActions';
@@ -19,6 +19,14 @@ import { createAssetPersistence } from './assetPersistence';
 /**
  * Asset store state interface
  */
+/**
+ * Match info for search results - tracks which field matched
+ */
+export interface SearchMatchInfo {
+  field: string; // 'identifier' | 'name' | 'identifiers.value' | 'description'
+  value: string; // The actual matched value
+}
+
 export interface AssetStore {
   // ============ Cache State ============
   cache: AssetCache;
@@ -28,6 +36,7 @@ export interface AssetStore {
   filters: AssetFilters;
   pagination: PaginationState;
   sort: SortState;
+  searchMatches: Map<number, SearchMatchInfo>; // assetId -> match info
 
   // ============ Bulk Upload State ============
   uploadJobId: string | null;
@@ -57,6 +66,7 @@ export interface AssetStore {
   resetPagination: () => void;
   selectAsset: (id: number | null) => void;
   getSelectedAsset: () => Asset | undefined;
+  getSearchMatch: (assetId: number) => SearchMatchInfo | undefined;
 
   // ============ Bulk Upload Actions ============
   setUploadJobId: (jobId: string | null) => void;
@@ -121,6 +131,7 @@ export const useAssetStore = create<AssetStore>()(
     filters: initialFilters,
     pagination: initialPagination,
     sort: initialSort,
+    searchMatches: new Map(),
     uploadJobId: null,
     pollingIntervalId: null,
 
@@ -167,6 +178,7 @@ export const useAssetStore = create<AssetStore>()(
     /**
      * Get filtered and sorted assets
      * Applies filters, search, and sort from Phase 2 functions
+     * Also tracks match info for search results
      */
     getFilteredAssets: () => {
       const { cache, filters, sort } = get();
@@ -175,7 +187,24 @@ export const useAssetStore = create<AssetStore>()(
       assets = filterAssets(assets, filters);
 
       if (filters.search) {
-        assets = searchAssets(assets, filters.search);
+        const results = searchAssetsWithMatches(assets, filters.search);
+
+        // Update match info for search results
+        const matches = new Map<number, SearchMatchInfo>();
+        for (const result of results) {
+          if (result.matchedField && result.matchedValue) {
+            matches.set(result.asset.id, {
+              field: result.matchedField,
+              value: result.matchedValue,
+            });
+          }
+        }
+        set({ searchMatches: matches });
+
+        assets = results.map((r) => r.asset);
+      } else {
+        // Clear matches when not searching
+        set({ searchMatches: new Map() });
       }
 
       assets = sortAssets(assets, sort);
@@ -220,6 +249,14 @@ export const useAssetStore = create<AssetStore>()(
     getSelectedAsset: () => {
       const { selectedAssetId, cache } = get();
       return selectedAssetId ? cache.byId.get(selectedAssetId) : undefined;
+    },
+
+    /**
+     * Get search match info for a specific asset
+     * Returns undefined if no match info or asset wasn't matched via search
+     */
+    getSearchMatch: (assetId: number) => {
+      return get().searchMatches.get(assetId);
     },
   }))
 );

@@ -4,6 +4,8 @@ import {
   filterAssets,
   sortAssets,
   searchAssets,
+  searchAssetsWithMatches,
+  isIdentifierLikeTerm,
   paginateAssets,
 } from './filters';
 
@@ -16,6 +18,7 @@ describe('Filters', () => {
       name: 'Dell Laptop',
       type: 'device',
       description: 'Work laptop for software development',
+      current_location_id: null,
       valid_from: '2024-01-01',
       valid_to: null,
       metadata: {},
@@ -23,6 +26,9 @@ describe('Filters', () => {
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
       deleted_at: null,
+      identifiers: [
+        { id: 1, type: 'rfid', value: 'E200000000010018', is_active: true },
+      ],
     },
     {
       id: 2,
@@ -31,6 +37,7 @@ describe('Filters', () => {
       name: 'John Doe',
       type: 'person',
       description: 'Senior engineer in platform team',
+      current_location_id: null,
       valid_from: '2024-01-15',
       valid_to: null,
       metadata: {},
@@ -38,6 +45,9 @@ describe('Filters', () => {
       created_at: '2024-01-15T00:00:00Z',
       updated_at: '2024-01-15T00:00:00Z',
       deleted_at: null,
+      identifiers: [
+        { id: 2, type: 'rfid', value: 'ABC12345678', is_active: true },
+      ],
     },
     {
       id: 3,
@@ -46,6 +56,7 @@ describe('Filters', () => {
       name: 'HP Laptop',
       type: 'device',
       description: 'Backup device for presentations',
+      current_location_id: null,
       valid_from: '2024-02-01',
       valid_to: null,
       metadata: {},
@@ -53,6 +64,7 @@ describe('Filters', () => {
       created_at: '2024-02-01T00:00:00Z',
       updated_at: '2024-02-01T00:00:00Z',
       deleted_at: null,
+      identifiers: [],
     },
   ];
 
@@ -261,6 +273,96 @@ describe('Filters', () => {
         totalPages: 1,
       });
       expect(result).toHaveLength(3);
+    });
+  });
+
+  describe('isIdentifierLikeTerm()', () => {
+    it('should return true for numeric strings with 3+ chars', () => {
+      expect(isIdentifierLikeTerm('10018')).toBe(true);
+      expect(isIdentifierLikeTerm('123456')).toBe(true);
+      expect(isIdentifierLikeTerm('999')).toBe(true);
+    });
+
+    it('should return true for hex strings', () => {
+      expect(isIdentifierLikeTerm('E200ABC')).toBe(true);
+      expect(isIdentifierLikeTerm('abc123')).toBe(true);
+      expect(isIdentifierLikeTerm('DEADBEEF')).toBe(true);
+    });
+
+    it('should return false for strings shorter than 3 chars', () => {
+      expect(isIdentifierLikeTerm('ab')).toBe(false);
+      expect(isIdentifierLikeTerm('1')).toBe(false);
+      expect(isIdentifierLikeTerm('A2')).toBe(false);
+    });
+
+    it('should return false for non-hex alphanumeric strings', () => {
+      expect(isIdentifierLikeTerm('laptop')).toBe(false);
+      expect(isIdentifierLikeTerm('printer')).toBe(false);
+      expect(isIdentifierLikeTerm('John')).toBe(false);
+    });
+
+    it('should return false for empty string', () => {
+      expect(isIdentifierLikeTerm('')).toBe(false);
+    });
+  });
+
+  describe('searchAssetsWithMatches()', () => {
+    it('should return SearchResult with asset for each result', () => {
+      const results = searchAssetsWithMatches(mockAssets, '10018');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].asset).toBeDefined();
+      // First result should be the suffix match
+      expect(results[0].asset.id).toBe(1);
+    });
+
+    it('should include matchedField for identifier suffix matches', () => {
+      const results = searchAssetsWithMatches(mockAssets, '10018');
+      expect(results[0].matchedField).toBe('identifiers.value');
+      expect(results[0].matchedValue).toBe('E200000000010018');
+    });
+
+    it('should prioritize suffix matches over fuzzy matches', () => {
+      const results = searchAssetsWithMatches(mockAssets, '10018');
+      expect(results[0].matchedField).toBe('identifiers.value');
+    });
+
+    it('should return all assets without match info for short search terms', () => {
+      const results = searchAssetsWithMatches(mockAssets, 'ab');
+      expect(results).toHaveLength(mockAssets.length);
+      expect(results[0].matchedField).toBeUndefined();
+    });
+
+    it('should be case-insensitive for identifier suffix matching', () => {
+      // ABC12345678 identifier on asset 2
+      const results = searchAssetsWithMatches(mockAssets, 'abc123');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results.some((r) => r.matchedField === 'identifiers.value')).toBe(
+        true
+      );
+    });
+
+    it('should include matchedField for fuzzy name matches', () => {
+      const results = searchAssetsWithMatches(mockAssets, 'laptop');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      const laptopResult = results.find(
+        (r) => r.asset.name === 'Dell Laptop' || r.asset.name === 'HP Laptop'
+      );
+      expect(laptopResult).toBeDefined();
+      expect(laptopResult?.matchedField).toBe('name');
+    });
+  });
+
+  describe('searchAssets() with identifiers', () => {
+    it('should match asset by identifier suffix "10018" first', () => {
+      const results = searchAssets(mockAssets, '10018');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      // Suffix match should be first result
+      expect(results[0].id).toBe(1);
+    });
+
+    it('should return all assets for search term shorter than 3 chars', () => {
+      const results = searchAssets(mockAssets, 'ab');
+      expect(results).toHaveLength(mockAssets.length);
     });
   });
 });
