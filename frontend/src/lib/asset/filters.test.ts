@@ -309,9 +309,8 @@ describe('Filters', () => {
   describe('searchAssetsWithMatches()', () => {
     it('should return SearchResult with asset for each result', () => {
       const results = searchAssetsWithMatches(mockAssets, '10018');
-      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results).toHaveLength(1); // Only suffix match, no fuzzy
       expect(results[0].asset).toBeDefined();
-      // First result should be the suffix match
       expect(results[0].asset.id).toBe(1);
     });
 
@@ -321,8 +320,10 @@ describe('Filters', () => {
       expect(results[0].matchedValue).toBe('E200000000010018');
     });
 
-    it('should prioritize suffix matches over fuzzy matches', () => {
+    it('should ONLY return suffix matches for identifier-like terms (no fuzzy)', () => {
       const results = searchAssetsWithMatches(mockAssets, '10018');
+      // Should only return assets with matching identifier suffix, not fuzzy matches
+      expect(results).toHaveLength(1);
       expect(results[0].matchedField).toBe('identifiers.value');
     });
 
@@ -333,12 +334,11 @@ describe('Filters', () => {
     });
 
     it('should be case-insensitive for identifier suffix matching', () => {
-      // ABC12345678 identifier on asset 2
-      const results = searchAssetsWithMatches(mockAssets, 'abc123');
-      expect(results.length).toBeGreaterThanOrEqual(1);
-      expect(results.some((r) => r.matchedField === 'identifiers.value')).toBe(
-        true
-      );
+      // ABC12345678 identifier on asset 2 - search for suffix "345678"
+      const results = searchAssetsWithMatches(mockAssets, '345678');
+      expect(results).toHaveLength(1);
+      expect(results[0].matchedField).toBe('identifiers.value');
+      expect(results[0].asset.id).toBe(2);
     });
 
     it('should include matchedField for fuzzy name matches', () => {
@@ -353,16 +353,21 @@ describe('Filters', () => {
   });
 
   describe('searchAssets() with identifiers', () => {
-    it('should match asset by identifier suffix "10018" first', () => {
+    it('should return only suffix matches for identifier-like search', () => {
       const results = searchAssets(mockAssets, '10018');
-      expect(results.length).toBeGreaterThanOrEqual(1);
-      // Suffix match should be first result
+      expect(results).toHaveLength(1); // Only the suffix match
       expect(results[0].id).toBe(1);
     });
 
     it('should return all assets for search term shorter than 3 chars', () => {
       const results = searchAssets(mockAssets, 'ab');
       expect(results).toHaveLength(mockAssets.length);
+    });
+
+    it('should return empty array for identifier-like term with no matches', () => {
+      // "99999" is identifier-like but no asset has identifier ending in it
+      const results = searchAssets(mockAssets, '99999');
+      expect(results).toHaveLength(0);
     });
   });
 });

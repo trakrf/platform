@@ -170,11 +170,10 @@ export function searchAssetsWithMatches(
     return assets.map((a) => ({ asset: a }));
   }
 
-  // For identifier-like terms, prioritize suffix matches
+  // For identifier-like terms (hex/numeric), ONLY return suffix matches
+  // Skip fuzzy search to avoid false positives like "10021" matching "ASSET-0020"
   if (isIdentifierLikeTerm(term)) {
-    // Phase 1: Exact suffix matches on identifiers (highest priority)
     const suffixMatches: SearchResult[] = [];
-    const nonSuffixAssets: Asset[] = [];
 
     for (const asset of assets) {
       const matchingId = asset.identifiers?.find((id) =>
@@ -186,23 +185,10 @@ export function searchAssetsWithMatches(
           matchedField: 'identifiers.value',
           matchedValue: matchingId.value,
         });
-      } else {
-        nonSuffixAssets.push(asset);
       }
     }
 
-    // Phase 2: Fuse.js fuzzy for remaining assets
-    const fuse = new Fuse(nonSuffixAssets, fuseOptions);
-    const fuzzyResults = fuse.search(term).map((result) => ({
-      asset: result.item,
-      matchedField: result.matches?.[0]?.key,
-      matchedValue:
-        typeof result.matches?.[0]?.value === 'string'
-          ? result.matches[0].value
-          : undefined,
-    }));
-
-    return [...suffixMatches, ...fuzzyResults];
+    return suffixMatches;
   }
 
   // Non-identifier terms: standard Fuse.js search
