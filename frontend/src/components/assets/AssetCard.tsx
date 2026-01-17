@@ -42,6 +42,8 @@ export function AssetCard({
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>(asset.identifiers || []);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
+  const getSearchMatch = useAssetStore((state) => state.getSearchMatch);
+  const searchMatch = getSearchMatch(asset.id);
 
   // Sync local identifiers when asset prop changes
   useEffect(() => {
@@ -102,7 +104,21 @@ export function AssetCard({
 
           {/* Name */}
           <td className="px-2 sm:px-4 py-2 sm:py-3 hidden md:table-cell">
-            <span className="text-sm text-gray-700 dark:text-gray-300">{asset.name}</span>
+            <span
+              className="text-sm text-gray-700 dark:text-gray-300"
+              title={
+                searchMatch?.field === 'identifiers.value'
+                  ? `Matched EPC: ...${searchMatch.value.slice(-12)}`
+                  : undefined
+              }
+            >
+              {asset.name}
+              {searchMatch?.field === 'identifiers.value' && (
+                <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                  EPC
+                </span>
+              )}
+            </span>
           </td>
 
           {/* Location */}
