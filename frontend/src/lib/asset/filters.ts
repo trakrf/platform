@@ -165,18 +165,34 @@ export function searchAssetsWithMatches(
 ): SearchResult[] {
   const term = searchTerm.trim();
 
-  // Minimum 3 characters for identifier search, return all for shorter terms
+  // Minimum 3 characters for search, return all for shorter terms
   if (!term || term.length < 3) {
     return assets.map((a) => ({ asset: a }));
   }
 
-  // For identifier-like terms (hex/numeric), use precise matching:
+  const termLower = term.toLowerCase();
+
+  // Phase 1: Exact match on asset identifier (case-insensitive)
+  // Handles searches like "asset-0020" → "ASSET-0020"
+  const exactMatch = assets.find(
+    (a) => a.identifier.toLowerCase() === termLower
+  );
+  if (exactMatch) {
+    return [
+      {
+        asset: exactMatch,
+        matchedField: 'identifier',
+        matchedValue: exactMatch.identifier,
+      },
+    ];
+  }
+
+  // Phase 2: For identifier-like terms (hex/numeric), use precise matching:
   // - EPC (identifiers.value): endsWith only
   // - Asset ID (identifier): beginsWith OR endsWith
   // Skip fuzzy search to avoid false positives like "10021" matching "ASSET-0020"
   if (isIdentifierLikeTerm(term)) {
     const matches: SearchResult[] = [];
-    const termLower = term.toLowerCase();
 
     for (const asset of assets) {
       // Check EPC suffix match first (highest priority)

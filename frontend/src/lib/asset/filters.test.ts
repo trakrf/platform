@@ -374,6 +374,13 @@ describe('Filters', () => {
   });
 
   describe('searchAssets() with identifiers', () => {
+    it('should return exact match for full asset identifier (case-insensitive)', () => {
+      // Exact match should return only that asset
+      const results = searchAssets(mockAssets, 'lap-001');
+      expect(results).toHaveLength(1);
+      expect(results[0].identifier).toBe('LAP-001');
+    });
+
     it('should return EPC suffix match for identifier-like search', () => {
       const results = searchAssets(mockAssets, '10018');
       expect(results).toHaveLength(1);
