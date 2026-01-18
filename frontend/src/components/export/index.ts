@@ -5,3 +5,4 @@
  */
 
 export { ExportModal, type ExportModalProps } from './ExportModal';
+export { useExportModal, type UseExportModalParams, type UseExportModalReturn } from './useExportModal';

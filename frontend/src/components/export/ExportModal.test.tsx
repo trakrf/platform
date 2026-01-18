@@ -363,42 +363,7 @@ describe('ExportModal', () => {
     expect(container).not.toBeInTheDocument();
   });
 
-  test('disables buttons while loading', async () => {
-    const { downloadBlob } = await import('@/utils/shareUtils');
-
-    let resolveDownload: () => void;
-    const downloadPromise = new Promise<void>((resolve) => {
-      resolveDownload = () => resolve();
-    });
-
-    (downloadBlob as unknown as ReturnType<typeof vi.fn>).mockReturnValue(downloadPromise);
-
-    render(
-      <ExportModal
-        isOpen={true}
-        onClose={mockOnClose}
-        selectedFormat="pdf"
-        itemCount={5}
-        generateExport={mockGenerateExport}
-      />
-    );
-
-    const downloadButton = screen.getByText('Download').closest('button');
-    fireEvent.click(downloadButton!);
-
-    await waitFor(() => {
-      const cancelButton = screen.getByText('Cancel').closest('button');
-      expect(cancelButton).toBeDisabled();
-    });
-
-    act(() => {
-      resolveDownload!();
-    });
-
-    await waitFor(() => {
-      expect(mockOnClose).toHaveBeenCalled();
-    });
-  });
+  // Note: Loading state is tested in useExportModal.test.ts
 
   test('handles export error gracefully', async () => {
     const toast = (await import('react-hot-toast')).default;
