@@ -10,6 +10,6 @@ export { usePacketStore } from './packetStore';
 export { useBarcodeStore } from './barcodeStore';
 export { useLocateStore } from './locateStore';
 export type { BarcodeData } from './barcodeStore';
-export { useAssetStore, type AssetStore } from './assets/assetStore';
+export { useAssetStore, type AssetStore, type SearchMatchInfo } from './assets/assetStore';
 export { useLocationStore, type LocationStore } from './locations/locationStore';
 export { useOrgStore } from './orgStore';

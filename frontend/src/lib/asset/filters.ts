@@ -117,17 +117,122 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
   return sorted;
 }
 
-// Fuse.js configuration for fuzzy search
-const fuseOptions: IFuseOptions<Asset> = {
-  keys: [
-    { name: 'identifier', weight: 2 },
-    { name: 'name', weight: 2 },
-    { name: 'description', weight: 1 },
-  ],
-  threshold: 0.4,
-  ignoreLocation: true,
-  includeScore: true,
-};
+/**
+ * Extended search result type for match tracking
+ */
+export interface SearchResult {
+  asset: Asset;
+  matchedField?: string; // 'identifier' | 'name' | 'identifiers.value' | 'description'
+  matchedValue?: string; // The actual matched identifier value
+}
+
+/**
+ * Helper to detect identifier-like terms (numeric or hex alphanumeric)
+ * Used to determine whether to prioritize suffix matching
+ */
+export function isIdentifierLikeTerm(term: string): boolean {
+  // Matches: pure numbers, or hex alphanumeric strings like "ABC123", "10018", "E200"
+  return /^[A-Fa-f0-9]+$/.test(term) && term.length >= 3;
+}
+
+/**
+ * Searches assets with match source tracking
+ *
+ * For identifier-like terms (hex/numeric), prioritizes suffix matches
+ * to handle barcode→EPC scenarios where barcodes may omit leading zeros.
+ *
+ * @param assets - Array of assets to search
+ * @param searchTerm - Search string
+ * @returns Array of SearchResult with match metadata
+ */
+export function searchAssetsWithMatches(
+  assets: Asset[],
+  searchTerm: string
+): SearchResult[] {
+  const term = searchTerm.trim();
+
+  // Minimum 3 characters for search, return all for shorter terms
+  if (!term || term.length < 3) {
+    return assets.map((a) => ({ asset: a }));
+  }
+
+  const termLower = term.toLowerCase();
+
+  // Collect all matches with their source
+  const matches: SearchResult[] = [];
+  const matchedAssetIds = new Set<number>();
+
+  for (const asset of assets) {
+    const assetIdLower = asset.identifier.toLowerCase();
+
+    // 1. Asset ID: exact match (highest priority)
+    if (assetIdLower === termLower) {
+      matches.push({
+        asset,
+        matchedField: 'identifier',
+        matchedValue: asset.identifier,
+      });
+      matchedAssetIds.add(asset.id);
+      continue;
+    }
+
+    // 2. EPC: suffix match (for hex/numeric terms only)
+    if (isIdentifierLikeTerm(term)) {
+      const matchingEpc = asset.identifiers?.find((id) =>
+        id.value.toLowerCase().endsWith(termLower)
+      );
+      if (matchingEpc) {
+        matches.push({
+          asset,
+          matchedField: 'identifiers.value',
+          matchedValue: matchingEpc.value,
+        });
+        matchedAssetIds.add(asset.id);
+        continue;
+      }
+    }
+
+    // 3. Asset ID: prefix/suffix match
+    if (assetIdLower.startsWith(termLower) || assetIdLower.endsWith(termLower)) {
+      matches.push({
+        asset,
+        matchedField: 'identifier',
+        matchedValue: asset.identifier,
+      });
+      matchedAssetIds.add(asset.id);
+    }
+  }
+
+  // 4. Name/Description: fuzzy match (exclude identifier from Fuse.js)
+  const fuzzyOptions: IFuseOptions<Asset> = {
+    keys: [
+      { name: 'name', weight: 2 },
+      { name: 'description', weight: 1 },
+    ],
+    threshold: 0.4,
+    ignoreLocation: true,
+    includeScore: true,
+    includeMatches: true,
+  };
+  const fuse = new Fuse(assets, fuzzyOptions);
+  const fuzzyResults = fuse.search(term);
+
+  for (const result of fuzzyResults) {
+    if (!matchedAssetIds.has(result.item.id)) {
+      matches.push({
+        asset: result.item,
+        matchedField: result.matches?.[0]?.key,
+        matchedValue:
+          typeof result.matches?.[0]?.value === 'string'
+            ? result.matches[0].value
+            : undefined,
+      });
+      matchedAssetIds.add(result.item.id);
+    }
+  }
+
+  return matches;
+}
 
 /**
  * Searches assets using fuzzy matching (typo-tolerant)
@@ -139,16 +244,10 @@ const fuseOptions: IFuseOptions<Asset> = {
  * @example
  * searchAssets(assets, 'laptop')   // Matches identifier, name, or description
  * searchAssets(assets, 'laptp')    // Handles typos
+ * searchAssets(assets, '10018')    // Matches EPC ending in 10018 (suffix priority)
  */
 export function searchAssets(assets: Asset[], searchTerm: string): Asset[] {
-  const term = searchTerm.trim();
-
-  if (!term) {
-    return assets;
-  }
-
-  const fuse = new Fuse(assets, fuseOptions);
-  return fuse.search(term).map((result) => result.item);
+  return searchAssetsWithMatches(assets, searchTerm).map((r) => r.asset);
 }
 
 /**
