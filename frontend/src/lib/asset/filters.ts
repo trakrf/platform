@@ -117,20 +117,6 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
   return sorted;
 }
 
-// Fuse.js configuration for fuzzy search
-const fuseOptions: IFuseOptions<Asset> = {
-  keys: [
-    { name: 'identifier', weight: 2 },
-    { name: 'name', weight: 2 },
-    { name: 'identifiers.value', weight: 2.5 }, // Highest priority for tag identifiers
-    { name: 'description', weight: 1 },
-  ],
-  threshold: 0.4,
-  ignoreLocation: true,
-  includeScore: true,
-  includeMatches: true, // Needed for match source indication
-};
-
 /**
  * Extended search result type for match tracking
  */
