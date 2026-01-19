@@ -72,6 +72,7 @@ export function useOrgModal({ isOpen, onClose, mode, defaultTab }: UseOrgModalPr
 
   // Modal open handlers
   const handleManageModeOpen = () => {
+    setShowDeleteModal(false);
     setActiveTab(defaultTab);
     if (currentOrg) {
       setOrgName(currentOrg.name);
@@ -153,6 +154,7 @@ export function useOrgModal({ isOpen, onClose, mode, defaultTab }: UseOrgModalPr
       await orgsApi.delete(currentOrg.id, confirmName);
       await fetchProfile();
       toast.success('Organization deleted');
+      setShowDeleteModal(false);
       onClose();
       window.location.hash = '#home';
     } catch (err) {
