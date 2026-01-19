@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Plus, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAssets, useAssetMutations } from '@/hooks/assets';
@@ -13,7 +13,12 @@ import { BulkUploadModal } from '@/components/assets/BulkUploadModal';
 import { AssetDetailsModal } from '@/components/assets/AssetDetailsModal';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { GlobalUploadAlert } from '@/components/shared/GlobalUploadAlert';
+import { ShareButton } from '@/components/ShareButton';
+import { ExportModal } from '@/components/export';
+import { useExport } from '@/hooks/useExport';
+import { generateAssetCSV, generateAssetExcel, generateAssetPDF } from '@/utils/export';
 import type { Asset } from '@/types/assets';
+import type { ExportFormat, ExportResult } from '@/types/export';
 
 export default function AssetsScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -26,6 +31,7 @@ export default function AssetsScreen() {
 
   const { isLoading } = useAssets();
   const { delete: deleteAsset } = useAssetMutations();
+  const { isModalOpen: isExportModalOpen, selectedFormat, openExport, closeExport } = useExport();
 
   const cache = useAssetStore((state) => state.cache);
   const filters = useAssetStore((state) => state.filters);
@@ -89,6 +95,22 @@ export default function AssetsScreen() {
     setIsBulkUploadOpen(false);
   };
 
+  const generateExport = useCallback(
+    (format: ExportFormat): ExportResult => {
+      switch (format) {
+        case 'csv':
+          return generateAssetCSV(filteredAssets);
+        case 'xlsx':
+          return generateAssetExcel(filteredAssets);
+        case 'pdf':
+          return generateAssetPDF(filteredAssets);
+        default:
+          throw new Error(`Unsupported format: ${format}`);
+      }
+    },
+    [filteredAssets]
+  );
+
   return (
     <ProtectedRoute>
       <div className="h-full flex flex-col p-2">
@@ -100,7 +122,15 @@ export default function AssetsScreen() {
           </div> */}
 
           <div className="flex-1 flex flex-col gap-4 min-w-0">
-            <AssetSearchSort />
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <AssetSearchSort />
+              </div>
+              <ShareButton
+                onFormatSelect={openExport}
+                disabled={filteredAssets.length === 0}
+              />
+            </div>
 
             {!isLoading && filteredAssets.length === 0 && !hasActiveFilters && (
               <EmptyState
@@ -192,6 +222,16 @@ export default function AssetsScreen() {
           isOpen={!!viewingAsset}
           onClose={() => setViewingAsset(null)}
           onEdit={handleEditAsset}
+        />
+
+        <ExportModal
+          isOpen={isExportModalOpen}
+          onClose={closeExport}
+          selectedFormat={selectedFormat}
+          itemCount={filteredAssets.length}
+          itemLabel="assets"
+          generateExport={generateExport}
+          shareTitle="Asset List"
         />
 
         {/* {isFiltersOpen && (

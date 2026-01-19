@@ -168,3 +168,4 @@ docker-compose.override.yml
 
 # CSW symlink (local installation)
 spec/csw
+tmp/
