@@ -94,6 +94,9 @@ export default defineConfig(({ mode }) => {
       '@test-utils': path.resolve(__dirname, './test-utils')
     }
   },
+  optimizeDeps: {
+    include: ['react-split-pane']
+  },
   server: {
     https: env.VITE_HTTPS === 'true' ? (certExists ? {
       cert: fs.readFileSync('./.cert/localhost.pem'),
