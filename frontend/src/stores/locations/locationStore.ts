@@ -22,6 +22,9 @@ export interface LocationStore {
   expandedNodeIds: Set<number>;
   treePanelWidth: number;
 
+  // Mobile expandable cards state
+  expandedCardIds: Set<number>;
+
   addLocation: (location: Location) => void;
   updateLocation: (id: number, updates: Partial<Location>) => void;
   updateCachedLocation: (id: number, updates: Partial<Location>) => void;
@@ -53,6 +56,9 @@ export interface LocationStore {
   toggleNodeExpanded: (id: number) => void;
   setTreePanelWidth: (width: number) => void;
   expandToLocation: (id: number) => void;
+
+  // Mobile expandable cards actions
+  toggleCardExpanded: (id: number) => void;
 }
 
 const initialCache: LocationCache = {
@@ -94,7 +100,7 @@ const STORAGE_KEYS = {
 // Load persisted UI state from localStorage
 const loadPersistedUIState = () => {
   if (typeof window === 'undefined' || !window.localStorage) {
-    return { expandedNodeIds: new Set<number>(), treePanelWidth: 280 };
+    return { expandedNodeIds: new Set<number>(), expandedCardIds: new Set<number>(), treePanelWidth: 280 };
   }
 
   try {
@@ -104,9 +110,10 @@ const loadPersistedUIState = () => {
     return {
       treePanelWidth: widthStr ? parseInt(widthStr, 10) : 280,
       expandedNodeIds: expandedStr ? new Set<number>(JSON.parse(expandedStr)) : new Set<number>(),
+      expandedCardIds: new Set<number>(), // Cards don't persist - start collapsed
     };
   } catch {
-    return { expandedNodeIds: new Set<number>(), treePanelWidth: 280 };
+    return { expandedNodeIds: new Set<number>(), expandedCardIds: new Set<number>(), treePanelWidth: 280 };
   }
 };
 
@@ -126,6 +133,9 @@ export const useLocationStore = create<LocationStore>()(
       // Split pane UI state (loaded from localStorage)
       expandedNodeIds: persistedUI.expandedNodeIds,
       treePanelWidth: persistedUI.treePanelWidth,
+
+      // Mobile expandable cards state
+      expandedCardIds: persistedUI.expandedCardIds,
 
       ...createCacheActions(set, get),
       ...createHierarchyQueries(set, get),

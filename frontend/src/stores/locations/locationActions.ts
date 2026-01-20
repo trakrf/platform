@@ -304,6 +304,8 @@ export function createCacheActions(
         // Reset split pane UI state
         expandedNodeIds: new Set<number>(),
         treePanelWidth: 280,
+        // Reset mobile card expansion state
+        expandedCardIds: new Set<number>(),
       })),
   };
 }
@@ -501,5 +503,17 @@ export function createUIActions(
       persistExpandedNodes(newExpandedNodeIds);
       set({ expandedNodeIds: newExpandedNodeIds });
     },
+
+    // Mobile expandable cards action
+    toggleCardExpanded: (id: number) =>
+      set((state: any) => {
+        const newExpandedCardIds = new Set<number>(state.expandedCardIds as Set<number>);
+        if (newExpandedCardIds.has(id)) {
+          newExpandedCardIds.delete(id);
+        } else {
+          newExpandedCardIds.add(id);
+        }
+        return { expandedCardIds: newExpandedCardIds };
+      }),
   };
 }

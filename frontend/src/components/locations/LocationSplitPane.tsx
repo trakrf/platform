@@ -52,7 +52,7 @@ export function LocationSplitPane({
   );
 
   return (
-    <div className={`h-full ${className}`}>
+    <div className={`h-full ${className}`} data-testid="location-split-pane">
       <SplitPane
         direction="horizontal"
         onResizeEnd={handleResizeEnd}

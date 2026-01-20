@@ -322,6 +322,7 @@ export function LocationTreePanel({
       ref={containerRef}
       role="tree"
       aria-label="Location hierarchy"
+      data-testid="location-tree-panel"
       className={`space-y-1 overflow-y-auto ${className}`}
       onKeyDown={handleKeyDown}
     >

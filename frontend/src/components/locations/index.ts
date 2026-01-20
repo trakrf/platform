@@ -20,3 +20,7 @@ export { LocationDetailsModal } from './LocationDetailsModal';
 export { LocationTreePanel } from './LocationTreePanel';
 export { LocationDetailsPanel } from './LocationDetailsPanel';
 export { LocationSplitPane } from './LocationSplitPane';
+
+// Mobile components (Phase 2 TRA-301)
+export { LocationExpandableCard } from './LocationExpandableCard';
+export { LocationMobileView } from './LocationMobileView';

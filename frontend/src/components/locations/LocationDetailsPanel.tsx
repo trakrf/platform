@@ -87,7 +87,7 @@ export function LocationDetailsPanel({
   }
 
   return (
-    <div className={`h-full flex flex-col overflow-hidden ${className}`}>
+    <div className={`h-full flex flex-col overflow-hidden ${className}`} data-testid="location-details-panel">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">
