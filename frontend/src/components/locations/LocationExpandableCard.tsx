@@ -186,11 +186,11 @@ export function LocationExpandableCard({
               <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Type</p>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {isRoot ? 'Top Level' : 'Sub-location'}
+                  {isRoot ? 'Root Location' : 'Subsidiary'}
                 </p>
               </div>
               <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Sub-locations</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Children</p>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">
                   {children.length} direct / {descendants.length} total
                 </p>
@@ -227,7 +227,7 @@ export function LocationExpandableCard({
           {visibleChildren.length > 0 && (
             <div className="p-3 pt-0 space-y-2 bg-gray-50 dark:bg-gray-800/50">
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400 pt-3 pb-1">
-                Sub-locations ({visibleChildren.length})
+                Children ({visibleChildren.length})
               </p>
               {visibleChildren.map((child) => (
                 <LocationExpandableCard

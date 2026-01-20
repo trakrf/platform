@@ -77,7 +77,7 @@ export function LocationParentSelector({
       disabled={disabled}
       className={`block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${className}`}
     >
-      <option value="">None (Top Level)</option>
+      <option value="">None (Root Location)</option>
       {sortedLocations.map((location) => (
         <option key={location.id} value={location.id}>
           {getDisplayName(location)}

@@ -154,12 +154,12 @@ export function LocationDetailsModal({
               <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Type</p>
                 <p className="font-medium text-gray-900 dark:text-white">
-                  {isRoot ? 'Top Level' : 'Sub-location'}
+                  {isRoot ? 'Root Location' : 'Subsidiary Location'}
                 </p>
               </div>
 
               <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Sub-locations</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Direct Children</p>
                 <p className="font-medium text-gray-900 dark:text-white">{children.length}</p>
               </div>
 
@@ -172,7 +172,7 @@ export function LocationDetailsModal({
             {children.length > 0 && (
               <div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Sub-locations:
+                  Direct Children:
                 </p>
                 <div className="space-y-2">
                   {children.map((child) => (
