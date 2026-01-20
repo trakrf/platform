@@ -361,3 +361,85 @@ describe('LocationStore - Filtering and Pagination', () => {
     expect(page1).toHaveLength(2);
   });
 });
+
+describe('LocationStore - Split Pane UI State', () => {
+  beforeEach(() => {
+    useLocationStore.getState().invalidateCache();
+
+    // Set up a hierarchy: root -> child -> grandchild
+    const root = createMockLocation(1, { identifier: 'root' });
+    const child = createMockLocation(2, { identifier: 'child', parent_location_id: 1 });
+    const grandchild = createMockLocation(3, { identifier: 'grandchild', parent_location_id: 2 });
+
+    useLocationStore.getState().setLocations([root, child, grandchild]);
+  });
+
+  it('should have default expandedNodeIds as empty Set', () => {
+    const { expandedNodeIds } = useLocationStore.getState();
+    expect(expandedNodeIds).toBeInstanceOf(Set);
+  });
+
+  it('should have default treePanelWidth of 280', () => {
+    const { treePanelWidth } = useLocationStore.getState();
+    expect(treePanelWidth).toBe(280);
+  });
+
+  it('should toggle node expansion - expand', () => {
+    useLocationStore.getState().toggleNodeExpanded(1);
+    const { expandedNodeIds } = useLocationStore.getState();
+    expect(expandedNodeIds.has(1)).toBe(true);
+  });
+
+  it('should toggle node expansion - collapse', () => {
+    useLocationStore.getState().toggleNodeExpanded(1);
+    useLocationStore.getState().toggleNodeExpanded(1);
+    const { expandedNodeIds } = useLocationStore.getState();
+    expect(expandedNodeIds.has(1)).toBe(false);
+  });
+
+  it('should expand multiple nodes independently', () => {
+    useLocationStore.getState().toggleNodeExpanded(1);
+    useLocationStore.getState().toggleNodeExpanded(2);
+    const { expandedNodeIds } = useLocationStore.getState();
+    expect(expandedNodeIds.has(1)).toBe(true);
+    expect(expandedNodeIds.has(2)).toBe(true);
+  });
+
+  it('should set tree panel width', () => {
+    useLocationStore.getState().setTreePanelWidth(350);
+    expect(useLocationStore.getState().treePanelWidth).toBe(350);
+  });
+
+  it('should expand all ancestors when expandToLocation called', () => {
+    // grandchild (3) has ancestors: root (1), child (2)
+    useLocationStore.getState().expandToLocation(3);
+    const { expandedNodeIds } = useLocationStore.getState();
+    expect(expandedNodeIds.has(1)).toBe(true);
+    expect(expandedNodeIds.has(2)).toBe(true);
+  });
+
+  it('should not expand the target location itself when expandToLocation called', () => {
+    useLocationStore.getState().expandToLocation(3);
+    const { expandedNodeIds } = useLocationStore.getState();
+    // The target (3) itself should not be expanded, only its ancestors
+    expect(expandedNodeIds.has(3)).toBe(false);
+  });
+
+  it('should preserve existing expanded nodes when expandToLocation called', () => {
+    // First expand node 1
+    useLocationStore.getState().toggleNodeExpanded(1);
+    // Then expand to grandchild
+    useLocationStore.getState().expandToLocation(3);
+    const { expandedNodeIds } = useLocationStore.getState();
+    // Both should be expanded (1 was already, 2 should be added)
+    expect(expandedNodeIds.has(1)).toBe(true);
+    expect(expandedNodeIds.has(2)).toBe(true);
+  });
+
+  it('should handle expandToLocation for root location (no ancestors)', () => {
+    useLocationStore.getState().expandToLocation(1);
+    const { expandedNodeIds } = useLocationStore.getState();
+    // Root has no ancestors, so nothing should be expanded
+    expect(expandedNodeIds.size).toBe(0);
+  });
+});
