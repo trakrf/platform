@@ -46,7 +46,7 @@ export function LocationStats({ className = '' }: LocationStatsProps) {
         />
         <StatCard
           icon={Building2}
-          label="Root Locations"
+          label="Top Level"
           value={stats.roots}
           subtitle="Top level"
           variant="blue"

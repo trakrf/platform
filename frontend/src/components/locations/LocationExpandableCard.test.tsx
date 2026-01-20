@@ -204,11 +204,11 @@ describe('LocationExpandableCard', () => {
     );
 
     // Should show children section
-    expect(screen.getByText('Children (1)')).toBeInTheDocument();
+    expect(screen.getByText('Sub-locations (1)')).toBeInTheDocument();
     expect(screen.getByText('child')).toBeInTheDocument();
   });
 
-  it('should show Root Location type for root locations', () => {
+  it('should show Top Level type for root locations', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
     useLocationStore.getState().toggleCardExpanded(1);
@@ -222,10 +222,10 @@ describe('LocationExpandableCard', () => {
       />
     );
 
-    expect(screen.getByText('Root Location')).toBeInTheDocument();
+    expect(screen.getByText('Top Level')).toBeInTheDocument();
   });
 
-  it('should show Subsidiary type for child locations', () => {
+  it('should show Sub-location type for child locations', () => {
     const root = createMockLocation(1);
     const child = createMockLocation(2, { parent_location_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
@@ -240,7 +240,7 @@ describe('LocationExpandableCard', () => {
       />
     );
 
-    expect(screen.getByText('Subsidiary')).toBeInTheDocument();
+    expect(screen.getByText('Sub-location')).toBeInTheDocument();
   });
 
   it('should collapse when expanded and header clicked again', () => {

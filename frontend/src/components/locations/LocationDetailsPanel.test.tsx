@@ -170,9 +170,9 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByText('Direct Children')).toBeInTheDocument();
+    expect(screen.getByText('Sub-locations')).toBeInTheDocument();
     // Look for the children count within the hierarchy section
-    const directChildrenSection = screen.getByText('Direct Children').closest('div');
+    const directChildrenSection = screen.getByText('Sub-locations').closest('div');
     expect(directChildrenSection?.parentElement).toHaveTextContent('2');
   });
 
@@ -305,7 +305,7 @@ describe('LocationDetailsPanel', () => {
     expect(onDelete).toHaveBeenCalledWith(1);
   });
 
-  it('should show Root Location type for root locations', () => {
+  it('should show Top Level type for root locations', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
 
@@ -318,10 +318,10 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByText('Root Location')).toBeInTheDocument();
+    expect(screen.getByText('Top Level')).toBeInTheDocument();
   });
 
-  it('should show Subsidiary Location type for child locations', () => {
+  it('should show Sub-location type for child locations', () => {
     const root = createMockLocation(1);
     const child = createMockLocation(2, { parent_location_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
@@ -335,6 +335,6 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByText('Subsidiary Location')).toBeInTheDocument();
+    expect(screen.getByText('Sub-location')).toBeInTheDocument();
   });
 });

@@ -85,7 +85,7 @@ export function LocationCard({
             <div className="flex items-center gap-1 sm:gap-2">
               <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500 dark:text-gray-400" />
               <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 hidden sm:inline">
-                {isRoot ? 'Root' : 'Subsidiary'}
+                {isRoot ? 'Top' : 'Sub'}
               </span>
             </div>
           </td>
