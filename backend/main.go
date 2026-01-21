@@ -234,7 +234,7 @@ func main() {
 	<-quit
 
 	log.Info().Msg("Shutting down gracefully...")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {

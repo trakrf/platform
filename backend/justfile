@@ -2,28 +2,28 @@
 # Uses fallback to inherit shared recipes from root justfile
 set fallback := true
 
+# Get database URLs from environment (loaded by direnv from .env.local)
+pg_url_local := env("PG_URL_LOCAL", "")
+pg_url_cloud := env("PG_URL_CLOUD", "")
+
 # List all available recipes
 default:
     @just --list
 
-# Start Go development server (local mode: backend on host → postgres in docker)
+# Start Go development server with hot reload (backend on host → postgres in docker)
 dev:
     @echo "🚀 Backend on host → postgres in docker (localhost:5432)"
-    @if [ -z "$$PG_URL_LOCAL" ]; then \
-        echo "⚠️  PG_URL_LOCAL not set - using PG_URL"; \
-        go run .; \
-    else \
-        PG_URL="$$PG_URL_LOCAL" go run .; \
-    fi
+    @env PG_URL="{{pg_url_local}}" air
 
-# Cloud development (backend on host → postgres in cloud)
+# Cloud development with hot reload (backend on host → postgres in cloud)
 dev-cloud:
     @echo "☁️  Backend on host → cloud postgres"
-    @if [ -z "$$PG_URL_CLOUD" ]; then \
-        echo "❌ PG_URL_CLOUD not set in .env.local"; \
-        exit 1; \
-    fi
-    PG_URL="$$PG_URL_CLOUD" go run .
+    @env PG_URL="{{pg_url_cloud}}" air
+
+# Run without hot reload (for debugging)
+dev-no-reload:
+    @echo "🚀 Backend on host → postgres in docker (no hot reload)"
+    @go build -o ./tmp/main . && env PG_URL="{{pg_url_local}}" ./tmp/main
 
 # Alias for consistency
 run: dev
@@ -67,9 +67,7 @@ smoke-test:
     echo "🔥 Running smoke test..."
     just build
     echo "Starting server with 5s timeout..."
-    if [ -n "${PG_URL_LOCAL:-}" ]; then
-    export PG_URL="$PG_URL_LOCAL"
-    fi
+    export PG_URL="{{pg_url_local}}"
     timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$!
     sleep 2
     echo "Testing /healthz endpoint..."
