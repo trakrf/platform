@@ -120,7 +120,7 @@ test('verify connection', async ({ page }) => {
 ### .env.local
 ```bash
 # For UI-only tests (default)
-VITE_BLE_MOCK_ENABLED=true
+VITE_BLE_BRIDGE_ENABLED=true
 
 # For hardware tests
 BLE_MCP_HOST=localhost
@@ -196,10 +196,10 @@ Tests run automatically on push/PR:
 - Verify page navigation completed
 - Increase timeout for BLE operations
 
-### "Mock not injected"
-- Ensure dev server running: `pnpm dev:mock`
-- Check VITE_BLE_MOCK_ENABLED=true
-- Verify mock injection in browser console
+### "Bridge not injected"
+- Ensure dev server running: `pnpm dev:bridge`
+- Check VITE_BLE_BRIDGE_ENABLED=true
+- Verify bridge injection in browser console
 
 ## Performance
 

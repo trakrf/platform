@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * Development server with BLE mock support
- * 
+ * Development server with BLE bridge support
+ *
  * This script:
  * 1. Checks if BLE bridge server is configured and available
- * 2. Health checks the mock server
+ * 2. Health checks the bridge server
  * 3. Provides MCP configuration instructions
  * 4. Starts the development server
  */
@@ -42,7 +42,7 @@ const BLE_MCP_TOKEN = process.env.BLE_MCP_HTTP_TOKEN;
 const wsUrl = new URL(BLE_BRIDGE_WS_URL);
 const isLocalhost = wsUrl.hostname === 'localhost' || wsUrl.hostname === '127.0.0.1';
 
-console.log('🔌 BLE Mock Configuration:');
+console.log('🔌 BLE Bridge Configuration:');
 console.log(`   WebSocket URL: ${BLE_BRIDGE_WS_URL}`);
 console.log(`   HTTP URL: ${BLE_BRIDGE_HTTP_URL}`);
 console.log(`   Host: ${wsUrl.hostname}:${wsUrl.port}`);
@@ -50,35 +50,35 @@ console.log(`   Auth: ${BLE_MCP_TOKEN ? 'Token configured' : 'No auth token'}`);
 console.log('');
 
 /**
- * Check if the mock server is available via HTTP health endpoint
+ * Check if the bridge server is available via HTTP health endpoint
  */
-async function checkMockServer() {
+async function checkBridgeServer() {
   try {
-    console.log(`🔍 Checking mock server at ${BLE_BRIDGE_HTTP_URL}/health...`);
-    
+    console.log(`🔍 Checking bridge server at ${BLE_BRIDGE_HTTP_URL}/health...`);
+
     const headers = {};
     if (BLE_MCP_TOKEN) {
       headers['Authorization'] = `Bearer ${BLE_MCP_TOKEN}`;
     }
-    
+
     const response = await fetch(`${BLE_BRIDGE_HTTP_URL}/health`, {
       method: 'GET',
       headers,
       signal: AbortSignal.timeout(3000)
     });
-    
+
     if (response.ok) {
       const health = await response.json();
-      console.log('✅ Mock server is available');
+      console.log('✅ Bridge server is available');
       console.log(`   Version: ${health.version || 'unknown'}`);
       console.log(`   Status: ${health.status || 'unknown'}`);
       return true;
     } else {
-      console.log(`❌ Mock server health check failed: HTTP ${response.status}`);
+      console.log(`❌ Bridge server health check failed: HTTP ${response.status}`);
       return false;
     }
   } catch (err) {
-    console.log(`❌ Mock server connection failed: ${err.message}`);
+    console.log(`❌ Bridge server connection failed: ${err.message}`);
     return false;
   }
 }
@@ -109,15 +109,15 @@ function showMcpInstructions() {
  */
 function startDevServer() {
   console.log('🚀 Starting development server...\n');
-  
-  // Use vite directly with environment to enable mock
+
+  // Use vite directly with environment to enable bridge
   // Run in test mode so DeviceManager is exposed for E2E tests
   const vite = spawn('pnpm', ['vite', '--mode', 'test', '--port', '5173'], {
     stdio: 'inherit',
     shell: true,
     env: {
       ...process.env,
-      VITE_BLE_MOCK_ENABLED: 'true',
+      VITE_BLE_BRIDGE_ENABLED: 'true',
       VITE_BLE_BRIDGE_URL: BLE_BRIDGE_WS_URL
     }
   });
@@ -136,35 +136,35 @@ function startDevServer() {
  * Main function
  */
 async function main() {
-  // Check if mock server is available
-  const serverAvailable = await checkMockServer();
-  
+  // Check if bridge server is available
+  const serverAvailable = await checkBridgeServer();
+
   if (!serverAvailable) {
-    console.error('\n❌ BLE mock server is not available!');
+    console.error('\n❌ BLE bridge server is not available!');
     console.error('');
-    
+
     if (isLocalhost) {
-      console.error('   The mock server needs to be running on localhost.');
+      console.error('   The bridge server needs to be running on localhost.');
       console.error('   You can start it with:');
       console.error('');
       console.error('   pnpm dlx ble-mcp-test serve --port ' + wsUrl.port);
       console.error('');
       console.error('   Or use the test:e2e:with-app command which starts it automatically.');
     } else {
-      console.error(`   The configured mock server at ${wsUrl.hostname}:${wsUrl.port} is not responding.`);
+      console.error(`   The configured bridge server at ${wsUrl.hostname}:${wsUrl.port} is not responding.`);
       console.error('   Please ensure the remote server is running and accessible.');
-      
+
       if (BLE_MCP_TOKEN) {
         console.error('   Note: Auth token is configured, make sure it\'s correct.');
       }
     }
-    
+
     process.exit(1);
   }
-  
+
   // Show MCP instructions
   showMcpInstructions();
-  
+
   // Start the dev server
   startDevServer();
 }

@@ -23,7 +23,7 @@ describe('Header', () => {
     mockCheckBrowserSupport.mockClear();
     
     // Mock Web Bluetooth API for browser support check
-    Object.defineProperty(window, '__webBluetoothMocked', {
+    Object.defineProperty(window, '__webBluetoothBridged', {
       writable: true,
       value: true
     });
@@ -258,7 +258,7 @@ describe('Header - Auth Integration', () => {
     mockDisconnect.mockClear();
 
     // Mock Web Bluetooth API for browser support check
-    Object.defineProperty(window, '__webBluetoothMocked', {
+    Object.defineProperty(window, '__webBluetoothBridged', {
       writable: true,
       value: true
     });

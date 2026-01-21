@@ -19,8 +19,8 @@ try {
   console.log(`📋 Port ${PORT} is in use:`);
   console.log(result);
   
-  if (result.includes('dev-mock')) {
-    console.log('🔌 Mock server is running (pnpm dev:mock)');
+  if (result.includes('dev-bridge')) {
+    console.log('🔌 Bridge server is running (pnpm dev:bridge)');
   } else if (result.includes('vite')) {
     console.log('🚀 Regular dev server is running (pnpm dev)');
   } else {

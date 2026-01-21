@@ -152,7 +152,7 @@ export default function App() {
   useEffect(() => {
     try {
       const hasBluetoothAPI = typeof navigator !== 'undefined' && navigator.bluetooth;
-      const isMocked = typeof window !== 'undefined' && !!(window as unknown as { __webBluetoothMocked?: boolean }).__webBluetoothMocked;
+      const isMocked = typeof window !== 'undefined' && !!(window as unknown as { __webBluetoothBridged?: boolean }).__webBluetoothBridged;
 
       if (!hasBluetoothAPI && !isMocked && typeof window !== 'undefined') {
         console.warn('Web Bluetooth is not supported in this browser.');

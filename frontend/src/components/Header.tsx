@@ -129,7 +129,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   useEffect(() => {
     const checkSupport = () => {
       const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
-      const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothMocked;
+      const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
       setIsBrowserSupported(hasBluetoothAPI || isMocked);
     };
 

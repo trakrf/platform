@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "dev:https": "VITE_BLE_MOCK_ENABLED=false VITE_HTTPS=true vite",
-    "dev:mock": "VITE_BLE_MOCK_ENABLED=true node scripts/dev-mock.js",
+    "dev:https": "VITE_BLE_BRIDGE_ENABLED=false VITE_HTTPS=true vite",
+    "dev:bridge": "VITE_BLE_BRIDGE_ENABLED=true node scripts/dev-bridge.js",
     "build": "tsc -p tsconfig.build.json && vite build",
     "start": "serve -s dist -l ${PORT:-3000}",
     "preview": "vite preview",

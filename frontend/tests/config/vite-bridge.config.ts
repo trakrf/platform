@@ -1,5 +1,5 @@
 /**
- * Minimal BLE Mock Configuration for Vite
+ * BLE Bridge Configuration for Vite
  *
  * This file contains only the configuration needed by vite.config.ts
  * Updated to import from lib/device/transport for consolidated transport layer
@@ -20,10 +20,10 @@ dotenv.config({ path: '.env.local' });
 const systemHostname = os.hostname();
 
 /**
- * Get config for Vite mock injection
+ * Get config for Vite bridge injection
  * Minimal config with no dependencies on app code
  */
-export function getViteMockConfig() {
+export function getViteBridgeConfig() {
   // Core bridge server settings
   const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
   const wsPort = process.env.BLE_MCP_WS_PORT || '8080';
