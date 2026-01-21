@@ -40,7 +40,7 @@ export default defineConfig({
   ],
   webServer: process.env.CI ? {
     // In CI, always start fresh server
-    command: process.env.USE_MOCK ? 'pnpm dev:mock' : 'pnpm vite',
+    command: process.env.USE_BRIDGE ? 'pnpm dev:bridge' : 'pnpm vite',
     port: 5173,
     timeout: 30 * 1000,
     reuseExistingServer: false,
@@ -48,7 +48,7 @@ export default defineConfig({
     stderr: 'pipe',
   } : {
     // In dev, expect server to be running
-    command: 'echo "\n⚠️  No dev server running on port 5173!\n\nPlease start the appropriate server first:\n  - For mock testing: pnpm dev:mock\n  - For real device: pnpm dev\n" && exit 1',
+    command: 'echo "\n⚠️  No dev server running on port 5173!\n\nPlease start the appropriate server first:\n  - For bridge testing: pnpm dev:bridge\n  - For real device: pnpm dev\n" && exit 1',
     port: 5173,
     timeout: 5 * 1000,  // Fail fast with helpful message
     reuseExistingServer: true,  // Always reuse if available

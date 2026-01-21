@@ -70,7 +70,7 @@ pnpm install
 # Start development server
 pnpm dev          # Standard development
 pnpm dev:https    # With HTTPS for real device testing
-pnpm dev:mock     # With BLE mock server (no HTTPS needed, see ../docs/frontend/MOCK_USAGE_GUIDE.md)
+pnpm dev:bridge   # With BLE bridge server (no HTTPS needed, see ../docs/frontend/BRIDGE_USAGE_GUIDE.md)
 
 # Build for production
 pnpm build

@@ -33,7 +33,7 @@ export async function connectToDevice(page: Page): Promise<void> {
       
       // Check if mock is injected
       const isMocked = await page.evaluate(() => {
-        return (window as WindowWithStores).__webBluetoothMocked === true;
+        return (window as WindowWithStores).__webBluetoothBridged === true;
       });
       console.log('[Connection] Mock injected:', isMocked);
       
@@ -472,7 +472,7 @@ export async function waitForBridgeReady(page: Page, timeout: number = 5000): Pr
         return {
           hasBluetooth: !!navigator.bluetooth,
           hasRequestDevice: !!(navigator.bluetooth && typeof navigator.bluetooth.requestDevice === 'function'),
-          isMocked: (window as WindowWithStores).__webBluetoothMocked === true,
+          isMocked: (window as WindowWithStores).__webBluetoothBridged === true,
           hasWebBleMock: typeof (window as WindowWithStores).WebBleMock !== 'undefined'
         };
       });

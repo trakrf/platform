@@ -113,7 +113,7 @@ export interface WindowWithStores extends Window {
       emit?: (event: string, data: Uint8Array) => void;
     };
   };
-  __webBluetoothMocked?: boolean;
+  __webBluetoothBridged?: boolean;
   getRfidManager?: () => Promise<{
     startInventory?: () => Promise<boolean>;
     stopInventory?: () => Promise<boolean>;

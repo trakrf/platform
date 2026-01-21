@@ -4,7 +4,7 @@ import { comlink } from 'vite-plugin-comlink';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { getViteMockConfig } from './tests/config/vite-mock.config';
+import { getViteBridgeConfig } from './tests/config/vite-bridge.config';
 
 // Define __dirname for ES modules
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,52 +12,52 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Check if local certificates exist
 const certExists = fs.existsSync('./.cert/localhost.pem') && fs.existsSync('./.cert/localhost-key.pem');
 
-// BLE Mock Plugin
-function injectBleMockPlugin(env: Record<string, string>) {
-  const mockEnabled = env.VITE_BLE_MOCK_ENABLED === 'true';
-  
+// BLE Bridge Plugin - injects Web BLE → bridge server redirection
+function injectBleBridgePlugin(env: Record<string, string>) {
+  const bridgeEnabled = env.VITE_BLE_BRIDGE_ENABLED === 'true';
+
   return {
-    name: 'inject-ble-mock',
+    name: 'inject-ble-bridge',
     transformIndexHtml(html: string) {
-      // Only inject the mock when explicitly enabled
-      if (!mockEnabled) {
+      // Only inject the bridge when explicitly enabled
+      if (!bridgeEnabled) {
         return html;
       }
 
       // Load the ble-mcp-test bundle from public folder
       const bundlePath = path.join(process.cwd(), 'public/web-ble-mock.bundle.js');
       let bundleCode = '';
-      
+
       try {
         bundleCode = fs.readFileSync(bundlePath, 'utf-8');
       } catch (err) {
-        console.error('[BLE Mock Plugin] Failed to read bundle:', err);
+        console.error('[BLE Bridge Plugin] Failed to read bundle:', err);
         return html;
       }
 
-      // Get shared configuration from ble-test-config
-      const mockConfig = getViteMockConfig();
+      // Get shared configuration from ble-bridge-config
+      const bridgeConfig = getViteBridgeConfig();
 
-      // Inject the bundle and initialize the mock
+      // Inject the bundle and initialize the bridge
       const injection = `
-    <!-- BLE Mock Injection -->
+    <!-- BLE Bridge Injection -->
     <script>
     // Load the bundle (it sets window.WebBleMock)
     ${bundleCode}
-    
-    // Initialize the Web Bluetooth mock (0.7.2 API)
+
+    // Initialize the Web Bluetooth bridge (redirects to bridge server)
     if (typeof WebBleMock !== 'undefined' && WebBleMock.injectWebBluetoothMock) {
       // Configuration object from shared config
-      const mockConfig = ${JSON.stringify(mockConfig)};
-      // Mock config loaded
-      WebBleMock.injectWebBluetoothMock(mockConfig);
-      // Injected ble-mcp-test mock
-      
-      // Verify injection and mark as mocked
+      const bridgeConfig = ${JSON.stringify(bridgeConfig)};
+      // Bridge config loaded
+      WebBleMock.injectWebBluetoothMock(bridgeConfig);
+      // Injected ble-mcp-test bridge
+
+      // Verify injection and mark as bridged
       if ('bluetooth' in navigator) {
         // navigator.bluetooth is now available
-        // Add a marker to indicate this is a mock
-        window.__webBluetoothMocked = true;
+        // Add a marker to indicate this is bridged
+        window.__webBluetoothBridged = true;
       } else {
         console.error('[WebBLE Adapter] Failed to inject navigator.bluetooth');
       }
@@ -81,8 +81,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       comlink(), // Add vite-plugin-comlink for worker proxying
-      // Inject BLE mock when running in mock mode
-      injectBleMockPlugin(env)
+      // Inject BLE bridge when running in bridge mode
+      injectBleBridgePlugin(env)
     ],
     worker: {
       format: 'es', // Ensure ES modules for workers

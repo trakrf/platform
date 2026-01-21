@@ -7,7 +7,7 @@ interface Navigator {
 
 // Augment the Window interface for testing utilities
 interface Window {
-  __webBluetoothMocked?: boolean;
+  __webBluetoothBridged?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   __TRANSPORT_MANAGER__?: any; // TransportManager is a private class, exposed for testing
   __ZUSTAND_STORES__?: {

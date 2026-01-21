@@ -74,6 +74,17 @@ dev-local:
     @echo "Press Ctrl+C to stop both servers"
     @just frontend dev & just backend dev & wait
 
+# Local development with BLE bridge (db + backend + frontend via bridge server)
+dev-bridge:
+    @just database up
+    @echo ""
+    @echo "🚀 Starting local development (BLE bridge mode)..."
+    @echo "📱 Frontend: http://localhost:5173 (BLE via bridge server)"
+    @echo "🔧 Backend:  http://localhost:8080"
+    @echo ""
+    @echo "Press Ctrl+C to stop both servers"
+    @just frontend dev-bridge & just backend dev & wait
+
 dev-stop:
     docker compose stop backend
     docker compose down

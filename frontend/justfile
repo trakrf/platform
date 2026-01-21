@@ -10,6 +10,10 @@ default:
 dev:
     pnpm dev
 
+# Start Vite with BLE bridge (Web BLE → bridge server → real hardware)
+dev-bridge:
+    pnpm run dev:bridge
+
 # Lint frontend code (auto-fix enabled)
 lint:
     pnpm run lint --fix

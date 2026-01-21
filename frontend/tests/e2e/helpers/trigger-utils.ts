@@ -32,7 +32,7 @@ export async function simulateTriggerPress(page: Page, maxRetries: number = 3): 
           message: 'TESTING_API_NOT_FOUND: navigator.bluetooth.testing.simulateNotification not available. Check ble-mcp-test v0.7.0+ mock is loaded.',
           hasTestingApi: false,
           hasBluetoothApi: !!navigator.bluetooth,
-          hasMockFlag: !!window?.__webBluetoothMocked
+          hasMockFlag: !!window?.__webBluetoothBridged
         };
       }
       
@@ -200,7 +200,7 @@ export async function simulateTriggerRelease(page: Page, maxRetries: number = 3)
           message: 'TESTING_API_NOT_FOUND: navigator.bluetooth.testing.simulateNotification not available. Check ble-mcp-test v0.7.0+ mock is loaded.',
           hasTestingApi: false,
           hasBluetoothApi: !!navigator.bluetooth,
-          hasMockFlag: !!window?.__webBluetoothMocked
+          hasMockFlag: !!window?.__webBluetoothBridged
         };
       }
       

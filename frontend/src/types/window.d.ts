@@ -47,7 +47,7 @@ declare global {
     
     // Testing utilities
     __BLE_MOCK__?: BleMock;
-    __webBluetoothMocked?: boolean;
+    __webBluetoothBridged?: boolean;
     __testPage?: boolean;
     WebBleMock?: WebBleMock;
     
