@@ -84,3 +84,16 @@ Files deleted:
 
 Ready for /check: YES
 
+---
+
+## Follow-up Fix: 2026-01-22
+
+### Issue: Turn signal tick only played once
+**Root cause**: `startSearching()` was called repeatedly from LocateScreen's useEffect, which cleared and restarted the interval each time before it could fire again.
+
+**Fix**:
+1. Added guard: `if (tickIntervalRef.current) return;` - skip if already ticking
+2. Changed interval from 1500ms to 700ms for typical automotive turn signal cadence (~85 bpm)
+
+Commit: `fix(locate): fix turn signal tick repeating and adjust cadence`
+
