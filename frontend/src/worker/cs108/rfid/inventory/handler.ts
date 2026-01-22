@@ -63,7 +63,7 @@ export class InventoryTagHandler implements NotificationHandler {
 
   /**
    * Check if this handler can process the given packet
-   * Only handles 0x8100 in INVENTORY or LOCATE modes
+   * Only handles 0x8100 in INVENTORY mode (LOCATE mode uses dedicated locate handler)
    */
   canHandle(packet: CS108Packet, context: NotificationContext): boolean {
     // Check for 0x8100 event code
@@ -71,15 +71,14 @@ export class InventoryTagHandler implements NotificationHandler {
       return false;
     }
 
-    // Only handle in INVENTORY or LOCATE modes
-    const validModes = [ReaderMode.INVENTORY, ReaderMode.LOCATE];
-    return validModes.includes(context.currentMode as any);
+    // Only handle in INVENTORY mode - LOCATE mode uses dedicated locate/handler.ts
+    return context.currentMode === ReaderMode.INVENTORY;
   }
 
   /**
    * Handle inventory notification packet
    */
-  async handle(packet: CS108Packet, context: NotificationContext): Promise<void> {
+  async handle(packet: CS108Packet, _context: NotificationContext): Promise<void> {
     const startTime = Date.now();
     this.stats.packetsProcessed++;
 
@@ -95,7 +94,7 @@ export class InventoryTagHandler implements NotificationHandler {
 
       // Stream tags immediately - no batching
       if (tags.length > 0) {
-        this.emitTags(tags, context);
+        this.emitTags(tags);
       }
 
       // Check buffer health periodically
@@ -117,26 +116,11 @@ export class InventoryTagHandler implements NotificationHandler {
   /**
    * Emit tags immediately (stream-as-we-parse)
    * Tags from a single parse cycle are emitted together to reduce overhead
+   * Note: LOCATE mode is handled by dedicated locate/handler.ts
    */
-  private emitTags(tags: ParsedTag[], context: NotificationContext): void {
-    // In LOCATE mode, emit special event
-    if (context.currentMode === ReaderMode.LOCATE && tags.length > 0) {
-      // Find strongest signal for locate mode
-      // Remember: RSSI is negative, so -30 dBm is stronger than -80 dBm
-      const strongestTag = tags.reduce((best, tag) =>
-        tag.rssi > best.rssi ? tag : best
-      );
-
-      // Use postWorkerEvent instead of globalThis.postMessage
-      postWorkerEvent({
-        type: WorkerEventType.LOCATE_UPDATE,
-        payload: {
-          epc: strongestTag.epc,
-          rssi: strongestTag.rssi,
-          timestamp: Date.now()
-        }
-      });
-    } else {
+  private emitTags(tags: ParsedTag[]): void {
+    // Normal inventory mode - emit array of tags from single parse
+    {
       // Normal inventory mode - emit array of tags from single parse
       // This avoids overhead of individual postMessage calls while
       // still streaming results as soon as they're parsed
