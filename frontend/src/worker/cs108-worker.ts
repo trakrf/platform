@@ -118,5 +118,14 @@ export function setLogLevel(level: 'error' | 'warn' | 'info' | 'debug' | LogLeve
 // Export LogLevel enum for convenience
 export { LogLevel };
 
+/**
+ * Enable/disable RSSI debug logging
+ * Shows raw byte values and both formula results for calibration
+ */
+export function setRssiDebug(enabled: boolean): void {
+  (globalThis as unknown as Record<string, unknown>).__RSSI_DEBUG = enabled;
+  logger.info(`[Worker] RSSI debug ${enabled ? 'enabled' : 'disabled'}`);
+}
+
 // No event callbacks needed - events flow directly through postMessage
 // The main thread listens to worker.onmessage to receive events

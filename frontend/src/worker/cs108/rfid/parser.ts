@@ -254,21 +254,27 @@ export class InventoryParser {
       // Extract and convert NB_RSSI (Narrowband RSSI)
       const nbRssi = data[offset + 2 + epcLengthBytes];
 
-      // RSSI conversion formula from CS108 spec for compact mode:
-      // Mantissa = bits 2:0, Exponent = bits 7:3
-      // Formula: 20 * log10(2^Exponent * (1 + Mantissa / 2^3))
+      // RSSI conversion formula from CS108 spec for compact mode (R2000 chip):
+      // Formula: 20 * log10(2^Exponent * (1 + Mantissa / 8))
+      // Where: Mantissa = bits 2:0, Exponent = bits 7:3
+      // Result is in dBuV (dB microvolts), convert to dBm: dBm = dBuV - 106.98
       const mantissa = nbRssi & 0x07;  // bits 2:0
       const exponent = (nbRssi >> 3) & 0x1F;  // bits 7:3
 
-      // Calculate RSSI in dBm using the CS108 formula
-      // The spec shows this gives a positive value (e.g., 54.19 for 0x48)
-      // which represents signal strength in dBm
-      const rssiCalculated = 20 * Math.log10(Math.pow(2, exponent) * (1 + mantissa / 8));
+      // Calculate RSSI in dBuV using the R2000 formula (CS108 always uses R2000)
+      const rssiDbuV = 20 * Math.log10(Math.pow(2, exponent) * (1 + mantissa / 8));
 
-      // CS108 returns RSSI as a positive value where higher = stronger signal
-      // But standard RFID convention uses negative dBm values
-      // Based on typical RFID ranges (-90 to -30 dBm), we need to negate
-      const rssi = -rssiCalculated;
+      // Debug: Log raw bytes and formula results for RSSI calibration
+      // Enable via: window.__enableRssiDebug(true) from browser console
+      if ((globalThis as unknown as Record<string, unknown>).__RSSI_DEBUG) {
+        console.log(`[RSSI-Compact] raw=0x${nbRssi.toString(16).padStart(2, '0')} (${nbRssi}) | dBuV=${rssiDbuV.toFixed(2)} dBm=${(rssiDbuV - 106.98).toFixed(2)}`);
+      }
+
+      // CS108 RSSI formula produces values in dBµV (dB microvolts), not dBm
+      // Convert to dBm using vendor formula: dBm = dBuV - 106.98
+      // Range: 17-97 dBuV maps to -90 to -10 dBm
+      // Source: CS108 vendor app ViewModelGeiger.cs dBuV2dBm()
+      const rssi = rssiDbuV - 106.98;
 
       tags.push({
         epc,
@@ -373,22 +379,34 @@ export class InventoryParser {
     const phase = fullPacket[14];
     const port = fullPacket[18] | (fullPacket[19] << 8);
 
-    // Calculate narrowband RSSI (same formula as compact mode)
+    // Calculate narrowband RSSI using R2000 formula (CS108 always uses R2000 chip)
+    // Formula: 20 * log10(2^Exponent * (1 + Mantissa / 8))
+    // Where: Mantissa = bits 2:0, Exponent = bits 7:3
+    // Result is in dBuV, convert to dBm: dBm = dBuV - 106.98
     const nbMantissa = nbRssi & 0x07;  // bits 2:0
     const nbExponent = (nbRssi >> 3) & 0x1F;  // bits 7:3
-    const nbRssiCalculated = 20 * Math.log10(Math.pow(2, nbExponent) * (1 + nbMantissa / 8));
+    const nbRssiDbuV = 20 * Math.log10(Math.pow(2, nbExponent) * (1 + nbMantissa / 8));
 
-    // Calculate wideband RSSI using vendor formula
+    // Calculate wideband RSSI using R2000 formula
     // Mantissa = bits 3:0, Exponent = bits 7:4, Mantissa_Size = 4
-    // Formula: 20 * log10(2^Exponent * (1 + Mantissa / 2^Mantissa_Size))
-    // Example: 0x48 -> Mantissa=8, Exponent=4 -> 20*log10(2^4 * (1+8/16)) = 27.60 dB
+    // Formula: 20 * log10(2^Exponent * (1 + Mantissa / 16))
     const wbMantissa = wbRssiByte & 0x0F;  // bits 3:0
     const wbExponent = (wbRssiByte >> 4) & 0x0F;  // bits 7:4
-    const wbRssiCalculated = 20 * Math.log10(Math.pow(2, wbExponent) * (1 + wbMantissa / 16));
+    const wbRssiDbuV = 20 * Math.log10(Math.pow(2, wbExponent) * (1 + wbMantissa / 16));
 
-    // For normal RFID RSSI convention (negative dBm values)
-    const rssi = -nbRssiCalculated;
-    const wbRssi = -wbRssiCalculated;
+    // Debug: Log raw bytes and formula results for RSSI calibration
+    // Enable via: window.__enableRssiDebug(true) from browser console
+    if ((globalThis as unknown as Record<string, unknown>).__RSSI_DEBUG) {
+      console.log(`[RSSI] NB raw=0x${nbRssi.toString(16).padStart(2, '0')} (${nbRssi}) | dBuV=${nbRssiDbuV.toFixed(2)} dBm=${(nbRssiDbuV - 106.98).toFixed(2)}`);
+      console.log(`[RSSI] WB raw=0x${wbRssiByte.toString(16).padStart(2, '0')} (${wbRssiByte}) | dBuV=${wbRssiDbuV.toFixed(2)} dBm=${(wbRssiDbuV - 106.98).toFixed(2)}`);
+    }
+
+    // CS108 RSSI formula produces values in dBµV (dB microvolts), not dBm
+    // Convert to dBm using vendor formula: dBm = dBuV - 106.98
+    // Range: 17-97 dBuV maps to -90 to -10 dBm
+    // Source: CS108 vendor app ViewModelGeiger.cs dBuV2dBm()
+    const rssi = nbRssiDbuV - 106.98;
+    const wbRssi = wbRssiDbuV - 106.98;
 
     // Extract inventory data (PC + EPC + CRC16)
     const invData = fullPacket.subarray(20);
