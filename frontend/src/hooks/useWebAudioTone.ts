@@ -16,9 +16,30 @@ import { rssiToFrequency, NO_SIGNAL_FREQUENCY } from '@/utils/rssiToFrequency';
 const TICK_INTERVAL_MS = 700; // Time between ticks (typical car turn signal)
 const TICK_DURATION_MS = 50; // Duration of each tick
 
+// Distortion amount: 0 = clean sine, higher = more crunch (sweet spot ~2-5)
+const DISTORTION_AMOUNT = 3;
+
+/**
+ * Create a soft-clipping distortion curve for WaveShaperNode.
+ * Adds odd harmonics for a "crunchy" sound without harsh square wave buzz.
+ */
+function createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
+  const samples = 44100;
+  const curve = new Float32Array(samples) as Float32Array<ArrayBuffer>;
+  const k = amount;
+
+  for (let i = 0; i < samples; i++) {
+    const x = (i * 2) / samples - 1; // -1 to 1
+    // Soft clipping using tanh-like function
+    curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x));
+  }
+  return curve;
+}
+
 export function useWebAudioTone() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const distortionRef = useRef<WaveShaperNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -46,6 +67,10 @@ export function useWebAudioTone() {
       oscillatorRef.current.disconnect();
       oscillatorRef.current = null;
     }
+    if (distortionRef.current) {
+      distortionRef.current.disconnect();
+      distortionRef.current = null;
+    }
     if (gainNodeRef.current) {
       gainNodeRef.current.disconnect();
       gainNodeRef.current = null;
@@ -68,10 +93,15 @@ export function useWebAudioTone() {
 
     // Create a short oscillator burst for percussive sound
     const tickOsc = ctx.createOscillator();
+    const tickDistortion = ctx.createWaveShaper();
     const tickGain = ctx.createGain();
 
     tickOsc.type = 'sine';
     tickOsc.frequency.value = NO_SIGNAL_FREQUENCY;
+
+    // Add crunch to tick too
+    tickDistortion.curve = createDistortionCurve(DISTORTION_AMOUNT);
+    tickDistortion.oversample = '2x';
 
     // Quick attack, quick decay for percussive feel
     const now = ctx.currentTime;
@@ -79,7 +109,9 @@ export function useWebAudioTone() {
     tickGain.gain.linearRampToValueAtTime(volume / 100, now + 0.005); // 5ms attack
     tickGain.gain.exponentialRampToValueAtTime(0.001, now + TICK_DURATION_MS / 1000); // decay
 
-    tickOsc.connect(tickGain);
+    // Signal chain: oscillator -> distortion -> gain -> output
+    tickOsc.connect(tickDistortion);
+    tickDistortion.connect(tickGain);
     tickGain.connect(ctx.destination);
 
     tickOsc.start(now);
@@ -101,10 +133,17 @@ export function useWebAudioTone() {
         oscillatorRef.current = ctx.createOscillator();
         oscillatorRef.current.type = 'sine';
 
+        // Add soft-clipping distortion for crunch
+        distortionRef.current = ctx.createWaveShaper();
+        distortionRef.current.curve = createDistortionCurve(DISTORTION_AMOUNT);
+        distortionRef.current.oversample = '2x'; // Reduce aliasing
+
         gainNodeRef.current = ctx.createGain();
         gainNodeRef.current.gain.value = volume / 100;
 
-        oscillatorRef.current.connect(gainNodeRef.current);
+        // Signal chain: oscillator -> distortion -> gain -> output
+        oscillatorRef.current.connect(distortionRef.current);
+        distortionRef.current.connect(gainNodeRef.current);
         gainNodeRef.current.connect(ctx.destination);
         oscillatorRef.current.start();
       }
