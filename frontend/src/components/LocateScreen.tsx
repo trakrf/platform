@@ -10,7 +10,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { ReaderState } from '@/worker/types/reader';
 import { EXAMPLE_EPCS } from '@test-utils/constants';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
-import { useMetalDetectorSound } from '@/hooks/useMetalDetectorSound';
+import { useWebAudioTone } from '@/hooks/useWebAudioTone';
 import { recordComponentRender } from '@/lib/perf/locate-metrics';
 
 // Constants
@@ -81,14 +81,15 @@ const LocateScreen: React.FC = () => {
     getFilteredRSSI
   } = useLocateStore();
 
-  // Initialize metal detector sound hook
+  // Initialize Web Audio tone hook
   const {
     updateProximity,
+    startSearching,
     stopBeeping,
     toggleSound,
     isEnabled: soundEnabled,
     isPlaying
-  } = useMetalDetectorSound();
+  } = useWebAudioTone();
 
   // All state is in Zustand - no local state for data
   // URL parameters are now handled in App.tsx BEFORE tab navigation
@@ -135,15 +136,13 @@ const LocateScreen: React.FC = () => {
 
     // Scanning - check if we have signal
     if (displayRSSI > DEFAULT_RSSI) {
-      // Have signal - use proximity beeps based on RSSI
+      // Have signal - use proximity tone based on RSSI
       updateProximity(displayRSSI);
     } else {
-      // No signal - need heartbeat tap (but locate audio doesn't have this yet)
-      // For now, just stop beeping
-      stopBeeping();
-      // TODO: Add double-tap heartbeat like inventory has
+      // No signal - play "searching" tick pattern
+      startSearching();
     }
-  }, [readerState, displayRSSI, updateProximity, stopBeeping]);
+  }, [readerState, displayRSSI, updateProximity, startSearching, stopBeeping]);
   
   // Format RSSI for display
   const formatRSSI = (value: number) => {
@@ -340,7 +339,7 @@ const LocateScreen: React.FC = () => {
             </div>
             {soundEnabled && isPlaying && (
               <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Beeping rate based on signal strength
+                Pitch increases with signal strength
               </div>
             )}
           </div>
