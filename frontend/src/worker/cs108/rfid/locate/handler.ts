@@ -14,6 +14,7 @@ import type { TagData } from '../types';
 import type { CS108Packet } from '../../type';
 import { ReaderMode } from '../../../types/reader';
 import { postWorkerEvent, WorkerEventType } from '../../../types/events';
+import { recordWorkerPost, recordWorkerThrottled } from '../../../../lib/perf/locate-metrics';
 import { InventoryParser } from '../parser.js';
 
 /**
@@ -159,9 +160,13 @@ export class LocateTagHandler implements NotificationHandler {
       // Throttle updates to prevent UI overload
       const now = Date.now();
       if (now - this.lastUpdateTime < this.MIN_UPDATE_INTERVAL_MS) {
+        recordWorkerThrottled();
         continue; // Skip this tag update but continue processing others
       }
       this.lastUpdateTime = now;
+
+      // Record metrics and get timestamp for latency measurement
+      const workerTimestamp = recordWorkerPost();
 
       // Emit locate update with both raw and smoothed values
       postWorkerEvent({
@@ -173,7 +178,8 @@ export class LocateTagHandler implements NotificationHandler {
           smoothedRssi: this.rssiBuffer.getSmoothed(),
           averageRssi: this.rssiBuffer.getAverage(),
           timestamp: tagData.timestamp,
-          antennaPort: tagData.antenna
+          antennaPort: tagData.antenna,
+          _workerTimestamp: workerTimestamp, // For latency measurement
         },
       });
     } // End of for loop

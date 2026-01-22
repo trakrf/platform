@@ -262,9 +262,17 @@ export class DeviceManager {
           const now = Date.now();
           const age = now - locatePayload.timestamp;
 
+          // Debug: log raw vs smoothed if enabled
+          if ((window as unknown as Record<string, unknown>).__LOCATE_DEBUG_RAW) {
+            console.log(`[RAW] raw=${locatePayload.rssi} smoothed=${locatePayload.smoothedRssi} wb=${locatePayload.wbRssi}`);
+          }
+
           if (age <= 1000) {
             useLocateStore.getState().addRssiReading(
-              locatePayload.smoothedRssi ?? locatePayload.rssi
+              locatePayload.smoothedRssi ?? locatePayload.rssi,
+              locatePayload.wbRssi,
+              undefined, // phase not in payload
+              locatePayload._workerTimestamp // for metrics
             );
           } else {
             console.debug(`[DeviceManager] Ignoring stale locate update (${age}ms old)`);

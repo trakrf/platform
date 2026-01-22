@@ -139,6 +139,7 @@ interface LocateUpdateEvent extends WorkerEventBase {
     timestamp: number;
     channelIndex?: number;
     antennaPort?: number;
+    _workerTimestamp?: number; // For performance metrics
   };
 }
 

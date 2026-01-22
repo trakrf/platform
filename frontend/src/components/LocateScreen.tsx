@@ -11,6 +11,7 @@ import { ReaderState } from '@/worker/types/reader';
 import { EXAMPLE_EPCS } from '@test-utils/constants';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useMetalDetectorSound } from '@/hooks/useMetalDetectorSound';
+import { recordComponentRender } from '@/lib/perf/locate-metrics';
 
 // Constants
 const DEFAULT_RSSI = -120;
@@ -21,6 +22,9 @@ const MAX_RSSI = -20;
 const GaugeComponent = React.lazy(() => import('react-gauge-component'));
 
 const LocateScreen: React.FC = () => {
+  // Track render for performance metrics
+  recordComponentRender();
+
   // Check for dark mode - keep this as it's UI-only state for theme detection
   const [isDarkMode, setIsDarkMode] = React.useState(false);
 
