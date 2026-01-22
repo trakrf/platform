@@ -1,14 +1,17 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import useSound from 'use-sound';
 import beepSound from '@/assets/sounds/beep.wav';
-import { rssiToBeepInterval } from '@/utils/rssiToInterval';
+import { rssiToBeepInterval, CONTINUOUS_TONE } from '@/utils/rssiToInterval';
+
+// Interval for "continuous" mode - short enough that beeps overlap into solid tone
+const CONTINUOUS_INTERVAL_MS = 25;
 
 export function useMetalDetectorSound() {
-  const [playBeep] = useSound(beepSound, { 
-    volume: 0.5,
+  const [playBeep] = useSound(beepSound, {
+    volume: 1.1,  // It's one louder, isn't it?
     interrupt: true
   });
-  
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastIntervalRef = useRef<number>(1000);
   const wasPlayingRef = useRef<boolean>(false);
@@ -16,23 +19,25 @@ export function useMetalDetectorSound() {
   const [isEnabled, setIsEnabled] = useState(true);
   const [volume, setVolume] = useState(50);
   const [isPlaying, setIsPlaying] = useState(false);
-  
+
   const startBeeping = useCallback((intervalMs: number) => {
     if (!isEnabled) return;
-    
-    lastIntervalRef.current = intervalMs;
-    
+
+    // Handle continuous tone: use very short interval so beeps overlap
+    const actualInterval = intervalMs === CONTINUOUS_TONE ? CONTINUOUS_INTERVAL_MS : intervalMs;
+    lastIntervalRef.current = actualInterval;
+
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    
+
     playBeep();
-    
+
     intervalRef.current = setInterval(() => {
       playBeep();
-    }, intervalMs);
-    
+    }, actualInterval);
+
     setIsPlaying(true);
   }, [playBeep, isEnabled]);
   
