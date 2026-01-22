@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { recordStoreUpdateStart } from '../lib/perf/locate-metrics';
 
 // RSSI data point in the ring buffer
 export interface RssiDataPoint {
@@ -37,7 +38,7 @@ interface LocateState {
   updateRate: number;           // Updates per second
   
   // Actions
-  addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number) => void;
+  addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number) => void;
   setStatusMessage: (message: string) => void;
   clearBuffer: () => void;
   
@@ -70,8 +71,16 @@ export const useLocateStore = create<LocateState>()(
     updateRate: 0,
     
     // Add new RSSI reading to ring buffer
-    addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number) => {
+    addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number) => {
+      // Start metrics recording (returns completion callback)
+      const completeMetrics = recordStoreUpdateStart(workerTimestamp);
+
       const now = Date.now();
+
+      // Debug logging - enable with: window.__LOCATE_DEBUG = true
+      if ((window as unknown as Record<string, unknown>).__LOCATE_DEBUG) {
+        console.log(`[RSSI] ${now} | ${nb_rssi} dBm | wb: ${wb_rssi ?? 'n/a'}`);
+      }
       const state = get();
       
       // Create new data point
@@ -126,6 +135,9 @@ export const useLocateStore = create<LocateState>()(
         peakRSSI,
         updateRate: Math.round(updateRate * 10) / 10 // Round to 1 decimal
       });
+
+      // Complete metrics recording
+      completeMetrics();
     },
 
     // Set status message

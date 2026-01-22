@@ -23,6 +23,7 @@ interface CS108WorkerAPI {
   startScanning(): Promise<void>;
   stopScanning(): Promise<void>;
   setLogLevel(level: LogLevel): void;
+  setRssiDebug(enabled: boolean): void;
 }
 
 // Import stores for direct updates
@@ -262,9 +263,17 @@ export class DeviceManager {
           const now = Date.now();
           const age = now - locatePayload.timestamp;
 
+          // Debug: log raw vs smoothed if enabled
+          if ((window as unknown as Record<string, unknown>).__LOCATE_DEBUG_RAW) {
+            console.log(`[RAW] raw=${locatePayload.rssi} smoothed=${locatePayload.smoothedRssi} wb=${locatePayload.wbRssi}`);
+          }
+
           if (age <= 1000) {
             useLocateStore.getState().addRssiReading(
-              locatePayload.smoothedRssi ?? locatePayload.rssi
+              locatePayload.smoothedRssi ?? locatePayload.rssi,
+              locatePayload.wbRssi,
+              undefined, // phase not in payload
+              locatePayload._workerTimestamp // for metrics
             );
           } else {
             console.debug(`[DeviceManager] Ignoring stale locate update (${age}ms old)`);
@@ -521,4 +530,27 @@ export class DeviceManager {
   onTriggerChanged(_callback: (pressed: boolean) => void): void {
     console.warn('[DeviceManager] onTriggerChanged is deprecated - events flow through native postMessage');
   }
+
+  /**
+   * Enable/disable RSSI debug logging in the worker
+   * Shows raw byte values and both formula results for calibration
+   * Usage: DeviceManager.getInstance()?.setRssiDebug(true)
+   *   or: window.__enableRssiDebug(true)
+   */
+  setRssiDebug(enabled: boolean): void {
+    this.worker.setRssiDebug(enabled);
+    console.info(`[DeviceManager] RSSI debug ${enabled ? 'enabled' : 'disabled'}`);
+  }
+}
+
+// Expose RSSI debug toggle on window for easy console access
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__enableRssiDebug = (enabled: boolean) => {
+    const manager = DeviceManager.getInstance();
+    if (manager) {
+      manager.setRssiDebug(enabled);
+    } else {
+      console.warn('[DeviceManager] No device connected. Connect first, then call __enableRssiDebug(true)');
+    }
+  };
 }

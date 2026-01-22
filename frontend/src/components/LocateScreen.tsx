@@ -11,6 +11,7 @@ import { ReaderState } from '@/worker/types/reader';
 import { EXAMPLE_EPCS } from '@test-utils/constants';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useMetalDetectorSound } from '@/hooks/useMetalDetectorSound';
+import { recordComponentRender } from '@/lib/perf/locate-metrics';
 
 // Constants
 const DEFAULT_RSSI = -120;
@@ -21,6 +22,9 @@ const MAX_RSSI = -20;
 const GaugeComponent = React.lazy(() => import('react-gauge-component'));
 
 const LocateScreen: React.FC = () => {
+  // Track render for performance metrics
+  recordComponentRender();
+
   // Check for dark mode - keep this as it's UI-only state for theme detection
   const [isDarkMode, setIsDarkMode] = React.useState(false);
 
@@ -255,11 +259,11 @@ const LocateScreen: React.FC = () => {
                   width: 0.3,
                   padding: 0.05,
                   subArcs: [
-                    { limit: -80, color: '#EA4228' },
-                    { limit: -65, color: '#F97316' },
-                    { limit: -50, color: '#F5CD19' },
-                    { limit: -35, color: '#5BE12C' },
-                    { limit: MAX_RSSI, color: '#3B82F6' }
+                    // Aligned with scale divisions: -100, -80, -60, -40, -20
+                    { limit: -80, color: '#EA4228' },  // Red: very weak (-100 to -80)
+                    { limit: -60, color: '#F97316' },  // Orange: weak (-80 to -60)
+                    { limit: -40, color: '#F5CD19' },  // Yellow: medium (-60 to -40)
+                    { limit: MAX_RSSI, color: '#5BE12C' }  // Green: strong (-40 to -20)
                   ]
                 }}
                 labels={{

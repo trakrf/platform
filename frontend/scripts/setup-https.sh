@@ -29,11 +29,11 @@ mkcert -install
 # Generate certificates for localhost and local IP
 echo "Generating certificates..."
 cd .cert
-mkcert localhost 127.0.0.1 ::1 192.168.50.139
+mkcert localhost 127.0.0.1 ::1 192.168.50.203 mssb.local
 
-# Rename to expected names
-mv localhost+3.pem localhost.pem
-mv localhost+3-key.pem localhost-key.pem
+# Rename to expected names (glob handles different domain counts)
+mv localhost+*.pem localhost.pem
+mv localhost+*-key.pem localhost-key.pem
 
 cd ..
 
