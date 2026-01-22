@@ -107,9 +107,10 @@ export default defineConfig(({ mode }) => {
       'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept'
     },
     hmr: {
+      // Use wss for HTTPS, ws for HTTP
       protocol: env.VITE_HTTPS === 'true' ? 'wss' : 'ws',
-      host: env.VITE_HMR_HOST || 'mssb.local',
-      clientPort: env.VITE_HTTPS === 'true' ? 443 : undefined
+      // Allow override via env, otherwise let vite auto-detect
+      host: env.VITE_HMR_HOST || undefined
     },
     // Allow all hosts - use wildcard patterns for any ngrok subdomain
     allowedHosts: ['.ngrok-free.app', '.ngrok.io', '.localhost', 'localhost']
