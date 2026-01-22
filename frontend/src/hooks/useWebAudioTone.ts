@@ -12,8 +12,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { rssiToFrequency, NO_SIGNAL_FREQUENCY } from '@/utils/rssiToFrequency';
 
-// "No signal" tick pattern: turn signal style
-const TICK_INTERVAL_MS = 1500; // Time between ticks
+// "No signal" tick pattern: automotive turn signal style (~85 bpm)
+const TICK_INTERVAL_MS = 700; // Time between ticks (typical car turn signal)
 const TICK_DURATION_MS = 50; // Duration of each tick
 
 export function useWebAudioTone() {
@@ -121,11 +121,11 @@ export function useWebAudioTone() {
   const startNoSignalTick = useCallback(() => {
     if (!isEnabled) return;
 
+    // Already ticking - don't restart (prevents useEffect from resetting interval)
+    if (tickIntervalRef.current) return;
+
     // Stop proximity tone if playing
     stopProximityTone();
-
-    // Stop existing tick interval
-    stopNoSignalTick();
 
     // Play first tick immediately
     playTick();
@@ -134,7 +134,7 @@ export function useWebAudioTone() {
     tickIntervalRef.current = setInterval(playTick, TICK_INTERVAL_MS);
     setMode('no-signal');
     setIsPlaying(true);
-  }, [isEnabled, playTick, stopProximityTone, stopNoSignalTick]);
+  }, [isEnabled, playTick, stopProximityTone]);
 
   // Public API - matches useMetalDetectorSound for drop-in replacement
 
