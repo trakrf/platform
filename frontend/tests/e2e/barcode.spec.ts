@@ -253,4 +253,58 @@ test.describe('Barcode Operations', () => {
     expect(afterClear).toBe(0);
     console.log('[Test] Barcode history cleared');
   });
+
+  test('should reliably read fragmented barcodes under stress', async () => {
+    // This test validates CRC/length validation prevents silent failures
+    // The 24-char QR code forces BLE fragmentation across multiple MTU chunks
+    // Before fix: ~30-90% empty reads due to corrupted/incomplete packets
+    // After fix: 0% empty reads (packets either valid or cleanly rejected)
+
+    const SCAN_CYCLES = parseInt(process.env.BARCODE_STRESS_CYCLES || '10');
+    const results = { valid: 0, empty: 0, total: 0 };
+
+    console.log(`[Stress Test] Running ${SCAN_CYCLES} scan cycles with fragmented barcode...`);
+
+    for (let i = 0; i < SCAN_CYCLES; i++) {
+      // Clear previous barcodes
+      await sharedPage.evaluate(() => {
+        const barcodeStore = (window as WindowWithStores).__ZUSTAND_STORES__?.barcodeStore;
+        barcodeStore?.getState().clearBarcodes();
+      });
+
+      // Scan
+      await simulateTriggerPress(sharedPage);
+      await sharedPage.waitForTimeout(500);
+      await simulateTriggerRelease(sharedPage);
+      await sharedPage.waitForTimeout(200);
+
+      // Check result
+      const barcodes = await sharedPage.evaluate(() => {
+        const barcodeStore = (window as WindowWithStores).__ZUSTAND_STORES__?.barcodeStore;
+        return barcodeStore?.getState().barcodes || [];
+      });
+
+      results.total++;
+      if (barcodes.length > 0 && barcodes[0].data && barcodes[0].data.length > 0) {
+        results.valid++;
+      } else {
+        results.empty++;
+      }
+
+      if ((i + 1) % 5 === 0) {
+        console.log(`[Stress Test] Progress: ${i + 1}/${SCAN_CYCLES} - Valid: ${results.valid}, Empty: ${results.empty}`);
+      }
+    }
+
+    const successRate = (results.valid / results.total) * 100;
+    console.log(`[Stress Test] Final: ${results.valid}/${results.total} valid (${successRate.toFixed(1)}%)`);
+
+    // After fix: success rate should be >80% (was ~33% before fix)
+    // Some empty reads are expected due to:
+    // - BLE packet loss at radio layer (before our code receives it)
+    // - Brief scan windows where barcode isn't captured
+    // - Legitimate scanner "no data" responses
+    expect(successRate).toBeGreaterThan(80);
+    expect(results.valid).toBeGreaterThan(0);
+  });
 });

@@ -40,7 +40,18 @@ export const TEST_TAG_RANGE = '10018-10023';
  */
 export const PRIMARY_TEST_TAG = TEST_TAGS.TAG_1; // '10018' - Used for basic tests
 export const LOCATE_TEST_TAG = TEST_TAGS.TAG_3;  // '10020' - Used for locate tests
-export const BARCODE_TEST_TAG = TEST_TAGS.TAG_3; // '10020' - Also used as barcode (physical barcode is 10020)
+
+/**
+ * Barcode test value - 24-char QR code (after AIM prefix stripped by parser)
+ * Physical QR code available in test environment
+ * This longer barcode spans multiple BLE MTU chunks, exercising CRC/length validation
+ */
+export const BARCODE_TEST_TAG = 'E20034120000000000001234';
+
+/**
+ * Barcode test tag with AIM prefix (as reported by scanner before parsing)
+ */
+export const BARCODE_TEST_TAG_RAW = 'Q]Q1E20034120000000000001234';
 
 /**
  * Invalid test data for error testing

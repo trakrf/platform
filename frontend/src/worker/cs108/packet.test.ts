@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PacketHandler } from './packet.js';
-import { parsePacket } from './protocol.js';
+import { parsePacket, calculatePacketCRC, validatePacketCRC, validatePacketLength } from './protocol.js';
 import { RFID_POWER_OFF, RFID_POWER_ON, TRIGGER_PRESSED_NOTIFICATION } from './event.js';
 
 describe('parsePacket', () => {
@@ -138,8 +138,9 @@ describe('PacketHandler BLE Fragmentation', () => {
     // Total packet length: 0x26 (38 bytes) split across 3 BLE transmissions
 
     // Fragment 1: First 20 bytes including header
+    // Note: Using CRC=0x0000 to skip validation per CS108 spec (for test purposes)
     const fragment1 = new Uint8Array([
-      0xA7, 0xB3, 0x26, 0xC2, 0xCA, 0x9E, 0xF2, 0x2B,  // Header (8 bytes)
+      0xA7, 0xB3, 0x26, 0xC2, 0x82, 0x9E, 0x00, 0x00,  // Header (8 bytes) - CRC=0 skips validation
       0x81, 0x00, 0x03, 0x12, 0x05, 0x80, 0x07, 0x00,  // Start of payload
       0x00, 0x00, 0x93, 0x1A
     ]);
@@ -189,13 +190,13 @@ describe('PacketHandler BLE Fragmentation', () => {
     const maxPacket = new Uint8Array(128);
     // Header
     maxPacket[0] = 0xA7; // Prefix byte 1
-    maxPacket[1] = 0xB3; // Prefix byte 2
+    maxPacket[1] = 0xB3; // Prefix byte 2 (BT transport)
     maxPacket[2] = 0x78; // Length (120 bytes = 0x78)
-    maxPacket[3] = 0xC2; // Header byte
-    maxPacket[4] = 0xCA; // Header byte
-    maxPacket[5] = 0x9E; // Header byte
-    maxPacket[6] = 0xF2; // Header byte
-    maxPacket[7] = 0x2B; // Header byte
+    maxPacket[3] = 0xC2; // Module (RFID)
+    maxPacket[4] = 0x82; // Reserve byte (must be 0x82)
+    maxPacket[5] = 0x9E; // Direction (uplink)
+    maxPacket[6] = 0x00; // CRC high byte (0x0000 = skip validation per spec)
+    maxPacket[7] = 0x00; // CRC low byte
 
     // Add event code (bytes 8-9)
     maxPacket[8] = 0x81;  // Event code high byte (INVENTORY_TAG)
@@ -268,10 +269,10 @@ describe('PacketHandler uplink building', () => {
   it('should allow CRC injection for testing', () => {
     const customCRC = 0x1234;
     const packet = handler.buildResponse(RFID_POWER_OFF, new Uint8Array([0x00]), { crc: customCRC });
-    
-    // Check that custom CRC was injected
-    expect(packet[6]).toBe(0x34);  // CRC low byte
-    expect(packet[7]).toBe(0x12);  // CRC high byte
+
+    // Check that custom CRC was injected (big-endian: high byte first)
+    expect(packet[6]).toBe(0x12);  // CRC high byte at position 6
+    expect(packet[7]).toBe(0x34);  // CRC low byte at position 7
   });
   
   it('should build both downlink and uplink packets', () => {
@@ -286,5 +287,116 @@ describe('PacketHandler uplink building', () => {
     // Event codes should match
     expect(command[8]).toBe(response[8]);
     expect(command[9]).toBe(response[9]);
+  });
+});
+
+describe('CS108 Packet Validation', () => {
+  describe('CRC Calculation', () => {
+    it('should calculate CRC matching vendor algorithm', () => {
+      // Real packet from hardware test: A7 B3 03 D9 82 9E 74 37 A0 01 00
+      // Verified: CRC bytes [6]=0x74, [7]=0x37 -> big-endian CRC = 0x7437
+      const packet = new Uint8Array([0xa7, 0xb3, 0x03, 0xd9, 0x82, 0x9e, 0x74, 0x37, 0xa0, 0x01, 0x00]);
+      const crc = calculatePacketCRC(packet);
+      expect(crc).toBe(0x7437); // Verified against hardware
+    });
+
+    it('should parse CRC as big-endian', () => {
+      const packet = new Uint8Array([0xa7, 0xb3, 0x03, 0xd9, 0x82, 0x9e, 0x74, 0x37, 0xa0, 0x01, 0x00]);
+      const result = validatePacketCRC(packet);
+      expect(result.expected).toBe(0x7437); // bytes[6]=0x74, bytes[7]=0x37 -> 0x7437
+      expect(result.valid).toBe(true);
+    });
+
+    it('should skip validation when CRC is zero', () => {
+      // Per CS108 spec, CRC of zero means skip validation
+      const packet = new Uint8Array([0xa7, 0xb3, 0x03, 0xd9, 0x82, 0x9e, 0x00, 0x00, 0xa0, 0x01, 0x00]);
+      const result = validatePacketCRC(packet);
+      expect(result.valid).toBe(true);
+      expect(result.expected).toBe(0);
+      expect(result.actual).toBe(0);
+    });
+
+    it('should detect CRC mismatch', () => {
+      // Corrupt CRC bytes (0xFFFF instead of valid CRC)
+      const packet = new Uint8Array([0xa7, 0xb3, 0x03, 0xd9, 0x82, 0x9e, 0xFF, 0xFF, 0xa0, 0x01, 0x00]);
+      const result = validatePacketCRC(packet);
+      expect(result.valid).toBe(false);
+      expect(result.expected).toBe(0xFFFF); // What's in packet
+      // actual will be some other calculated value
+    });
+  });
+
+  describe('Length Validation', () => {
+    it('should validate correct length', () => {
+      // Length byte [2] = 0x03, total should be 3 + 8 = 11 bytes
+      const packet = new Uint8Array([0xa7, 0xb3, 0x03, 0xd9, 0x82, 0x9e, 0x74, 0x37, 0xa0, 0x01, 0x00]);
+      const result = validatePacketLength(packet);
+      expect(result.valid).toBe(true);
+      expect(result.expected).toBe(11);
+      expect(result.actual).toBe(11);
+    });
+
+    it('should detect length mismatch - too short', () => {
+      // Length byte says 3, but packet is only 10 bytes (missing 1)
+      const packet = new Uint8Array([0xa7, 0xb3, 0x03, 0xd9, 0x82, 0x9e, 0x74, 0x37, 0xa0, 0x01]);
+      const result = validatePacketLength(packet);
+      expect(result.valid).toBe(false);
+      expect(result.expected).toBe(11);
+      expect(result.actual).toBe(10);
+    });
+
+    it('should detect length mismatch - too long', () => {
+      // Length byte says 3, but packet is 12 bytes (1 extra)
+      const packet = new Uint8Array([0xa7, 0xb3, 0x03, 0xd9, 0x82, 0x9e, 0x74, 0x37, 0xa0, 0x01, 0x00, 0xFF]);
+      const result = validatePacketLength(packet);
+      expect(result.valid).toBe(false);
+      expect(result.expected).toBe(11);
+      expect(result.actual).toBe(12);
+    });
+  });
+
+  describe('PacketHandler Integration', () => {
+    let handler: PacketHandler;
+
+    beforeEach(() => {
+      handler = new PacketHandler();
+    });
+
+    it('should reject packets with invalid CRC', () => {
+      // Packet with corrupted CRC (0xFFFF instead of calculated value)
+      // Using RFID_POWER_OFF response packet structure
+      const corruptPacket = new Uint8Array([
+        0xA7, 0xB3, 0x03, 0xC2, 0x82, 0x9E, // Header
+        0xFF, 0xFF,  // Invalid CRC
+        0x80, 0x01,  // Event code (RFID_POWER_OFF)
+        0x00         // Success byte
+      ]);
+      const packets = handler.processIncomingData(corruptPacket);
+      expect(packets.length).toBe(0); // Should be rejected
+    });
+
+    it('should accept packets with valid CRC', () => {
+      // Build a valid response packet using buildResponse (includes correct CRC)
+      const validPacket = handler.buildResponse(RFID_POWER_OFF, new Uint8Array([0x00]));
+
+      // Create a new handler to process this packet
+      const handler2 = new PacketHandler();
+      const packets = handler2.processIncomingData(validPacket);
+      expect(packets.length).toBe(1);
+      expect(packets[0].eventCode).toBe(0x8001); // RFID_POWER_OFF
+    });
+
+    it('should accept packets with zero CRC (validation skipped)', () => {
+      // Packet with CRC=0x0000 which means skip validation per CS108 spec
+      const zeroCrcPacket = new Uint8Array([
+        0xA7, 0xB3, 0x03, 0xC2, 0x82, 0x9E, // Header
+        0x00, 0x00,  // Zero CRC (skip validation)
+        0x80, 0x01,  // Event code (RFID_POWER_OFF)
+        0x00         // Success byte
+      ]);
+      const packets = handler.processIncomingData(zeroCrcPacket);
+      expect(packets.length).toBe(1);
+      expect(packets[0].eventCode).toBe(0x8001);
+    });
   });
 });
