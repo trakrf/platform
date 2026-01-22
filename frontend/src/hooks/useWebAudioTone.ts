@@ -16,22 +16,21 @@ import { rssiToFrequency, NO_SIGNAL_FREQUENCY } from '@/utils/rssiToFrequency';
 const TICK_INTERVAL_MS = 700; // Time between ticks (typical car turn signal)
 const TICK_DURATION_MS = 50; // Duration of each tick
 
-// Distortion amount: 0 = clean sine, higher = more crunch (sweet spot ~2-5)
-const DISTORTION_AMOUNT = 3;
+// Distortion amount: 0 = clean sine, higher = more crunch
+const DISTORTION_AMOUNT = 12;
 
 /**
- * Create a soft-clipping distortion curve for WaveShaperNode.
- * Adds odd harmonics for a "crunchy" sound without harsh square wave buzz.
+ * Create a distortion curve for WaveShaperNode.
+ * Higher amount = more aggressive clipping and harmonic content.
  */
 function createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
   const samples = 44100;
   const curve = new Float32Array(samples) as Float32Array<ArrayBuffer>;
-  const k = amount;
 
   for (let i = 0; i < samples; i++) {
     const x = (i * 2) / samples - 1; // -1 to 1
-    // Soft clipping using tanh-like function
-    curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x));
+    // Aggressive tanh-based saturation
+    curve[i] = Math.tanh(amount * x);
   }
   return curve;
 }
