@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mockup C: Split Panel (Master-Detail)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    .row-hover:hover { background-color: #f3f4f6; }
+    .row-selected { background-color: #eff6ff; border-left: 3px solid #3b82f6; }
+    .duration-bar { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+  </style>
+</head>
+<body class="h-full bg-gray-50 font-sans">
+  <div class="flex h-full">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-900 text-white flex flex-col flex-shrink-0">
+      <div class="p-4 border-b border-gray-700">
+        <h1 class="text-xl font-bold text-blue-400">TrakRF</h1>
+      </div>
+      <nav class="flex-1 p-2 space-y-1">
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+          Home
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Inventory
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          Locate
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+          Barcode
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+          Assets
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Locations
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Reports
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Settings
+        </a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Header -->
+      <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <h1 class="text-2xl font-semibold text-gray-900">Reports</h1>
+        <div class="flex items-center gap-4">
+          <select class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option>NADA Productions</option>
+          </select>
+        </div>
+      </header>
+
+      <!-- Split Panel Content -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- Left Panel: Asset List -->
+        <div class="w-2/5 border-r border-gray-200 bg-white flex flex-col">
+          <div class="p-4 border-b border-gray-200 flex-shrink-0">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Current Locations</h2>
+            <!-- Search & Filter -->
+            <div class="flex gap-2">
+              <div class="flex-1 relative">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input type="text" placeholder="Search..." class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg">
+              </div>
+              <select class="px-3 py-2 text-sm border border-gray-300 rounded-lg">
+                <option>All Locations</option>
+              </select>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">47 assets found</p>
+          </div>
+
+          <!-- Asset List -->
+          <div class="flex-1 overflow-auto">
+            <div class="row-selected cursor-pointer px-4 py-3 border-b border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-900">Sony PXW-FX9 Camera</p>
+                  <p class="text-sm text-gray-500">CAM-001</p>
+                </div>
+                <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </div>
+              <div class="flex items-center gap-4 mt-1 text-sm">
+                <span class="flex items-center gap-1 text-gray-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                  Studio A
+                </span>
+                <span class="text-gray-400">2h ago</span>
+              </div>
+            </div>
+
+            <div class="row-hover cursor-pointer px-4 py-3 border-b border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-900">Shure SM58 Microphone</p>
+                  <p class="text-sm text-gray-500">MIC-042</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 mt-1 text-sm">
+                <span class="flex items-center gap-1 text-gray-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                  Booth 3
+                </span>
+                <span class="text-gray-400">15m ago</span>
+              </div>
+            </div>
+
+            <div class="row-hover cursor-pointer px-4 py-3 border-b border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-900">MacBook Pro 16"</p>
+                  <p class="text-sm text-gray-500">LPT-103</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 mt-1 text-sm">
+                <span class="flex items-center gap-1 text-gray-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                  Edit Bay 2
+                </span>
+                <span class="text-gray-400">1d ago</span>
+              </div>
+            </div>
+
+            <div class="row-hover cursor-pointer px-4 py-3 border-b border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-900">Sennheiser HD600</p>
+                  <p class="text-sm text-gray-500">HP-007</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 mt-1 text-sm">
+                <span class="flex items-center gap-1 text-gray-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                  Control Room
+                </span>
+                <span class="text-gray-400">3h ago</span>
+              </div>
+            </div>
+
+            <div class="row-hover cursor-pointer px-4 py-3 border-b border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-900">Blackmagic ATEM Mini</p>
+                  <p class="text-sm text-gray-500">SWT-001</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 mt-1 text-sm">
+                <span class="flex items-center gap-1 text-gray-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                  Studio A
+                </span>
+                <span class="text-gray-400">2h ago</span>
+              </div>
+            </div>
+
+            <div class="row-hover cursor-pointer px-4 py-3 border-b border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-900">LED Panel Light 1x1</p>
+                  <p class="text-sm text-gray-500">LGT-LED-12</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 mt-1 text-sm">
+                <span class="flex items-center gap-1 text-gray-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                  Storage Room
+                </span>
+                <span class="text-amber-500">5d ago</span>
+              </div>
+            </div>
+
+            <div class="row-hover cursor-pointer px-4 py-3 border-b border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-900">Wireless Lavalier Kit</p>
+                  <p class="text-sm text-gray-500">MIC-LAV-08</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 mt-1 text-sm">
+                <span class="flex items-center gap-1 text-gray-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                  Studio B
+                </span>
+                <span class="text-gray-400">45m ago</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pagination -->
+          <div class="p-3 border-t border-gray-200 flex-shrink-0">
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-gray-500">1-10 of 47</span>
+              <div class="flex gap-1">
+                <button class="px-2 py-1 border border-gray-300 rounded hover:bg-gray-50">&lt;</button>
+                <button class="px-2 py-1 bg-blue-600 text-white rounded">1</button>
+                <button class="px-2 py-1 border border-gray-300 rounded hover:bg-gray-50">2</button>
+                <button class="px-2 py-1 border border-gray-300 rounded hover:bg-gray-50">&gt;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Panel: Asset History -->
+        <div class="flex-1 bg-gray-50 flex flex-col overflow-hidden">
+          <!-- History Header -->
+          <div class="bg-white border-b border-gray-200 p-4 flex-shrink-0">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-900">Sony PXW-FX9 Camera</h2>
+                <p class="text-sm text-gray-500">CAM-001</p>
+              </div>
+              <button class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg" title="Close">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <!-- Date Filter & Export -->
+            <div class="flex items-center gap-3 mt-3">
+              <input type="date" value="2026-01-20" class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg">
+              <span class="text-gray-400">to</span>
+              <input type="date" value="2026-01-23" class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg">
+              <button class="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                CSV
+              </button>
+            </div>
+          </div>
+
+          <!-- History Content -->
+          <div class="flex-1 overflow-auto p-4">
+            <!-- Summary Card -->
+            <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+              <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p class="text-2xl font-bold text-blue-600">4</p>
+                  <p class="text-xs text-gray-500">Locations</p>
+                </div>
+                <div>
+                  <p class="text-2xl font-bold text-blue-600">3d 5h</p>
+                  <p class="text-xs text-gray-500">Tracked</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-green-600">Studio A</p>
+                  <p class="text-xs text-gray-500">Current</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Compact Table -->
+            <div class="bg-white rounded-lg border border-gray-200 mb-4 overflow-hidden">
+              <div class="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                <h3 class="text-sm font-medium text-gray-700">History Table</h3>
+              </div>
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th class="text-left px-4 py-2 text-xs font-medium text-gray-500">Location</th>
+                    <th class="text-left px-4 py-2 text-xs font-medium text-gray-500">Arrived</th>
+                    <th class="text-left px-4 py-2 text-xs font-medium text-gray-500">Duration</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr>
+                    <td class="px-4 py-2">
+                      <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                        Studio A
+                      </span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500">Jan 23, 10:30 AM</td>
+                    <td class="px-4 py-2 text-gray-900 font-medium">2h 15m</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-2">
+                      <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-gray-300 rounded-full"></span>
+                        Equipment Room
+                      </span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500">Jan 23, 8:00 AM</td>
+                    <td class="px-4 py-2 text-gray-900 font-medium">2h 30m</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-2">
+                      <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-gray-300 rounded-full"></span>
+                        Studio B
+                      </span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500">Jan 22, 2:00 PM</td>
+                    <td class="px-4 py-2 text-gray-900 font-medium">18h 0m</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-2">
+                      <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-gray-300 rounded-full"></span>
+                        Equipment Room
+                      </span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500">Jan 22, 9:00 AM</td>
+                    <td class="px-4 py-2 text-gray-900 font-medium">5h 0m</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-2">
+                      <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-gray-300 rounded-full"></span>
+                        Storage Room
+                      </span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500">Jan 20, 5:00 PM</td>
+                    <td class="px-4 py-2 text-gray-900 font-medium">1d 16h</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Visual Timeline -->
+            <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div class="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                <h3 class="text-sm font-medium text-gray-700">Visual Timeline</h3>
+              </div>
+              <div class="p-4">
+                <!-- Timeline visualization -->
+                <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
+                  <span>Jan 20</span>
+                  <span>Jan 21</span>
+                  <span>Jan 22</span>
+                  <span>Jan 23</span>
+                  <span>Now</span>
+                </div>
+                <div class="relative h-8 flex items-center">
+                  <!-- Timeline track -->
+                  <div class="absolute inset-x-0 h-1 bg-gray-200 rounded-full"></div>
+                  <!-- Segments -->
+                  <div class="absolute left-0 h-1 bg-blue-400 rounded-full" style="width: 35%"></div>
+                  <div class="absolute h-1 bg-blue-500 rounded-full" style="left: 35%; width: 10%"></div>
+                  <div class="absolute h-1 bg-blue-400 rounded-full" style="left: 45%; width: 5%"></div>
+                  <div class="absolute h-1 bg-blue-600 rounded-full" style="left: 50%; width: 40%"></div>
+                  <div class="absolute h-1 bg-green-500 rounded-full" style="left: 90%; width: 10%"></div>
+                  <!-- Dots -->
+                  <div class="absolute w-3 h-3 bg-gray-400 rounded-full border-2 border-white" style="left: 0%"></div>
+                  <div class="absolute w-3 h-3 bg-gray-400 rounded-full border-2 border-white" style="left: 35%"></div>
+                  <div class="absolute w-3 h-3 bg-gray-400 rounded-full border-2 border-white" style="left: 45%"></div>
+                  <div class="absolute w-3 h-3 bg-gray-400 rounded-full border-2 border-white" style="left: 50%"></div>
+                  <div class="absolute w-3 h-3 bg-green-500 rounded-full border-2 border-white" style="left: 90%"></div>
+                </div>
+                <!-- Legend -->
+                <div class="flex flex-wrap gap-x-4 gap-y-1 mt-4 text-xs">
+                  <span class="flex items-center gap-1">
+                    <span class="w-3 h-3 bg-blue-400 rounded"></span>
+                    Storage (40%)
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="w-3 h-3 bg-blue-500 rounded"></span>
+                    Equipment (15%)
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="w-3 h-3 bg-blue-600 rounded"></span>
+                    Studio B (35%)
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="w-3 h-3 bg-green-500 rounded"></span>
+                    Studio A (10%)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Mockup Label -->
+  <div class="fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg">
+    Mockup C: Split Panel (Hybrid Table + Timeline) - Instance 1/mocky
+  </div>
+</body>
+</html>

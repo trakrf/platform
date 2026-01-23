@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TRA-140: Asset Location Reports - Mockups</title>
+  <title>TRA-140: Asset Location Reports - All Mockups</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -24,125 +24,86 @@
   </script>
 </head>
 <body class="bg-dark-bg text-gray-100 min-h-screen p-8">
-  <div class="max-w-4xl mx-auto">
+  <div class="max-w-5xl mx-auto">
     <h1 class="text-3xl font-bold mb-2">TRA-140: Asset Location Reports</h1>
-    <p class="text-gray-400 mb-8">UI Mockups for NADA Asset Location Reporting Feature</p>
+    <p class="text-gray-400 mb-8">10 UI Mockups for NADA Asset Location Reporting Feature</p>
 
-    <div class="grid gap-6">
-      <!-- Mockup A -->
-      <a href="mockup-a-sidebar.html" class="block bg-dark-card border border-dark-border rounded-lg p-6 hover:border-yellow-600/50 transition-colors group">
-        <div class="flex items-start justify-between">
-          <div>
-            <span class="px-2 py-1 bg-yellow-600/20 text-yellow-400 rounded text-xs font-medium mb-3 inline-block">Option A</span>
-            <h2 class="text-xl font-semibold mb-2 group-hover:text-yellow-400 transition-colors">Sidebar Filters</h2>
-            <p class="text-gray-400 mb-4">Classic layout matching existing Assets/Locations pages with filter sidebar on the left.</p>
-            <ul class="text-sm text-gray-500 space-y-1">
-              <li>+ Consistent with existing UI patterns</li>
-              <li>+ Familiar filter interaction</li>
-              <li>- Takes horizontal space</li>
-            </ul>
-          </div>
-          <svg class="w-6 h-6 text-gray-500 group-hover:text-yellow-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        </div>
+    <!-- Group 1: Sidebar/Toolbar/Dashboard -->
+    <h2 class="text-xl font-semibold mb-4 text-blue-400">Group 1: Filter Layout Variations</h2>
+    <p class="text-gray-500 mb-4">Focus on different filter placement and overall page layout</p>
+    <div class="grid md:grid-cols-3 gap-4 mb-8">
+      <a href="mockup-a-sidebar.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-blue-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs font-medium mb-3 inline-block">A1</span>
+        <h3 class="font-semibold mb-2 group-hover:text-blue-400">Sidebar Filters</h3>
+        <p class="text-sm text-gray-500">Classic left sidebar with filter checkboxes. Matches existing Assets page.</p>
       </a>
-
-      <!-- Mockup B -->
-      <a href="mockup-b-toolbar.html" class="block bg-dark-card border border-dark-border rounded-lg p-6 hover:border-green-600/50 transition-colors group">
-        <div class="flex items-start justify-between">
-          <div>
-            <span class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs font-medium mb-3 inline-block">Option B</span>
-            <h2 class="text-xl font-semibold mb-2 group-hover:text-green-400 transition-colors">Toolbar Filters</h2>
-            <p class="text-gray-400 mb-4">Compact horizontal toolbar with inline dropdowns. Day-grouped timeline in slide-over.</p>
-            <ul class="text-sm text-gray-500 space-y-1">
-              <li>+ Maximizes vertical space for data</li>
-              <li>+ Clean, modern appearance</li>
-              <li>- Less filter visibility</li>
-            </ul>
-          </div>
-          <svg class="w-6 h-6 text-gray-500 group-hover:text-green-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        </div>
+      <a href="mockup-b-toolbar.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-green-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs font-medium mb-3 inline-block">A2</span>
+        <h3 class="font-semibold mb-2 group-hover:text-green-400">Toolbar Filters</h3>
+        <p class="text-sm text-gray-500">Compact horizontal toolbar. Maximizes vertical space for data.</p>
       </a>
-
-      <!-- Mockup C -->
-      <a href="mockup-c-dashboard.html" class="block bg-dark-card border border-dark-border rounded-lg p-6 hover:border-purple-600/50 transition-colors group">
-        <div class="flex items-start justify-between">
-          <div>
-            <span class="px-2 py-1 bg-purple-600/20 text-purple-400 rounded text-xs font-medium mb-3 inline-block">Option C</span>
-            <h2 class="text-xl font-semibold mb-2 group-hover:text-purple-400 transition-colors">Dashboard Stats</h2>
-            <p class="text-gray-400 mb-4">Summary stat cards + tabs for future reports. Status badges show asset freshness.</p>
-            <ul class="text-sm text-gray-500 space-y-1">
-              <li>+ At-a-glance insights</li>
-              <li>+ Expandable for future reports</li>
-              <li>- More complex to implement</li>
-            </ul>
-          </div>
-          <svg class="w-6 h-6 text-gray-500 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        </div>
+      <a href="mockup-c-dashboard.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-purple-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-purple-600/20 text-purple-400 rounded text-xs font-medium mb-3 inline-block">A3</span>
+        <h3 class="font-semibold mb-2 group-hover:text-purple-400">Dashboard Stats</h3>
+        <p class="text-sm text-gray-500">Summary cards + tabs. Status badges show freshness.</p>
       </a>
     </div>
 
-    <!-- TRA-140 Additional Mockups -->
-    <h2 class="text-2xl font-bold mt-12 mb-4">Alternative Approaches</h2>
-    <p class="text-gray-400 mb-6">Additional layout explorations with different interaction patterns</p>
-
-    <div class="grid gap-4">
-      <!-- B1: Inline Table -->
-      <a href="tra140-b1-inline-table.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-blue-600/50 transition-colors group">
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs font-medium mr-2">B1</span>
-            <span class="font-semibold group-hover:text-blue-400 transition-colors">Inline Drill-Down + Table</span>
-            <p class="text-gray-500 text-sm mt-1">Click rows to expand history as nested table</p>
-          </div>
-          <svg class="w-5 h-5 text-gray-500 group-hover:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        </div>
+    <!-- Group 2: Current Locations / Asset History / Split Panel -->
+    <h2 class="text-xl font-semibold mb-4 text-yellow-400">Group 2: Navigation Patterns</h2>
+    <p class="text-gray-500 mb-4">Focus on how users navigate between locations list and asset history</p>
+    <div class="grid md:grid-cols-3 gap-4 mb-8">
+      <a href="mockup-a-current-locations.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-yellow-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-yellow-600/20 text-yellow-400 rounded text-xs font-medium mb-3 inline-block">B1</span>
+        <h3 class="font-semibold mb-2 group-hover:text-yellow-400">Current Locations</h3>
+        <p class="text-sm text-gray-500">Tabbed interface. Table view with click-through to history.</p>
       </a>
-
-      <!-- B2: Inline Timeline -->
-      <a href="tra140-b2-inline-timeline.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-cyan-600/50 transition-colors group">
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="px-2 py-1 bg-cyan-600/20 text-cyan-400 rounded text-xs font-medium mr-2">B2</span>
-            <span class="font-semibold group-hover:text-cyan-400 transition-colors">Inline Drill-Down + Timeline</span>
-            <p class="text-gray-500 text-sm mt-1">Click rows to expand visual timeline with duration bars</p>
-          </div>
-          <svg class="w-5 h-5 text-gray-500 group-hover:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        </div>
+      <a href="mockup-b-asset-history.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-orange-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-orange-600/20 text-orange-400 rounded text-xs font-medium mb-3 inline-block">B2</span>
+        <h3 class="font-semibold mb-2 group-hover:text-orange-400">Asset History</h3>
+        <p class="text-sm text-gray-500">Dedicated history view with timeline visualization.</p>
       </a>
-
-      <!-- C1: Split Table -->
-      <a href="tra140-c1-split-table.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-orange-600/50 transition-colors group">
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="px-2 py-1 bg-orange-600/20 text-orange-400 rounded text-xs font-medium mr-2">C1</span>
-            <span class="font-semibold group-hover:text-orange-400 transition-colors">Split Panel + Table</span>
-            <p class="text-gray-500 text-sm mt-1">Master-detail: asset list on left, history table on right</p>
-          </div>
-          <svg class="w-5 h-5 text-gray-500 group-hover:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        </div>
-      </a>
-
-      <!-- C2: Split Timeline -->
-      <a href="tra140-c2-split-timeline.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-pink-600/50 transition-colors group">
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="px-2 py-1 bg-pink-600/20 text-pink-400 rounded text-xs font-medium mr-2">C2</span>
-            <span class="font-semibold group-hover:text-pink-400 transition-colors">Split Panel + Timeline</span>
-            <p class="text-gray-500 text-sm mt-1">Master-detail: asset list on left, visual timeline on right</p>
-          </div>
-          <svg class="w-5 h-5 text-gray-500 group-hover:text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        </div>
+      <a href="mockup-c-split-panel.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-red-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs font-medium mb-3 inline-block">B3</span>
+        <h3 class="font-semibold mb-2 group-hover:text-red-400">Split Panel</h3>
+        <p class="text-sm text-gray-500">Master-detail side-by-side. See list and history together.</p>
       </a>
     </div>
 
-    <!-- Feature Summary -->
-    <div class="mt-8 bg-dark-card border border-dark-border rounded-lg p-6">
+    <!-- Group 3: Inline Drilldown Variations -->
+    <h2 class="text-xl font-semibold mb-4 text-cyan-400">Group 3: Inline Drilldown</h2>
+    <p class="text-gray-500 mb-4">Expandable rows - click to see history without leaving the list</p>
+    <div class="grid md:grid-cols-2 gap-4 mb-8">
+      <a href="tra140-b1-inline-table.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-cyan-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-cyan-600/20 text-cyan-400 rounded text-xs font-medium mb-3 inline-block">C1</span>
+        <h3 class="font-semibold mb-2 group-hover:text-cyan-400">Inline + Table History</h3>
+        <p class="text-sm text-gray-500">Expandable rows with simple table showing location history.</p>
+      </a>
+      <a href="tra140-b2-inline-timeline.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-teal-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-teal-600/20 text-teal-400 rounded text-xs font-medium mb-3 inline-block">C2</span>
+        <h3 class="font-semibold mb-2 group-hover:text-teal-400">Inline + Visual Timeline</h3>
+        <p class="text-sm text-gray-500">Expandable rows with visual timeline and duration bars.</p>
+      </a>
+    </div>
+
+    <!-- Group 4: Split Panel Variations -->
+    <h2 class="text-xl font-semibold mb-4 text-pink-400">Group 4: Split Panel Detail</h2>
+    <p class="text-gray-500 mb-4">Side-by-side master-detail with different history displays</p>
+    <div class="grid md:grid-cols-2 gap-4 mb-8">
+      <a href="tra140-c1-split-table.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-pink-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-pink-600/20 text-pink-400 rounded text-xs font-medium mb-3 inline-block">D1</span>
+        <h3 class="font-semibold mb-2 group-hover:text-pink-400">Split + Table History</h3>
+        <p class="text-sm text-gray-500">List on left, table-based history on right.</p>
+      </a>
+      <a href="tra140-c2-split-timeline.html" class="block bg-dark-card border border-dark-border rounded-lg p-5 hover:border-rose-500/50 transition-colors group">
+        <span class="px-2 py-1 bg-rose-600/20 text-rose-400 rounded text-xs font-medium mb-3 inline-block">D2</span>
+        <h3 class="font-semibold mb-2 group-hover:text-rose-400">Split + Visual Timeline</h3>
+        <p class="text-sm text-gray-500">List on left, visual timeline on right.</p>
+      </a>
+    </div>
+
+    <!-- Summary -->
+    <div class="bg-dark-card border border-dark-border rounded-lg p-6">
       <h3 class="text-lg font-semibold mb-4">Common Features (All Mockups)</h3>
       <div class="grid md:grid-cols-2 gap-4 text-sm">
         <div>
@@ -156,10 +117,10 @@
           </ul>
         </div>
         <div>
-          <h4 class="font-medium text-gray-300 mb-2">Report 2: Asset History (Slide-over)</h4>
+          <h4 class="font-medium text-gray-300 mb-2">Report 2: Asset History</h4>
           <ul class="text-gray-500 space-y-1">
             <li>&#x2713; Location timeline with duration</li>
-            <li>&#x2713; Date presets (Today, 7d, 30d, 90d)</li>
+            <li>&#x2713; Date presets (7d, 30d, 90d)</li>
             <li>&#x2713; Custom date range picker</li>
             <li>&#x2713; CSV export for history</li>
           </ul>
@@ -168,7 +129,7 @@
     </div>
 
     <p class="text-center text-gray-600 mt-8 text-sm">
-      Click any mockup to view. Each has interactive elements (click table rows to see slide-over).
+      Click any mockup to view. All are interactive - click table rows to see details.
     </p>
   </div>
 </body>
