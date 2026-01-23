@@ -228,7 +228,7 @@ describe('LocationExpandableCard', () => {
     expect(screen.queryByText(/direct \/ .* total/i)).not.toBeInTheDocument();
   });
 
-  it('should render Add Sub-location button when onAddChild provided', () => {
+  it('should render Add button when onAddChild provided', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
     useLocationStore.getState().toggleCardExpanded(1);
@@ -244,10 +244,10 @@ describe('LocationExpandableCard', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Add Sub-location' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
   });
 
-  it('should call onAddChild with location.id when Add Sub-location clicked', () => {
+  it('should call onAddChild with location.id when Add clicked', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
     useLocationStore.getState().toggleCardExpanded(1);
@@ -263,11 +263,11 @@ describe('LocationExpandableCard', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Sub-location' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(onAddChild).toHaveBeenCalledWith(1);
   });
 
-  it('should NOT render Add Sub-location button when onAddChild not provided', () => {
+  it('should NOT render Add button when onAddChild not provided', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
     useLocationStore.getState().toggleCardExpanded(1);
@@ -281,7 +281,7 @@ describe('LocationExpandableCard', () => {
       />
     );
 
-    expect(screen.queryByRole('button', { name: 'Add Sub-location' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument();
   });
 
   it('should collapse when expanded and header clicked again', () => {

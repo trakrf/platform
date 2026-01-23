@@ -317,7 +317,7 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Add Sub-location' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Add/i })).toBeInTheDocument();
   });
 
   it('should call onAddChild with location.id when Add Sub-location clicked', () => {
@@ -335,7 +335,7 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Sub-location' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add/i }));
     expect(onAddChild).toHaveBeenCalledWith(1);
   });
 
@@ -352,7 +352,7 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.queryByRole('button', { name: 'Add Sub-location' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add/i })).not.toBeInTheDocument();
   });
 
 });
