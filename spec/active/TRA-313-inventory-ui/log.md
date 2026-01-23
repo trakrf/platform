@@ -103,3 +103,34 @@ Ready for /check: YES
 - `frontend/src/components/inventory/InventoryStats.tsx` - Added saveable count stat card
 - `frontend/src/components/__tests__/InventoryScreen.test.tsx` - Added location detection tests
 
+---
+
+## Bug Fix: Location Tag Detection
+
+### Issue
+Location tag "10022" assigned to a location wasn't being detected during scanning.
+
+### Root Cause
+EPC format mismatch:
+- Scanned EPC: `E2806894000000000010022` (full hex string)
+- Stored identifier: `10022` (just the numeric portion)
+
+The lookup was comparing the full EPC against stored identifiers, which never matched.
+
+### Solution
+Added multi-strategy lookup in `tagStore.ts`:
+1. Try full EPC
+2. Try displayEpc (with leading zeros removed)
+3. Try trailing numeric portion of EPC (regex: `/(\d+)$/`)
+
+### Files Modified
+- `frontend/src/stores/tagStore.ts` - Updated `addTag` and `_enrichTagsWithLocations`
+
+### Validation
+- lint ✅
+- typecheck ✅
+- test ✅ (886 passing, 26 skipped)
+
+### Commit
+`fix(inventory): improve location tag detection with multi-strategy lookup`
+
