@@ -8,6 +8,7 @@ import { ShareModal } from '@/components/ShareModal';
 import type { ExportFormat } from '@/types/export';
 import { useInventoryAudio } from '@/hooks/useInventoryAudio';
 import { useReconciliation } from '@/hooks/useReconciliation';
+import { useInventorySave } from '@/hooks/inventory/useInventorySave';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useSortableInventory } from '@/hooks/useSortableInventory';
 import { usePagination } from '@/hooks/usePagination';
@@ -19,7 +20,6 @@ import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryTableContent } from '@/components/inventory/InventoryTableContent';
 import { InventorySettingsPanel } from '@/components/inventory/InventorySettingsPanel';
 import { LocationBar } from '@/components/inventory/LocationBar';
-import toast from 'react-hot-toast';
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,6 +28,7 @@ export default function InventoryScreen() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedExportFormat, setSelectedExportFormat] = useState<ExportFormat>('csv');
   const [isBrowserSupported, setIsBrowserSupported] = useState(true);
+  const [showClearPulse, setShowClearPulse] = useState(false);
 
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +55,7 @@ export default function InventoryScreen() {
 
   const audio = useInventoryAudio();
   const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
+  const { save, isSaving } = useInventorySave();
 
   // Load assets for tag enrichment (only when authenticated)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -185,7 +187,7 @@ export default function InventoryScreen() {
     setStatusFilters(new Set());
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!isAuthenticated) {
       // Save current route for redirect after login (same pattern as ProtectedRoute)
       sessionStorage.setItem('redirectAfterLogin', 'inventory');
@@ -193,12 +195,26 @@ export default function InventoryScreen() {
       return;
     }
 
-    // Actual save will be implemented in TRA-314
-    // For now, just show a placeholder toast
-    if (resolvedLocation && saveableCount > 0) {
-      toast.success(`Ready to save ${saveableCount} assets to ${resolvedLocation.name}`);
+    if (!resolvedLocation) return;
+
+    // Get saveable asset IDs (asset type tags only)
+    const saveableAssets = tags
+      .filter(t => t.type === 'asset' && t.assetId)
+      .map(t => t.assetId!);
+
+    if (saveableAssets.length === 0) return;
+
+    try {
+      await save({
+        location_id: resolvedLocation.id,
+        asset_ids: saveableAssets,
+      });
+      // Trigger clear button pulse animation on success
+      setShowClearPulse(true);
+    } catch {
+      // Error handling is done in the hook with toast
     }
-  }, [isAuthenticated, resolvedLocation, saveableCount]);
+  }, [isAuthenticated, resolvedLocation, tags, save]);
 
   useEffect(() => {
     const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
@@ -242,8 +258,11 @@ export default function InventoryScreen() {
           hasItems={filteredTags.length > 0}
           readerState={readerState}
           onSave={handleSave}
-          isSaveDisabled={isAuthenticated ? (!resolvedLocation || saveableCount === 0) : displayableTags.length === 0}
+          isSaveDisabled={isAuthenticated ? (!resolvedLocation || saveableCount === 0 || isSaving) : displayableTags.length === 0}
+          isSaving={isSaving}
           saveableCount={saveableCount}
+          showClearPulse={showClearPulse}
+          onClearPulseEnd={() => setShowClearPulse(false)}
         />
         <LocationBar
           detectedLocation={detectedLocation}
