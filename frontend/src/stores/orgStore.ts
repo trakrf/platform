@@ -25,7 +25,7 @@ interface OrgState {
 
 export const useOrgStore = create<OrgState>()(
   createStoreWithTracking(
-    (set) => ({
+    (set, get) => ({
       // Initial state
       currentOrg: null,
       currentRole: null,
@@ -34,8 +34,18 @@ export const useOrgStore = create<OrgState>()(
       error: null,
 
       // Sync state from authStore profile
+      // Invalidates org-specific caches when org changes (including on login)
       syncFromProfile: () => {
         const profile = useAuthStore.getState().profile;
+        const previousOrgId = get().currentOrg?.id;
+        const newOrgId = profile?.current_org?.id;
+
+        // Invalidate caches if org changed (including null -> value on login)
+        if (previousOrgId !== newOrgId) {
+          useAssetStore.getState().invalidateCache();
+          useLocationStore.getState().invalidateCache();
+        }
+
         if (profile) {
           set({
             currentOrg: profile.current_org,
