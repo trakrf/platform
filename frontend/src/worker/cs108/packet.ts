@@ -347,9 +347,9 @@ export class PacketHandler {
             packetHex: Array.from(packetData.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')
           }
         });
-        // Discard and reset
+        // Discard invalid packet but preserve any remaining bytes for next packet
+        this.rawDataBuffer = this.rawDataBuffer.slice(this.currentPacket.totalExpected);
         this.currentPacket = null;
-        this.rawDataBuffer = new Uint8Array(0);
         return null;
       }
 
@@ -368,9 +368,9 @@ export class PacketHandler {
             packetHex: Array.from(packetData.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')
           }
         });
-        // Discard and reset
+        // Discard invalid packet but preserve any remaining bytes for next packet
+        this.rawDataBuffer = this.rawDataBuffer.slice(this.currentPacket.totalExpected);
         this.currentPacket = null;
-        this.rawDataBuffer = new Uint8Array(0);
         return null;
       }
 
