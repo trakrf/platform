@@ -131,6 +131,31 @@ Added multi-strategy lookup in `tagStore.ts`:
 - typecheck ✅
 - test ✅ (886 passing, 26 skipped)
 
-### Commit
-`fix(inventory): improve location tag detection with multi-strategy lookup`
+### Commits
+- `fix(inventory): improve location tag detection with multi-strategy lookup`
+- `fix(inventory): fetch all locations for tag detection cache`
+
+---
+
+## Bug Fix #2: Locations Not Fully Loaded
+
+### Issue
+Location tag still not detected even after multi-strategy lookup fix.
+
+### Root Cause
+`useLocations` hook called `locationsApi.list()` without specifying a limit.
+Backend defaults to `limit=10`, so locations beyond the first 10 weren't loaded
+into the `byTagEpc` cache.
+
+### Solution
+Changed `useLocations` to paginate through ALL locations:
+- Fetch in batches of 100 per page
+- Continue until `allLocations.length >= totalCount`
+- Added warning if fetched count doesn't match total (safety net for large customers)
+
+### Files Modified
+- `frontend/src/hooks/locations/useLocations.ts` - Added `fetchAllLocations()` pagination
+
+### Validation
+- typecheck ✅
 
