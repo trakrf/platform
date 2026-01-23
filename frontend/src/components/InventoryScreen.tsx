@@ -187,9 +187,9 @@ export default function InventoryScreen() {
 
   const handleSave = useCallback(() => {
     if (!isAuthenticated) {
-      // Redirect to login with return URL
-      const returnUrl = encodeURIComponent(window.location.pathname);
-      window.location.href = `/login?returnUrl=${returnUrl}`;
+      // Save current route for redirect after login (same pattern as ProtectedRoute)
+      sessionStorage.setItem('redirectAfterLogin', 'inventory');
+      window.location.hash = '#login';
       return;
     }
 
