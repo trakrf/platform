@@ -215,102 +215,55 @@ describe('TagStore - Tag Classification (TRA-312)', () => {
     vi.clearAllMocks();
   });
 
-  it('should set type to unknown for unrecognized tags', () => {
+  it('should set type to unknown for new tags initially', () => {
     useTagStore.getState().addTag({ epc: 'UNKNOWN123' });
     const tag = useTagStore.getState().tags[0];
     expect(tag.type).toBe('unknown');
   });
 
-  it('should set type to location when EPC matches location tag', () => {
-    // Setup: populate location cache with a location that has tag identifier
-    const location = createMockLocation(1, 'Warehouse A - Rack 12', 'LOCATION123');
-    useLocationStore.getState().setLocations([location]);
+  it('should queue all new tags for lookup', () => {
+    useTagStore.getState().addTag({ epc: 'NEWTAG123' });
 
-    useTagStore.getState().addTag({ epc: 'LOCATION123' });
-    const tag = useTagStore.getState().tags[0];
-
-    expect(tag.type).toBe('location');
-    expect(tag.locationId).toBe(1);
-    expect(tag.locationName).toBe('Warehouse A - Rack 12');
-  });
-
-  it('should not queue location tags for asset lookup', () => {
-    // Setup location cache
-    const location = createMockLocation(1, 'Warehouse A', 'LOCATIONEPC');
-    useLocationStore.getState().setLocations([location]);
-
-    useTagStore.getState().addTag({ epc: 'LOCATIONEPC' });
-
-    // Verify tag was NOT queued for lookup
-    expect(useTagStore.getState()._lookupQueue.size).toBe(0);
-  });
-
-  it('should queue unknown tags for asset lookup', () => {
-    useTagStore.getState().addTag({ epc: 'UNKNOWNEPC' });
-
-    // Verify tag WAS queued for lookup
-    expect(useTagStore.getState()._lookupQueue.has('UNKNOWNEPC')).toBe(true);
+    // All new tags should be queued for classification via lookup API
+    expect(useTagStore.getState()._lookupQueue.has('NEWTAG123')).toBe(true);
   });
 
   it('should preserve existing type when updating tag reads', () => {
-    // First add as location
-    const location = createMockLocation(1, 'Storage Room', 'LOCATION999');
-    useLocationStore.getState().setLocations([location]);
-
-    useTagStore.getState().addTag({ epc: 'LOCATION999', rssi: -60 });
-    expect(useTagStore.getState().tags[0].type).toBe('location');
+    // Manually set a tag as classified
+    useTagStore.setState({
+      tags: [{
+        epc: 'LOCATION999',
+        displayEpc: 'LOCATION999',
+        count: 1,
+        rssi: -60,
+        source: 'rfid',
+        type: 'location',
+        locationId: 1,
+        locationName: 'Storage Room',
+      }]
+    });
 
     // Update with another read (same tag scanned again)
     useTagStore.getState().addTag({ epc: 'LOCATION999', rssi: -55 });
 
     const tag = useTagStore.getState().tags[0];
-    expect(tag.type).toBe('location');
+    expect(tag.type).toBe('location'); // Type preserved
     expect(tag.count).toBe(2);
     expect(tag.rssi).toBe(-55);
   });
 
-  it('should re-enrich unknown tags with locations after _enrichTagsWithLocations', () => {
-    // Add tag while location cache is empty
-    useTagStore.getState().addTag({ epc: 'LATERKNOWN' });
-    expect(useTagStore.getState().tags[0].type).toBe('unknown');
+  it('should not re-queue existing tags for lookup', () => {
+    // Add a tag first
+    useTagStore.getState().addTag({ epc: 'EXISTINGTAG' });
+    expect(useTagStore.getState()._lookupQueue.has('EXISTINGTAG')).toBe(true);
 
-    // Populate location cache
-    const location = createMockLocation(2, 'New Location', 'LATERKNOWN');
-    useLocationStore.getState().setLocations([location]);
+    // Clear the queue
+    useTagStore.setState({ _lookupQueue: new Set<string>() });
 
-    // Run enrichment
-    useTagStore.getState()._enrichTagsWithLocations();
+    // Add same tag again (another read)
+    useTagStore.getState().addTag({ epc: 'EXISTINGTAG' });
 
-    const tag = useTagStore.getState().tags[0];
-    expect(tag.type).toBe('location');
-    expect(tag.locationId).toBe(2);
-    expect(tag.locationName).toBe('New Location');
-  });
-
-  it('should not re-enrich tags already classified as asset', () => {
-    // Manually set a tag as asset type
-    useTagStore.setState({
-      tags: [{
-        epc: 'ASSET123',
-        displayEpc: 'ASSET123',
-        count: 1,
-        source: 'rfid',
-        type: 'asset',
-        assetId: 99,
-        assetName: 'Test Asset',
-      }]
-    });
-
-    // Populate location cache with same EPC (shouldn't happen in real life)
-    const location = createMockLocation(5, 'Should Not Match', 'ASSET123');
-    useLocationStore.getState().setLocations([location]);
-
-    // Run enrichment
-    useTagStore.getState()._enrichTagsWithLocations();
-
-    // Should still be asset, not location
-    const tag = useTagStore.getState().tags[0];
-    expect(tag.type).toBe('asset');
-    expect(tag.assetId).toBe(99);
+    // Should NOT be queued again since tag already exists
+    expect(useTagStore.getState()._lookupQueue.has('EXISTINGTAG')).toBe(false);
   });
 });

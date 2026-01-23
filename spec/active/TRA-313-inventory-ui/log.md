@@ -159,3 +159,46 @@ Changed `useLocations` to paginate through ALL locations:
 ### Validation
 - typecheck ✅
 
+---
+
+## Architecture Improvement: Unified Lookup API
+
+### Issue
+Location tag detection via frontend cache was unreliable due to:
+1. EPC format mismatches between scanned EPCs and stored identifiers
+2. Timing issues with cache population vs tag scanning
+3. Complex multi-strategy lookup logic duplicated in frontend
+
+### Solution
+Removed frontend location cache lookup and unified tag classification through the backend lookup API:
+
+1. **Backend already handles both assets AND locations**: The `/api/v1/lookup/tags` endpoint normalizes EPCs and returns either asset or location data
+2. **Simplified frontend**: All new tags are queued for lookup, classification happens via API
+3. **Removed redundant code**: `_enrichTagsWithLocations`, synchronous cache lookup, and location store dependency
+
+### Key Changes
+
+**`frontend/src/stores/tagStore.ts`**:
+- Removed `_enrichTagsWithLocations` method
+- Removed synchronous location cache lookup in `addTag`
+- Updated `_flushLookupQueue` to handle both `result.asset` AND `result.location`
+- All new tags now queued for batch lookup
+
+**`frontend/src/hooks/locations/useLocations.ts`**:
+- Simplified to just fetch locations for dropdown (no tag enrichment)
+- Removed tagStore dependency
+
+**`frontend/src/stores/tagStore.test.ts`**:
+- Updated tests to reflect new async classification architecture
+
+### Benefits
+- Single source of truth for EPC normalization (backend)
+- No timing issues - classification happens whenever lookup completes
+- Simpler frontend code - no duplicate lookup strategies
+- More reliable - backend handles all edge cases
+
+### Validation
+- typecheck ✅
+- lint ✅ (0 errors)
+- test ✅ (883 passing)
+

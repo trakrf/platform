@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { useOrgStore } from '@/stores/orgStore';
-import { useTagStore } from '@/stores/tagStore';
 import { locationsApi } from '@/lib/api/locations';
 import type { Location } from '@/types/locations';
 
@@ -54,8 +53,6 @@ export function useLocations(options: UseLocationsOptions = {}) {
     queryFn: async () => {
       const result = await fetchAllLocations();
       useLocationStore.getState().setLocations(result.data);
-      // Re-enrich any already-scanned tags with location data now that cache is populated
-      useTagStore.getState()._enrichTagsWithLocations();
       return result;
     },
     enabled,

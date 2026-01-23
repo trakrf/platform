@@ -9,7 +9,6 @@ import { useSettingsStore } from './settingsStore';
 import { useAuthStore } from './authStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
-import { useLocationStore } from './locations/locationStore';
 
 // Tag classification type
 export type TagType = 'asset' | 'location' | 'unknown';
@@ -103,7 +102,6 @@ interface TagState {
   // Internal lookup queue actions
   _queueForLookup: (epc: string) => void;
   _flushLookupQueue: () => Promise<void>;
-  _enrichTagsWithLocations: () => void;
 }
 
 export const useTagStore = create<TagState>()(
@@ -265,33 +263,8 @@ export const useTagStore = create<TagState>()(
     const existingIndex = state.tags.findIndex(t => t.epc === epc);
     const isNewTag = existingIndex < 0;
 
-    // Check location cache synchronously for new tags (TRA-312)
-    // Try multiple lookup strategies: full EPC and displayEpc
-    let tagType: TagType = 'unknown';
-    let locationId: number | undefined;
-    let locationName: string | undefined;
-
-    if (isNewTag) {
-      const locationStore = useLocationStore.getState();
-      let location = locationStore.getLocationByTagEpc(epc);
-      if (!location && displayEpc !== epc) {
-        location = locationStore.getLocationByTagEpc(displayEpc);
-      }
-      // Try matching just the trailing numeric portion of the EPC
-      // This handles cases where location tags are stored as "10022" but
-      // the scanned EPC is "E2806894000000000010022"
-      if (!location) {
-        const numericMatch = epc.match(/(\d+)$/);
-        if (numericMatch) {
-          location = locationStore.getLocationByTagEpc(numericMatch[1]);
-        }
-      }
-      if (location) {
-        tagType = 'location';
-        locationId = location.id;
-        locationName = location.name;
-      }
-    }
+    // Tag classification will be done asynchronously via the lookup API
+    // Keep initial type as 'unknown' - _flushLookupQueue will classify as asset or location
 
     set((state) => {
       const now = Date.now();
@@ -310,15 +283,13 @@ export const useTagStore = create<TagState>()(
           timestamp: now
         };
       } else {
-        // Create new tag with classification (TRA-312)
+        // Create new tag - classification done asynchronously via lookup API
         const newTag: TagInfo = {
           epc,
           displayEpc,
           count: 1,
           source: 'rfid',
-          type: tagType,
-          locationId,
-          locationName,
+          type: 'unknown',
           firstSeenTime: now,
           lastSeenTime: now,
           readCount: 1,
@@ -338,8 +309,8 @@ export const useTagStore = create<TagState>()(
       };
     });
 
-    // Queue new tags for batch lookup (only if not already classified as location)
-    if (isNewTag && epc && tagType !== 'location') {
+    // Queue all new tags for batch lookup to classify as asset or location
+    if (isNewTag && epc) {
       get()._queueForLookup(epc);
     }
   },
@@ -427,7 +398,7 @@ export const useTagStore = create<TagState>()(
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
       const results = response.data.data;
 
-      // Update tags with asset info from lookup results (TRA-312: set type to 'asset')
+      // Update tags with asset OR location info from lookup results (TRA-312/TRA-313)
       set((state) => ({
         tags: state.tags.map(tag => {
           const result = results[tag.epc];
@@ -439,6 +410,13 @@ export const useTagStore = create<TagState>()(
               assetName: result.asset.name,
               assetIdentifier: result.asset.identifier,
               description: result.asset.description || undefined,
+            };
+          } else if (result?.location) {
+            return {
+              ...tag,
+              type: 'location' as TagType,
+              locationId: result.location.id,
+              locationName: result.location.name,
             };
           }
           return tag;
@@ -452,42 +430,6 @@ export const useTagStore = create<TagState>()(
     }
   },
 
-  // Re-enrich tags with location data after login (TRA-312)
-  _enrichTagsWithLocations: () => {
-    set((state) => ({
-      tags: state.tags.map(tag => {
-        // Only process unknown tags (not already classified)
-        if (tag.type !== 'unknown') {
-          return tag;
-        }
-
-        const locationStore = useLocationStore.getState();
-        // Try multiple lookup strategies:
-        // 1. Full EPC
-        // 2. Display EPC (with leading zeros removed)
-        // 3. Trailing numeric portion (for tags stored as "10022")
-        let location = locationStore.getLocationByTagEpc(tag.epc);
-        if (!location && tag.displayEpc && tag.displayEpc !== tag.epc) {
-          location = locationStore.getLocationByTagEpc(tag.displayEpc);
-        }
-        if (!location) {
-          const numericMatch = tag.epc.match(/(\d+)$/);
-          if (numericMatch) {
-            location = locationStore.getLocationByTagEpc(numericMatch[1]);
-          }
-        }
-        if (location) {
-          return {
-            ...tag,
-            type: 'location' as TagType,
-            locationId: location.id,
-            locationName: location.name,
-          };
-        }
-        return tag;
-      })
-    }));
-  },
   }), 'TagStore'),
   {
     name: 'tag-storage',
@@ -505,13 +447,7 @@ export const useTagStore = create<TagState>()(
 useAuthStore.subscribe((state, prevState) => {
   // Only react to login (false -> true transition)
   if (state.isAuthenticated && !prevState.isAuthenticated) {
-    // User just logged in - flush any queued EPCs for asset enrichment
+    // User just logged in - flush any queued EPCs for asset/location classification
     useTagStore.getState()._flushLookupQueue();
-
-    // Re-enrich tags with location data now that cache may be populated (TRA-312)
-    // Small delay to ensure locationStore has been initialized by useLocations hook
-    setTimeout(() => {
-      useTagStore.getState()._enrichTagsWithLocations();
-    }, 100);
   }
 });
