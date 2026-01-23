@@ -348,6 +348,11 @@ export const useTagStore = create<TagState>()(
       .map(t => t.epc)
       .filter(Boolean);
 
+    console.log('[TagStore] refreshAssetEnrichment:', {
+      totalTags: state.tags.length,
+      unenrichedCount: unenriched.length,
+    });
+
     if (unenriched.length === 0) return;
 
     // Add to queue and flush immediately
@@ -377,6 +382,7 @@ export const useTagStore = create<TagState>()(
     // Skip API call for anonymous users - keep queue intact for later
     const isAuthenticated = useAuthStore.getState().isAuthenticated;
     if (!isAuthenticated) {
+      console.log('[TagStore] _flushLookupQueue: skipping (not authenticated)');
       return;
     }
 
@@ -384,8 +390,16 @@ export const useTagStore = create<TagState>()(
 
     // Don't run if already in progress or queue is empty
     if (state._isLookupInProgress || state._lookupQueue.size === 0) {
+      console.log('[TagStore] _flushLookupQueue: skipping', {
+        inProgress: state._isLookupInProgress,
+        queueSize: state._lookupQueue.size,
+      });
       return;
     }
+
+    console.log('[TagStore] _flushLookupQueue: starting', {
+      queueSize: state._lookupQueue.size,
+    });
 
     // Take snapshot of queue and clear it
     const epcs = Array.from(state._lookupQueue);
@@ -398,6 +412,14 @@ export const useTagStore = create<TagState>()(
     try {
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
       const results = response.data.data;
+
+      const matchedAssets = Object.values(results).filter((r: any) => r?.asset).length;
+      const matchedLocations = Object.values(results).filter((r: any) => r?.location).length;
+      console.log('[TagStore] _flushLookupQueue: API response', {
+        epcCount: epcs.length,
+        matchedAssets,
+        matchedLocations,
+      });
 
       // Update tags with asset OR location info from lookup results (TRA-312/TRA-313)
       set((state) => ({
@@ -424,6 +446,7 @@ export const useTagStore = create<TagState>()(
         })
       }));
     } catch (error) {
+      console.error('[TagStore] _flushLookupQueue: API error', error);
       // On error, re-queue the EPCs for retry on next batch
       epcs.forEach(epc => get()._lookupQueue.add(epc));
     } finally {
@@ -458,7 +481,29 @@ useAuthStore.subscribe((state, prevState) => {
     // User just logged in - re-enrich any unenriched tags from localStorage
     // Note: _lookupQueue is not persisted, so we must use refreshAssetEnrichment
     // which finds tags without assetId/locationId and queues them for lookup
-    useTagStore.getState().refreshAssetEnrichment();
+    const tagState = useTagStore.getState();
+    console.log('[TagStore] Auth subscription: login detected', {
+      tagCount: tagState.tags.length,
+      unenriched: tagState.tags.filter(t => t.assetId === undefined && t.locationId === undefined).length,
+    });
+    tagState.refreshAssetEnrichment();
+  }
+
+  // Clear enrichment data when user logs out (true -> false transition)
+  if (!state.isAuthenticated && prevState.isAuthenticated) {
+    console.log('[TagStore] Auth subscription: logout detected, clearing enrichment');
+    const tagStore = useTagStore.getState();
+    tagStore.setTags(
+      tagStore.tags.map(tag => ({
+        ...tag,
+        type: 'unknown' as const,
+        assetId: undefined,
+        assetName: undefined,
+        assetIdentifier: undefined,
+        locationId: undefined,
+        locationName: undefined,
+      }))
+    );
   }
 });
 
@@ -472,10 +517,16 @@ if (typeof useOrgStore.subscribe === 'function') {
     // Only trigger on actual org change, not on first load
     if (newOrgId !== prevOrgId && newOrgId !== undefined) {
       const tagStore = useTagStore.getState();
+      console.log('[TagStore] Org subscription: org changed', {
+        prevOrgId,
+        newOrgId,
+        tagCount: tagStore.tags.length,
+      });
 
       // Only clear mappings when switching FROM one org TO another (not on first login)
       // On first login (prevOrgId undefined), just trigger enrichment without clearing
       if (prevOrgId !== undefined) {
+        console.log('[TagStore] Org subscription: clearing mappings (org switch)');
         // Clear asset/location mappings but keep EPC and scan data
         tagStore.setTags(
           tagStore.tags.map(tag => ({
@@ -488,6 +539,8 @@ if (typeof useOrgStore.subscribe === 'function') {
             locationName: undefined,
           }))
         );
+      } else {
+        console.log('[TagStore] Org subscription: first login, skipping clear');
       }
 
       // Re-enrich with new org's data (or enrich for first time on login)
