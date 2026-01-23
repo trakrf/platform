@@ -428,6 +428,13 @@ export const useTagStore = create<TagState>()(
       epcs.forEach(epc => get()._lookupQueue.add(epc));
     } finally {
       set({ _isLookupInProgress: false });
+
+      // Check if items were added to queue while we were processing
+      // This handles the race condition where multiple callers try to flush
+      if (get()._lookupQueue.size > 0) {
+        // Schedule another flush (use setTimeout to avoid stack overflow)
+        setTimeout(() => get()._flushLookupQueue(), 0);
+      }
     }
   },
 
@@ -462,21 +469,28 @@ if (typeof useOrgStore.subscribe === 'function') {
     const newOrgId = state.currentOrg?.id;
     const prevOrgId = prevState.currentOrg?.id;
 
+    // Only trigger on actual org change, not on first load
     if (newOrgId !== prevOrgId && newOrgId !== undefined) {
       const tagStore = useTagStore.getState();
-      // Clear asset/location mappings but keep EPC and scan data
-      tagStore.setTags(
-        tagStore.tags.map(tag => ({
-          ...tag,
-          type: 'unknown' as const,
-          assetId: undefined,
-          assetName: undefined,
-          assetIdentifier: undefined,
-          locationId: undefined,
-          locationName: undefined,
-        }))
-      );
-      // Re-enrich with new org's data
+
+      // Only clear mappings when switching FROM one org TO another (not on first login)
+      // On first login (prevOrgId undefined), just trigger enrichment without clearing
+      if (prevOrgId !== undefined) {
+        // Clear asset/location mappings but keep EPC and scan data
+        tagStore.setTags(
+          tagStore.tags.map(tag => ({
+            ...tag,
+            type: 'unknown' as const,
+            assetId: undefined,
+            assetName: undefined,
+            assetIdentifier: undefined,
+            locationId: undefined,
+            locationName: undefined,
+          }))
+        );
+      }
+
+      // Re-enrich with new org's data (or enrich for first time on login)
       tagStore.refreshAssetEnrichment();
     }
   });
