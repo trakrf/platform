@@ -76,12 +76,70 @@ Total tasks: 10
 
 ---
 
-## Final Validation
+## Initial Validation
 - `just frontend lint` ✅
 - `just frontend typecheck` ✅
 - `just frontend test` ✅ (938 passing)
 - `just frontend build` ✅
 
+---
+
+## Follow-up Session: User Feedback & Corrections
+
+### Issue 1: Desktop Mode FAB Broken ✅
+**Problem:** FAB was creating children of selected location instead of root locations.
+**Fix:** Changed `parentLocationId={isDesktop ? selectedLocationId : createParentId}` to `parentLocationId={createParentId}` in LocationsScreen.tsx. FAB always creates root; inline "Add Sub-location" button creates children.
+
+### Issue 2: Button Terminology ✅
+**Problem:** "Add Child" terminology was unclear.
+**Fix:** Renamed to "Add Sub-location" in LocationDetailsPanel and shortened to "Add" in LocationExpandableCard for mobile space constraints.
+
+### Issue 3: Mobile Button Layout ✅
+**Problem:** Action buttons didn't fit well on mobile screens.
+**Fix:**
+- LocationExpandableCard: Changed to 2-column grid layout (`grid grid-cols-2 gap-2`)
+- LocationDetailsPanel: Added `flex-wrap`, responsive text (hidden/inline at sm breakpoint), icon-only on small screens
+
+### Files Modified (Follow-up)
+- `LocationDetailsPanel.tsx` - Added inline "Add Sub-location" button with responsive layout
+- `LocationExpandableCard.tsx` - Changed to 2-column grid, shortened "Add" text
+- `LocationDetailsPanel.test.tsx` - Updated button matcher to use regex `/Add/i`
+- `LocationExpandableCard.test.tsx` - Updated button matcher to use regex `/Add/i`
+- `locations/index.ts` - Removed phase comments from barrel export
+
+---
+
+## Final Validation
+- `just frontend lint` ✅ (0 errors, 308 warnings)
+- `just frontend typecheck` ✅ (0 errors)
+- `just frontend test` ✅ (941 passing)
+- `just frontend build` ✅
+
+---
+
 ## Implementation Complete 🎉
-All 10 tasks completed successfully.
+
+**Branch:** `feature/TRA-301-extra-simplify-ui`
+**PR:** https://github.com/trakrf/platform/pull/136
+**Commits:** 16 commits ahead of main
+
+### Summary of Changes
+
+| Component | Change |
+|-----------|--------|
+| LocationDetailsPanel | Removed Hierarchy Information section; Added "Add Sub-location" button with responsive icons |
+| LocationExpandableCard | Removed Type/Children info grid; Added "Add" button; 2-column action grid |
+| LocationForm | Added parentLocationId prop; Context message for create mode |
+| LocationFormModal | Added parentLocationId prop passthrough |
+| LocationSplitPane | Added onAddChild prop |
+| LocationMobileView | Added onAddChild prop |
+| LocationsScreen | FAB creates root; handleAddChild for inline buttons |
+
+### Behavior Summary
+
+| Action | Result |
+|--------|--------|
+| Click FAB (floating + button) | Creates root-level location |
+| Click "Add Sub-location" in details panel | Creates child of selected location |
+| Click "Add" on mobile expanded card | Creates child of that card's location |
 

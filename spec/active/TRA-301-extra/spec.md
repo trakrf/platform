@@ -3,7 +3,8 @@
 **Ticket:** TRA-301 (follow-up)
 **Author:** Claude Code
 **Date:** 2026-01-23
-**Status:** Draft
+**Status:** Complete
+**PR:** https://github.com/trakrf/platform/pull/136
 **Workspace:** frontend
 
 ---
@@ -307,15 +308,15 @@ interface LocationFormModalProps {
 
 ## Acceptance Criteria
 
-- [ ] Hierarchy Information section removed from desktop details panel
-- [ ] Hierarchy Information section removed from mobile expanded cards
-- [ ] Create form shows parent context based on tree selection
-- [ ] Create form does NOT show parent dropdown (in create mode)
-- [ ] Creating with no selection → root-level location
-- [ ] Creating with selection → child of selected location
-- [ ] All existing tests pass
-- [ ] New unit tests for changed behavior
-- [ ] E2E tests for create flow
+- [x] Hierarchy Information section removed from desktop details panel
+- [x] Hierarchy Information section removed from mobile expanded cards
+- [x] Create form shows parent context based on tree selection
+- [x] Create form does NOT show parent dropdown (in create mode)
+- [x] Creating with no selection → root-level location (FAB creates root)
+- [x] Creating with selection → child of selected location (inline button)
+- [x] All existing tests pass (941 tests)
+- [x] New unit tests for changed behavior
+- [ ] E2E tests for create flow (existing E2E tests cover mobile/accessibility)
 
 ---
 
@@ -327,19 +328,16 @@ interface LocationFormModalProps {
 
 ---
 
-## Open Questions
+## Open Questions (Resolved)
 
 1. **Should Edit mode keep the parent selector?**
-   - Recommendation: Yes, for explicit "Move" operations. Or rely solely on Move button.
+   - ✅ **Decision:** Yes, edit mode keeps the LocationParentSelector dropdown for explicit parent changes.
 
 2. **Mobile: Where does Add button go?**
-   - Option A: Keep FAB, uses last-expanded card as context
-   - Option B: Add "+" button on each card header to add child
-   - Recommendation: Keep FAB for root, add inline "+" for children (discuss with team)
+   - ✅ **Decision:** FAB creates root-level locations. Each expanded card has an inline "Add" button to create children of that location.
 
 3. **What if user wants to create location at different level?**
-   - They can select desired parent first, then click Add
-   - Or create anywhere and use "Move" to relocate
+   - ✅ **Decision:** Select desired parent in tree/card, then use inline "Add Sub-location" button. Or create anywhere and use "Move" to relocate.
 
 ---
 
