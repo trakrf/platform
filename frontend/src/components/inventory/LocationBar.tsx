@@ -3,14 +3,14 @@
  */
 
 import { Menu } from '@headlessui/react';
-import { MapPin, ChevronDown, Check } from 'lucide-react';
+import { MapPin, ChevronDown, Check, Radio, RotateCcw } from 'lucide-react';
 import type { Location } from '@/types/locations';
 
 interface LocationBarProps {
   detectedLocation: { id: number; name: string } | null;
   detectionMethod: 'tag' | 'manual' | null;
   selectedLocationId: number | null;
-  onLocationChange: (locationId: number) => void;
+  onLocationChange: (locationId: number | null) => void;
   locations: Location[];
   isAuthenticated: boolean;
 }
@@ -74,6 +74,28 @@ export function LocationBar({
 
             <Menu.Items className="absolute right-0 mt-2 w-72 max-h-64 overflow-y-auto origin-top-right rounded-lg bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
               <div className="p-1">
+                {/* "Use detected" option when there's a detected location and manual override */}
+                {detectedLocation && selectedLocationId && selectedLocationId !== detectedLocation.id && (
+                  <>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <button
+                          onClick={() => onLocationChange(null)}
+                          className={`${
+                            active ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                          } group flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors text-blue-600 dark:text-blue-400`}
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4 flex-shrink-0" />
+                          <span className="flex-1 text-left">
+                            Use detected: {detectedLocation.name}
+                          </span>
+                        </button>
+                      )}
+                    </Menu.Item>
+                    <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                  </>
+                )}
+
                 {sortedLocations.length === 0 ? (
                   <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
                     No locations available
@@ -81,6 +103,7 @@ export function LocationBar({
                 ) : (
                   sortedLocations.map((location) => {
                     const isSelected = resolvedLocation?.id === location.id;
+                    const isDetected = detectedLocation?.id === location.id;
                     return (
                       <Menu.Item key={location.id}>
                         {({ active }) => (
@@ -97,8 +120,14 @@ export function LocationBar({
                             <span className="flex-1 text-left text-gray-900 dark:text-gray-100 truncate">
                               {location.name}
                             </span>
+                            {isDetected && (
+                              <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded flex items-center gap-1 flex-shrink-0">
+                                <Radio className="h-3 w-3" />
+                                detected
+                              </span>
+                            )}
                             {isSelected && (
-                              <Check className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                              <Check className="ml-1 h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                             )}
                           </button>
                         )}

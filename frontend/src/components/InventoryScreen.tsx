@@ -246,7 +246,7 @@ export default function InventoryScreen() {
           saveableCount={saveableCount}
         />
         <LocationBar
-          detectedLocation={resolvedLocation}
+          detectedLocation={detectedLocation}
           detectionMethod={displayDetectionMethod}
           selectedLocationId={manualLocationId}
           onLocationChange={setManualLocationId}
