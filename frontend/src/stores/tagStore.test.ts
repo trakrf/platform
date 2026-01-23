@@ -1,6 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useTagStore } from './tagStore';
+import { useAuthStore } from './authStore';
+import { lookupApi } from '@/lib/api/lookup';
 import { LOCATE_TEST_TAG, PRIMARY_TEST_TAG, EPC_FORMATS } from '@test-utils/constants';
+
+// Mock the lookup API
+vi.mock('@/lib/api/lookup');
 
 describe('TagStore - Leading Zero Trimming', () => {
   beforeEach(() => {
@@ -96,5 +101,82 @@ describe('TagStore - Leading Zero Trimming', () => {
 
     const tag = useTagStore.getState().tags[0];
     expect(tag.displayEpc).toBe('123'); // 3 digits (odd) is fine
+  });
+});
+
+describe('TagStore - Auth Guard for Lookup', () => {
+  beforeEach(() => {
+    // Clear tags and reset lookup queue
+    useTagStore.setState({
+      tags: [],
+      _lookupQueue: new Set<string>(),
+      _isLookupInProgress: false,
+      _lookupTimer: null
+    });
+    // Reset auth state
+    useAuthStore.setState({ isAuthenticated: false });
+    vi.clearAllMocks();
+  });
+
+  it('should skip API call when not authenticated', async () => {
+    // Set up queue with EPCs
+    useTagStore.setState({
+      _lookupQueue: new Set(['EPC001', 'EPC002'])
+    });
+
+    // Ensure not authenticated
+    useAuthStore.setState({ isAuthenticated: false });
+
+    // Mock the API to verify it's NOT called
+    const lookupSpy = vi.mocked(lookupApi.byTags);
+
+    await useTagStore.getState()._flushLookupQueue();
+
+    // API should NOT be called
+    expect(lookupSpy).not.toHaveBeenCalled();
+
+    // Queue should still have items (not cleared)
+    expect(useTagStore.getState()._lookupQueue.size).toBe(2);
+  });
+
+  it('should call API when authenticated', async () => {
+    // Add a tag to trigger queue setup
+    useTagStore.getState().addTag({
+      epc: 'EPC001',
+      rssi: -60
+    });
+
+    // Set up queue directly
+    useTagStore.setState({
+      _lookupQueue: new Set(['EPC001'])
+    });
+
+    useAuthStore.setState({ isAuthenticated: true });
+
+    vi.mocked(lookupApi.byTags).mockResolvedValue({
+      data: { data: {} }
+    } as any);
+
+    await useTagStore.getState()._flushLookupQueue();
+
+    expect(lookupApi.byTags).toHaveBeenCalled();
+  });
+
+  it('should not clear queue when skipping due to auth', async () => {
+    const testEpcs = new Set(['TEST001', 'TEST002', 'TEST003']);
+    useTagStore.setState({
+      _lookupQueue: testEpcs
+    });
+
+    useAuthStore.setState({ isAuthenticated: false });
+
+    await useTagStore.getState()._flushLookupQueue();
+
+    // Queue should remain intact for when user logs in
+    const queue = useTagStore.getState()._lookupQueue;
+    expect(queue.size).toBe(3);
+    expect(queue.has('TEST001')).toBe(true);
+    expect(queue.has('TEST002')).toBe(true);
+    expect(queue.has('TEST003')).toBe(true);
   });
 });
