@@ -22,6 +22,8 @@ import {
   signupTestUser,
   loginTestUser,
   getAuthToken,
+  createOrgViaAPI,
+  switchOrgViaAPI,
 } from './fixtures/org.fixture';
 
 const API_BASE = 'http://localhost:8080/api/v1';
@@ -376,7 +378,117 @@ test.describe('Inventory Save Flow', () => {
     console.log(`[Test] Clear button has pulse: ${hasPulse}`);
   });
 
-  test('3. anonymous user clicking Save redirects to login', async () => {
+  test('3. switching orgs clears asset mappings and re-enriches', async () => {
+    // This test verifies that when a user switches orgs, the asset/location
+    // mappings are cleared (since they're org-specific) and re-enrichment happens
+
+    // First, ensure we're logged in
+    console.log('[Test] Logging in for org switch test...');
+    await loginTestUser(sharedPage, testEmail, testPassword);
+
+    // Navigate to inventory and verify we have enriched tags
+    await sharedPage.goto('/#inventory');
+    await sharedPage.waitForTimeout(1000);
+
+    // Add some tags with mock enrichment data directly to store
+    await sharedPage.evaluate(() => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      const tagStore = stores?.tagStore;
+      if (tagStore) {
+        // Clear existing tags first
+        tagStore.getState().clearTags();
+
+        // Add tags with fake enrichment (simulating tags from old org)
+        tagStore.getState().setTags([
+          {
+            epc: 'ORG_TEST_0000000000001',
+            displayEpc: 'ORG_TEST_0000000000001',
+            count: 1,
+            source: 'rfid',
+            type: 'asset',
+            assetId: 99999,
+            assetName: 'Old Org Asset',
+            timestamp: Date.now(),
+          },
+          {
+            epc: 'ORG_TEST_0000000000002',
+            displayEpc: 'ORG_TEST_0000000000002',
+            count: 1,
+            source: 'rfid',
+            type: 'location',
+            locationId: 88888,
+            locationName: 'Old Org Location',
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+    });
+
+    // Verify tags have enrichment data
+    const beforeSwitch = await sharedPage.evaluate(() => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      const tags = stores?.tagStore?.getState().tags || [];
+      return {
+        count: tags.length,
+        enriched: tags.filter((t: any) => t.assetId !== undefined || t.locationId !== undefined).length,
+        tags: tags.map((t: any) => ({
+          epc: t.epc,
+          type: t.type,
+          assetId: t.assetId,
+          locationId: t.locationId,
+        })),
+      };
+    });
+
+    console.log('[Test] Before org switch:', beforeSwitch);
+    expect(beforeSwitch.enriched).toBe(2);
+
+    // Create a new org
+    console.log('[Test] Creating new org...');
+    const newOrg = await createOrgViaAPI(sharedPage, `New Org ${testId}`);
+    console.log(`[Test] Created org: ${newOrg.name} (ID: ${newOrg.id})`);
+
+    // Switch to the new org via API (updates token in localStorage)
+    console.log('[Test] Switching to new org via API...');
+    await switchOrgViaAPI(sharedPage, newOrg.id);
+
+    // Reload the page to pick up the new token and trigger the org change subscription
+    await sharedPage.reload({ waitUntil: 'networkidle' });
+
+    // Navigate to inventory to see the effect
+    await sharedPage.goto('/#inventory');
+    await sharedPage.waitForTimeout(1000);
+
+    // Verify tags have been cleared of enrichment data
+    const afterSwitch = await sharedPage.evaluate(() => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      const tags = stores?.tagStore?.getState().tags || [];
+      return {
+        count: tags.length,
+        enriched: tags.filter((t: any) => t.assetId !== undefined || t.locationId !== undefined).length,
+        unknownType: tags.filter((t: any) => t.type === 'unknown').length,
+        tags: tags.map((t: any) => ({
+          epc: t.epc,
+          type: t.type,
+          assetId: t.assetId,
+          locationId: t.locationId,
+        })),
+      };
+    });
+
+    console.log('[Test] After org switch:', afterSwitch);
+
+    // Tags should still exist but with cleared enrichment
+    expect(afterSwitch.count).toBe(beforeSwitch.count);
+    // Enrichment should be cleared (assetId/locationId undefined)
+    expect(afterSwitch.enriched).toBe(0);
+    // Type should be reset to 'unknown'
+    expect(afterSwitch.unknownType).toBe(afterSwitch.count);
+
+    console.log('[Test] Org switch correctly cleared asset/location mappings');
+  });
+
+  test('4. anonymous user clicking Save redirects to login', async () => {
     // Clear auth state
     await clearAuthState(sharedPage);
     await sharedPage.reload({ waitUntil: 'networkidle' });
