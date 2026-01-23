@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRA-140 Mockup B1: Inline Drill-Down with Table</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg-primary: #111827;
+      --bg-secondary: #1f2937;
+      --bg-tertiary: #374151;
+      --border-color: #374151;
+      --text-primary: #f9fafb;
+      --text-secondary: #9ca3af;
+      --text-muted: #6b7280;
+      --accent-blue: #3b82f6;
+      --accent-blue-hover: #2563eb;
+      --accent-green: #10b981;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+    }
+    .sidebar {
+      width: 220px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      padding: 16px 0;
+      flex-shrink: 0;
+    }
+    .logo { padding: 0 16px 16px; font-size: 20px; font-weight: 700; color: var(--accent-blue); }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; color: var(--text-secondary);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .nav-item:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .nav-item.active { background: var(--accent-blue); color: white; }
+    .nav-icon { width: 20px; height: 20px; opacity: 0.7; }
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .header {
+      padding: 16px 24px; border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .header h1 { font-size: 20px; font-weight: 600; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-radius: 6px; font-size: 14px;
+      font-weight: 500; cursor: pointer; transition: all 0.15s; border: none;
+    }
+    .btn-primary { background: var(--accent-blue); color: white; }
+    .btn-primary:hover { background: var(--accent-blue-hover); }
+    .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+    .content { flex: 1; padding: 24px; overflow-y: auto; }
+    .filters { display: flex; gap: 12px; margin-bottom: 16px; }
+    .search-box { flex: 1; max-width: 300px; position: relative; }
+    .search-box input {
+      width: 100%; padding: 10px 12px 10px 40px;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 8px; color: var(--text-primary); font-size: 14px;
+    }
+    .search-box input::placeholder { color: var(--text-muted); }
+    .search-box svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+    select {
+      padding: 10px 32px 10px 12px; background: var(--bg-secondary);
+      border: 1px solid var(--border-color); border-radius: 8px;
+      color: var(--text-primary); font-size: 14px; cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center;
+    }
+    .results-count { color: var(--text-secondary); font-size: 14px; margin-bottom: 12px; }
+    .hint { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
+    .table-container {
+      background: var(--bg-secondary); border-radius: 12px;
+      border: 1px solid var(--border-color); overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-secondary); background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-color);
+    }
+    td { padding: 14px 16px; font-size: 14px; border-bottom: 1px solid var(--border-color); }
+    tr:last-child td { border-bottom: none; }
+    .asset-row { cursor: pointer; transition: background 0.15s; }
+    .asset-row:hover { background: var(--bg-tertiary); }
+    .asset-row.expanded { background: rgba(59, 130, 246, 0.1); }
+    .expand-icon { display: inline-block; width: 20px; transition: transform 0.2s; }
+    .asset-row.expanded .expand-icon { transform: rotate(90deg); }
+    .asset-name { font-weight: 500; }
+    .identifier { color: var(--text-secondary); font-family: monospace; font-size: 13px; }
+    .location { display: flex; align-items: center; gap: 6px; }
+    .location-dot { width: 8px; height: 8px; background: var(--accent-green); border-radius: 50%; }
+    .time-ago { color: var(--text-secondary); }
+    .history-panel { display: none; background: var(--bg-primary); border-top: 1px solid var(--border-color); }
+    .history-panel.show { display: block; }
+    .history-content { padding: 20px 16px 20px 48px; }
+    .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .history-title { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+    .history-filters { display: flex; gap: 12px; align-items: center; }
+    .history-table {
+      background: var(--bg-secondary); border-radius: 8px;
+      border: 1px solid var(--border-color); overflow: hidden; margin-bottom: 12px;
+    }
+    .history-table th { background: var(--bg-tertiary); padding: 10px 14px; font-size: 11px; }
+    .history-table td { padding: 10px 14px; font-size: 13px; }
+    .current-badge {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+      background: rgba(16, 185, 129, 0.2); color: var(--accent-green);
+      border-radius: 4px; font-size: 11px; font-weight: 500;
+    }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .status-dot.current { background: var(--accent-green); }
+    .status-dot.past { background: transparent; border: 2px solid var(--text-muted); }
+    .history-summary { color: var(--text-secondary); font-size: 13px; }
+    .pagination {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px; border-top: 1px solid var(--border-color); background: var(--bg-secondary);
+    }
+    .pagination-info { color: var(--text-secondary); font-size: 14px; }
+    .pagination-controls { display: flex; gap: 8px; }
+    .page-btn {
+      padding: 6px 12px; background: var(--bg-tertiary);
+      border: 1px solid var(--border-color); border-radius: 6px;
+      color: var(--text-primary); cursor: pointer; font-size: 14px;
+    }
+    .page-btn:hover { background: var(--border-color); }
+    .page-btn.active { background: var(--accent-blue); border-color: var(--accent-blue); }
+    .mockup-badge {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--accent-blue); color: white;
+      padding: 8px 16px; border-radius: 20px;
+      font-size: 12px; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="logo">TrakRF</div>
+    <nav>
+      <div class="nav-item"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>Home</div>
+      <div class="nav-item"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Inventory</div>
+      <div class="nav-item"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>Assets</div>
+      <div class="nav-item"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Locations</div>
+      <div class="nav-item active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Reports</div>
+      <div class="nav-item"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Settings</div>
+    </nav>
+  </aside>
+  <main class="main">
+    <header class="header">
+      <h1>Asset Location Report</h1>
+      <button class="btn btn-primary">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        Export CSV
+      </button>
+    </header>
+    <div class="content">
+      <div class="filters">
+        <div class="search-box">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" placeholder="Search assets...">
+        </div>
+        <select>
+          <option>All Locations</option>
+          <option>Studio A</option>
+          <option>Studio B</option>
+          <option>Storage Room</option>
+          <option>Edit Bay 1</option>
+        </select>
+      </div>
+      <div class="results-count">47 assets found</div>
+      <p class="hint">Click any row to view movement history</p>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr><th style="width:40px"></th><th>Asset Name</th><th>Identifier</th><th>Location</th><th>Last Seen</th></tr>
+          </thead>
+          <tbody>
+            <tr class="asset-row" onclick="toggleRow(this)">
+              <td><span class="expand-icon">▶</span></td>
+              <td class="asset-name">Sony PXW-FX9 Camera</td>
+              <td class="identifier">CAM-001</td>
+              <td><div class="location"><span class="location-dot"></span>Studio A</div></td>
+              <td class="time-ago">2 hours ago</td>
+            </tr>
+            <tr class="history-row"><td colspan="5" style="padding:0;">
+              <div class="history-panel">
+                <div class="history-content">
+                  <div class="history-header">
+                    <span class="history-title">MOVEMENT HISTORY</span>
+                    <div class="history-filters">
+                      <select style="padding:6px 28px 6px 10px;font-size:13px;"><option>Last 7 Days</option><option>Last 30 Days</option></select>
+                      <button class="btn btn-secondary" style="padding:6px 12px;font-size:13px;">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>CSV
+                      </button>
+                    </div>
+                  </div>
+                  <div class="history-table">
+                    <table>
+                      <thead><tr><th style="width:40px;"></th><th>Location</th><th>Arrived</th><th>Duration</th></tr></thead>
+                      <tbody>
+                        <tr><td><span class="status-dot current"></span></td><td>Studio A</td><td>Jan 23, 10:30 AM</td><td><span class="current-badge">2h 15m (current)</span></td></tr>
+                        <tr><td><span class="status-dot past"></span></td><td>Storage Room</td><td>Jan 22, 5:00 PM</td><td>17h 30m</td></tr>
+                        <tr><td><span class="status-dot past"></span></td><td>Edit Bay 1</td><td>Jan 22, 2:00 PM</td><td>3h 0m</td></tr>
+                        <tr><td><span class="status-dot past"></span></td><td>Studio A</td><td>Jan 20, 9:00 AM</td><td>2d 5h</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="history-summary">4 location changes in selected period</div>
+                </div>
+              </div>
+            </td></tr>
+            <tr class="asset-row" onclick="toggleRow(this)">
+              <td><span class="expand-icon">▶</span></td>
+              <td class="asset-name">Shure SM58 Microphone</td>
+              <td class="identifier">MIC-042</td>
+              <td><div class="location"><span class="location-dot"></span>Booth 3</div></td>
+              <td class="time-ago">15 minutes ago</td>
+            </tr>
+            <tr class="history-row"><td colspan="5" style="padding:0;"><div class="history-panel"></div></td></tr>
+            <tr class="asset-row" onclick="toggleRow(this)">
+              <td><span class="expand-icon">▶</span></td>
+              <td class="asset-name">MacBook Pro 16"</td>
+              <td class="identifier">LPT-103</td>
+              <td><div class="location"><span class="location-dot"></span>Edit Bay 2</div></td>
+              <td class="time-ago">1 day ago</td>
+            </tr>
+            <tr class="history-row"><td colspan="5" style="padding:0;"><div class="history-panel"></div></td></tr>
+            <tr class="asset-row" onclick="toggleRow(this)">
+              <td><span class="expand-icon">▶</span></td>
+              <td class="asset-name">Sennheiser HD 600</td>
+              <td class="identifier">HP-007</td>
+              <td><div class="location"><span class="location-dot"></span>Control Room</div></td>
+              <td class="time-ago">3 hours ago</td>
+            </tr>
+            <tr class="history-row"><td colspan="5" style="padding:0;"><div class="history-panel"></div></td></tr>
+            <tr class="asset-row" onclick="toggleRow(this)">
+              <td><span class="expand-icon">▶</span></td>
+              <td class="asset-name">Canon EOS R5</td>
+              <td class="identifier">CAM-015</td>
+              <td><div class="location"><span class="location-dot"></span>Studio B</div></td>
+              <td class="time-ago">45 minutes ago</td>
+            </tr>
+            <tr class="history-row"><td colspan="5" style="padding:0;"><div class="history-panel"></div></td></tr>
+          </tbody>
+        </table>
+        <div class="pagination">
+          <div class="pagination-info">Showing 1-10 of 47 assets</div>
+          <div class="pagination-controls">
+            <button class="page-btn">‹</button>
+            <button class="page-btn active">1</button>
+            <button class="page-btn">2</button>
+            <button class="page-btn">3</button>
+            <button class="page-btn">›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div class="mockup-badge">Mockup B1: Inline Table</div>
+  <script>
+    function toggleRow(row) {
+      const historyRow = row.nextElementSibling;
+      const panel = historyRow.querySelector('.history-panel');
+      const wasExpanded = row.classList.contains('expanded');
+      document.querySelectorAll('.asset-row').forEach(r => r.classList.remove('expanded'));
+      document.querySelectorAll('.history-panel').forEach(p => p.classList.remove('show'));
+      if (!wasExpanded) { row.classList.add('expanded'); panel.classList.add('show'); }
+    }
+  </script>
+</body>
+</html>
