@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRA-140: Asset Location Reports - Mockups</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            dark: {
+              bg: '#0f1419',
+              card: '#1a1f2e',
+              border: '#2d3748',
+              hover: '#252d3d'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-dark-bg text-gray-100 min-h-screen p-8">
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold mb-2">TRA-140: Asset Location Reports</h1>
+    <p class="text-gray-400 mb-8">UI Mockups for NADA Asset Location Reporting Feature</p>
+
+    <div class="grid gap-6">
+      <!-- Mockup A -->
+      <a href="mockup-a-sidebar.html" class="block bg-dark-card border border-dark-border rounded-lg p-6 hover:border-yellow-600/50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="px-2 py-1 bg-yellow-600/20 text-yellow-400 rounded text-xs font-medium mb-3 inline-block">Option A</span>
+            <h2 class="text-xl font-semibold mb-2 group-hover:text-yellow-400 transition-colors">Sidebar Filters</h2>
+            <p class="text-gray-400 mb-4">Classic layout matching existing Assets/Locations pages with filter sidebar on the left.</p>
+            <ul class="text-sm text-gray-500 space-y-1">
+              <li>+ Consistent with existing UI patterns</li>
+              <li>+ Familiar filter interaction</li>
+              <li>- Takes horizontal space</li>
+            </ul>
+          </div>
+          <svg class="w-6 h-6 text-gray-500 group-hover:text-yellow-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </a>
+
+      <!-- Mockup B -->
+      <a href="mockup-b-toolbar.html" class="block bg-dark-card border border-dark-border rounded-lg p-6 hover:border-green-600/50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs font-medium mb-3 inline-block">Option B</span>
+            <h2 class="text-xl font-semibold mb-2 group-hover:text-green-400 transition-colors">Toolbar Filters</h2>
+            <p class="text-gray-400 mb-4">Compact horizontal toolbar with inline dropdowns. Day-grouped timeline in slide-over.</p>
+            <ul class="text-sm text-gray-500 space-y-1">
+              <li>+ Maximizes vertical space for data</li>
+              <li>+ Clean, modern appearance</li>
+              <li>- Less filter visibility</li>
+            </ul>
+          </div>
+          <svg class="w-6 h-6 text-gray-500 group-hover:text-green-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </a>
+
+      <!-- Mockup C -->
+      <a href="mockup-c-dashboard.html" class="block bg-dark-card border border-dark-border rounded-lg p-6 hover:border-purple-600/50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="px-2 py-1 bg-purple-600/20 text-purple-400 rounded text-xs font-medium mb-3 inline-block">Option C</span>
+            <h2 class="text-xl font-semibold mb-2 group-hover:text-purple-400 transition-colors">Dashboard Stats</h2>
+            <p class="text-gray-400 mb-4">Summary stat cards + tabs for future reports. Status badges show asset freshness.</p>
+            <ul class="text-sm text-gray-500 space-y-1">
+              <li>+ At-a-glance insights</li>
+              <li>+ Expandable for future reports</li>
+              <li>- More complex to implement</li>
+            </ul>
+          </div>
+          <svg class="w-6 h-6 text-gray-500 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </a>
+    </div>
+
+    <!-- Feature Summary -->
+    <div class="mt-8 bg-dark-card border border-dark-border rounded-lg p-6">
+      <h3 class="text-lg font-semibold mb-4">Common Features (All Mockups)</h3>
+      <div class="grid md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <h4 class="font-medium text-gray-300 mb-2">Report 1: Current Asset Locations</h4>
+          <ul class="text-gray-500 space-y-1">
+            <li>&#x2713; Asset name, location, last seen</li>
+            <li>&#x2713; Search by asset name</li>
+            <li>&#x2713; Filter by location</li>
+            <li>&#x2713; Click-through to history</li>
+            <li>&#x2713; CSV export</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-medium text-gray-300 mb-2">Report 2: Asset History (Slide-over)</h4>
+          <ul class="text-gray-500 space-y-1">
+            <li>&#x2713; Location timeline with duration</li>
+            <li>&#x2713; Date presets (Today, 7d, 30d, 90d)</li>
+            <li>&#x2713; Custom date range picker</li>
+            <li>&#x2713; CSV export for history</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-gray-600 mt-8 text-sm">
+      Click any mockup to view. Each has interactive elements (click table rows to see slide-over).
+    </p>
+  </div>
+</body>
+</html>

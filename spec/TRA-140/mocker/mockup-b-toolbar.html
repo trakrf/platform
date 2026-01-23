@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mockup B: Toolbar Filters - Asset Location Reports</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            dark: {
+              bg: '#0f1419',
+              card: '#1a1f2e',
+              border: '#2d3748',
+              hover: '#252d3d'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .slide-over { transform: translateX(100%); }
+    .slide-over.open { transform: translateX(0); }
+  </style>
+</head>
+<body class="bg-dark-bg text-gray-100 min-h-screen">
+
+  <!-- Top Navigation -->
+  <nav class="bg-dark-card border-b border-dark-border px-4 py-3">
+    <div class="flex items-center space-x-6">
+      <span class="text-xl font-bold text-blue-400">TrakRF</span>
+      <div class="flex space-x-1">
+        <a href="#" class="px-3 py-2 rounded text-gray-400 hover:bg-dark-hover">Home</a>
+        <a href="#" class="px-3 py-2 rounded text-gray-400 hover:bg-dark-hover">Inventory</a>
+        <a href="#" class="px-3 py-2 rounded text-gray-400 hover:bg-dark-hover">Assets</a>
+        <a href="#" class="px-3 py-2 rounded text-gray-400 hover:bg-dark-hover">Locations</a>
+        <a href="#" class="px-3 py-2 rounded bg-blue-600 text-white">Reports</a>
+        <a href="#" class="px-3 py-2 rounded text-gray-400 hover:bg-dark-hover">Settings</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="p-6 max-w-7xl mx-auto">
+    <!-- Breadcrumb -->
+    <div class="text-sm text-gray-400 mb-2">
+      Reports <span class="mx-2">/</span> <span class="text-gray-200">Current Asset Locations</span>
+    </div>
+
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-semibold">Current Asset Locations</h1>
+    </div>
+
+    <!-- Toolbar Filters -->
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4 mb-4">
+      <div class="flex flex-wrap gap-4 items-center">
+        <!-- Search -->
+        <div class="flex-1 min-w-64">
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input type="text" placeholder="Search assets..." class="w-full bg-dark-bg border border-dark-border rounded pl-10 pr-4 py-2 text-gray-100 placeholder-gray-500">
+          </div>
+        </div>
+
+        <!-- Location Filter -->
+        <select class="bg-dark-bg border border-dark-border rounded px-4 py-2 text-gray-100">
+          <option>All Locations</option>
+          <option>Building A</option>
+          <option>Building B</option>
+          <option>Storage</option>
+          <option>Auditorium</option>
+        </select>
+
+        <!-- Time Filter -->
+        <select class="bg-dark-bg border border-dark-border rounded px-4 py-2 text-gray-100">
+          <option>Any time</option>
+          <option selected>Last 24 hours</option>
+          <option>Last 7 days</option>
+          <option>Last 30 days</option>
+        </select>
+
+        <!-- Export -->
+        <button class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex items-center">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Export
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-dark-card rounded-lg border border-dark-border overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-dark-bg">
+          <tr>
+            <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Asset Name</th>
+            <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Current Location</th>
+            <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Last Seen</th>
+            <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Tags</th>
+            <th class="w-10"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-dark-border">
+          <tr class="hover:bg-dark-hover cursor-pointer" onclick="openSlideOver()">
+            <td class="px-4 py-4">
+              <div class="flex items-center">
+                <span class="w-8 h-8 bg-blue-600/20 text-blue-400 rounded flex items-center justify-center mr-3">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                  </svg>
+                </span>
+                <span class="font-medium">Projector A1</span>
+              </div>
+            </td>
+            <td class="px-4 py-4 text-gray-300">Room 101</td>
+            <td class="px-4 py-4 text-gray-400">2 min ago</td>
+            <td class="px-4 py-4">
+              <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs">AV</span>
+            </td>
+            <td class="px-4 py-4 text-gray-500">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </td>
+          </tr>
+          <tr class="hover:bg-dark-hover cursor-pointer" onclick="openSlideOver()">
+            <td class="px-4 py-4">
+              <div class="flex items-center">
+                <span class="w-8 h-8 bg-green-600/20 text-green-400 rounded flex items-center justify-center mr-3">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                  </svg>
+                </span>
+                <span class="font-medium">Laptop Cart B</span>
+              </div>
+            </td>
+            <td class="px-4 py-4 text-gray-300">Storage</td>
+            <td class="px-4 py-4 text-gray-400">15 min ago</td>
+            <td class="px-4 py-4">
+              <span class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs">IT</span>
+            </td>
+            <td class="px-4 py-4 text-gray-500">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </td>
+          </tr>
+          <tr class="hover:bg-dark-hover cursor-pointer" onclick="openSlideOver()">
+            <td class="px-4 py-4">
+              <div class="flex items-center">
+                <span class="w-8 h-8 bg-blue-600/20 text-blue-400 rounded flex items-center justify-center mr-3">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+                  </svg>
+                </span>
+                <span class="font-medium">AV Rack #3</span>
+              </div>
+            </td>
+            <td class="px-4 py-4 text-gray-300">Auditorium</td>
+            <td class="px-4 py-4 text-gray-400">1 hour ago</td>
+            <td class="px-4 py-4">
+              <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs">AV</span>
+            </td>
+            <td class="px-4 py-4 text-gray-500">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </td>
+          </tr>
+          <tr class="hover:bg-dark-hover cursor-pointer" onclick="openSlideOver()">
+            <td class="px-4 py-4">
+              <div class="flex items-center">
+                <span class="w-8 h-8 bg-purple-600/20 text-purple-400 rounded flex items-center justify-center mr-3">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                  </svg>
+                </span>
+                <span class="font-medium">Camera Kit</span>
+              </div>
+            </td>
+            <td class="px-4 py-4 text-gray-300">Room 205</td>
+            <td class="px-4 py-4 text-gray-400">3 hours ago</td>
+            <td class="px-4 py-4">
+              <span class="px-2 py-1 bg-purple-600/20 text-purple-400 rounded text-xs">Media</span>
+            </td>
+            <td class="px-4 py-4 text-gray-500">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </td>
+          </tr>
+          <tr class="hover:bg-dark-hover cursor-pointer" onclick="openSlideOver()">
+            <td class="px-4 py-4">
+              <div class="flex items-center">
+                <span class="w-8 h-8 bg-blue-600/20 text-blue-400 rounded flex items-center justify-center mr-3">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                  </svg>
+                </span>
+                <span class="font-medium">Microphone Set</span>
+              </div>
+            </td>
+            <td class="px-4 py-4 text-gray-300">Conference A</td>
+            <td class="px-4 py-4 text-gray-400">Yesterday</td>
+            <td class="px-4 py-4">
+              <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs">AV</span>
+            </td>
+            <td class="px-4 py-4 text-gray-500">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </td>
+          </tr>
+          <tr class="hover:bg-dark-hover cursor-pointer" onclick="openSlideOver()">
+            <td class="px-4 py-4">
+              <div class="flex items-center">
+                <span class="w-8 h-8 bg-blue-600/20 text-blue-400 rounded flex items-center justify-center mr-3">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                  </svg>
+                </span>
+                <span class="font-medium">Display Stand</span>
+              </div>
+            </td>
+            <td class="px-4 py-4 text-gray-300">Lobby</td>
+            <td class="px-4 py-4 text-gray-400">2 days ago</td>
+            <td class="px-4 py-4">
+              <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs">AV</span>
+            </td>
+            <td class="px-4 py-4 text-gray-500">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex justify-between items-center mt-4 text-sm text-gray-400">
+      <div class="flex items-center space-x-4">
+        <span>Showing 1-6 of 124</span>
+        <select class="bg-dark-card border border-dark-border rounded px-2 py-1 text-sm">
+          <option>10 per page</option>
+          <option>20 per page</option>
+          <option>50 per page</option>
+        </select>
+      </div>
+      <div class="flex space-x-1">
+        <button class="px-3 py-1 bg-dark-card border border-dark-border rounded hover:bg-dark-hover">&lt;</button>
+        <button class="px-3 py-1 bg-blue-600 rounded">1</button>
+        <button class="px-3 py-1 bg-dark-card border border-dark-border rounded hover:bg-dark-hover">2</button>
+        <button class="px-3 py-1 bg-dark-card border border-dark-border rounded hover:bg-dark-hover">3</button>
+        <span class="px-2 py-1">...</span>
+        <button class="px-3 py-1 bg-dark-card border border-dark-border rounded hover:bg-dark-hover">&gt;</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Slide-Over Panel -->
+  <div id="slideOverBackdrop" class="fixed inset-0 bg-black bg-opacity-50 hidden" onclick="closeSlideOver()"></div>
+  <div id="slideOver" class="slide-over fixed right-0 top-0 h-full w-[420px] bg-dark-card border-l border-dark-border shadow-xl transition-transform duration-300 overflow-y-auto">
+    <!-- Header -->
+    <div class="p-4 border-b border-dark-border">
+      <div class="flex justify-between items-start">
+        <button onclick="closeSlideOver()" class="text-gray-400 hover:text-gray-200 mr-3">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <div class="flex-1">
+          <h2 class="text-lg font-semibold">Projector A1</h2>
+          <p class="text-sm text-gray-400">ID: AST-001 | Type: Device</p>
+        </div>
+        <button onclick="closeSlideOver()" class="text-gray-400 hover:text-gray-200">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="flex gap-2 mt-2">
+        <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs">AV</span>
+        <span class="px-2 py-1 bg-gray-600/20 text-gray-400 rounded text-xs">Equipment</span>
+      </div>
+    </div>
+
+    <div class="p-4">
+      <!-- Date Range Filter -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-300 mb-3">Location History</label>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <button class="px-3 py-1.5 bg-blue-600 rounded text-sm">Today</button>
+          <button class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm hover:bg-dark-hover">7d</button>
+          <button class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm hover:bg-dark-hover">30d</button>
+          <button class="px-3 py-1.5 bg-dark-bg border border-dark-border rounded text-sm hover:bg-dark-hover">All</button>
+        </div>
+        <div class="flex items-center space-x-2 text-sm">
+          <input type="date" class="bg-dark-bg border border-dark-border rounded px-3 py-1.5" value="2026-01-15">
+          <span class="text-gray-500">to</span>
+          <input type="date" class="bg-dark-bg border border-dark-border rounded px-3 py-1.5" value="2026-01-23">
+        </div>
+      </div>
+
+      <!-- Timeline with day groupings -->
+      <div class="space-y-6">
+        <!-- Today -->
+        <div>
+          <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Today</h4>
+          <div class="space-y-3">
+            <div class="flex items-start">
+              <div class="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3"></div>
+              <div class="flex-1 bg-dark-bg rounded-lg p-3">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <p class="font-medium">Room 101</p>
+                    <p class="text-sm text-green-400">Currently here</p>
+                  </div>
+                  <span class="text-sm text-gray-400">10:32 AM</span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">2h 15m so far</p>
+              </div>
+            </div>
+            <div class="flex items-start">
+              <div class="w-2 h-2 bg-gray-500 rounded-full mt-2 mr-3"></div>
+              <div class="flex-1 bg-dark-bg rounded-lg p-3">
+                <div class="flex justify-between items-start">
+                  <p class="font-medium">Storage</p>
+                  <span class="text-sm text-gray-400">8:17 AM</span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">45 minutes</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Yesterday -->
+        <div>
+          <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Yesterday</h4>
+          <div class="space-y-3">
+            <div class="flex items-start">
+              <div class="w-2 h-2 bg-gray-500 rounded-full mt-2 mr-3"></div>
+              <div class="flex-1 bg-dark-bg rounded-lg p-3">
+                <div class="flex justify-between items-start">
+                  <p class="font-medium">Auditorium</p>
+                  <span class="text-sm text-gray-400">4:30 PM</span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">3h 10m</p>
+              </div>
+            </div>
+            <div class="flex items-start">
+              <div class="w-2 h-2 bg-gray-500 rounded-full mt-2 mr-3"></div>
+              <div class="flex-1 bg-dark-bg rounded-lg p-3">
+                <div class="flex justify-between items-start">
+                  <p class="font-medium">Room 101</p>
+                  <span class="text-sm text-gray-400">2:15 PM</span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">2h 15m</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Jan 21 -->
+        <div>
+          <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Jan 21</h4>
+          <div class="space-y-3">
+            <div class="flex items-start">
+              <div class="w-2 h-2 bg-gray-500 rounded-full mt-2 mr-3"></div>
+              <div class="flex-1 bg-dark-bg rounded-lg p-3">
+                <div class="flex justify-between items-start">
+                  <p class="font-medium">Storage</p>
+                  <span class="text-sm text-gray-400">9:00 AM</span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">5h 15m</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Button -->
+      <button class="w-full mt-6 bg-dark-bg border border-dark-border rounded px-4 py-2.5 hover:bg-dark-hover flex items-center justify-center">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        Download CSV
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function openSlideOver() {
+      document.getElementById('slideOverBackdrop').classList.remove('hidden');
+      document.getElementById('slideOver').classList.add('open');
+    }
+    function closeSlideOver() {
+      document.getElementById('slideOverBackdrop').classList.add('hidden');
+      document.getElementById('slideOver').classList.remove('open');
+    }
+  </script>
+
+  <!-- Design Notes -->
+  <div class="fixed bottom-4 left-4 bg-green-900 border border-green-700 rounded-lg p-3 max-w-sm text-sm">
+    <strong class="text-green-300">Mockup B: Toolbar Filters</strong>
+    <p class="text-green-200 mt-1">Compact horizontal filters maximize data space. Day-grouped timeline in slide-over. Click any row to see details.</p>
+  </div>
+</body>
+</html>
