@@ -7,26 +7,32 @@ Parallel Claude instances worked on mockups simultaneously. This document tracks
 ## Instance 1 (Claude - "mocky" assignment)
 
 **Assigned directory:** `spec/TRA-140/mocky/`
-**Actual directory used:** `spec/TRA-140/mocks/` (mistake - used wrong name)
+**Status:** ✅ RESOLVED - Recreated mockups in correct directory
 
-### Files Created
+### Files Created (Recreated)
 
-**Markdown specs in `spec/TRA-140/mocks/`:**
-- `mockup-a-tabbed-reports.md` - Tabbed reports page, table-based history
-- `mockup-b-inline-drilldown.md` - Updated to visual timeline approach
-- `mockup-c-split-panel.md` - Split panel master-detail with hybrid table+timeline
+**HTML mockups in `spec/TRA-140/mocky/`:**
+- `index.html` - Landing page with links to all 3 mockups
+- `mockup-a-current-locations.html` - Tabbed reports, Current Locations tab with table
+- `mockup-b-asset-history.html` - Tabbed reports, Asset History tab with visual timeline
+- `mockup-c-split-panel.html` - Split panel master-detail with hybrid table + timeline
 
-**HTML mockups:** Created but pushed to separate branch for GitHub Pages
+### Design Approach
+
+Focused on **tabbed reports** with **visual timeline** for history:
+- **Mockup A**: Standard table layout for Current Locations (consistent with existing TrakRF)
+- **Mockup B**: Visual timeline with duration bars grouped by day (easy pattern recognition)
+- **Mockup C**: Split panel showing both table summary AND horizontal timeline
+
+### User Clarification Questions Asked
+
+1. Nav placement → "New 'Reports' sidebar tab"
+2. Report organization → "Tab switcher at top"
+3. History view → "Both table and timeline options"
 
 ### GitHub Pages Setup
 
-Created branch `mockups/tra-140-reports` with HTML files at root:
-- `mockup-b1-inline-table.html`
-- `mockup-b2-inline-timeline.html`
-- `mockup-c1-split-table.html`
-- `mockup-c2-split-timeline.html`
-
-Enabled GitHub Pages: https://trakrf.github.io/platform/
+Created branch `mockups/tra-140-reports` and enabled GitHub Pages.
 
 ### Linear Updates
 
@@ -34,11 +40,10 @@ Added two comments to TRA-140:
 1. Summary of mockup approaches
 2. Live GitHub Pages URLs
 
-### Issues/Collisions
+### Issues/Collisions (Resolved)
 
-- Used `mocks/` instead of `mocky/` as instructed
-- HTML files only exist on `mockups/tra-140-reports` branch, not on main working branch
-- May have overwritten or conflicted with files from other instances
+- Initially used `mocks/` instead of `mocky/` - **FIXED**: Recreated in correct `mocky/` directory
+- Original HTML files were lost during branch operations - **FIXED**: Recreated all 3 mockups
 
 ---
 
@@ -142,10 +147,9 @@ Added one comment to TRA-140 with mockup descriptions and viewing instructions.
 
 ```
 spec/TRA-140/
-├── mockin/           # Has 3 HTML + 3 MD + index.html
-├── mocks/            # Has 4 MD only (Instance 1's work)
-├── mocker/           # MISSING
-├── mocky/            # MISSING (Instance 1 should have used this)
+├── mockin/           # Instance 2: 3 HTML + 3 MD + index.html (sidebar/toolbar/dashboard)
+├── mocks/            # Instance 3: 4 MD (b1, b2, c1, c2 inline/split variants)
+├── mocky/            # Instance 1: 3 HTML + index.html (tabbed + timeline) ✅ RECREATED
 └── MERGE.md          # This file
 ```
 
@@ -167,15 +171,29 @@ These HTML files are at the repo root and should be organized:
 
 **Live at:** https://trakrf.github.io/platform/
 
+### Instance 2 (mockin) - Filter Placement Exploration
 | # | Mockup | Layout | History View | URL |
 |---|--------|--------|--------------|-----|
 | 1 | A: Sidebar Filters | Classic sidebar | Slide-over | [View](https://trakrf.github.io/platform/mockup-a-sidebar.html) |
 | 2 | B: Toolbar Filters | Horizontal toolbar | Slide-over | [View](https://trakrf.github.io/platform/mockup-b-toolbar.html) |
 | 3 | C: Dashboard Stats | Stats cards + tabs | Slide-over | [View](https://trakrf.github.io/platform/mockup-c-dashboard.html) |
+
+### Instance 3 (mocks) - Inline vs Split Panel
+| # | Mockup | Layout | History View | URL |
+|---|--------|--------|--------------|-----|
 | 4 | B1: Inline + Table | Expandable rows | Nested table | [View](https://trakrf.github.io/platform/tra140-b1-inline-table.html) |
 | 5 | B2: Inline + Timeline | Expandable rows | Visual timeline | [View](https://trakrf.github.io/platform/tra140-b2-inline-timeline.html) |
 | 6 | C1: Split + Table | Master-detail | Table in panel | [View](https://trakrf.github.io/platform/tra140-c1-split-table.html) |
 | 7 | C2: Split + Timeline | Master-detail | Timeline in panel | [View](https://trakrf.github.io/platform/tra140-c2-split-timeline.html) |
+
+### Instance 1 (mocky) - Tabbed Reports + Visual Timeline
+| # | Mockup | Layout | History View | Local File |
+|---|--------|--------|--------------|------------|
+| 8 | Tabbed: Current Locations | Tab switcher | Table | `spec/TRA-140/mocky/mockup-a-current-locations.html` |
+| 9 | Tabbed: Asset History | Tab switcher | Visual timeline | `spec/TRA-140/mocky/mockup-b-asset-history.html` |
+| 10 | Split Panel Hybrid | Master-detail | Table + Timeline | `spec/TRA-140/mocky/mockup-c-split-panel.html` |
+
+*Note: Instance 1's mockups need to be pushed to GitHub Pages branch*
 
 **Key Design Dimensions Explored:**
 - **Filter placement:** Sidebar vs toolbar vs inline

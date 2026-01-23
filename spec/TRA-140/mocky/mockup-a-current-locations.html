@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mockup A: Tabbed Reports - Current Locations</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+    .row-hover:hover { background-color: #f3f4f6; }
+  </style>
+</head>
+<body class="h-full bg-gray-50 font-sans">
+  <div class="flex h-full">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-900 text-white flex flex-col">
+      <div class="p-4 border-b border-gray-700">
+        <h1 class="text-xl font-bold text-blue-400">TrakRF</h1>
+      </div>
+      <nav class="flex-1 p-2 space-y-1">
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+          Home
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Inventory
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          Locate
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+          Barcode
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+          Assets
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Locations
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Reports
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:bg-gray-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Settings
+        </a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Header -->
+      <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <h1 class="text-2xl font-semibold text-gray-900">Reports</h1>
+        <div class="flex items-center gap-4">
+          <select class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option>NADA Productions</option>
+          </select>
+        </div>
+      </header>
+
+      <!-- Tab Switcher -->
+      <div class="bg-white border-b border-gray-200 px-6">
+        <nav class="flex gap-8">
+          <button class="py-4 text-sm font-medium tab-active">Current Locations</button>
+          <a href="mockup-b-asset-history.html" class="py-4 text-sm font-medium text-gray-500 hover:text-gray-700">Asset History</a>
+        </nav>
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 overflow-auto p-6">
+        <!-- Filters -->
+        <div class="flex gap-4 mb-6">
+          <div class="flex-1 max-w-md">
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input type="text" placeholder="Search assets..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+          </div>
+          <select class="px-4 py-2 border border-gray-300 rounded-lg">
+            <option>All Locations</option>
+            <option>Studio A</option>
+            <option>Studio B</option>
+            <option>Equipment Room</option>
+            <option>Storage Room</option>
+          </select>
+        </div>
+
+        <!-- Results count -->
+        <p class="text-sm text-gray-500 mb-4">Found 47 assets</p>
+
+        <!-- Table -->
+        <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <table class="w-full">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Name</th>
+                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Identifier</th>
+                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Current Location</th>
+                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Last Seen</th>
+                <th class="w-10"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr class="row-hover cursor-pointer">
+                <td class="px-6 py-4 font-medium text-gray-900">Sony PXW-FX9 Camera</td>
+                <td class="px-6 py-4 text-gray-500">CAM-001</td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                    Studio A
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-500">2 hours ago</td>
+                <td class="px-6 py-4 text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </td>
+              </tr>
+              <tr class="row-hover cursor-pointer">
+                <td class="px-6 py-4 font-medium text-gray-900">Shure SM58 Microphone</td>
+                <td class="px-6 py-4 text-gray-500">MIC-042</td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                    Booth 3
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-500">15 min ago</td>
+                <td class="px-6 py-4 text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </td>
+              </tr>
+              <tr class="row-hover cursor-pointer">
+                <td class="px-6 py-4 font-medium text-gray-900">MacBook Pro 16"</td>
+                <td class="px-6 py-4 text-gray-500">LPT-103</td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                    Edit Bay 2
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-500">1 day ago</td>
+                <td class="px-6 py-4 text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </td>
+              </tr>
+              <tr class="row-hover cursor-pointer">
+                <td class="px-6 py-4 font-medium text-gray-900">Sennheiser HD600 Headphones</td>
+                <td class="px-6 py-4 text-gray-500">HP-007</td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                    Control Room
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-500">3 hours ago</td>
+                <td class="px-6 py-4 text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </td>
+              </tr>
+              <tr class="row-hover cursor-pointer">
+                <td class="px-6 py-4 font-medium text-gray-900">Blackmagic ATEM Mini Pro</td>
+                <td class="px-6 py-4 text-gray-500">SWT-001</td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                    Studio A
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-500">2 hours ago</td>
+                <td class="px-6 py-4 text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </td>
+              </tr>
+              <tr class="row-hover cursor-pointer">
+                <td class="px-6 py-4 font-medium text-gray-900">LED Panel Light 1x1</td>
+                <td class="px-6 py-4 text-gray-500">LGT-LED-12</td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-amber-500 rounded-full"></span>
+                    Storage Room
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-amber-600">5 days ago</td>
+                <td class="px-6 py-4 text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </td>
+              </tr>
+              <tr class="row-hover cursor-pointer">
+                <td class="px-6 py-4 font-medium text-gray-900">Wireless Lavalier Kit</td>
+                <td class="px-6 py-4 text-gray-500">MIC-LAV-08</td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                    Studio B
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-500">45 min ago</td>
+                <td class="px-6 py-4 text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex items-center justify-between mt-4 text-sm">
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500">Rows per page:</span>
+            <select class="border border-gray-300 rounded px-2 py-1">
+              <option>10</option>
+              <option>20</option>
+              <option>50</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-4">
+            <span class="text-gray-500">Showing 1-10 of 47</span>
+            <div class="flex gap-1">
+              <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50" disabled>&lt;</button>
+              <button class="px-3 py-1 bg-blue-600 text-white rounded">1</button>
+              <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">2</button>
+              <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">3</button>
+              <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">4</button>
+              <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">5</button>
+              <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">&gt;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Mockup Label -->
+  <div class="fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg">
+    Mockup A: Current Locations (Table) - Instance 1/mocky
+  </div>
+</body>
+</html>
