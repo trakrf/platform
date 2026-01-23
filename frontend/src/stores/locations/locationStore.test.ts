@@ -314,6 +314,82 @@ describe('LocationStore - UI State', () => {
   });
 });
 
+describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
+  beforeEach(() => {
+    useLocationStore.getState().invalidateCache();
+  });
+
+  it('should return location by RFID tag EPC', () => {
+    const location = createMockLocation(1, {
+      identifier: 'WH-A',
+      name: 'Warehouse A',
+      identifiers: [{ id: 1, type: 'rfid', value: '300833B2DDD9014000000001', is_active: true }],
+    });
+    useLocationStore.getState().setLocations([location]);
+
+    const found = useLocationStore.getState().getLocationByTagEpc('300833B2DDD9014000000001');
+    expect(found?.id).toBe(1);
+    expect(found?.name).toBe('Warehouse A');
+  });
+
+  it('should return undefined for non-existent EPC', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+
+    const found = useLocationStore.getState().getLocationByTagEpc('NONEXISTENT');
+    expect(found).toBeUndefined();
+  });
+
+  it('should not index inactive tag identifiers', () => {
+    const location = createMockLocation(1, {
+      identifier: 'WH-B',
+      name: 'Warehouse B',
+      identifiers: [{ id: 1, type: 'rfid', value: 'INACTIVE123', is_active: false }],
+    });
+    useLocationStore.getState().setLocations([location]);
+
+    const found = useLocationStore.getState().getLocationByTagEpc('INACTIVE123');
+    expect(found).toBeUndefined();
+  });
+
+  it('should clear byTagEpc index on cache invalidation', () => {
+    const location = createMockLocation(1, {
+      identifier: 'WH-C',
+      identifiers: [{ id: 1, type: 'rfid', value: 'CLEAREDTAG', is_active: true }],
+    });
+    useLocationStore.getState().setLocations([location]);
+
+    // Verify it's indexed
+    expect(useLocationStore.getState().getLocationByTagEpc('CLEAREDTAG')).toBeDefined();
+
+    // Invalidate cache
+    useLocationStore.getState().invalidateCache();
+
+    // Should be gone
+    expect(useLocationStore.getState().getLocationByTagEpc('CLEAREDTAG')).toBeUndefined();
+  });
+
+  it('should handle multiple tag identifiers per location', () => {
+    const location = createMockLocation(1, {
+      identifier: 'MULTI-TAG',
+      name: 'Multi-Tag Location',
+      identifiers: [
+        { id: 1, type: 'rfid', value: 'TAG001', is_active: true },
+        { id: 2, type: 'rfid', value: 'TAG002', is_active: true },
+        { id: 3, type: 'rfid', value: 'TAG003', is_active: false }, // inactive
+      ],
+    });
+    useLocationStore.getState().setLocations([location]);
+
+    // Both active tags should find the location
+    expect(useLocationStore.getState().getLocationByTagEpc('TAG001')?.id).toBe(1);
+    expect(useLocationStore.getState().getLocationByTagEpc('TAG002')?.id).toBe(1);
+
+    // Inactive tag should not
+    expect(useLocationStore.getState().getLocationByTagEpc('TAG003')).toBeUndefined();
+  });
+});
+
 describe('LocationStore - Filtering and Pagination', () => {
   beforeEach(() => {
     useLocationStore.getState().invalidateCache();

@@ -51,6 +51,7 @@ export function serializeCache(cache: LocationCache): string {
   const serializable = {
     byId: Array.from(cache.byId.entries()),
     byIdentifier: Array.from(cache.byIdentifier.entries()),
+    byTagEpc: Array.from(cache.byTagEpc.entries()),
     byParentId: Array.from(cache.byParentId.entries()).map(([key, value]) => [
       key,
       Array.from(value),
@@ -82,6 +83,7 @@ export function deserializeCache(data: string): LocationCache | null {
     return {
       byId: new Map(parsed.byId),
       byIdentifier: new Map(parsed.byIdentifier),
+      byTagEpc: new Map(parsed.byTagEpc || []),
       byParentId: new Map(
         parsed.byParentId.map(([key, value]: [any, any]) => [key, new Set(value)])
       ),

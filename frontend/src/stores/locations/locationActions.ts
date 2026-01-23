@@ -234,6 +234,7 @@ export function createCacheActions(
         const cache: LocationCache = {
           byId: new Map(),
           byIdentifier: new Map(),
+          byTagEpc: new Map(),
           byParentId: new Map(),
           rootIds: new Set(),
           activeIds: new Set(),
@@ -249,6 +250,15 @@ export function createCacheActions(
           updateParentChildMapping(cache, location.id, parentId);
           updateRootSet(cache, location.id, parentId);
           updateActiveSet(cache, location);
+
+          // Build EPC index from location's tag identifiers
+          if (location.identifiers) {
+            for (const identifier of location.identifiers) {
+              if (identifier.is_active && identifier.type === 'rfid') {
+                cache.byTagEpc.set(identifier.value, location);
+              }
+            }
+          }
         }
 
         rebuildOrderedLists(cache);
@@ -277,6 +287,7 @@ export function createCacheActions(
         cache: {
           byId: new Map(),
           byIdentifier: new Map(),
+          byTagEpc: new Map(),
           byParentId: new Map(),
           rootIds: new Set(),
           activeIds: new Set(),
@@ -316,6 +327,10 @@ export function createHierarchyQueries(
 
     getLocationByIdentifier: (identifier: string) => {
       return (get() as any).cache.byIdentifier.get(identifier);
+    },
+
+    getLocationByTagEpc: (epc: string) => {
+      return (get() as any).cache.byTagEpc.get(epc);
     },
 
     getChildren: (id: number) => {

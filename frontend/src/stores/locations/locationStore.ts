@@ -27,6 +27,7 @@ export interface LocationStore {
 
   getLocationById: (id: number) => Location | undefined;
   getLocationByIdentifier: (identifier: string) => Location | undefined;
+  getLocationByTagEpc: (epc: string) => Location | undefined;
   getChildren: (id: number) => Location[];
   getDescendants: (id: number) => Location[];
   getAncestors: (id: number) => Location[];
@@ -49,6 +50,7 @@ export interface LocationStore {
 const initialCache: LocationCache = {
   byId: new Map(),
   byIdentifier: new Map(),
+  byTagEpc: new Map(),
   byParentId: new Map(),
   rootIds: new Set(),
   activeIds: new Set(),
