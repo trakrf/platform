@@ -201,4 +201,8 @@ Removed frontend location cache lookup and unified tag classification through th
 - typecheck ✅
 - lint ✅ (0 errors)
 - test ✅ (883 passing)
+- **Manual test ✅** - Location tag 10022 correctly detected as "Bay 7 Shelf 1"
+
+### Evidence
+See `inv-loc-2.png` - LocationBar shows "Bay 7 Shelf 1 via location tag (strongest signal)"
 
