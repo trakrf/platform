@@ -163,6 +163,30 @@ These HTML files are at the repo root and should be organized:
 
 ---
 
+## Consolidated Mockup Summary for Tim
+
+**Live at:** https://trakrf.github.io/platform/
+
+| # | Mockup | Layout | History View | URL |
+|---|--------|--------|--------------|-----|
+| 1 | A: Sidebar Filters | Classic sidebar | Slide-over | [View](https://trakrf.github.io/platform/mockup-a-sidebar.html) |
+| 2 | B: Toolbar Filters | Horizontal toolbar | Slide-over | [View](https://trakrf.github.io/platform/mockup-b-toolbar.html) |
+| 3 | C: Dashboard Stats | Stats cards + tabs | Slide-over | [View](https://trakrf.github.io/platform/mockup-c-dashboard.html) |
+| 4 | B1: Inline + Table | Expandable rows | Nested table | [View](https://trakrf.github.io/platform/tra140-b1-inline-table.html) |
+| 5 | B2: Inline + Timeline | Expandable rows | Visual timeline | [View](https://trakrf.github.io/platform/tra140-b2-inline-timeline.html) |
+| 6 | C1: Split + Table | Master-detail | Table in panel | [View](https://trakrf.github.io/platform/tra140-c1-split-table.html) |
+| 7 | C2: Split + Timeline | Master-detail | Timeline in panel | [View](https://trakrf.github.io/platform/tra140-c2-split-timeline.html) |
+
+**Key Design Dimensions Explored:**
+- **Filter placement:** Sidebar vs toolbar vs inline
+- **History trigger:** Slide-over vs inline expand vs persistent panel
+- **History display:** Table vs visual timeline with duration bars
+- **Layout:** Single list vs split panel (master-detail)
+
+**Recommendation:** Start with the index page which groups and describes each option.
+
+---
+
 ## Resolution Plan
 
 Once all instances document their work:
