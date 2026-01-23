@@ -55,6 +55,9 @@ interface TagState {
   selectedTag: TagInfo | null;
   displayFormat: 'hex' | 'decimal';
 
+  // Track which org the enrichment data belongs to (for detecting stale data on page reload)
+  enrichedOrgId: number | null;
+
   // Sorting state
   sortColumn: string | null;
   sortDirection: 'asc' | 'desc';
@@ -112,6 +115,7 @@ export const useTagStore = create<TagState>()(
   tags: [],
   selectedTag: null,
   displayFormat: 'decimal', // Default to decimal format
+  enrichedOrgId: null, // Track which org the enrichment data belongs to
 
   // Sorting initial state - default to timestamp descending
   sortColumn: 'timestamp',
@@ -421,6 +425,9 @@ export const useTagStore = create<TagState>()(
         matchedLocations,
       });
 
+      // Get current org ID to track which org this enrichment belongs to
+      const currentOrgId = useOrgStore.getState().currentOrg?.id ?? null;
+
       // Update tags with asset OR location info from lookup results (TRA-312/TRA-313)
       set((state) => ({
         tags: state.tags.map(tag => {
@@ -443,7 +450,9 @@ export const useTagStore = create<TagState>()(
             };
           }
           return tag;
-        })
+        }),
+        // Track which org this enrichment belongs to (for detecting stale data on reload)
+        enrichedOrgId: (matchedAssets > 0 || matchedLocations > 0) ? currentOrgId : state.enrichedOrgId,
       }));
     } catch (error) {
       console.error('[TagStore] _flushLookupQueue: API error', error);
@@ -464,8 +473,9 @@ export const useTagStore = create<TagState>()(
   }), 'TagStore'),
   {
     name: 'tag-storage',
-    partialize: (state: TagState) => ({ 
+    partialize: (state: TagState) => ({
       tags: state.tags,
+      enrichedOrgId: state.enrichedOrgId,
       currentPage: state.currentPage,
       sortColumn: state.sortColumn,
       sortDirection: state.sortDirection
@@ -517,16 +527,24 @@ if (typeof useOrgStore.subscribe === 'function') {
     // Only trigger on actual org change, not on first load
     if (newOrgId !== prevOrgId && newOrgId !== undefined) {
       const tagStore = useTagStore.getState();
+      const enrichedOrgId = tagStore.enrichedOrgId;
       console.log('[TagStore] Org subscription: org changed', {
         prevOrgId,
         newOrgId,
+        enrichedOrgId,
         tagCount: tagStore.tags.length,
       });
 
-      // Only clear mappings when switching FROM one org TO another (not on first login)
-      // On first login (prevOrgId undefined), just trigger enrichment without clearing
-      if (prevOrgId !== undefined) {
-        console.log('[TagStore] Org subscription: clearing mappings (org switch)');
+      // Clear mappings when:
+      // 1. Switching FROM one org TO another (prevOrgId defined)
+      // 2. On first login if enrichedOrgId doesn't match (stale data from previous session)
+      const shouldClear = prevOrgId !== undefined ||
+        (enrichedOrgId !== null && enrichedOrgId !== newOrgId);
+
+      if (shouldClear) {
+        console.log('[TagStore] Org subscription: clearing mappings', {
+          reason: prevOrgId !== undefined ? 'org switch' : 'stale enrichment from different org',
+        });
         // Clear asset/location mappings but keep EPC and scan data
         tagStore.setTags(
           tagStore.tags.map(tag => ({
@@ -539,8 +557,10 @@ if (typeof useOrgStore.subscribe === 'function') {
             locationName: undefined,
           }))
         );
+        // Reset enrichedOrgId since we cleared the data
+        useTagStore.setState({ enrichedOrgId: null });
       } else {
-        console.log('[TagStore] Org subscription: first login, skipping clear');
+        console.log('[TagStore] Org subscription: first login, same org or no prior enrichment');
       }
 
       // Re-enrich with new org's data (or enrich for first time on login)
