@@ -94,11 +94,47 @@ Added two comments to TRA-140:
 
 ---
 
-## Instance 3 (TBD)
+## Instance 3 (Claude - this session)
 
-**Assigned directory:**
+**Assigned directory:** `spec/TRA-140/mocks/` (user said "mockin" but I used "mocks")
 
-*(Add summary here)*
+### Files Created
+
+**Markdown specs in `spec/TRA-140/mocks/`:**
+- `mockup-b1-inline-table.md` - Inline expandable rows with table history
+- `mockup-b2-inline-timeline.md` - Inline expandable rows with visual timeline
+- `mockup-c1-split-table.md` - Split panel master-detail with table history
+- `mockup-c2-split-timeline.md` - Split panel master-detail with visual timeline
+
+**HTML mockups at repo root (for GitHub Pages):**
+- `tra140-b1-inline-table.html`
+- `tra140-b2-inline-timeline.html`
+- `tra140-c1-split-table.html`
+- `tra140-c2-split-timeline.html`
+
+Note: My HTML files have `tra140-` prefix to distinguish from Instance 2's `mockup-a/b/c-*.html` files.
+
+### User Clarification Questions Asked
+
+Before creating mockups, I asked:
+1. Layout preference → "Both B and C" (inline drill-down AND split panel)
+2. Date filter style → "Yes, with presets"
+3. Nav location → "Top nav bar" (though user edited to sidebar to match TrakRF)
+
+### Git Commits Made
+
+1. `374f0b7` - `docs: add TRA-140 asset location report mockups` - 4 HTML files
+2. `f4c06ca` - `docs: add TRA-140 mockups to index page` - Updated index.html with links
+
+### Linear Updates
+
+Added one comment to TRA-140 with mockup descriptions and viewing instructions.
+
+### Issues/Collisions
+
+- User originally said put mocks in "mockin" but I used "mocks" (same as Instance 1)
+- HTML files lost when switching branches - had to recreate them
+- My markdown files (b1, b2, c1, c2) differ from Instance 1's markdown files (a, b, c) - we explored different approaches
 
 ---
 
