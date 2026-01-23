@@ -35,7 +35,7 @@ export const useOrgStore = create<OrgState>()(
 
       // Sync state from authStore profile
       // Invalidates org-specific caches when org changes (including on login)
-      syncFromProfile: () => {
+      syncFromProfile: async () => {
         const profile = useAuthStore.getState().profile;
         const previousOrgId = get().currentOrg?.id;
         const newOrgId = profile?.current_org?.id;
@@ -52,6 +52,23 @@ export const useOrgStore = create<OrgState>()(
             currentRole: profile.current_org?.role ?? null,
             orgs: profile.orgs,
           });
+
+          // On first login (null -> org), refresh the token to include org_id claim
+          // This ensures the lookup API has proper org context
+          if (previousOrgId === undefined && newOrgId !== undefined) {
+            try {
+              console.log('[OrgStore] Refreshing token with org_id after login');
+              const response = await orgsApi.setCurrentOrg({ org_id: newOrgId });
+              const authState = useAuthStore.getState();
+              useAuthStore.setState({ ...authState, token: response.data.token });
+              console.log('[OrgStore] Token refreshed, triggering tag enrichment');
+              // Import dynamically to avoid circular dependency
+              const { useTagStore } = await import('./tagStore');
+              useTagStore.getState().refreshAssetEnrichment();
+            } catch (error) {
+              console.error('[OrgStore] Failed to refresh token after login:', error);
+            }
+          }
         } else {
           set({
             currentOrg: null,
