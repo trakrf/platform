@@ -303,4 +303,56 @@ describe('LocationDetailsPanel', () => {
     expect(onDelete).toHaveBeenCalledWith(1);
   });
 
+  it('should render Add Child button when onAddChild provided', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+
+    render(
+      <LocationDetailsPanel
+        locationId={1}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onAddChild={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Add Child' })).toBeInTheDocument();
+  });
+
+  it('should call onAddChild with location.id when Add Child clicked', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+
+    const onAddChild = vi.fn();
+    render(
+      <LocationDetailsPanel
+        locationId={1}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onAddChild={onAddChild}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Child' }));
+    expect(onAddChild).toHaveBeenCalledWith(1);
+  });
+
+  it('should NOT render Add Child button when onAddChild not provided', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+
+    render(
+      <LocationDetailsPanel
+        locationId={1}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Add Child' })).not.toBeInTheDocument();
+  });
+
 });

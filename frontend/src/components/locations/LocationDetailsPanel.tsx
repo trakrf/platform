@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Building2, Calendar, CheckCircle, XCircle, FolderTree } from 'lucide-react';
+import { MapPin, Building2, Calendar, CheckCircle, XCircle, FolderTree, Plus } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
 import { TagIdentifierList } from '@/components/assets';
@@ -10,6 +10,7 @@ export interface LocationDetailsPanelProps {
   onEdit: (id: number) => void;
   onMove: (id: number) => void;
   onDelete: (id: number) => void;
+  onAddChild?: (parentId: number) => void;
   onChildClick?: (id: number) => void;
   className?: string;
 }
@@ -19,6 +20,7 @@ export function LocationDetailsPanel({
   onEdit,
   onMove,
   onDelete,
+  onAddChild,
   onChildClick,
   className = '',
 }: LocationDetailsPanelProps) {
@@ -242,6 +244,15 @@ export function LocationDetailsPanel({
             Delete
           </button>
           <div className="flex gap-3">
+            {onAddChild && (
+              <button
+                onClick={() => onAddChild(location.id)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded-lg transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Add Child
+              </button>
+            )}
             <button
               onClick={() => onMove(location.id)}
               className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 dark:text-purple-400 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded-lg transition-colors"
