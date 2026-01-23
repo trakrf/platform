@@ -9,6 +9,10 @@ import { useSettingsStore } from './settingsStore';
 import { useAuthStore } from './authStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
+import { useLocationStore } from './locations/locationStore';
+
+// Tag classification type
+export type TagType = 'asset' | 'location' | 'unknown';
 
 // Define tag info type
 export interface TagInfo {
@@ -21,7 +25,7 @@ export interface TagInfo {
   antenna?: number;     // Now optional for unscanned recon items
   timestamp?: number;   // Now optional for unscanned recon items
   reconciled?: boolean | null; // null = not on list, false = on list but not found, true = found
-  
+
   // Time tracking fields
   firstSeenTime?: number;  // When tag was first seen
   lastSeenTime?: number;   // When tag was last seen
@@ -31,9 +35,17 @@ export interface TagInfo {
   location?: string;
   source: 'scan' | 'reconciliation' | 'rfid';
 
+  // Tag classification (TRA-312)
+  type: TagType;
+
+  // Asset fields (populated when type === 'asset')
   assetId?: number;
   assetName?: string;
   assetIdentifier?: string;
+
+  // Location fields (populated when type === 'location')
+  locationId?: number;
+  locationName?: string;
 }
 
 // Tag Store interface
@@ -91,6 +103,7 @@ interface TagState {
   // Internal lookup queue actions
   _queueForLookup: (epc: string) => void;
   _flushLookupQueue: () => Promise<void>;
+  _enrichTagsWithLocations: () => void;
 }
 
 export const useTagStore = create<TagState>()(
@@ -226,6 +239,7 @@ export const useTagStore = create<TagState>()(
           count: 0,
           reconciled: false,
           source: 'reconciliation' as const,
+          type: 'unknown',
           description: item.description,
           location: item.location,
           rssi: item.rssi,
@@ -250,13 +264,27 @@ export const useTagStore = create<TagState>()(
     const existingIndex = state.tags.findIndex(t => t.epc === epc);
     const isNewTag = existingIndex < 0;
 
+    // Check location cache synchronously for new tags (TRA-312)
+    let tagType: TagType = 'unknown';
+    let locationId: number | undefined;
+    let locationName: string | undefined;
+
+    if (isNewTag) {
+      const location = useLocationStore.getState().getLocationByTagEpc(epc);
+      if (location) {
+        tagType = 'location';
+        locationId = location.id;
+        locationName = location.name;
+      }
+    }
+
     set((state) => {
       const now = Date.now();
       const displayEpc = removeLeadingZeros(epc);
 
       let newTags;
       if (existingIndex >= 0) {
-        // Update existing tag (don't re-enrich, keep existing asset data)
+        // Update existing tag (don't re-enrich, keep existing asset/location data)
         newTags = [...state.tags];
         newTags[existingIndex] = {
           ...newTags[existingIndex],
@@ -268,12 +296,15 @@ export const useTagStore = create<TagState>()(
           timestamp: now
         };
       } else {
-        // Create new tag without asset data (will be enriched via API)
+        // Create new tag with classification (TRA-312)
         const newTag: TagInfo = {
           epc,
           displayEpc,
           count: 1,
           source: 'rfid',
+          type: tagType,
+          locationId,
+          locationName,
           firstSeenTime: now,
           lastSeenTime: now,
           readCount: 1,
@@ -293,8 +324,8 @@ export const useTagStore = create<TagState>()(
       };
     });
 
-    // Queue new tags for batch lookup
-    if (isNewTag && epc) {
+    // Queue new tags for batch lookup (only if not already classified as location)
+    if (isNewTag && epc && tagType !== 'location') {
       get()._queueForLookup(epc);
     }
   },
@@ -382,13 +413,14 @@ export const useTagStore = create<TagState>()(
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
       const results = response.data.data;
 
-      // Update tags with asset info from lookup results
+      // Update tags with asset info from lookup results (TRA-312: set type to 'asset')
       set((state) => ({
         tags: state.tags.map(tag => {
           const result = results[tag.epc];
           if (result?.asset) {
             return {
               ...tag,
+              type: 'asset' as TagType,
               assetId: result.asset.id,
               assetName: result.asset.name,
               assetIdentifier: result.asset.identifier,
@@ -404,6 +436,29 @@ export const useTagStore = create<TagState>()(
     } finally {
       set({ _isLookupInProgress: false });
     }
+  },
+
+  // Re-enrich tags with location data after login (TRA-312)
+  _enrichTagsWithLocations: () => {
+    set((state) => ({
+      tags: state.tags.map(tag => {
+        // Only process unknown tags (not already classified)
+        if (tag.type !== 'unknown') {
+          return tag;
+        }
+
+        const location = useLocationStore.getState().getLocationByTagEpc(tag.epc);
+        if (location) {
+          return {
+            ...tag,
+            type: 'location' as TagType,
+            locationId: location.id,
+            locationName: location.name,
+          };
+        }
+        return tag;
+      })
+    }));
   },
   }), 'TagStore'),
   {
@@ -424,5 +479,11 @@ useAuthStore.subscribe((state, prevState) => {
   if (state.isAuthenticated && !prevState.isAuthenticated) {
     // User just logged in - flush any queued EPCs for asset enrichment
     useTagStore.getState()._flushLookupQueue();
+
+    // Re-enrich tags with location data now that cache may be populated (TRA-312)
+    // Small delay to ensure locationStore has been initialized by useLocations hook
+    setTimeout(() => {
+      useTagStore.getState()._enrichTagsWithLocations();
+    }, 100);
   }
 });

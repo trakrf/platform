@@ -79,6 +79,7 @@ describe('Transforms', () => {
       const mockCache: LocationCache = {
         byId: new Map([[1, { id: 1, identifier: 'test' } as any]]),
         byIdentifier: new Map([['test', { id: 1, identifier: 'test' } as any]]),
+        byTagEpc: new Map(),
         byParentId: new Map([[null, new Set([1])]]),
         rootIds: new Set([1]),
         activeIds: new Set([1]),
@@ -105,6 +106,7 @@ describe('Transforms', () => {
       const emptyCache: LocationCache = {
         byId: new Map(),
         byIdentifier: new Map(),
+        byTagEpc: new Map(),
         byParentId: new Map(),
         rootIds: new Set(),
         activeIds: new Set(),
@@ -138,6 +140,7 @@ describe('Transforms', () => {
       const mockCache: LocationCache = {
         byId: new Map(),
         byIdentifier: new Map(),
+        byTagEpc: new Map(),
         byParentId: new Map(),
         rootIds: new Set(),
         activeIds: new Set(),
@@ -158,6 +161,7 @@ describe('Transforms', () => {
       const mockCache: LocationCache = {
         byId: new Map(),
         byIdentifier: new Map(),
+        byTagEpc: new Map(),
         byParentId: new Map([
           [null, new Set([1, 2])],
           [1, new Set([3, 4, 5])],
@@ -184,6 +188,7 @@ describe('Transforms', () => {
       const mockCache: LocationCache = {
         byId: new Map(),
         byIdentifier: new Map(),
+        byTagEpc: new Map(),
         byParentId: new Map(),
         rootIds: new Set(),
         activeIds: new Set(),

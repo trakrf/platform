@@ -140,6 +140,7 @@ export interface PaginationState {
 export interface LocationCache {
   byId: Map<number, Location>;
   byIdentifier: Map<string, Location>;
+  byTagEpc: Map<string, Location>; // EPC value → Location (for location tag detection)
   byParentId: Map<number | null, Set<number>>;
   rootIds: Set<number>;
   activeIds: Set<number>;
