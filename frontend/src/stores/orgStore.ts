@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { createStoreWithTracking } from './createStore';
 import { orgsApi } from '@/lib/api/orgs';
 import { useAuthStore } from './authStore';
+import { useAssetStore } from './assets/assetStore';
+import { useLocationStore } from './locations/locationStore';
 import type { UserOrgWithRole, UserOrg, OrgRole, Organization } from '@/types/org';
 
 interface OrgState {
@@ -54,6 +56,9 @@ export const useOrgStore = create<OrgState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await orgsApi.setCurrentOrg({ org_id: orgId });
+          // Invalidate org-specific caches before updating token
+          useAssetStore.getState().invalidateCache();
+          useLocationStore.getState().invalidateCache();
           // Update the token with new org_id claim
           const authState = useAuthStore.getState();
           useAuthStore.setState({ ...authState, token: response.data.token });
