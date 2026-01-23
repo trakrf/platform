@@ -20,6 +20,7 @@ import type { Location } from '@/types/locations';
 
 export default function LocationsScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createParentId, setCreateParentId] = useState<number | null>(null);
   const [viewingLocation, setViewingLocation] = useState<Location | null>(null);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
   const [deletingLocation, setDeletingLocation] = useState<Location | null>(null);
@@ -33,6 +34,7 @@ export default function LocationsScreen() {
   const { delete: deleteLocation } = useLocationMutations();
   const { setActiveTab } = useUIStore();
   const getLocationById = useLocationStore((state) => state.getLocationById);
+  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
   const cache = useLocationStore((state) => state.cache);
   const filters = useLocationStore((state) => state.filters);
 
@@ -86,6 +88,11 @@ export default function LocationsScreen() {
     [getLocationById]
   );
 
+  const handleAddChild = useCallback((parentId: number) => {
+    setCreateParentId(parentId);
+    setIsCreateModalOpen(true);
+  }, []);
+
   const handleMoveLocation = async (locationId: number, newParentId: number | null) => {
     const location = cache.byId.get(locationId);
     if (!location) return;
@@ -133,6 +140,7 @@ export default function LocationsScreen() {
                   onEdit={handleEditById}
                   onMove={handleMoveById}
                   onDelete={handleDeleteById}
+                  onAddChild={handleAddChild}
                 />
               </div>
             </div>
@@ -149,7 +157,11 @@ export default function LocationsScreen() {
         <LocationFormModal
           isOpen={isCreateModalOpen}
           mode="create"
-          onClose={() => setIsCreateModalOpen(false)}
+          parentLocationId={isDesktop ? selectedLocationId : createParentId}
+          onClose={() => {
+            setIsCreateModalOpen(false);
+            setCreateParentId(null);
+          }}
         />
 
         {viewingLocation && (

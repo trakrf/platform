@@ -10,10 +10,11 @@ interface LocationFormModalProps {
   isOpen: boolean;
   mode: 'create' | 'edit';
   location?: Location;
+  parentLocationId?: number | null;
   onClose: () => void;
 }
 
-export function LocationFormModal({ isOpen, mode, location, onClose }: LocationFormModalProps) {
+export function LocationFormModal({ isOpen, mode, location, parentLocationId, onClose }: LocationFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,6 +148,7 @@ export function LocationFormModal({ isOpen, mode, location, onClose }: LocationF
           <LocationForm
             mode={mode}
             location={location}
+            parentLocationId={parentLocationId}
             onSubmit={handleSubmit}
             onCancel={onClose}
             loading={loading}

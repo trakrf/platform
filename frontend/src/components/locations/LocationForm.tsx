@@ -1,12 +1,13 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { validateIdentifier, validateName } from '@/lib/location/validators';
 import { LocationParentSelector } from './LocationParentSelector';
+import { useLocationStore } from '@/stores/locations/locationStore';
 import type { Location, TagIdentifierInput } from '@/types/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { useDeviceStore } from '@/stores';
 import { lookupApi } from '@/lib/api/lookup';
 import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
-import { Plus, QrCode, Loader2 } from 'lucide-react';
+import { Plus, QrCode, Loader2, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { TagIdentifierInputRow } from '@/components/assets';
 
@@ -23,6 +24,7 @@ interface LocationFormData {
 interface LocationFormProps {
   mode: 'create' | 'edit';
   location?: Location;
+  parentLocationId?: number | null;
   onSubmit: (data: LocationFormData) => void;
   onCancel: () => void;
   loading?: boolean;
@@ -55,6 +57,7 @@ function formatDateToRFC3339(dateString: string): string {
 export function LocationForm({
   mode,
   location,
+  parentLocationId,
   onSubmit,
   onCancel,
   loading = false,
@@ -72,6 +75,10 @@ export function LocationForm({
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
+
+  // Get parent location info for context message
+  const getLocationById = useLocationStore((state) => state.getLocationById);
+  const parentLocation = parentLocationId ? getLocationById(parentLocationId) : null;
 
   // Barcode scanning for tag identifiers
   const isConnected = useDeviceStore((s) => s.isConnected);
@@ -120,7 +127,7 @@ export function LocationForm({
         identifier: '',
         name: '',
         description: '',
-        parent_location_id: null,
+        parent_location_id: parentLocationId ?? null,
         valid_from: '',
         valid_to: '',
         is_active: true,
@@ -129,7 +136,7 @@ export function LocationForm({
       setTagIdentifiers([{ type: 'rfid', value: '' }]);
       setAutoFocusIndex(0);
     }
-  }, [mode, location]);
+  }, [mode, location, parentLocationId]);
 
   // Handle barcode scan for tag identifiers
   const handleBarcodeScan = async (epc: string) => {
@@ -357,15 +364,34 @@ export function LocationForm({
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Parent Location
         </label>
-        <LocationParentSelector
-          value={formData.parent_location_id}
-          onChange={(value) => handleChange('parent_location_id', value)}
-          currentLocationId={mode === 'edit' && location ? location.id : undefined}
-          disabled={loading}
-        />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Select a parent location or leave as root
-        </p>
+        {mode === 'create' ? (
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            {parentLocationId && parentLocation ? (
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm text-blue-700 dark:text-blue-300">
+                  Creating inside: <span className="font-medium">{parentLocation.identifier}</span>
+                </span>
+              </div>
+            ) : (
+              <span className="text-sm text-blue-700 dark:text-blue-300">
+                Creating a top-level location
+              </span>
+            )}
+          </div>
+        ) : (
+          <>
+            <LocationParentSelector
+              value={formData.parent_location_id}
+              onChange={(value) => handleChange('parent_location_id', value)}
+              currentLocationId={location?.id}
+              disabled={loading}
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Select a parent location or leave as root
+            </p>
+          </>
+        )}
       </div>
 
       <div>

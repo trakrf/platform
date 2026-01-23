@@ -32,7 +32,6 @@ export function LocationDetailsPanel({
 
   const location = locationId ? getLocationById(locationId) : undefined;
   const children = location ? getChildren(location.id) : [];
-  const descendants = location ? getDescendants(location.id) : [];
   const rootLocations = getRootLocations();
   const isRoot = location?.parent_location_id === null;
   const Icon = isRoot ? Building2 : MapPin;
@@ -173,65 +172,39 @@ export function LocationDetailsPanel({
           onIdentifierRemoved={handleIdentifierRemoved}
         />
 
-        {/* Hierarchy Information */}
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Hierarchy Information
-          </h3>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Type</p>
-              <p className="font-medium text-gray-900 dark:text-white">
-                {isRoot ? 'Root Location' : 'Subsidiary Location'}
-              </p>
-            </div>
-
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Direct Children</p>
-              <p className="font-medium text-gray-900 dark:text-white">{children.length}</p>
-            </div>
-
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg col-span-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Descendants</p>
-              <p className="font-medium text-gray-900 dark:text-white">{descendants.length}</p>
+        {/* Sub-locations */}
+        {children.length > 0 && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              Sub-locations ({children.length})
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {children.map((child) => (
+                <div
+                  key={child.id}
+                  className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                  onClick={() => onChildClick?.(child.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onChildClick?.(child.id);
+                    }
+                  }}
+                >
+                  <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {child.identifier}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    ({child.name})
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* Children list */}
-          {children.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Direct Children:
-              </p>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {children.map((child) => (
-                  <div
-                    key={child.id}
-                    className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
-                    onClick={() => onChildClick?.(child.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onChildClick?.(child.id);
-                      }
-                    }}
-                  >
-                    <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                      {child.identifier}
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      ({child.name})
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Validity Period */}
         <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">

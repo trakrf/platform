@@ -208,7 +208,66 @@ describe('LocationExpandableCard', () => {
     expect(screen.getByText('child')).toBeInTheDocument();
   });
 
-  it('should show Root Location type for root locations', () => {
+  it('should NOT show Type or Children info grid', () => {
+    const root = createMockLocation(1);
+    const child = createMockLocation(2, { parent_location_id: 1 });
+    useLocationStore.getState().setLocations([root, child]);
+    useLocationStore.getState().toggleCardExpanded(1);
+
+    render(
+      <LocationExpandableCard
+        location={root}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText('Root Location')).not.toBeInTheDocument();
+    expect(screen.queryByText('Subsidiary')).not.toBeInTheDocument();
+    expect(screen.queryByText(/direct \/ .* total/i)).not.toBeInTheDocument();
+  });
+
+  it('should render Add Child button when onAddChild provided', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+    useLocationStore.getState().toggleCardExpanded(1);
+
+    const onAddChild = vi.fn();
+    render(
+      <LocationExpandableCard
+        location={location}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onAddChild={onAddChild}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Add Child' })).toBeInTheDocument();
+  });
+
+  it('should call onAddChild with location.id when Add Child clicked', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+    useLocationStore.getState().toggleCardExpanded(1);
+
+    const onAddChild = vi.fn();
+    render(
+      <LocationExpandableCard
+        location={location}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onAddChild={onAddChild}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Child' }));
+    expect(onAddChild).toHaveBeenCalledWith(1);
+  });
+
+  it('should NOT render Add Child button when onAddChild not provided', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
     useLocationStore.getState().toggleCardExpanded(1);
@@ -222,25 +281,7 @@ describe('LocationExpandableCard', () => {
       />
     );
 
-    expect(screen.getByText('Root Location')).toBeInTheDocument();
-  });
-
-  it('should show Subsidiary type for child locations', () => {
-    const root = createMockLocation(1);
-    const child = createMockLocation(2, { parent_location_id: 1 });
-    useLocationStore.getState().setLocations([root, child]);
-    useLocationStore.getState().toggleCardExpanded(2);
-
-    render(
-      <LocationExpandableCard
-        location={child}
-        onEdit={vi.fn()}
-        onMove={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText('Subsidiary')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Child' })).not.toBeInTheDocument();
   });
 
   it('should collapse when expanded and header clicked again', () => {
