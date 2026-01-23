@@ -303,7 +303,7 @@ describe('LocationDetailsPanel', () => {
     expect(onDelete).toHaveBeenCalledWith(1);
   });
 
-  it('should render Add Child button when onAddChild provided', () => {
+  it('should render Add Sub-location button when onAddChild provided', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
 
@@ -317,10 +317,10 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Add Child' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Sub-location' })).toBeInTheDocument();
   });
 
-  it('should call onAddChild with location.id when Add Child clicked', () => {
+  it('should call onAddChild with location.id when Add Sub-location clicked', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
 
@@ -335,11 +335,11 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Child' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Sub-location' }));
     expect(onAddChild).toHaveBeenCalledWith(1);
   });
 
-  it('should NOT render Add Child button when onAddChild not provided', () => {
+  it('should NOT render Add Sub-location button when onAddChild not provided', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
 
@@ -352,7 +352,7 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.queryByRole('button', { name: 'Add Child' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Sub-location' })).not.toBeInTheDocument();
   });
 
 });

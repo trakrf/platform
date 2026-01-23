@@ -250,7 +250,7 @@ export function LocationDetailsPanel({
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded-lg transition-colors"
               >
                 <Plus className="h-4 w-4" />
-                Add Child
+                Add Sub-location
               </button>
             )}
             <button
