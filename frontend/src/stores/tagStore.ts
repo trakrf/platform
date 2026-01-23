@@ -395,18 +395,14 @@ export const useTagStore = create<TagState>()(
     });
 
     try {
-      console.log('[TagStore] Lookup request EPCs:', epcs);
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
       const results = response.data.data;
-      console.log('[TagStore] Lookup response:', results);
 
       // Update tags with asset OR location info from lookup results (TRA-312/TRA-313)
       set((state) => ({
         tags: state.tags.map(tag => {
           const result = results[tag.epc];
-          console.log(`[TagStore] Tag "${tag.epc}" lookup result:`, result);
           if (result?.asset) {
-            console.log(`[TagStore] ✅ Classifying ${tag.epc} as ASSET: ${result.asset.name}`);
             return {
               ...tag,
               type: 'asset' as TagType,
@@ -416,7 +412,6 @@ export const useTagStore = create<TagState>()(
               description: result.asset.description || undefined,
             };
           } else if (result?.location) {
-            console.log(`[TagStore] ✅ Classifying ${tag.epc} as LOCATION: ${result.location.name}`);
             return {
               ...tag,
               type: 'location' as TagType,
