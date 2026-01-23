@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useDeviceStore, useTagStore, useSettingsStore, useAuthStore } from '@/stores';
 import { useAssets } from '@/hooks/assets';
+import { useLocations } from '@/hooks/locations';
 import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search } from 'lucide-react';
 import { ShareModal } from '@/components/ShareModal';
@@ -17,6 +18,8 @@ import { InventoryHeader } from '@/components/inventory/InventoryHeader';
 import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryTableContent } from '@/components/inventory/InventoryTableContent';
 import { InventorySettingsPanel } from '@/components/inventory/InventorySettingsPanel';
+import { LocationBar } from '@/components/inventory/LocationBar';
+import toast from 'react-hot-toast';
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,10 +59,65 @@ export default function InventoryScreen() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   useAssets({ enabled: isAuthenticated });
 
+  // Load locations for dropdown selection (only when authenticated)
+  const { locations } = useLocations({ enabled: isAuthenticated });
+
+  // Manual location selection state
+  const [manualLocationId, setManualLocationId] = useState<number | null>(null);
+
   const sortedTags = useSortableInventory(tags, sortColumn, sortDirection);
 
+  // Filter out location tags - they're used for detection, not display
+  const displayableTags = useMemo(() => {
+    return sortedTags.filter(tag => tag.type !== 'location');
+  }, [sortedTags]);
+
+  // Detect location from scanned location tags (strongest RSSI wins)
+  const detectedLocation = useMemo(() => {
+    const locationTags = tags.filter(t => t.type === 'location');
+    if (locationTags.length === 0) return null;
+
+    // Strongest RSSI wins
+    const strongest = locationTags.reduce((best, current) =>
+      (current.rssi ?? -120) > (best.rssi ?? -120) ? current : best
+    );
+
+    if (!strongest.locationId || !strongest.locationName) return null;
+
+    return {
+      id: strongest.locationId,
+      name: strongest.locationName,
+    };
+  }, [tags]);
+
+  // Detection method for display
+  const detectionMethod = useMemo(() => {
+    if (!detectedLocation) return null;
+    return 'tag' as const; // Always 'tag' for auto-detected
+  }, [detectedLocation]);
+
+  // Resolved location = manual override OR detected
+  const resolvedLocation = useMemo(() => {
+    if (manualLocationId) {
+      const location = locations.find(l => l.id === manualLocationId);
+      return location ? { id: location.id, name: location.name } : null;
+    }
+    return detectedLocation;
+  }, [manualLocationId, detectedLocation, locations]);
+
+  // Display detection method
+  const displayDetectionMethod = useMemo(() => {
+    if (manualLocationId) return 'manual' as const;
+    return detectionMethod;
+  }, [manualLocationId, detectionMethod]);
+
+  // Count of saveable assets (asset type tags only)
+  const saveableCount = useMemo(() => {
+    return tags.filter(t => t.type === 'asset').length;
+  }, [tags]);
+
   const filteredTags = useMemo(() => {
-    return sortedTags.filter(tag => {
+    return displayableTags.filter(tag => {
       const matchesSearch = !searchTerm ||
         (tag.displayEpc || tag.epc).toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -71,7 +129,7 @@ export default function InventoryScreen() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [sortedTags, searchTerm, statusFilters]);
+  }, [displayableTags, searchTerm, statusFilters]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -91,9 +149,10 @@ export default function InventoryScreen() {
       found: foundTags,
       missing: missingTags,
       notListed: notListedTags,
-      hasReconciliation
+      hasReconciliation,
+      saveable: saveableCount,
     };
-  }, [filteredTags]);
+  }, [filteredTags, saveableCount]);
 
   const handleSort = useCallback((column: string) => {
     if (sortColumn !== column) {
@@ -126,6 +185,21 @@ export default function InventoryScreen() {
     setStatusFilters(new Set());
   }, []);
 
+  const handleSave = useCallback(() => {
+    if (!isAuthenticated) {
+      // Redirect to login with return URL
+      const returnUrl = encodeURIComponent(window.location.pathname);
+      window.location.href = `/login?returnUrl=${returnUrl}`;
+      return;
+    }
+
+    // Actual save will be implemented in TRA-314
+    // For now, just show a placeholder toast
+    if (resolvedLocation && saveableCount > 0) {
+      toast.success(`Ready to save ${saveableCount} assets to ${resolvedLocation.name}`);
+    }
+  }, [isAuthenticated, resolvedLocation, saveableCount]);
+
   useEffect(() => {
     const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
     const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
@@ -152,7 +226,7 @@ export default function InventoryScreen() {
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex-1 flex flex-col min-h-0">
         <InventoryHeader
           filteredCount={filteredTags.length}
-          totalCount={sortedTags.length}
+          totalCount={displayableTags.length}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           onDownloadSample={downloadSampleReconFile}
@@ -167,6 +241,17 @@ export default function InventoryScreen() {
           }}
           hasItems={filteredTags.length > 0}
           readerState={readerState}
+          onSave={handleSave}
+          isSaveDisabled={!resolvedLocation || saveableCount === 0}
+          saveableCount={saveableCount}
+        />
+        <LocationBar
+          detectedLocation={resolvedLocation}
+          detectionMethod={displayDetectionMethod}
+          selectedLocationId={manualLocationId}
+          onLocationChange={setManualLocationId}
+          locations={locations}
+          isAuthenticated={isAuthenticated}
         />
 
 
