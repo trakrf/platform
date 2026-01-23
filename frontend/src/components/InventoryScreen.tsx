@@ -64,6 +64,19 @@ export default function InventoryScreen() {
   // Load locations for dropdown selection (only when authenticated)
   const { locations } = useLocations({ enabled: isAuthenticated });
 
+  // Re-enrich tags when authenticated and have unenriched tags
+  // This handles: page reload while logged in, navigating to inventory after login
+  const refreshAssetEnrichment = useTagStore((state) => state.refreshAssetEnrichment);
+  useEffect(() => {
+    if (isAuthenticated && tags.length > 0) {
+      // Check if any tags need enrichment
+      const hasUnenriched = tags.some(t => t.assetId === undefined && t.locationId === undefined);
+      if (hasUnenriched) {
+        refreshAssetEnrichment();
+      }
+    }
+  }, [isAuthenticated, tags.length, refreshAssetEnrichment]);
+
   // Manual location selection state
   const [manualLocationId, setManualLocationId] = useState<number | null>(null);
 

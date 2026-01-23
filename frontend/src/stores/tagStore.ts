@@ -7,6 +7,7 @@ import type { ReconciliationItem } from '@/utils/reconciliationUtils';
 import { normalizeEpc, removeLeadingZeros } from '@/utils/reconciliationUtils';
 import { useSettingsStore } from './settingsStore';
 import { useAuthStore } from './authStore';
+import { useOrgStore } from './orgStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
 
@@ -338,12 +339,12 @@ export const useTagStore = create<TagState>()(
     lastRSSIUpdateTime: Date.now()
   }),
 
-  // Re-enrich all tags with current asset data via API lookup
+  // Re-enrich all tags with current asset/location data via API lookup
   refreshAssetEnrichment: async () => {
     const state = get();
-    // Get all EPCs that don't have assetId yet
+    // Get all EPCs that haven't been classified yet (no assetId AND no locationId)
     const unenriched = state.tags
-      .filter(t => t.assetId === undefined)
+      .filter(t => t.assetId === undefined && t.locationId === undefined)
       .map(t => t.epc)
       .filter(Boolean);
 
@@ -443,11 +444,40 @@ export const useTagStore = create<TagState>()(
   )
 );
 
-// Flush lookup queue when user logs in (for tags scanned while anonymous)
+// Re-enrich tags when user logs in (for tags scanned while anonymous)
 useAuthStore.subscribe((state, prevState) => {
   // Only react to login (false -> true transition)
   if (state.isAuthenticated && !prevState.isAuthenticated) {
-    // User just logged in - flush any queued EPCs for asset/location classification
-    useTagStore.getState()._flushLookupQueue();
+    // User just logged in - re-enrich any unenriched tags from localStorage
+    // Note: _lookupQueue is not persisted, so we must use refreshAssetEnrichment
+    // which finds tags without assetId/locationId and queues them for lookup
+    useTagStore.getState().refreshAssetEnrichment();
   }
 });
+
+// Clear enrichment data when org changes (asset/location IDs are org-specific)
+// Guard against test environments where subscribe may not exist on mocked stores
+if (typeof useOrgStore.subscribe === 'function') {
+  useOrgStore.subscribe((state, prevState) => {
+    const newOrgId = state.currentOrg?.id;
+    const prevOrgId = prevState.currentOrg?.id;
+
+    if (newOrgId !== prevOrgId && newOrgId !== undefined) {
+      const tagStore = useTagStore.getState();
+      // Clear asset/location mappings but keep EPC and scan data
+      tagStore.setTags(
+        tagStore.tags.map(tag => ({
+          ...tag,
+          type: 'unknown' as const,
+          assetId: undefined,
+          assetName: undefined,
+          assetIdentifier: undefined,
+          locationId: undefined,
+          locationName: undefined,
+        }))
+      );
+      // Re-enrich with new org's data
+      tagStore.refreshAssetEnrichment();
+    }
+  });
+}
