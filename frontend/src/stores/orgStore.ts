@@ -2,8 +2,6 @@ import { create } from 'zustand';
 import { createStoreWithTracking } from './createStore';
 import { orgsApi } from '@/lib/api/orgs';
 import { useAuthStore } from './authStore';
-import { useAssetStore } from './assets/assetStore';
-import { useLocationStore } from './locations/locationStore';
 import type { UserOrgWithRole, UserOrg, OrgRole, Organization } from '@/types/org';
 
 interface OrgState {
@@ -25,7 +23,7 @@ interface OrgState {
 
 export const useOrgStore = create<OrgState>()(
   createStoreWithTracking(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       currentOrg: null,
       currentRole: null,
@@ -34,17 +32,9 @@ export const useOrgStore = create<OrgState>()(
       error: null,
 
       // Sync state from authStore profile
-      // Invalidates org-specific caches when org changes (including on login)
+      // Note: Central invalidation is now called by authStore after login/logout
       syncFromProfile: () => {
         const profile = useAuthStore.getState().profile;
-        const previousOrgId = get().currentOrg?.id;
-        const newOrgId = profile?.current_org?.id;
-
-        // Invalidate caches if org changed (including null -> value on login)
-        if (previousOrgId !== newOrgId) {
-          useAssetStore.getState().invalidateCache();
-          useLocationStore.getState().invalidateCache();
-        }
 
         if (profile) {
           set({
@@ -66,14 +56,19 @@ export const useOrgStore = create<OrgState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await orgsApi.setCurrentOrg({ org_id: orgId });
-          // Invalidate org-specific caches before updating token
-          useAssetStore.getState().invalidateCache();
-          useLocationStore.getState().invalidateCache();
+
           // Update the token with new org_id claim
           const authState = useAuthStore.getState();
           useAuthStore.setState({ ...authState, token: response.data.token });
+
+          // Call central invalidation
+          const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
+          const { queryClient } = await import('@/lib/queryClient');
+          await invalidateAllOrgScopedData(queryClient);
+
           // Refetch profile to get updated current_org
           await useAuthStore.getState().fetchProfile();
+
           // Sync derived state
           const profile = useAuthStore.getState().profile;
           if (profile) {
@@ -84,11 +79,12 @@ export const useOrgStore = create<OrgState>()(
               isLoading: false,
             });
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const axiosError = err as { response?: { data?: { detail?: string; error?: string } }; message?: string };
           const errorMessage =
-            err.response?.data?.detail ||
-            err.response?.data?.error ||
-            err.message ||
+            axiosError.response?.data?.detail ||
+            axiosError.response?.data?.error ||
+            axiosError.message ||
             'Failed to switch organization';
           set({ error: errorMessage, isLoading: false });
           throw err;
@@ -114,11 +110,12 @@ export const useOrgStore = create<OrgState>()(
             });
           }
           return newOrg;
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const axiosError = err as { response?: { data?: { detail?: string; error?: string } }; message?: string };
           const errorMessage =
-            err.response?.data?.detail ||
-            err.response?.data?.error ||
-            err.message ||
+            axiosError.response?.data?.detail ||
+            axiosError.response?.data?.error ||
+            axiosError.message ||
             'Failed to create organization';
           set({ error: errorMessage, isLoading: false });
           throw err;

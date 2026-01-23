@@ -71,20 +71,26 @@ export const useAuthStore = create<AuthState>()(
                 console.log('[AuthStore] Refreshing token with org_id:', profile.current_org.id);
                 const orgResponse = await orgsApi.setCurrentOrg({ org_id: profile.current_org.id });
                 set({ token: orgResponse.data.token });
+
+                // INVALIDATE: After setCurrentOrg() returns with org_id token
+                const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
+                const { queryClient } = await import('@/lib/queryClient');
+                await invalidateAllOrgScopedData(queryClient);
               } catch (err) {
                 console.error('[AuthStore] Failed to refresh token with org_id:', err);
               }
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             // Extract error message from RFC 7807 Problem Details format
             // Handle empty strings by checking truthy AND non-empty
-            const data = err.response?.data;
-            const errorObj = data?.error || data; // Handle both nested and flat structures
+            const axiosError = err as { response?: { data?: { error?: { detail?: string; title?: string } | string; detail?: string; title?: string } }; message?: string };
+            const data = axiosError.response?.data;
+            const errorObj = (typeof data?.error === 'object' ? data.error : data) as { detail?: string; title?: string } | undefined;
             let errorMessage =
               (typeof errorObj?.detail === 'string' && errorObj.detail.trim()) ||
               (typeof errorObj?.title === 'string' && errorObj.title.trim()) ||
               (typeof data?.error === 'string' && data.error.trim()) ||
-              (typeof err.message === 'string' && err.message.trim()) ||
+              (typeof axiosError.message === 'string' && axiosError.message.trim()) ||
               'Login failed';
 
             // Ensure it's always a string (defensive coding)
@@ -136,20 +142,26 @@ export const useAuthStore = create<AuthState>()(
                 console.log('[AuthStore] Refreshing token with org_id:', profile.current_org.id);
                 const orgResponse = await orgsApi.setCurrentOrg({ org_id: profile.current_org.id });
                 set({ token: orgResponse.data.token });
+
+                // INVALIDATE: After setCurrentOrg() returns with org_id token
+                const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
+                const { queryClient } = await import('@/lib/queryClient');
+                await invalidateAllOrgScopedData(queryClient);
               } catch (err) {
                 console.error('[AuthStore] Failed to refresh token with org_id:', err);
               }
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             // Extract error message from RFC 7807 Problem Details format
             // Handle empty strings by checking truthy AND non-empty
-            const data = err.response?.data;
-            const errorObj = data?.error || data; // Handle both nested and flat structures
+            const axiosError = err as { response?: { data?: { error?: { detail?: string; title?: string } | string; detail?: string; title?: string } }; message?: string };
+            const data = axiosError.response?.data;
+            const errorObj = (typeof data?.error === 'object' ? data.error : data) as { detail?: string; title?: string } | undefined;
             let errorMessage =
               (typeof errorObj?.detail === 'string' && errorObj.detail.trim()) ||
               (typeof errorObj?.title === 'string' && errorObj.title.trim()) ||
               (typeof data?.error === 'string' && data.error.trim()) ||
-              (typeof err.message === 'string' && err.message.trim()) ||
+              (typeof axiosError.message === 'string' && axiosError.message.trim()) ||
               'Signup failed';
 
             // Ensure it's always a string (defensive coding)
@@ -175,6 +187,14 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             error: null,
             profile: null,
+          });
+
+          // Clear all org-scoped data
+          Promise.all([
+            import('@/lib/cache/orgScopedCache'),
+            import('@/lib/queryClient'),
+          ]).then(([{ invalidateAllOrgScopedData }, { queryClient }]) => {
+            invalidateAllOrgScopedData(queryClient);
           });
         },
 
