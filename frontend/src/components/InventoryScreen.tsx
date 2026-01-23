@@ -242,7 +242,7 @@ export default function InventoryScreen() {
           hasItems={filteredTags.length > 0}
           readerState={readerState}
           onSave={handleSave}
-          isSaveDisabled={!resolvedLocation || saveableCount === 0}
+          isSaveDisabled={isAuthenticated ? (!resolvedLocation || saveableCount === 0) : displayableTags.length === 0}
           saveableCount={saveableCount}
         />
         <LocationBar
