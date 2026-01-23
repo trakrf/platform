@@ -260,17 +260,32 @@ export const useTagStore = create<TagState>()(
   
   addTag: (tag) => {
     const epc = tag.epc || '';
+    const displayEpc = removeLeadingZeros(epc);
     const state = get();
     const existingIndex = state.tags.findIndex(t => t.epc === epc);
     const isNewTag = existingIndex < 0;
 
     // Check location cache synchronously for new tags (TRA-312)
+    // Try multiple lookup strategies: full EPC and displayEpc
     let tagType: TagType = 'unknown';
     let locationId: number | undefined;
     let locationName: string | undefined;
 
     if (isNewTag) {
-      const location = useLocationStore.getState().getLocationByTagEpc(epc);
+      const locationStore = useLocationStore.getState();
+      let location = locationStore.getLocationByTagEpc(epc);
+      if (!location && displayEpc !== epc) {
+        location = locationStore.getLocationByTagEpc(displayEpc);
+      }
+      // Try matching just the trailing numeric portion of the EPC
+      // This handles cases where location tags are stored as "10022" but
+      // the scanned EPC is "E2806894000000000010022"
+      if (!location) {
+        const numericMatch = epc.match(/(\d+)$/);
+        if (numericMatch) {
+          location = locationStore.getLocationByTagEpc(numericMatch[1]);
+        }
+      }
       if (location) {
         tagType = 'location';
         locationId = location.id;
@@ -280,7 +295,6 @@ export const useTagStore = create<TagState>()(
 
     set((state) => {
       const now = Date.now();
-      const displayEpc = removeLeadingZeros(epc);
 
       let newTags;
       if (existingIndex >= 0) {
@@ -447,7 +461,21 @@ export const useTagStore = create<TagState>()(
           return tag;
         }
 
-        const location = useLocationStore.getState().getLocationByTagEpc(tag.epc);
+        const locationStore = useLocationStore.getState();
+        // Try multiple lookup strategies:
+        // 1. Full EPC
+        // 2. Display EPC (with leading zeros removed)
+        // 3. Trailing numeric portion (for tags stored as "10022")
+        let location = locationStore.getLocationByTagEpc(tag.epc);
+        if (!location && tag.displayEpc && tag.displayEpc !== tag.epc) {
+          location = locationStore.getLocationByTagEpc(tag.displayEpc);
+        }
+        if (!location) {
+          const numericMatch = tag.epc.match(/(\d+)$/);
+          if (numericMatch) {
+            location = locationStore.getLocationByTagEpc(numericMatch[1]);
+          }
+        }
         if (location) {
           return {
             ...tag,
