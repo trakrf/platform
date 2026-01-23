@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware';
 import type { ReconciliationItem } from '@/utils/reconciliationUtils';
 import { normalizeEpc, removeLeadingZeros } from '@/utils/reconciliationUtils';
 import { useSettingsStore } from './settingsStore';
+import { useAuthStore } from './authStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
 
@@ -356,6 +357,12 @@ export const useTagStore = create<TagState>()(
 
   // Flush the lookup queue and call the batch API
   _flushLookupQueue: async () => {
+    // Skip API call for anonymous users - keep queue intact for later
+    const isAuthenticated = useAuthStore.getState().isAuthenticated;
+    if (!isAuthenticated) {
+      return;
+    }
+
     const state = get();
 
     // Don't run if already in progress or queue is empty
@@ -410,3 +417,12 @@ export const useTagStore = create<TagState>()(
   }
   )
 );
+
+// Flush lookup queue when user logs in (for tags scanned while anonymous)
+useAuthStore.subscribe((state, prevState) => {
+  // Only react to login (false -> true transition)
+  if (state.isAuthenticated && !prevState.isAuthenticated) {
+    // User just logged in - flush any queued EPCs for asset enrichment
+    useTagStore.getState()._flushLookupQueue();
+  }
+});
