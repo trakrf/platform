@@ -159,23 +159,43 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
 
 /**
  * Generate CSV from assets
+ *
+ * Format optimized for inventory reconciliation round-trip:
+ * - Column order: Asset ID, Name, Description, Status, Created, Location, Tag ID...
+ * - Tag IDs in rightmost columns, extending right for multi-tag assets
+ * - Header repeats "Tag ID" for each tag column
  */
 export function generateAssetCSV(assets: Asset[]): ExportResult {
-  const headers = ['Asset ID', 'Name', 'Type', 'Tag ID(s)', 'Location', 'Status', 'Description', 'Created'];
+  // Calculate max tag count (minimum 1 to always have Tag ID column)
+  const maxTags = Math.max(1, ...assets.map((a) => a.identifiers?.length || 0));
+
+  // Build headers: fixed columns + repeated "Tag ID" columns
+  const fixedHeaders = ['Asset ID', 'Name', 'Description', 'Status', 'Created', 'Location'];
+  const tagHeaders = Array(maxTags).fill('Tag ID');
+  const headers = [...fixedHeaders, ...tagHeaders];
+
   let content = headers.join(',') + '\n';
 
   assets.forEach((asset) => {
-    const row = [
+    // Fixed columns in new order
+    const fixedCols = [
       `"${asset.identifier}"`,
       `"${(asset.name || '').replace(/"/g, '""')}"`,
-      asset.type,
-      `"${asset.identifiers?.map((t) => t.value).join('; ') || ''}"`,
-      `"${getLocationName(asset.current_location_id).replace(/"/g, '""')}"`,
-      asset.is_active ? 'Active' : 'Inactive',
       `"${(asset.description || '').replace(/"/g, '""')}"`,
+      asset.is_active ? 'Active' : 'Inactive',
       asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
+      `"${getLocationName(asset.current_location_id).replace(/"/g, '""')}"`,
     ];
-    content += row.join(',') + '\n';
+
+    // Tag columns - one per column, pad with empty if fewer tags
+    const tagCols = Array(maxTags)
+      .fill('')
+      .map((_, i) => {
+        const tag = asset.identifiers?.[i]?.value || '';
+        return tag ? `"${tag.replace(/"/g, '""')}"` : '';
+      });
+
+    content += [...fixedCols, ...tagCols].join(',') + '\n';
   });
 
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });

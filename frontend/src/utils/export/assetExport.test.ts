@@ -108,19 +108,40 @@ describe('assetExport', () => {
       expect(result.blob.type).toBe('text/csv;charset=utf-8;');
     });
 
-    it('includes correct headers', async () => {
+    it('includes correct headers in new column order', async () => {
       const result = generateAssetCSV(mockAssets);
       const content = await readBlobAsText(result.blob);
       const headers = content.split('\n')[0];
 
+      // Fixed columns in new order
       expect(headers).toContain('Asset ID');
       expect(headers).toContain('Name');
-      expect(headers).toContain('Type');
-      expect(headers).toContain('Tag ID(s)');
-      expect(headers).toContain('Location');
-      expect(headers).toContain('Status');
       expect(headers).toContain('Description');
+      expect(headers).toContain('Status');
       expect(headers).toContain('Created');
+      expect(headers).toContain('Location');
+      // Tag ID columns repeated (not "Tag ID(s)")
+      expect(headers).toContain('Tag ID');
+      expect(headers).not.toContain('Tag ID(s)');
+      // Type column removed
+      expect(headers).not.toContain(',Type,');
+    });
+
+    it('has correct column order: identity, state, tags', async () => {
+      const result = generateAssetCSV(mockAssets);
+      const content = await readBlobAsText(result.blob);
+      const headers = content.split('\n')[0].split(',');
+
+      // Verify exact column order
+      expect(headers[0]).toBe('Asset ID');
+      expect(headers[1]).toBe('Name');
+      expect(headers[2]).toBe('Description');
+      expect(headers[3]).toBe('Status');
+      expect(headers[4]).toBe('Created');
+      expect(headers[5]).toBe('Location');
+      // Remaining columns are all "Tag ID"
+      expect(headers[6]).toBe('Tag ID');
+      expect(headers[7]).toBe('Tag ID'); // mockAssets has asset with 2 tags
     });
 
     it('includes asset data in rows', async () => {
@@ -129,10 +150,54 @@ describe('assetExport', () => {
 
       expect(content).toContain('ASSET-001');
       expect(content).toContain('Laptop Dell XPS');
-      expect(content).toContain('device');
+      // Type column removed - should not contain device type in isolation
       expect(content).toContain('E280001234567890');
       expect(content).toContain('Warehouse A');
       expect(content).toContain('Active');
+    });
+
+    it('separates multiple tags into columns', async () => {
+      const result = generateAssetCSV(mockAssets);
+      const content = await readBlobAsText(result.blob);
+      const lines = content.split('\n');
+
+      // Asset 1 has 2 tags - should be in separate columns, not semicolon-separated
+      const asset1Line = lines.find((line) => line.includes('ASSET-001'));
+      expect(asset1Line).toBeDefined();
+      expect(asset1Line).toContain('E280001234567890');
+      expect(asset1Line).toContain('E280001234567891');
+      // Tags should NOT be semicolon-separated
+      expect(asset1Line).not.toContain('; ');
+    });
+
+    it('pads empty columns for assets with fewer tags', async () => {
+      const result = generateAssetCSV(mockAssets);
+      const content = await readBlobAsText(result.blob);
+      const lines = content.split('\n');
+
+      // Asset 3 has 1 tag, Asset 1 has 2 - so Asset 3 should have empty second tag column
+      const asset3Line = lines.find((line) => line.includes('ASSET-003'));
+      expect(asset3Line).toBeDefined();
+      const asset3Cols = asset3Line!.split(',');
+      // With max 2 tags: 6 fixed cols + 2 tag cols = 8 total
+      expect(asset3Cols.length).toBe(8);
+      // Second tag column should be empty
+      expect(asset3Cols[7]).toBe('');
+    });
+
+    it('includes minimum one Tag ID column even with no tags', async () => {
+      // Test with asset that has no tags
+      const noTagAsset: Asset = {
+        ...mockAssets[1],
+        identifiers: [],
+      };
+      const result = generateAssetCSV([noTagAsset]);
+      const content = await readBlobAsText(result.blob);
+      const headers = content.split('\n')[0].split(',');
+
+      // Should still have at least one Tag ID column
+      expect(headers).toContain('Tag ID');
+      expect(headers.length).toBe(7); // 6 fixed + 1 tag
     });
 
     it('resolves location names from store', async () => {
