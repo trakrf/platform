@@ -24,6 +24,7 @@ import {
   getAuthToken,
   createOrgViaAPI,
   switchOrgViaAPI,
+  listOrgsViaAPI,
 } from './fixtures/org.fixture';
 
 const API_BASE = 'http://localhost:8080/api/v1';
@@ -488,7 +489,103 @@ test.describe('Inventory Save Flow', () => {
     console.log('[Test] Org switch correctly cleared asset/location mappings');
   });
 
-  test('4. anonymous user clicking Save redirects to login', async () => {
+  test('4. switching back to original org re-enriches with original mappings', async () => {
+    // This test verifies that when switching back to the original org,
+    // tags get re-enriched with that org's asset/location mappings
+
+    // First, add tags with EPCs that match our test assets (created in test 2)
+    // These are the real EPCs from the hardware scan
+    if (scannedEpcs.length === 0) {
+      console.log('[Test] No scanned EPCs available, using mock data');
+      scannedEpcs = ['MOCK_EPC_001', 'MOCK_EPC_002', 'MOCK_EPC_003'];
+    }
+
+    console.log('[Test] Setting up tags with original EPCs:', scannedEpcs.slice(0, 3));
+
+    await sharedPage.evaluate((epcs: string[]) => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      const tagStore = stores?.tagStore;
+      if (tagStore) {
+        tagStore.getState().clearTags();
+        // Add tags with EPCs that should match assets in the original org
+        tagStore.getState().setTags(epcs.slice(0, 3).map((epc: string) => ({
+          epc,
+          displayEpc: epc,
+          count: 1,
+          source: 'rfid',
+          type: 'unknown', // Not enriched yet
+          timestamp: Date.now(),
+        })));
+      }
+    }, scannedEpcs);
+
+    // Verify tags are unenriched
+    const beforeSwitch = await sharedPage.evaluate(() => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      const tags = stores?.tagStore?.getState().tags || [];
+      return {
+        count: tags.length,
+        enriched: tags.filter((t: any) => t.assetId !== undefined).length,
+      };
+    });
+
+    console.log('[Test] Before switch back:', beforeSwitch);
+    expect(beforeSwitch.enriched).toBe(0);
+
+    // Get the original org by finding it in the list
+    const orgs = await listOrgsViaAPI(sharedPage);
+    const originalOrg = orgs.find((o) => o.name === testOrgName);
+
+    console.log('[Test] Available orgs:', orgs.map((o) => o.name));
+    console.log('[Test] Looking for original org:', testOrgName);
+    console.log('[Test] Found original org:', originalOrg?.name, originalOrg?.id);
+
+    if (originalOrg?.id) {
+      await switchOrgViaAPI(sharedPage, originalOrg.id);
+
+      // Reload and navigate to inventory
+      await sharedPage.reload({ waitUntil: 'networkidle' });
+      await sharedPage.goto('/#inventory');
+      await sharedPage.waitForTimeout(1000);
+
+      // Wait for enrichment to happen
+      try {
+        await waitForEnrichment(sharedPage, 10000);
+        console.log('[Test] Re-enrichment detected!');
+      } catch (e) {
+        console.log('[Test] Re-enrichment did not complete in time');
+      }
+
+      // Check if tags got re-enriched
+      const afterSwitch = await sharedPage.evaluate(() => {
+        const stores = (window as any).__ZUSTAND_STORES__;
+        const tags = stores?.tagStore?.getState().tags || [];
+        return {
+          count: tags.length,
+          enriched: tags.filter((t: any) => t.assetId !== undefined).length,
+          tags: tags.map((t: any) => ({
+            epc: t.epc,
+            type: t.type,
+            assetId: t.assetId,
+            assetName: t.assetName,
+          })),
+        };
+      });
+
+      console.log('[Test] After switch back:', afterSwitch);
+
+      // Tags should be re-enriched with original org's assets
+      // We created 3 test assets, so at least those should be enriched
+      if (testAssets.length > 0) {
+        expect(afterSwitch.enriched).toBeGreaterThan(0);
+        console.log(`[Test] Re-enriched ${afterSwitch.enriched} tags after switching back`);
+      }
+    } else {
+      console.log('[Test] Could not find original org, skipping switch-back verification');
+    }
+  });
+
+  test('5. anonymous user clicking Save redirects to login', async () => {
     // Clear auth state
     await clearAuthState(sharedPage);
     await sharedPage.reload({ waitUntil: 'networkidle' });

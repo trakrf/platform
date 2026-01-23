@@ -443,6 +443,30 @@ export async function resendInviteViaAPI(
 }
 
 /**
+ * List all orgs the user has access to
+ */
+export async function listOrgsViaAPI(
+  page: Page
+): Promise<Array<{ id: number; name: string }>> {
+  const baseUrl = getApiBaseUrl(page);
+  const token = await getAuthToken(page);
+
+  const response = await page.request.get(`${baseUrl}/orgs`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok()) {
+    const text = await response.text();
+    throw new Error(`Failed to list orgs: ${response.status()} - ${text}`);
+  }
+
+  const data = await response.json();
+  return data.data ?? [];
+}
+
+/**
  * Get invitations list via API
  */
 export async function getInvitationsViaAPI(
