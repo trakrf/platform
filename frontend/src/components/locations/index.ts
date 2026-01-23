@@ -16,11 +16,8 @@ export { LocationBreadcrumb } from './LocationBreadcrumb';
 export { LocationMoveModal } from './LocationMoveModal';
 export { LocationDetailsModal } from './LocationDetailsModal';
 
-// Split pane components (Phase 1 TRA-301)
 export { LocationTreePanel } from './LocationTreePanel';
 export { LocationDetailsPanel } from './LocationDetailsPanel';
 export { LocationSplitPane } from './LocationSplitPane';
-
-// Mobile components (Phase 2 TRA-301)
 export { LocationExpandableCard } from './LocationExpandableCard';
 export { LocationMobileView } from './LocationMobileView';
