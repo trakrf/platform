@@ -16,3 +16,13 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/* Pulse animation for attention (used after save to draw attention to Clear button) */
+.pulse-attention {
+  animation: pulse-attention 0.5s ease-in-out 4;
+}
+
+@keyframes pulse-attention {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}

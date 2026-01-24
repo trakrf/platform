@@ -7,9 +7,9 @@ import type { ReconciliationItem } from '@/utils/reconciliationUtils';
 import { normalizeEpc, removeLeadingZeros } from '@/utils/reconciliationUtils';
 import { useSettingsStore } from './settingsStore';
 import { useAuthStore } from './authStore';
+import { useOrgStore } from './orgStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
-import { useLocationStore } from './locations/locationStore';
 
 // Tag classification type
 export type TagType = 'asset' | 'location' | 'unknown';
@@ -54,6 +54,9 @@ interface TagState {
   tags: TagInfo[];
   selectedTag: TagInfo | null;
   displayFormat: 'hex' | 'decimal';
+
+  // Track which org the enrichment data belongs to (for detecting stale data on page reload)
+  enrichedOrgId: number | null;
 
   // Sorting state
   sortColumn: string | null;
@@ -103,7 +106,6 @@ interface TagState {
   // Internal lookup queue actions
   _queueForLookup: (epc: string) => void;
   _flushLookupQueue: () => Promise<void>;
-  _enrichTagsWithLocations: () => void;
 }
 
 export const useTagStore = create<TagState>()(
@@ -113,6 +115,7 @@ export const useTagStore = create<TagState>()(
   tags: [],
   selectedTag: null,
   displayFormat: 'decimal', // Default to decimal format
+  enrichedOrgId: null, // Track which org the enrichment data belongs to
 
   // Sorting initial state - default to timestamp descending
   sortColumn: 'timestamp',
@@ -260,27 +263,16 @@ export const useTagStore = create<TagState>()(
   
   addTag: (tag) => {
     const epc = tag.epc || '';
+    const displayEpc = removeLeadingZeros(epc);
     const state = get();
     const existingIndex = state.tags.findIndex(t => t.epc === epc);
     const isNewTag = existingIndex < 0;
 
-    // Check location cache synchronously for new tags (TRA-312)
-    let tagType: TagType = 'unknown';
-    let locationId: number | undefined;
-    let locationName: string | undefined;
-
-    if (isNewTag) {
-      const location = useLocationStore.getState().getLocationByTagEpc(epc);
-      if (location) {
-        tagType = 'location';
-        locationId = location.id;
-        locationName = location.name;
-      }
-    }
+    // Tag classification will be done asynchronously via the lookup API
+    // Keep initial type as 'unknown' - _flushLookupQueue will classify as asset or location
 
     set((state) => {
       const now = Date.now();
-      const displayEpc = removeLeadingZeros(epc);
 
       let newTags;
       if (existingIndex >= 0) {
@@ -296,15 +288,13 @@ export const useTagStore = create<TagState>()(
           timestamp: now
         };
       } else {
-        // Create new tag with classification (TRA-312)
+        // Create new tag - classification done asynchronously via lookup API
         const newTag: TagInfo = {
           epc,
           displayEpc,
           count: 1,
           source: 'rfid',
-          type: tagType,
-          locationId,
-          locationName,
+          type: 'unknown',
           firstSeenTime: now,
           lastSeenTime: now,
           readCount: 1,
@@ -324,8 +314,8 @@ export const useTagStore = create<TagState>()(
       };
     });
 
-    // Queue new tags for batch lookup (only if not already classified as location)
-    if (isNewTag && epc && tagType !== 'location') {
+    // Queue all new tags for batch lookup to classify as asset or location
+    if (isNewTag && epc) {
       get()._queueForLookup(epc);
     }
   },
@@ -353,14 +343,19 @@ export const useTagStore = create<TagState>()(
     lastRSSIUpdateTime: Date.now()
   }),
 
-  // Re-enrich all tags with current asset data via API lookup
+  // Re-enrich all tags with current asset/location data via API lookup
   refreshAssetEnrichment: async () => {
     const state = get();
-    // Get all EPCs that don't have assetId yet
+    // Get all EPCs that haven't been classified yet (no assetId AND no locationId)
     const unenriched = state.tags
-      .filter(t => t.assetId === undefined)
+      .filter(t => t.assetId === undefined && t.locationId === undefined)
       .map(t => t.epc)
       .filter(Boolean);
+
+    console.log('[TagStore] refreshAssetEnrichment:', {
+      totalTags: state.tags.length,
+      unenrichedCount: unenriched.length,
+    });
 
     if (unenriched.length === 0) return;
 
@@ -391,6 +386,7 @@ export const useTagStore = create<TagState>()(
     // Skip API call for anonymous users - keep queue intact for later
     const isAuthenticated = useAuthStore.getState().isAuthenticated;
     if (!isAuthenticated) {
+      console.log('[TagStore] _flushLookupQueue: skipping (not authenticated)');
       return;
     }
 
@@ -398,8 +394,16 @@ export const useTagStore = create<TagState>()(
 
     // Don't run if already in progress or queue is empty
     if (state._isLookupInProgress || state._lookupQueue.size === 0) {
+      console.log('[TagStore] _flushLookupQueue: skipping', {
+        inProgress: state._isLookupInProgress,
+        queueSize: state._lookupQueue.size,
+      });
       return;
     }
+
+    console.log('[TagStore] _flushLookupQueue: starting', {
+      queueSize: state._lookupQueue.size,
+    });
 
     // Take snapshot of queue and clear it
     const epcs = Array.from(state._lookupQueue);
@@ -413,7 +417,18 @@ export const useTagStore = create<TagState>()(
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
       const results = response.data.data;
 
-      // Update tags with asset info from lookup results (TRA-312: set type to 'asset')
+      const matchedAssets = Object.values(results).filter((r: any) => r?.asset).length;
+      const matchedLocations = Object.values(results).filter((r: any) => r?.location).length;
+      console.log('[TagStore] _flushLookupQueue: API response', {
+        epcCount: epcs.length,
+        matchedAssets,
+        matchedLocations,
+      });
+
+      // Get current org ID to track which org this enrichment belongs to
+      const currentOrgId = useOrgStore.getState().currentOrg?.id ?? null;
+
+      // Update tags with asset OR location info from lookup results (TRA-312/TRA-313)
       set((state) => ({
         tags: state.tags.map(tag => {
           const result = results[tag.epc];
@@ -426,45 +441,41 @@ export const useTagStore = create<TagState>()(
               assetIdentifier: result.asset.identifier,
               description: result.asset.description || undefined,
             };
+          } else if (result?.location) {
+            return {
+              ...tag,
+              type: 'location' as TagType,
+              locationId: result.location.id,
+              locationName: result.location.name,
+            };
           }
           return tag;
-        })
+        }),
+        // Track which org this enrichment belongs to (for detecting stale data on reload)
+        enrichedOrgId: (matchedAssets > 0 || matchedLocations > 0) ? currentOrgId : state.enrichedOrgId,
       }));
     } catch (error) {
+      console.error('[TagStore] _flushLookupQueue: API error', error);
       // On error, re-queue the EPCs for retry on next batch
       epcs.forEach(epc => get()._lookupQueue.add(epc));
     } finally {
       set({ _isLookupInProgress: false });
+
+      // Check if items were added to queue while we were processing
+      // This handles the race condition where multiple callers try to flush
+      if (get()._lookupQueue.size > 0) {
+        // Schedule another flush (use setTimeout to avoid stack overflow)
+        setTimeout(() => get()._flushLookupQueue(), 0);
+      }
     }
   },
 
-  // Re-enrich tags with location data after login (TRA-312)
-  _enrichTagsWithLocations: () => {
-    set((state) => ({
-      tags: state.tags.map(tag => {
-        // Only process unknown tags (not already classified)
-        if (tag.type !== 'unknown') {
-          return tag;
-        }
-
-        const location = useLocationStore.getState().getLocationByTagEpc(tag.epc);
-        if (location) {
-          return {
-            ...tag,
-            type: 'location' as TagType,
-            locationId: location.id,
-            locationName: location.name,
-          };
-        }
-        return tag;
-      })
-    }));
-  },
   }), 'TagStore'),
   {
     name: 'tag-storage',
-    partialize: (state: TagState) => ({ 
+    partialize: (state: TagState) => ({
       tags: state.tags,
+      enrichedOrgId: state.enrichedOrgId,
       currentPage: state.currentPage,
       sortColumn: state.sortColumn,
       sortDirection: state.sortDirection
@@ -473,17 +484,87 @@ export const useTagStore = create<TagState>()(
   )
 );
 
-// Flush lookup queue when user logs in (for tags scanned while anonymous)
+// Re-enrich tags when user logs in (for tags scanned while anonymous)
 useAuthStore.subscribe((state, prevState) => {
   // Only react to login (false -> true transition)
   if (state.isAuthenticated && !prevState.isAuthenticated) {
-    // User just logged in - flush any queued EPCs for asset enrichment
-    useTagStore.getState()._flushLookupQueue();
+    // User just logged in - re-enrich any unenriched tags from localStorage
+    // Note: _lookupQueue is not persisted, so we must use refreshAssetEnrichment
+    // which finds tags without assetId/locationId and queues them for lookup
+    const tagState = useTagStore.getState();
+    console.log('[TagStore] Auth subscription: login detected', {
+      tagCount: tagState.tags.length,
+      unenriched: tagState.tags.filter(t => t.assetId === undefined && t.locationId === undefined).length,
+    });
+    tagState.refreshAssetEnrichment();
+  }
 
-    // Re-enrich tags with location data now that cache may be populated (TRA-312)
-    // Small delay to ensure locationStore has been initialized by useLocations hook
-    setTimeout(() => {
-      useTagStore.getState()._enrichTagsWithLocations();
-    }, 100);
+  // Clear enrichment data when user logs out (true -> false transition)
+  if (!state.isAuthenticated && prevState.isAuthenticated) {
+    console.log('[TagStore] Auth subscription: logout detected, clearing enrichment');
+    const tagStore = useTagStore.getState();
+    tagStore.setTags(
+      tagStore.tags.map(tag => ({
+        ...tag,
+        type: 'unknown' as const,
+        assetId: undefined,
+        assetName: undefined,
+        assetIdentifier: undefined,
+        locationId: undefined,
+        locationName: undefined,
+      }))
+    );
   }
 });
+
+// Clear enrichment data when org changes (asset/location IDs are org-specific)
+// Guard against test environments where subscribe may not exist on mocked stores
+if (typeof useOrgStore.subscribe === 'function') {
+  useOrgStore.subscribe((state, prevState) => {
+    const newOrgId = state.currentOrg?.id;
+    const prevOrgId = prevState.currentOrg?.id;
+
+    // Only trigger on actual org change, not on first load
+    if (newOrgId !== prevOrgId && newOrgId !== undefined) {
+      const tagStore = useTagStore.getState();
+      const enrichedOrgId = tagStore.enrichedOrgId;
+      console.log('[TagStore] Org subscription: org changed', {
+        prevOrgId,
+        newOrgId,
+        enrichedOrgId,
+        tagCount: tagStore.tags.length,
+      });
+
+      // Clear mappings when:
+      // 1. Switching FROM one org TO another (prevOrgId defined)
+      // 2. On first login if enrichedOrgId doesn't match (stale data from previous session)
+      const shouldClear = prevOrgId !== undefined ||
+        (enrichedOrgId !== null && enrichedOrgId !== newOrgId);
+
+      if (shouldClear) {
+        console.log('[TagStore] Org subscription: clearing mappings', {
+          reason: prevOrgId !== undefined ? 'org switch' : 'stale enrichment from different org',
+        });
+        // Clear asset/location mappings but keep EPC and scan data
+        tagStore.setTags(
+          tagStore.tags.map(tag => ({
+            ...tag,
+            type: 'unknown' as const,
+            assetId: undefined,
+            assetName: undefined,
+            assetIdentifier: undefined,
+            locationId: undefined,
+            locationName: undefined,
+          }))
+        );
+        // Reset enrichedOrgId since we cleared the data
+        useTagStore.setState({ enrichedOrgId: null });
+      } else {
+        console.log('[TagStore] Org subscription: first login, same org or no prior enrichment');
+      }
+
+      // Re-enrich with new org's data (or enrich for first time on login)
+      tagStore.refreshAssetEnrichment();
+    }
+  });
+}

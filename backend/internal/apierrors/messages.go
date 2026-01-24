@@ -143,6 +143,12 @@ const (
 	MemberInvalidRole          = "Invalid role"
 )
 
+// Inventory error messages
+const (
+	InventorySaveFailed    = "Failed to save inventory"
+	InventorySaveForbidden = "Location or assets not accessible"
+)
+
 // Invitation error messages
 const (
 	InvitationListFailed          = "Failed to list invitations"

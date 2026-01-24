@@ -62,7 +62,19 @@ export const useAuthStore = create<AuthState>()(
             });
 
             // Fetch profile to populate org data after login
-            get().fetchProfile();
+            await get().fetchProfile();
+
+            // Ensure token has org_id claim for org-scoped API calls
+            const profile = get().profile;
+            if (profile?.current_org?.id) {
+              try {
+                console.log('[AuthStore] Refreshing token with org_id:', profile.current_org.id);
+                const orgResponse = await orgsApi.setCurrentOrg({ org_id: profile.current_org.id });
+                set({ token: orgResponse.data.token });
+              } catch (err) {
+                console.error('[AuthStore] Failed to refresh token with org_id:', err);
+              }
+            }
           } catch (err: any) {
             // Extract error message from RFC 7807 Problem Details format
             // Handle empty strings by checking truthy AND non-empty
@@ -115,7 +127,19 @@ export const useAuthStore = create<AuthState>()(
             });
 
             // Fetch profile to populate org data after signup
-            get().fetchProfile();
+            await get().fetchProfile();
+
+            // Ensure token has org_id claim for org-scoped API calls
+            const profile = get().profile;
+            if (profile?.current_org?.id) {
+              try {
+                console.log('[AuthStore] Refreshing token with org_id:', profile.current_org.id);
+                const orgResponse = await orgsApi.setCurrentOrg({ org_id: profile.current_org.id });
+                set({ token: orgResponse.data.token });
+              } catch (err) {
+                console.error('[AuthStore] Failed to refresh token with org_id:', err);
+              }
+            }
           } catch (err: any) {
             // Extract error message from RFC 7807 Problem Details format
             // Handle empty strings by checking truthy AND non-empty

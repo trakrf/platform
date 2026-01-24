@@ -1,4 +1,4 @@
-import { Download, Package2, Trash2, Upload, Volume2, VolumeX, Play, Pause } from 'lucide-react';
+import { Download, Package2, Trash2, Upload, Volume2, VolumeX, Play, Pause, Save } from 'lucide-react';
 import { ShareButton } from '@/components/ShareButton';
 import type { ExportFormat } from '@/types/export';
 import { InventorySearchBar } from './InventorySearchBar';
@@ -17,7 +17,15 @@ interface InventoryHeaderProps {
   isProcessingCSV: boolean;
   onShareFormatSelect: (format: ExportFormat) => void;
   hasItems: boolean;
-  readerState: string
+  readerState: string;
+  // Save button props
+  onSave: () => void;
+  isSaveDisabled: boolean;
+  isSaving?: boolean;
+  saveableCount: number;
+  // Clear button pulse animation
+  showClearPulse?: boolean;
+  onClearPulseEnd?: () => void;
 }
 
 export function InventoryHeader({
@@ -34,6 +42,12 @@ export function InventoryHeader({
   onShareFormatSelect,
   hasItems,
   readerState,
+  onSave,
+  isSaveDisabled,
+  isSaving = false,
+  saveableCount,
+  showClearPulse = false,
+  onClearPulseEnd,
 }: InventoryHeaderProps) {
   const scanButtonActive = useDeviceStore((state) => state.scanButtonActive); // UI button state
   const toggleScanButton = useDeviceStore((state) => state.toggleScanButton);
@@ -82,7 +96,8 @@ export function InventoryHeader({
             </div>
             <button
               onClick={onClearInventory}
-              className="p-1.5 sm:p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+              onAnimationEnd={onClearPulseEnd}
+              className={`p-1.5 sm:p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors ${showClearPulse ? 'pulse-attention' : ''}`}
               title="Clear inventory"
             >
               <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -99,6 +114,18 @@ export function InventoryHeader({
               disabled={!hasItems}
               iconOnly={true}
             />
+            <button
+              onClick={onSave}
+              disabled={isSaveDisabled}
+              className="p-1.5 sm:p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title={isSaveDisabled ? 'Select a location first' : `Save ${saveableCount} assets`}
+            >
+              {isSaving ? (
+                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              )}
+            </button>
           </div>
         </div>
         <InventorySearchBar value={searchTerm} onChange={onSearchChange} />
@@ -154,7 +181,8 @@ export function InventoryHeader({
           </div>
           <button
             onClick={onClearInventory}
-            className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center text-sm"
+            onAnimationEnd={onClearPulseEnd}
+            className={`px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center text-sm ${showClearPulse ? 'pulse-attention' : ''}`}
           >
             <Trash2 className="w-4 h-4 mr-1.5" />
             Clear
@@ -172,6 +200,19 @@ export function InventoryHeader({
             disabled={!hasItems}
             iconOnly={false}
           />
+          <button
+            onClick={onSave}
+            disabled={isSaveDisabled}
+            className="px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center text-sm"
+            title={isSaveDisabled ? 'Select a location first' : `Save ${saveableCount} assets`}
+          >
+            {isSaving ? (
+              <div className="w-4 h-4 mr-1.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-1.5" />
+            )}
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
         </div>
       </div>
     </div>

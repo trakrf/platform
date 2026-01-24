@@ -9,6 +9,7 @@ import (
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
+	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
@@ -31,12 +32,13 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
+	inventoryHandler := inventoryhandler.NewHandler(store)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, "test", time.Now())
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	testHandler := testhandler.NewHandler(store)
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {

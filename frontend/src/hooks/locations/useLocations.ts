@@ -2,10 +2,46 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { locationsApi } from '@/lib/api/locations';
+import type { Location } from '@/types/locations';
 
 export interface UseLocationsOptions {
   enabled?: boolean;
   refetchOnMount?: boolean;
+}
+
+const PAGE_SIZE = 100;
+
+/**
+ * Fetch all locations by paginating through results.
+ * Required for building complete byTagEpc cache for location tag detection.
+ */
+async function fetchAllLocations(): Promise<{ data: Location[]; total_count: number }> {
+  const allLocations: Location[] = [];
+  let offset = 0;
+  let totalCount = 0;
+
+  // Fetch first page to get total count
+  const firstPage = await locationsApi.list({ limit: PAGE_SIZE, offset: 0 });
+  allLocations.push(...firstPage.data.data);
+  totalCount = firstPage.data.total_count;
+
+  // Fetch remaining pages if needed
+  while (allLocations.length < totalCount) {
+    offset += PAGE_SIZE;
+    const page = await locationsApi.list({ limit: PAGE_SIZE, offset });
+    if (page.data.data.length === 0) break; // Safety: no more data
+    allLocations.push(...page.data.data);
+  }
+
+  // Sanity check: warn if we somehow have fewer than expected
+  if (allLocations.length < totalCount) {
+    console.warn(
+      `[useLocations] Fetched ${allLocations.length} locations but total_count is ${totalCount}. ` +
+      `Some locations may be missing from cache.`
+    );
+  }
+
+  return { data: allLocations, total_count: totalCount };
 }
 
 export function useLocations(options: UseLocationsOptions = {}) {
@@ -15,9 +51,9 @@ export function useLocations(options: UseLocationsOptions = {}) {
   const query = useQuery({
     queryKey: ['locations', currentOrg?.id],
     queryFn: async () => {
-      const response = await locationsApi.list();
-      useLocationStore.getState().setLocations(response.data.data);
-      return response.data;
+      const result = await fetchAllLocations();
+      useLocationStore.getState().setLocations(result.data);
+      return result;
     },
     enabled,
     refetchOnMount,

@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, BarChart3, Package2 } from 'lucide-react';
+import { CheckCircle, XCircle, BarChart3, Package2, Save } from 'lucide-react';
 
 interface InventoryStatsProps {
   stats: {
@@ -7,6 +7,7 @@ interface InventoryStatsProps {
     notListed: number;
     totalScanned: number;
     hasReconciliation: boolean;
+    saveable: number;
   };
   activeFilters: Set<string>;
   onToggleFilter: (filter: string) => void;
@@ -15,7 +16,7 @@ interface InventoryStatsProps {
 
 export function InventoryStats({ stats, activeFilters, onToggleFilter, onClearFilters }: InventoryStatsProps) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 md:gap-3">
       <button
         onClick={() => onToggleFilter('Found')}
         className={`bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-2 md:p-3 cursor-pointer transition-shadow text-left w-full ${
@@ -97,6 +98,19 @@ export function InventoryStats({ stats, activeFilters, onToggleFilter, onClearFi
           </div>
         </div>
       </button>
+
+      <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-2 md:p-3 text-left w-full">
+        <div className="flex items-center justify-between">
+          <div className="w-full">
+            <div className="flex items-center mb-0.5 sm:mb-1">
+              <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-purple-600 mr-1 sm:mr-1.5 md:mr-2 flex-shrink-0" />
+              <span className="text-purple-800 dark:text-purple-200 font-semibold text-[10px] xs:text-xs sm:text-sm lg:text-base truncate">Saveable</span>
+            </div>
+            <div className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-purple-800 dark:text-purple-200">{stats.saveable}</div>
+            <div className="text-purple-600 dark:text-purple-400 text-[10px] xs:text-xs lg:text-sm truncate">Recognized assets</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
