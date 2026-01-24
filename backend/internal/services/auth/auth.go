@@ -227,16 +227,15 @@ func (s *Service) Login(ctx context.Context, request auth.LoginRequest, compareP
 		return nil, fmt.Errorf("invalid email or password")
 	}
 
-	orgUserQuery := `
-		SELECT org_id
-		FROM trakrf.org_users
-		WHERE user_id = $1 AND deleted_at IS NULL
-		LIMIT 1
-	`
-	var orgID int
-	err = s.db.QueryRow(ctx, orgUserQuery, usr.ID).Scan(&orgID)
+	orgIDPtr, err := s.storage.GetUserPreferredOrgID(ctx, usr.ID)
 	if err != nil {
-		orgID = 0
+		// Log but don't fail login - user can still select org manually
+		fmt.Printf("Warning: failed to get preferred org: %v\n", err)
+	}
+
+	var orgID int
+	if orgIDPtr != nil {
+		orgID = *orgIDPtr
 	}
 
 	// Update last_login_at timestamp
@@ -253,10 +252,6 @@ func (s *Service) Login(ctx context.Context, request auth.LoginRequest, compareP
 		}
 	}
 
-	var orgIDPtr *int
-	if orgID != 0 {
-		orgIDPtr = &orgID
-	}
 	token, err := generateJWT(usr.ID, usr.Email, orgIDPtr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate JWT: %w", err)

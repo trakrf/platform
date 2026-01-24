@@ -15,7 +15,6 @@ export function useDoubleTap(volume: number = 0.5) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const startDoubleTap = useCallback((intervalMs: number) => {
-    console.debug('[useDoubleTap] Starting double-tap with interval', intervalMs, 'ms');
     // Clear any existing interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -23,13 +22,11 @@ export function useDoubleTap(volume: number = 0.5) {
     }
 
     // Play double tap immediately
-    console.debug('[useDoubleTap] Playing initial double-tap');
     playTap();
     setTimeout(() => playTap(), 150); // Second tap 150ms after first
 
     // Set up interval for subsequent double taps
     intervalRef.current = setInterval(() => {
-      console.debug('[useDoubleTap] Playing interval double-tap');
       playTap();
       setTimeout(() => playTap(), 150); // Second tap 150ms after first
     }, intervalMs);

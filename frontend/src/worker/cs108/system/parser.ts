@@ -50,8 +50,5 @@ export const parseBatteryPercentage: ScalarParser = (data: Uint8Array): number =
   // Clamp to 0-100 range and round to integer
   const clampedPercentage = Math.round(Math.max(0, Math.min(100, percentage)));
 
-  // Debug logging for battery voltage and percentage
-  console.debug(`[BatteryParser] Raw voltage: ${voltage}mV, Calculated: ${Math.round(percentage)}%, Clamped: ${clampedPercentage}%`);
-
   return clampedPercentage;
 };
