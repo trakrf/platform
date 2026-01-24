@@ -65,13 +65,17 @@ export async function invalidateAllOrgScopedData(queryClient: QueryClient): Prom
     localStorage.removeItem(key);
   }
 
-  // 4. Invalidate react-query caches
-  queryClient.invalidateQueries({
-    predicate: (query) => {
+  // 4. Remove AND invalidate react-query caches
+  // removeQueries: deletes cached data so queries must refetch
+  // invalidateQueries: marks as stale (needed if component is already mounted)
+  const queryPredicate = {
+    predicate: (query: { queryKey: readonly unknown[] }) => {
       const key = query.queryKey[0];
       return typeof key === 'string' && ORG_SCOPED_QUERY_PREFIXES.includes(key);
     },
-  });
+  };
+  queryClient.removeQueries(queryPredicate);
+  queryClient.invalidateQueries(queryPredicate);
 }
 
 // Export for testing

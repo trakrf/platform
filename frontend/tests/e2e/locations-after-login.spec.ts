@@ -95,19 +95,19 @@ async function getDisplayedLocationCount(page: Page): Promise<number> {
  * Perform logout via UI
  */
 async function logoutViaUI(page: Page): Promise<void> {
-  // Click user menu button
-  const userMenuButton = page.locator('[data-testid="user-menu-button"]');
-  await userMenuButton.click();
+  // Click org switcher menu button
+  const orgSwitcher = page.locator('[data-testid="org-switcher"]');
+  await orgSwitcher.click();
 
   // Wait for menu to open
   await page.waitForTimeout(300);
 
   // Click logout button
-  const logoutButton = page.locator('button:has-text("Log out")');
+  const logoutButton = page.locator('button:has-text("Logout")');
   await logoutButton.click();
 
-  // Wait for redirect to login
-  await page.waitForURL(/#login/, { timeout: 5000 });
+  // Wait for logged-out state - "Log In" button appears in header
+  await page.waitForSelector('button:has-text("Log In")', { timeout: 5000 });
 }
 
 test.describe('Locations After Login (TRA-318)', () => {
@@ -171,8 +171,8 @@ test.describe('Locations After Login (TRA-318)', () => {
     // Perform logout
     await logoutViaUI(sharedPage);
 
-    // Verify we're on login page
-    await expect(sharedPage).toHaveURL(/#login/);
+    // Verify logged-out state - "Log In" button visible
+    await expect(sharedPage.locator('button:has-text("Log In")')).toBeVisible();
 
     // Verify auth state is cleared
     const isAuthenticated = await sharedPage.evaluate(() => {
