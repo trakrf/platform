@@ -149,6 +149,12 @@ const (
 	InventorySaveForbidden = "Location or assets not accessible"
 )
 
+// Report error messages
+const (
+	ReportCurrentLocationsFailed = "Failed to list current locations"
+	ReportCurrentLocationsCount  = "Failed to count current locations"
+)
+
 // Invitation error messages
 const (
 	InvitationListFailed          = "Failed to list invitations"
