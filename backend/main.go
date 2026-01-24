@@ -28,6 +28,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
+	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/logger"
@@ -100,6 +101,7 @@ func setupRouter(
 	assetsHandler *assetshandler.Handler,
 	locationsHandler *locationshandler.Handler,
 	inventoryHandler *inventoryhandler.Handler,
+	reportsHandler *reportshandler.Handler,
 	lookupHandler *lookuphandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
@@ -138,6 +140,7 @@ func setupRouter(
 		assetsHandler.RegisterRoutes(r)
 		locationsHandler.RegisterRoutes(r)
 		inventoryHandler.RegisterRoutes(r)
+		reportsHandler.RegisterRoutes(r)
 		lookupHandler.RegisterRoutes(r)
 	})
 
@@ -208,13 +211,14 @@ func main() {
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
 	inventoryHandler := inventoryhandler.NewHandler(store)
+	reportsHandler := reportshandler.NewHandler(store)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
