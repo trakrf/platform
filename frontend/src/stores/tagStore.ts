@@ -352,11 +352,6 @@ export const useTagStore = create<TagState>()(
       .map(t => t.epc)
       .filter(Boolean);
 
-    console.log('[TagStore] refreshAssetEnrichment:', {
-      totalTags: state.tags.length,
-      unenrichedCount: unenriched.length,
-    });
-
     if (unenriched.length === 0) return;
 
     // Add to queue and flush immediately
@@ -386,7 +381,6 @@ export const useTagStore = create<TagState>()(
     // Skip API call for anonymous users - keep queue intact for later
     const isAuthenticated = useAuthStore.getState().isAuthenticated;
     if (!isAuthenticated) {
-      console.log('[TagStore] _flushLookupQueue: skipping (not authenticated)');
       return;
     }
 
@@ -394,16 +388,8 @@ export const useTagStore = create<TagState>()(
 
     // Don't run if already in progress or queue is empty
     if (state._isLookupInProgress || state._lookupQueue.size === 0) {
-      console.log('[TagStore] _flushLookupQueue: skipping', {
-        inProgress: state._isLookupInProgress,
-        queueSize: state._lookupQueue.size,
-      });
       return;
     }
-
-    console.log('[TagStore] _flushLookupQueue: starting', {
-      queueSize: state._lookupQueue.size,
-    });
 
     // Take snapshot of queue and clear it
     const epcs = Array.from(state._lookupQueue);
@@ -416,14 +402,6 @@ export const useTagStore = create<TagState>()(
     try {
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
       const results = response.data.data;
-
-      const matchedAssets = Object.values(results).filter((r: any) => r?.asset).length;
-      const matchedLocations = Object.values(results).filter((r: any) => r?.location).length;
-      console.log('[TagStore] _flushLookupQueue: API response', {
-        epcCount: epcs.length,
-        matchedAssets,
-        matchedLocations,
-      });
 
       // Get current org ID to track which org this enrichment belongs to
       const currentOrgId = useOrgStore.getState().currentOrg?.id ?? null;
@@ -459,7 +437,8 @@ export const useTagStore = create<TagState>()(
       }));
 
       // Track which org this enrichment belongs to (for canary detection)
-      if (matchedAssets > 0 || matchedLocations > 0) {
+      const hasResults = Object.values(results).some((r: any) => r?.asset || r?.location);
+      if (hasResults) {
         lastEnrichmentOrgId = currentOrgId;
       }
     } catch (error) {

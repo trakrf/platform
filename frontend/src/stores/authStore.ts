@@ -30,7 +30,30 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     createStoreWithTracking(
-      (set, get) => ({
+      (set, get) => {
+        // Helper to refresh token with org context (used by login and signup)
+        const refreshTokenWithOrg = async (orgId: number, actionName: string, attempt: number = 1): Promise<void> => {
+          try {
+            console.log('[AuthStore] Refreshing token with org_id:', orgId, attempt > 1 ? `(attempt ${attempt})` : '');
+            const orgResponse = await orgsApi.setCurrentOrg({ org_id: orgId });
+            set({ token: orgResponse.data.token });
+
+            // INVALIDATE: After setCurrentOrg() returns with org_id token
+            const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
+            const { queryClient } = await import('@/lib/queryClient');
+            await invalidateAllOrgScopedData(queryClient);
+          } catch (err) {
+            if (attempt < 2) {
+              console.warn('[AuthStore] setCurrentOrg failed, retrying...', err);
+              await refreshTokenWithOrg(orgId, actionName, attempt + 1);
+            } else {
+              console.error('[AuthStore] Failed to refresh token with org_id after retry:', err);
+              throw new Error(`${actionName} failed: could not set organization context`);
+            }
+          }
+        };
+
+        return {
         // Initial state
         user: null,
         token: null,
@@ -67,18 +90,7 @@ export const useAuthStore = create<AuthState>()(
             // Ensure token has org_id claim for org-scoped API calls
             const profile = get().profile;
             if (profile?.current_org?.id) {
-              try {
-                console.log('[AuthStore] Refreshing token with org_id:', profile.current_org.id);
-                const orgResponse = await orgsApi.setCurrentOrg({ org_id: profile.current_org.id });
-                set({ token: orgResponse.data.token });
-
-                // INVALIDATE: After setCurrentOrg() returns with org_id token
-                const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
-                const { queryClient } = await import('@/lib/queryClient');
-                await invalidateAllOrgScopedData(queryClient);
-              } catch (err) {
-                console.error('[AuthStore] Failed to refresh token with org_id:', err);
-              }
+              await refreshTokenWithOrg(profile.current_org.id, 'Login');
             }
           } catch (err: unknown) {
             // Extract error message from RFC 7807 Problem Details format
@@ -138,18 +150,7 @@ export const useAuthStore = create<AuthState>()(
             // Ensure token has org_id claim for org-scoped API calls
             const profile = get().profile;
             if (profile?.current_org?.id) {
-              try {
-                console.log('[AuthStore] Refreshing token with org_id:', profile.current_org.id);
-                const orgResponse = await orgsApi.setCurrentOrg({ org_id: profile.current_org.id });
-                set({ token: orgResponse.data.token });
-
-                // INVALIDATE: After setCurrentOrg() returns with org_id token
-                const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
-                const { queryClient } = await import('@/lib/queryClient');
-                await invalidateAllOrgScopedData(queryClient);
-              } catch (err) {
-                console.error('[AuthStore] Failed to refresh token with org_id:', err);
-              }
+              await refreshTokenWithOrg(profile.current_org.id, 'Signup');
             }
           } catch (err: unknown) {
             // Extract error message from RFC 7807 Problem Details format
@@ -259,7 +260,8 @@ export const useAuthStore = create<AuthState>()(
             set({ profileLoading: false });
           }
         },
-      }),
+      };
+      },
       'authStore'
     ),
     {

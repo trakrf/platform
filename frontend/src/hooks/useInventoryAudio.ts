@@ -43,7 +43,6 @@ export function useInventoryAudio() {
   useEffect(() => {
     // Stop all sounds if disabled or not actively scanning
     if (!isEnabled || readerState !== ReaderState.SCANNING) {
-      console.debug('[useInventoryAudio] Stopping all sounds - enabled:', isEnabled, 'state:', readerState);
       beeper.stopBeeping();
       tapper.stopDoubleTap();
       return;
@@ -52,13 +51,11 @@ export function useInventoryAudio() {
     // Use different sounds for different states
     if (readsPerSecond > 0) {
       // Reading tags - use beep with frequency based on read rate
-      console.debug('[useInventoryAudio] Reading tags at', readsPerSecond, 'reads/sec');
       tapper.stopDoubleTap(); // Stop tap if it was playing
       const interval = frequencyToBeepInterval(readsPerSecond);
       beeper.startBeeping(interval);
     } else {
       // Scanning but no tags - use double-tap heartbeat
-      console.debug('[useInventoryAudio] Scanning without tags - starting tap heartbeat');
       beeper.stopBeeping(); // Stop beep if it was playing
       tapper.startDoubleTap(2000); // Double-tap every 2 seconds
     }

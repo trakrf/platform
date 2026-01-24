@@ -206,3 +206,34 @@ func (s *Storage) UpdateUserLastOrg(ctx context.Context, userID, orgID int) erro
 	}
 	return nil
 }
+
+// GetUserPreferredOrgID returns the user's last_org_id if set and valid,
+// otherwise returns their first org membership (by name), or nil if no orgs.
+func (s *Storage) GetUserPreferredOrgID(ctx context.Context, userID int) (*int, error) {
+	query := `
+		SELECT COALESCE(
+			-- First try: user's last_org_id if they're still a member
+			(SELECT u.last_org_id
+			 FROM trakrf.users u
+			 JOIN trakrf.org_users ou ON ou.org_id = u.last_org_id AND ou.user_id = u.id
+			 WHERE u.id = $1 AND u.last_org_id IS NOT NULL
+			   AND ou.deleted_at IS NULL AND u.deleted_at IS NULL),
+			-- Fallback: first org by name (consistent with ListUserOrgs)
+			(SELECT ou.org_id
+			 FROM trakrf.org_users ou
+			 JOIN trakrf.organizations o ON o.id = ou.org_id
+			 WHERE ou.user_id = $1 AND ou.deleted_at IS NULL AND o.deleted_at IS NULL
+			 ORDER BY o.name ASC
+			 LIMIT 1)
+		) as org_id
+	`
+	var orgID *int
+	err := s.pool.QueryRow(ctx, query, userID).Scan(&orgID)
+	if err == pgx.ErrNoRows || orgID == nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user preferred org: %w", err)
+	}
+	return orgID, nil
+}

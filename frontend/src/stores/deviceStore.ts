@@ -55,15 +55,12 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
   
   // Actions
   setReaderState: (state) => set((prevState) => {
-    // Debug logging for state transitions
-    if (prevState.readerState !== state) {
-      console.debug(`[DeviceStore] Reader state change: ${prevState.readerState} -> ${state}`);
-      // Log stack trace for READY transitions after DISCONNECTED
-      if (prevState.readerState === ReaderState.DISCONNECTED && state === ReaderState.CONNECTED) {
-        console.warn('[DeviceStore] WARNING: Setting READY after DISCONNECTED - this is likely a bug');
-        console.trace();
-      }
+    // Log warning for suspicious state transitions (DISCONNECTED -> CONNECTED without CONNECTING)
+    if (prevState.readerState === ReaderState.DISCONNECTED && state === ReaderState.CONNECTED) {
+      console.warn('[DeviceStore] WARNING: Setting CONNECTED after DISCONNECTED - this is likely a bug');
+      console.trace();
     }
+
     const isConnected = state !== ReaderState.DISCONNECTED;
     const isScanning = state === ReaderState.SCANNING;
 
@@ -72,21 +69,16 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
     // If reader disconnects or errors, also turn off the button
     let scanButtonActive = prevState.scanButtonActive;
     if (state === ReaderState.CONNECTED && prevState.readerState === ReaderState.SCANNING) {
-      console.debug('[DeviceStore] Scanning stopped - resetting scan button');
       scanButtonActive = false;
     } else if (state === ReaderState.DISCONNECTED) {
       scanButtonActive = false;
     } else if (state === ReaderState.ERROR) {
-      console.debug('[DeviceStore] Reader error - resetting scan button');
       scanButtonActive = false;
     }
 
     return { readerState: state, isConnected, isScanning, scanButtonActive };
   }),
-  setReaderMode: (mode) => set((prevState) => {
-    if (prevState.readerMode !== mode) {
-      console.debug(`[DeviceStore] Reader mode change: ${prevState.readerMode} -> ${mode}`);
-    }
+  setReaderMode: (mode) => set(() => {
     return { readerMode: mode };
   }),
   setDeviceName: (name) => set({ deviceName: name }),
@@ -100,13 +92,7 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
   // UI Scanning control - toggles the button state
   // DeviceManager subscribes to this and reacts by calling startScanning/stopScanning
   toggleScanButton: () => set((state) => {
-    const newState = !state.scanButtonActive;
-    console.debug(`[DeviceStore] Scan button toggled: ${state.scanButtonActive} -> ${newState}`);
-
-    // Log the UI action (trackRFIDOperation doesn't have this event type yet)
-    console.debug('[DeviceStore] Scan button toggled for mode:', state.readerMode);
-
-    return { scanButtonActive: newState };
+    return { scanButtonActive: !state.scanButtonActive };
   }),
 
   // Connection methods

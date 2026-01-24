@@ -122,7 +122,7 @@ test.describe('Locations After Login (TRA-318)', () => {
   const testPassword = 'TestPassword123!';
   const testOrgName = `Locations Test Org ${testId}`;
 
-  let testLocations: TestLocation[] = [];
+  const testLocations: TestLocation[] = [];
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
