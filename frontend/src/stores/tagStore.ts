@@ -11,6 +11,10 @@ import { useOrgStore } from './orgStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
 
+// Module-level canary: track which org enrichment data belongs to
+// Used to detect if central invalidation was bypassed (fail loudly)
+let lastEnrichmentOrgId: number | null = null;
+
 // Tag classification type
 export type TagType = 'asset' | 'location' | 'unknown';
 
@@ -54,9 +58,6 @@ interface TagState {
   tags: TagInfo[];
   selectedTag: TagInfo | null;
   displayFormat: 'hex' | 'decimal';
-
-  // Track which org the enrichment data belongs to (for detecting stale data on page reload)
-  enrichedOrgId: number | null;
 
   // Sorting state
   sortColumn: string | null;
@@ -115,7 +116,6 @@ export const useTagStore = create<TagState>()(
   tags: [],
   selectedTag: null,
   displayFormat: 'decimal', // Default to decimal format
-  enrichedOrgId: null, // Track which org the enrichment data belongs to
 
   // Sorting initial state - default to timestamp descending
   sortColumn: 'timestamp',
@@ -428,6 +428,11 @@ export const useTagStore = create<TagState>()(
       // Get current org ID to track which org this enrichment belongs to
       const currentOrgId = useOrgStore.getState().currentOrg?.id ?? null;
 
+      // Canary: detect if central invalidation was bypassed
+      if (lastEnrichmentOrgId !== null && lastEnrichmentOrgId !== currentOrgId) {
+        console.warn('[tagStore] Stale enrichment detected - central invalidation may have been bypassed');
+      }
+
       // Update tags with asset OR location info from lookup results (TRA-312/TRA-313)
       set((state) => ({
         tags: state.tags.map(tag => {
@@ -451,9 +456,12 @@ export const useTagStore = create<TagState>()(
           }
           return tag;
         }),
-        // Track which org this enrichment belongs to (for detecting stale data on reload)
-        enrichedOrgId: (matchedAssets > 0 || matchedLocations > 0) ? currentOrgId : state.enrichedOrgId,
       }));
+
+      // Track which org this enrichment belongs to (for canary detection)
+      if (matchedAssets > 0 || matchedLocations > 0) {
+        lastEnrichmentOrgId = currentOrgId;
+      }
     } catch (error) {
       console.error('[TagStore] _flushLookupQueue: API error', error);
       // On error, re-queue the EPCs for retry on next batch
@@ -475,7 +483,6 @@ export const useTagStore = create<TagState>()(
     name: 'tag-storage',
     partialize: (state: TagState) => ({
       tags: state.tags,
-      enrichedOrgId: state.enrichedOrgId,
       currentPage: state.currentPage,
       sortColumn: state.sortColumn,
       sortDirection: state.sortDirection
@@ -517,54 +524,6 @@ useAuthStore.subscribe((state, prevState) => {
   }
 });
 
-// Clear enrichment data when org changes (asset/location IDs are org-specific)
-// Guard against test environments where subscribe may not exist on mocked stores
-if (typeof useOrgStore.subscribe === 'function') {
-  useOrgStore.subscribe((state, prevState) => {
-    const newOrgId = state.currentOrg?.id;
-    const prevOrgId = prevState.currentOrg?.id;
-
-    // Only trigger on actual org change, not on first load
-    if (newOrgId !== prevOrgId && newOrgId !== undefined) {
-      const tagStore = useTagStore.getState();
-      const enrichedOrgId = tagStore.enrichedOrgId;
-      console.log('[TagStore] Org subscription: org changed', {
-        prevOrgId,
-        newOrgId,
-        enrichedOrgId,
-        tagCount: tagStore.tags.length,
-      });
-
-      // Clear mappings when:
-      // 1. Switching FROM one org TO another (prevOrgId defined)
-      // 2. On first login if enrichedOrgId doesn't match (stale data from previous session)
-      const shouldClear = prevOrgId !== undefined ||
-        (enrichedOrgId !== null && enrichedOrgId !== newOrgId);
-
-      if (shouldClear) {
-        console.log('[TagStore] Org subscription: clearing mappings', {
-          reason: prevOrgId !== undefined ? 'org switch' : 'stale enrichment from different org',
-        });
-        // Clear asset/location mappings but keep EPC and scan data
-        tagStore.setTags(
-          tagStore.tags.map(tag => ({
-            ...tag,
-            type: 'unknown' as const,
-            assetId: undefined,
-            assetName: undefined,
-            assetIdentifier: undefined,
-            locationId: undefined,
-            locationName: undefined,
-          }))
-        );
-        // Reset enrichedOrgId since we cleared the data
-        useTagStore.setState({ enrichedOrgId: null });
-      } else {
-        console.log('[TagStore] Org subscription: first login, same org or no prior enrichment');
-      }
-
-      // Re-enrich with new org's data (or enrich for first time on login)
-      tagStore.refreshAssetEnrichment();
-    }
-  });
-}
+// Note: Org-scoped cache invalidation (including tag clearing) is now handled
+// centrally by invalidateAllOrgScopedData() in @/lib/cache/orgScopedCache.ts
+// The subscription that was here has been removed to avoid scattered invalidation.

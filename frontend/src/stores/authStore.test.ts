@@ -1,13 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAuthStore } from './authStore';
 import { authApi } from '@/lib/api/auth';
+import { orgsApi } from '@/lib/api/orgs';
 import { jwtDecode } from 'jwt-decode';
 
-// Mock the API
+// Mock the APIs
 vi.mock('@/lib/api/auth');
+vi.mock('@/lib/api/orgs');
 
 // Mock jwt-decode
 vi.mock('jwt-decode');
+
+// Mock the cache invalidation module
+vi.mock('@/lib/cache/orgScopedCache', () => ({
+  invalidateAllOrgScopedData: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock the queryClient module
+vi.mock('@/lib/queryClient', () => ({
+  queryClient: {},
+}));
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -45,10 +57,29 @@ describe('authStore', () => {
 
       vi.mocked(authApi.login).mockResolvedValue(mockResponse as any);
 
+      // Mock getProfile to return a profile with current_org
+      vi.mocked(orgsApi.getProfile).mockResolvedValue({
+        data: {
+          data: {
+            id: 1,
+            email: 'test@example.com',
+            name: 'Test User',
+            current_org: { id: 1, name: 'Test Org', role: 'owner' as const },
+            orgs: [{ id: 1, name: 'Test Org' }],
+          },
+        },
+      } as any);
+
+      // Mock setCurrentOrg to return a token with org_id
+      vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
+        data: { token: 'test-token-with-org', message: 'ok' },
+      } as any);
+
       await useAuthStore.getState().login('test@example.com', 'password123');
 
       const state = useAuthStore.getState();
-      expect(state.token).toBe('test-token-123');
+      // Token is updated to the one with org_id claim
+      expect(state.token).toBe('test-token-with-org');
       expect(state.user?.email).toBe('test@example.com');
       expect(state.user?.name).toBe('Test User');
       expect(state.isAuthenticated).toBe(true);
@@ -113,10 +144,29 @@ describe('authStore', () => {
 
       vi.mocked(authApi.signup).mockResolvedValue(mockResponse as any);
 
+      // Mock getProfile to return a profile with current_org
+      vi.mocked(orgsApi.getProfile).mockResolvedValue({
+        data: {
+          data: {
+            id: 2,
+            email: 'newuser@example.com',
+            name: 'New User',
+            current_org: { id: 1, name: 'New Org', role: 'owner' as const },
+            orgs: [{ id: 1, name: 'New Org' }],
+          },
+        },
+      } as any);
+
+      // Mock setCurrentOrg to return a token with org_id
+      vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
+        data: { token: 'new-user-token-with-org', message: 'ok' },
+      } as any);
+
       await useAuthStore.getState().signup('newuser@example.com', 'password123');
 
       const state = useAuthStore.getState();
-      expect(state.token).toBe('new-user-token');
+      // Token is updated to the one with org_id claim
+      expect(state.token).toBe('new-user-token-with-org');
       expect(state.user?.email).toBe('newuser@example.com');
       expect(state.isAuthenticated).toBe(true);
       expect(state.error).toBeNull();
@@ -323,6 +373,24 @@ describe('authStore', () => {
 
       vi.mocked(authApi.login).mockResolvedValue(mockResponse as any);
 
+      // Mock getProfile to return a profile with current_org
+      vi.mocked(orgsApi.getProfile).mockResolvedValue({
+        data: {
+          data: {
+            id: 3,
+            email: 'persist@example.com',
+            name: 'Persist Test',
+            current_org: { id: 1, name: 'Test Org', role: 'owner' as const },
+            orgs: [{ id: 1, name: 'Test Org' }],
+          },
+        },
+      } as any);
+
+      // Mock setCurrentOrg to return a token with org_id
+      vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
+        data: { token: 'persist-test-token-with-org', message: 'ok' },
+      } as any);
+
       await useAuthStore.getState().login('persist@example.com', 'password');
 
       // Check localStorage
@@ -330,7 +398,8 @@ describe('authStore', () => {
       expect(stored).toBeTruthy();
 
       const parsed = JSON.parse(stored!);
-      expect(parsed.state.token).toBe('persist-test-token');
+      // Token is updated to the one with org_id claim
+      expect(parsed.state.token).toBe('persist-test-token-with-org');
       expect(parsed.state.user.email).toBe('persist@example.com');
     });
 

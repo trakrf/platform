@@ -160,6 +160,27 @@ just backend test        # ✅ Space instead of hyphen
 4. **Branch naming**: `feature/add-xyz`, `fix/broken-xyz`, `docs/update-xyz`
 5. **Prefer incremental commits over amending** - Create new commits for follow-up changes rather than amending previous commits. The incremental history is valuable, even for small fixes.
 
+## 🚀 Preview Deployments (Automatic)
+
+**Creating a PR automatically deploys to preview - NO MERGE NEEDED**
+
+- **Opening a PR** triggers automatic deployment to `https://app.preview.trakrf.id`
+- **All open PRs** are merged into the preview branch automatically
+- **Preview updates** on every push (synchronize event) to any open PR
+- **No manual steps required** - just push your branch and open a PR
+
+**How it works** (see `.github/workflows/sync-preview.yml`):
+1. GitHub Action triggers on PR open/synchronize/reopen
+2. Workflow merges ALL open PRs into preview branch
+3. Preview environment auto-deploys from preview branch
+4. Deployment status is posted as a comment on the PR
+
+**To test your changes on preview:**
+1. Push your branch
+2. Open a PR (or push to existing PR branch)
+3. Wait for deployment (watch for status comment on PR)
+4. Test at `https://app.preview.trakrf.id`
+
 ## Architecture Principles
 
 ### Core Philosophy

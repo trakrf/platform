@@ -5,14 +5,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useOrgSwitch } from './useOrgSwitch';
 import { useOrgStore } from '@/stores/orgStore';
 import { useAuthStore } from '@/stores/authStore';
-import { useAssetStore } from '@/stores/assets/assetStore';
-import { useLocationStore } from '@/stores/locations/locationStore';
-import { useTagStore } from '@/stores/tagStore';
-import { useBarcodeStore } from '@/stores/barcodeStore';
 import { orgsApi } from '@/lib/api/orgs';
+import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import type { Organization } from '@/types/org';
 
 vi.mock('@/lib/api/orgs');
+
+// Mock the cache invalidation module
+vi.mock('@/lib/cache/orgScopedCache', () => ({
+  invalidateAllOrgScopedData: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock the queryClient module
+vi.mock('@/lib/queryClient', () => ({
+  queryClient: {},
+}));
 
 const mockOrg: Organization = {
   id: 456,
@@ -33,20 +40,12 @@ const createWrapper = () => {
 describe('useOrgSwitch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset stores
-    useAssetStore.getState().invalidateCache();
-    useLocationStore.getState().invalidateCache();
-    useTagStore.getState().clearTags();
-    useBarcodeStore.getState().clearBarcodes();
   });
 
   describe('switchOrg', () => {
     it('should call store switchOrg and invalidate caches', async () => {
+      // orgStore.switchOrg now calls central invalidation internally
       const switchOrgSpy = vi.spyOn(useOrgStore.getState(), 'switchOrg').mockResolvedValue();
-      const invalidateAssetCache = vi.spyOn(useAssetStore.getState(), 'invalidateCache');
-      const invalidateLocationCache = vi.spyOn(useLocationStore.getState(), 'invalidateCache');
-      const clearTags = vi.spyOn(useTagStore.getState(), 'clearTags');
-      const clearBarcodes = vi.spyOn(useBarcodeStore.getState(), 'clearBarcodes');
 
       const { result } = renderHook(() => useOrgSwitch(), {
         wrapper: createWrapper(),
@@ -56,11 +55,8 @@ describe('useOrgSwitch', () => {
         await result.current.switchOrg(123);
       });
 
+      // useOrgSwitch.switchOrg delegates to orgStore.switchOrg which handles central invalidation
       expect(switchOrgSpy).toHaveBeenCalledWith(123);
-      expect(invalidateAssetCache).toHaveBeenCalled();
-      expect(invalidateLocationCache).toHaveBeenCalled();
-      expect(clearTags).toHaveBeenCalled();
-      expect(clearBarcodes).toHaveBeenCalled();
     });
   });
 
@@ -79,12 +75,6 @@ describe('useOrgSwitch', () => {
       // Mock fetchProfile
       vi.spyOn(useAuthStore.getState(), 'fetchProfile').mockResolvedValue();
 
-      // Spy on cache invalidation
-      const invalidateAssetCache = vi.spyOn(useAssetStore.getState(), 'invalidateCache');
-      const invalidateLocationCache = vi.spyOn(useLocationStore.getState(), 'invalidateCache');
-      const clearTags = vi.spyOn(useTagStore.getState(), 'clearTags');
-      const clearBarcodes = vi.spyOn(useBarcodeStore.getState(), 'clearBarcodes');
-
       const { result } = renderHook(() => useOrgSwitch(), {
         wrapper: createWrapper(),
       });
@@ -96,10 +86,8 @@ describe('useOrgSwitch', () => {
 
       expect(newOrg).toEqual(mockOrg);
       expect(orgsApi.setCurrentOrg).toHaveBeenCalledWith({ org_id: 456 });
-      expect(invalidateAssetCache).toHaveBeenCalled();
-      expect(invalidateLocationCache).toHaveBeenCalled();
-      expect(clearTags).toHaveBeenCalled();
-      expect(clearBarcodes).toHaveBeenCalled();
+      // Central invalidation is called after createOrg
+      expect(invalidateAllOrgScopedData).toHaveBeenCalled();
     });
 
     it('should update auth token after creating org', async () => {
