@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Building2, Calendar, CheckCircle, XCircle, FolderTree } from 'lucide-react';
+import { MapPin, Building2, Calendar, CheckCircle, XCircle, FolderTree, Plus, Pencil, ArrowRightLeft, Trash2 } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
 import { TagIdentifierList } from '@/components/assets';
@@ -10,6 +10,7 @@ export interface LocationDetailsPanelProps {
   onEdit: (id: number) => void;
   onMove: (id: number) => void;
   onDelete: (id: number) => void;
+  onAddChild?: (parentId: number) => void;
   onChildClick?: (id: number) => void;
   className?: string;
 }
@@ -19,6 +20,7 @@ export function LocationDetailsPanel({
   onEdit,
   onMove,
   onDelete,
+  onAddChild,
   onChildClick,
   className = '',
 }: LocationDetailsPanelProps) {
@@ -32,7 +34,6 @@ export function LocationDetailsPanel({
 
   const location = locationId ? getLocationById(locationId) : undefined;
   const children = location ? getChildren(location.id) : [];
-  const descendants = location ? getDescendants(location.id) : [];
   const rootLocations = getRootLocations();
   const isRoot = location?.parent_location_id === null;
   const Icon = isRoot ? Building2 : MapPin;
@@ -173,65 +174,39 @@ export function LocationDetailsPanel({
           onIdentifierRemoved={handleIdentifierRemoved}
         />
 
-        {/* Hierarchy Information */}
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Hierarchy Information
-          </h3>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Type</p>
-              <p className="font-medium text-gray-900 dark:text-white">
-                {isRoot ? 'Root Location' : 'Subsidiary Location'}
-              </p>
-            </div>
-
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Direct Children</p>
-              <p className="font-medium text-gray-900 dark:text-white">{children.length}</p>
-            </div>
-
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg col-span-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Descendants</p>
-              <p className="font-medium text-gray-900 dark:text-white">{descendants.length}</p>
+        {/* Sub-locations */}
+        {children.length > 0 && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              Sub-locations ({children.length})
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {children.map((child) => (
+                <div
+                  key={child.id}
+                  className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                  onClick={() => onChildClick?.(child.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onChildClick?.(child.id);
+                    }
+                  }}
+                >
+                  <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {child.identifier}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    ({child.name})
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* Children list */}
-          {children.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Direct Children:
-              </p>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {children.map((child) => (
-                  <div
-                    key={child.id}
-                    className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
-                    onClick={() => onChildClick?.(child.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onChildClick?.(child.id);
-                      }
-                    }}
-                  >
-                    <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                      {child.identifier}
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      ({child.name})
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Validity Period */}
         <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
@@ -261,27 +236,38 @@ export function LocationDetailsPanel({
 
       {/* Actions footer */}
       <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4 bg-gray-50 dark:bg-gray-800">
-        <div className="flex justify-between">
+        <div className="flex flex-wrap gap-2 justify-end">
           <button
             onClick={() => onDelete(location.id)}
-            className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg transition-colors order-last sm:order-first sm:mr-auto"
           >
-            Delete
+            <Trash2 className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Delete</span>
           </button>
-          <div className="flex gap-3">
+          {onAddChild && (
             <button
-              onClick={() => onMove(location.id)}
-              className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 dark:text-purple-400 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded-lg transition-colors"
+              onClick={() => onAddChild(location.id)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded-lg transition-colors"
             >
-              Move
+              <Plus className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Add Sub-location</span>
+              <span className="sm:hidden">Add</span>
             </button>
-            <button
-              onClick={() => onEdit(location.id)}
-              className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors"
-            >
-              Edit
-            </button>
-          </div>
+          )}
+          <button
+            onClick={() => onMove(location.id)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 dark:text-purple-400 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded-lg transition-colors"
+          >
+            <ArrowRightLeft className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Move</span>
+          </button>
+          <button
+            onClick={() => onEdit(location.id)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors"
+          >
+            <Pencil className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Edit</span>
+          </button>
         </div>
       </div>
     </div>

@@ -3,7 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { LocationForm } from './LocationForm';
 import { useDeviceStore } from '@/stores';
+import { useLocationStore } from '@/stores/locations/locationStore';
 import * as useScanToInputModule from '@/hooks/useScanToInput';
+import type { Location } from '@/types/locations';
 
 describe('LocationForm - Scanner Integration', () => {
   const mockOnSubmit = vi.fn();
@@ -134,5 +136,107 @@ describe('LocationForm - Scanner Integration', () => {
     // Button should now be disabled with gray styling
     expect(scanButton).toBeDisabled();
     expect(scanButton?.className).toContain('text-gray-400');
+  });
+});
+
+describe('LocationForm - Context-Aware Parent', () => {
+  const mockOnSubmit = vi.fn();
+  const mockOnCancel = vi.fn();
+
+  const createMockLocation = (id: number, overrides = {}): Location => ({
+    id,
+    org_id: 1,
+    identifier: `loc_${id}`,
+    name: `Location ${id}`,
+    description: '',
+    parent_location_id: null,
+    path: `loc_${id}`,
+    depth: 1,
+    valid_from: '2024-01-01',
+    valid_to: null,
+    is_active: true,
+    metadata: {},
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useLocationStore.getState().invalidateCache();
+    useDeviceStore.setState({ isConnected: false });
+
+    // Mock useScanToInput
+    vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
+      startRfidScan: vi.fn(),
+      startBarcodeScan: vi.fn(),
+      stopScan: vi.fn(),
+      isScanning: false,
+      scanType: null,
+      setFocused: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('should show "Creating a top-level location" when no parentLocationId', () => {
+    render(
+      <LocationForm
+        mode="create"
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    expect(screen.getByText('Creating a top-level location')).toBeInTheDocument();
+  });
+
+  it('should show "Creating inside: {identifier}" when parentLocationId provided', () => {
+    const parentLocation = createMockLocation(1, { identifier: 'warehouse-a' });
+    useLocationStore.getState().setLocations([parentLocation]);
+
+    render(
+      <LocationForm
+        mode="create"
+        parentLocationId={1}
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    expect(screen.getByText(/Creating inside:/)).toBeInTheDocument();
+    expect(screen.getByText('warehouse-a')).toBeInTheDocument();
+  });
+
+  it('should NOT show LocationParentSelector dropdown in create mode', () => {
+    render(
+      <LocationForm
+        mode="create"
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    // The dropdown would have a "Select a parent" option or similar
+    expect(screen.queryByText('Select a parent location or leave as root')).not.toBeInTheDocument();
+  });
+
+  it('should show LocationParentSelector in edit mode', () => {
+    const location = createMockLocation(1, { identifier: 'test-loc', name: 'Test Location' });
+    useLocationStore.getState().setLocations([location]);
+
+    render(
+      <LocationForm
+        mode="edit"
+        location={location}
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    // The helper text is shown only when the selector is visible
+    expect(screen.getByText('Select a parent location or leave as root')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { ChevronRight, ChevronDown, Building2, MapPin, Pencil, ArrowRightLeft, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Building2, MapPin, Pencil, ArrowRightLeft, Trash2, Plus } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
 import type { Location } from '@/types/locations';
@@ -9,6 +9,7 @@ export interface LocationExpandableCardProps {
   onEdit: (id: number) => void;
   onMove: (id: number) => void;
   onDelete: (id: number) => void;
+  onAddChild?: (parentId: number) => void;
   searchTerm?: string;
 }
 
@@ -18,6 +19,7 @@ export function LocationExpandableCard({
   onEdit,
   onMove,
   onDelete,
+  onAddChild,
   searchTerm = '',
 }: LocationExpandableCardProps) {
   const expandedCardIds = useLocationStore((state) => state.expandedCardIds);
@@ -102,6 +104,11 @@ export function LocationExpandableCard({
     onDelete(location.id);
   };
 
+  const handleAddChild = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onAddChild?.(location.id);
+  };
+
   return (
     <div
       className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
@@ -181,45 +188,38 @@ export function LocationExpandableCard({
               </div>
             )}
 
-            {/* Info grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Type</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {isRoot ? 'Root Location' : 'Subsidiary'}
-                </p>
-              </div>
-              <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Children</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {children.length} direct / {descendants.length} total
-                </p>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            {/* Action buttons - 2 column grid for better mobile layout */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={handleEdit}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors"
               >
-                <Pencil className="h-4 w-4" />
-                Edit
+                <Pencil className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">Edit</span>
               </button>
               <button
                 onClick={handleMove}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 dark:text-purple-400 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded-lg transition-colors"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 dark:text-purple-400 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded-lg transition-colors"
               >
-                <ArrowRightLeft className="h-4 w-4" />
-                Move
+                <ArrowRightLeft className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">Move</span>
               </button>
               <button
                 onClick={handleDelete}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg transition-colors"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg transition-colors"
               >
-                <Trash2 className="h-4 w-4" />
-                Delete
+                <Trash2 className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">Delete</span>
               </button>
+              {onAddChild && (
+                <button
+                  onClick={handleAddChild}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded-lg transition-colors"
+                >
+                  <Plus className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Add</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -237,6 +237,7 @@ export function LocationExpandableCard({
                   onEdit={onEdit}
                   onMove={onMove}
                   onDelete={onDelete}
+                  onAddChild={onAddChild}
                   searchTerm={searchTerm}
                 />
               ))}

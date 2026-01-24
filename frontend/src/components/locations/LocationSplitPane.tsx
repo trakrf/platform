@@ -10,6 +10,7 @@ export interface LocationSplitPaneProps {
   onEdit: (id: number) => void;
   onMove: (id: number) => void;
   onDelete: (id: number) => void;
+  onAddChild?: (parentId: number) => void;
   className?: string;
 }
 
@@ -18,6 +19,7 @@ export function LocationSplitPane({
   onEdit,
   onMove,
   onDelete,
+  onAddChild,
   className = '',
 }: LocationSplitPaneProps) {
   const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
@@ -80,6 +82,7 @@ export function LocationSplitPane({
             onEdit={onEdit}
             onMove={onMove}
             onDelete={onDelete}
+            onAddChild={onAddChild}
             onChildClick={handleChildClick}
             className="h-full"
           />

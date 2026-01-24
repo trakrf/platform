@@ -7,6 +7,7 @@ export interface LocationMobileViewProps {
   onEdit: (id: number) => void;
   onMove: (id: number) => void;
   onDelete: (id: number) => void;
+  onAddChild?: (parentId: number) => void;
   className?: string;
 }
 
@@ -15,6 +16,7 @@ export function LocationMobileView({
   onEdit,
   onMove,
   onDelete,
+  onAddChild,
   className = '',
 }: LocationMobileViewProps) {
   const getRootLocations = useLocationStore((state) => state.getRootLocations);
@@ -80,6 +82,7 @@ export function LocationMobileView({
           onEdit={onEdit}
           onMove={onMove}
           onDelete={onDelete}
+          onAddChild={onAddChild}
           searchTerm={searchTerm}
         />
       ))}

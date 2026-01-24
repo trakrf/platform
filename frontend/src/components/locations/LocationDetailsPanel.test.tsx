@@ -155,7 +155,7 @@ describe('LocationDetailsPanel', () => {
     expect(screen.getByTestId('location-breadcrumb')).toBeInTheDocument();
   });
 
-  it('should show hierarchy info with children count', () => {
+  it('should show Sub-locations section with count when children exist', () => {
     const root = createMockLocation(1);
     const child1 = createMockLocation(2, { parent_location_id: 1 });
     const child2 = createMockLocation(3, { parent_location_id: 1 });
@@ -170,17 +170,13 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByText('Direct Children')).toBeInTheDocument();
-    // Look for the children count within the hierarchy section
-    const directChildrenSection = screen.getByText('Direct Children').closest('div');
-    expect(directChildrenSection?.parentElement).toHaveTextContent('2');
+    expect(screen.getByText('Sub-locations (2)')).toBeInTheDocument();
   });
 
-  it('should show descendants count', () => {
+  it('should NOT show Hierarchy Information heading', () => {
     const root = createMockLocation(1);
     const child = createMockLocation(2, { parent_location_id: 1 });
-    const grandchild = createMockLocation(3, { parent_location_id: 2 });
-    useLocationStore.getState().setLocations([root, child, grandchild]);
+    useLocationStore.getState().setLocations([root, child]);
 
     render(
       <LocationDetailsPanel
@@ -191,7 +187,9 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByText('Total Descendants')).toBeInTheDocument();
+    expect(screen.queryByText('Hierarchy Information')).not.toBeInTheDocument();
+    expect(screen.queryByText('Direct Children')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total Descendants')).not.toBeInTheDocument();
   });
 
   it('should list direct children with click navigation', () => {
@@ -305,7 +303,43 @@ describe('LocationDetailsPanel', () => {
     expect(onDelete).toHaveBeenCalledWith(1);
   });
 
-  it('should show Root Location type for root locations', () => {
+  it('should render Add Sub-location button when onAddChild provided', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+
+    render(
+      <LocationDetailsPanel
+        locationId={1}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onAddChild={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /Add/i })).toBeInTheDocument();
+  });
+
+  it('should call onAddChild with location.id when Add Sub-location clicked', () => {
+    const location = createMockLocation(1);
+    useLocationStore.getState().setLocations([location]);
+
+    const onAddChild = vi.fn();
+    render(
+      <LocationDetailsPanel
+        locationId={1}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onAddChild={onAddChild}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Add/i }));
+    expect(onAddChild).toHaveBeenCalledWith(1);
+  });
+
+  it('should NOT render Add Sub-location button when onAddChild not provided', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().setLocations([location]);
 
@@ -318,23 +352,7 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByText('Root Location')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add/i })).not.toBeInTheDocument();
   });
 
-  it('should show Subsidiary Location type for child locations', () => {
-    const root = createMockLocation(1);
-    const child = createMockLocation(2, { parent_location_id: 1 });
-    useLocationStore.getState().setLocations([root, child]);
-
-    render(
-      <LocationDetailsPanel
-        locationId={2}
-        onEdit={vi.fn()}
-        onMove={vi.fn()}
-        onDelete={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText('Subsidiary Location')).toBeInTheDocument();
-  });
 });
