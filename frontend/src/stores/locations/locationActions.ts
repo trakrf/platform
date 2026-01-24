@@ -312,6 +312,11 @@ export function createCacheActions(
           direction: 'asc',
         },
         selectedLocationId: null,
+        // Reset split pane UI state
+        expandedNodeIds: new Set<number>(),
+        treePanelWidth: 280,
+        // Reset mobile card expansion state
+        expandedCardIds: new Set<number>(),
       })),
   };
 }
@@ -416,10 +421,36 @@ export function createHierarchyQueries(
   };
 }
 
+interface StorageKeys {
+  treePanelWidth: string;
+  expandedNodes: string;
+}
+
 export function createUIActions(
   set: Parameters<StateCreator<any>>[0],
-  _get: Parameters<StateCreator<any>>[1]
+  get: Parameters<StateCreator<any>>[1],
+  storageKeys?: StorageKeys
 ) {
+  const persistExpandedNodes = (expandedNodeIds: Set<number>) => {
+    if (storageKeys && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem(storageKeys.expandedNodes, JSON.stringify([...expandedNodeIds]));
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  };
+
+  const persistTreePanelWidth = (width: number) => {
+    if (storageKeys && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem(storageKeys.treePanelWidth, String(width));
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  };
+
   return {
     setSelectedLocation: (id: number | null) => {
       set({ selectedLocationId: id });
@@ -456,5 +487,48 @@ export function createUIActions(
     setLoading: (isLoading: boolean) => set({ isLoading }),
 
     setError: (error: string | null) => set({ error }),
+
+    // Split pane UI actions
+    toggleNodeExpanded: (id: number) =>
+      set((state: any) => {
+        const newExpandedNodeIds = new Set<number>(state.expandedNodeIds as Set<number>);
+        if (newExpandedNodeIds.has(id)) {
+          newExpandedNodeIds.delete(id);
+        } else {
+          newExpandedNodeIds.add(id);
+        }
+        persistExpandedNodes(newExpandedNodeIds);
+        return { expandedNodeIds: newExpandedNodeIds };
+      }),
+
+    setTreePanelWidth: (width: number) => {
+      persistTreePanelWidth(width);
+      set({ treePanelWidth: width });
+    },
+
+    expandToLocation: (id: number) => {
+      const state = get() as any;
+      const ancestors = state.getAncestors(id);
+      const newExpandedNodeIds = new Set<number>(state.expandedNodeIds as Set<number>);
+
+      for (const ancestor of ancestors) {
+        newExpandedNodeIds.add(ancestor.id);
+      }
+
+      persistExpandedNodes(newExpandedNodeIds);
+      set({ expandedNodeIds: newExpandedNodeIds });
+    },
+
+    // Mobile expandable cards action
+    toggleCardExpanded: (id: number) =>
+      set((state: any) => {
+        const newExpandedCardIds = new Set<number>(state.expandedCardIds as Set<number>);
+        if (newExpandedCardIds.has(id)) {
+          newExpandedCardIds.delete(id);
+        } else {
+          newExpandedCardIds.add(id);
+        }
+        return { expandedCardIds: newExpandedCardIds };
+      }),
   };
 }
