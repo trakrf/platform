@@ -115,4 +115,5 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 // RegisterRoutes registers report handler routes
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/v1/reports/current-locations", h.ListCurrentLocations)
+	r.Get("/api/v1/reports/assets/{id}/history", h.GetAssetHistory)
 }

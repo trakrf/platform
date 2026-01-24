@@ -176,3 +176,81 @@ func buildCurrentLocationsCountQuery() string {
 			   ))
 	`
 }
+
+// ListAssetHistory returns paginated location history for a single asset
+func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filter report.AssetHistoryFilter) ([]report.AssetHistoryItem, error) {
+	query := `
+		WITH scans AS (
+			SELECT
+				s.timestamp,
+				s.location_id,
+				l.name AS location_name,
+				LEAD(s.timestamp) OVER (ORDER BY s.timestamp) AS next_timestamp
+			FROM trakrf.asset_scans s
+			LEFT JOIN trakrf.locations l ON l.id = s.location_id
+			WHERE s.asset_id = $1
+			  AND s.org_id = $2
+			  AND ($3::timestamptz IS NULL OR s.timestamp >= $3)
+			  AND ($4::timestamptz IS NULL OR s.timestamp <= $4)
+		)
+		SELECT
+			timestamp,
+			location_id,
+			location_name,
+			EXTRACT(EPOCH FROM (next_timestamp - timestamp))::INT AS duration_seconds
+		FROM scans
+		ORDER BY timestamp DESC
+		LIMIT $5 OFFSET $6
+	`
+
+	rows, err := s.pool.Query(ctx, query, assetID, orgID, filter.StartDate, filter.EndDate, filter.Limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list asset history: %w", err)
+	}
+	defer rows.Close()
+
+	var items []report.AssetHistoryItem
+	for rows.Next() {
+		var item report.AssetHistoryItem
+		err := rows.Scan(
+			&item.Timestamp,
+			&item.LocationID,
+			&item.LocationName,
+			&item.DurationSeconds,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan asset history: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating asset history: %w", err)
+	}
+
+	if items == nil {
+		items = []report.AssetHistoryItem{}
+	}
+
+	return items, nil
+}
+
+// CountAssetHistory returns total count for pagination
+func (s *Storage) CountAssetHistory(ctx context.Context, assetID, orgID int, filter report.AssetHistoryFilter) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM trakrf.asset_scans s
+		WHERE s.asset_id = $1
+		  AND s.org_id = $2
+		  AND ($3::timestamptz IS NULL OR s.timestamp >= $3)
+		  AND ($4::timestamptz IS NULL OR s.timestamp <= $4)
+	`
+
+	var count int
+	err := s.pool.QueryRow(ctx, query, assetID, orgID, filter.StartDate, filter.EndDate).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count asset history: %w", err)
+	}
+
+	return count, nil
+}

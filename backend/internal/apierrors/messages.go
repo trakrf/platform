@@ -153,6 +153,11 @@ const (
 const (
 	ReportCurrentLocationsFailed = "Failed to list current locations"
 	ReportCurrentLocationsCount  = "Failed to count current locations"
+	ReportAssetHistoryFailed     = "Failed to get asset history"
+	ReportAssetHistoryCount      = "Failed to count asset history"
+	ReportAssetNotFound          = "Asset not found"
+	ReportInvalidAssetID         = "Invalid asset ID: %s"
+	ReportInvalidDateFormat      = "Invalid date format"
 )
 
 // Invitation error messages
