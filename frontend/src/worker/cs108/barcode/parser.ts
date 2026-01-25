@@ -41,8 +41,9 @@ export const parseBarcodeData = (data: Uint8Array): {
     workingString = workingString.substring(1);
   }
 
-  // Handle Code ID + AIM ID patterns (e.g., j]C0, u]d4)
-  const codeAimPattern = /^([a-z])(]\w\w)/;
+  // Handle Code ID + AIM ID patterns (e.g., j]C0, u]d4, Q]Q1)
+  // Code ID can be upper or lowercase depending on scanner config
+  const codeAimPattern = /^([a-zA-Z])(]\w\w)/;
   const codeAimMatch = workingString.match(codeAimPattern);
   if (codeAimMatch) {
     const aimId = codeAimMatch[2];

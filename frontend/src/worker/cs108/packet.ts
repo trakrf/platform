@@ -11,7 +11,8 @@
 import type { CS108Event, CS108Packet } from './type.js';
 import { logger } from '../utils/logger.js';
 import { CS108_EVENT_MAP } from './event.js';
-import { PACKET_CONSTANTS, calculateCRC } from './protocol.js';
+import { PACKET_CONSTANTS, calculatePacketCRC, validatePacketCRC, validatePacketLength } from './protocol.js';
+import * as Sentry from '@sentry/react';
 import { PacketDebugBuffer } from './utils/packet-debug-buffer.js';
 
 export class PacketHandler {
@@ -75,19 +76,22 @@ export class PacketHandler {
     }
 
     // CRC - For commands (downlink), CS108 accepts 0x00 0x00 for CRC bytes
-    // For responses/notifications (uplink), we calculate the actual CRC
+    // For responses/notifications (uplink), we calculate CRC using vendor algorithm
+    // Note: CRC bytes must be 0 during calculation since they're excluded
+    packet[PACKET_CONSTANTS.CRC_OFFSET] = 0x00;     // Temporarily zero for calculation
+    packet[PACKET_CONSTANTS.CRC_OFFSET + 1] = 0x00;
+
     const crc = options?.crc ?? (() => {
       if (direction === 'downlink') {
         // Commands can use zero CRC per CS108 spec
         return 0x0000;
       } else {
-        // Responses/notifications need actual CRC
-        const crcData = packet.slice(PACKET_CONSTANTS.EVENT_CODE_OFFSET, totalLength);
-        return calculateCRC(crcData);
+        // Responses/notifications use vendor CRC algorithm (full packet minus CRC bytes)
+        return calculatePacketCRC(packet);
       }
     })();
-    packet[PACKET_CONSTANTS.CRC_OFFSET] = crc & 0xFF;        // Low byte at position 6
-    packet[PACKET_CONSTANTS.CRC_OFFSET + 1] = (crc >> 8) & 0xFF;  // High byte at position 7
+    packet[PACKET_CONSTANTS.CRC_OFFSET] = (crc >> 8) & 0xFF;     // High byte at position 6 (big-endian)
+    packet[PACKET_CONSTANTS.CRC_OFFSET + 1] = crc & 0xFF;        // Low byte at position 7 (big-endian)
     
     return packet;
   }
@@ -169,7 +173,7 @@ export class PacketHandler {
       module: data[3],
       reserve: data[4],
       direction: data[5],
-      crc: data[6] | (data[7] << 8),
+      crc: (data[6] << 8) | data[7], // Big-endian per vendor spec
 
       // Event (if we have it)
       eventCode,
@@ -329,6 +333,47 @@ export class PacketHandler {
       // Extract exactly the amount of data we need
       const packetData = this.rawDataBuffer.slice(0, this.currentPacket.totalExpected);
 
+      // === Validate length ===
+      const lengthResult = validatePacketLength(packetData);
+      if (!lengthResult.valid) {
+        logger.warn(
+          `[PacketHandler] Length validation failed: expected ${lengthResult.expected}, got ${lengthResult.actual}`
+        );
+        Sentry.captureMessage('CS108 packet length validation failed', {
+          level: 'warning',
+          extra: {
+            expected: lengthResult.expected,
+            actual: lengthResult.actual,
+            packetHex: Array.from(packetData.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+          }
+        });
+        // Discard invalid packet but preserve any remaining bytes for next packet
+        this.rawDataBuffer = this.rawDataBuffer.slice(this.currentPacket.totalExpected);
+        this.currentPacket = null;
+        return null;
+      }
+
+      // === Validate CRC ===
+      const crcResult = validatePacketCRC(packetData);
+      if (!crcResult.valid) {
+        logger.warn(
+          `[PacketHandler] CRC validation failed: expected 0x${crcResult.expected.toString(16).padStart(4, '0')}, ` +
+          `calculated 0x${crcResult.actual.toString(16).padStart(4, '0')}`
+        );
+        Sentry.captureMessage('CS108 packet CRC validation failed', {
+          level: 'warning',
+          extra: {
+            expectedCRC: `0x${crcResult.expected.toString(16).padStart(4, '0')}`,
+            calculatedCRC: `0x${crcResult.actual.toString(16).padStart(4, '0')}`,
+            packetHex: Array.from(packetData.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+          }
+        });
+        // Discard invalid packet but preserve any remaining bytes for next packet
+        this.rawDataBuffer = this.rawDataBuffer.slice(this.currentPacket.totalExpected);
+        this.currentPacket = null;
+        return null;
+      }
+
       // Parse event code if we haven't already (bytes 8-9)
       if (!this.currentPacket.event && packetData.length >= 10) {
         const eventCode = (packetData[8] << 8) | packetData[9];
@@ -446,7 +491,7 @@ export class PacketHandler {
         module: data[3],
         reserve: data[4],
         direction: data[5],
-        crc: data[6] | (data[7] << 8),
+        crc: (data[6] << 8) | data[7], // Big-endian per vendor spec
         eventCode,
         event,
         rawPayload,
