@@ -1,13 +1,22 @@
 import { formatDuration } from '@/lib/reports/utils';
 import type { AssetHistoryItem } from '@/types/reports';
-import { MapPin } from 'lucide-react';
+import { MapPin, Loader2 } from 'lucide-react';
 
 interface MovementTimelineProps {
   data: AssetHistoryItem[];
   isLoading: boolean;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
 }
 
-export function MovementTimeline({ data, isLoading }: MovementTimelineProps) {
+export function MovementTimeline({
+  data,
+  isLoading,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+}: MovementTimelineProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -42,7 +51,8 @@ export function MovementTimeline({ data, isLoading }: MovementTimelineProps) {
     <div className="relative">
       {data.map((item, index) => {
         const isFirst = index === 0;
-        const isLast = index === data.length - 1;
+        const isLastItem = index === data.length - 1;
+        const showLine = !isLastItem || hasMore; // Continue line if more data available
         const time = new Date(item.timestamp);
         const isToday = new Date().toDateString() === time.toDateString();
 
@@ -59,13 +69,13 @@ export function MovementTimeline({ data, isLoading }: MovementTimelineProps) {
                 }`}
               />
               {/* Line */}
-              {!isLast && (
+              {showLine && (
                 <div className="w-0.5 flex-1 bg-gray-200 dark:bg-gray-700 min-h-[40px]" />
               )}
             </div>
 
             {/* Content */}
-            <div className={`flex-1 ${isLast ? 'pb-0' : 'pb-4'}`}>
+            <div className={`flex-1 ${isLastItem && !hasMore ? 'pb-0' : 'pb-4'}`}>
               {/* Location name */}
               <p
                 className={`font-medium ${
@@ -103,6 +113,32 @@ export function MovementTimeline({ data, isLoading }: MovementTimelineProps) {
           </div>
         );
       })}
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center">
+            <div className="w-3 h-3 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+          </div>
+          <div className="flex-1">
+            <button
+              onClick={onLoadMore}
+              disabled={isLoadingMore}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300
+                font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isLoadingMore ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                'Load more history'
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

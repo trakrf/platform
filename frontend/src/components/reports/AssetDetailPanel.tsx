@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, Download, ChevronDown } from 'lucide-react';
 import { useAssetHistory } from '@/hooks/reports';
 import { FreshnessBadge } from './FreshnessBadge';
 import { MovementTimeline } from './MovementTimeline';
-import type { CurrentLocationItem } from '@/types/reports';
+import type { CurrentLocationItem, AssetHistoryItem } from '@/types/reports';
 
 interface AssetDetailPanelProps {
   asset: CurrentLocationItem | null;
@@ -11,6 +11,8 @@ interface AssetDetailPanelProps {
 }
 
 type DateRange = 'today' | '7days' | '30days' | '90days';
+
+const PAGE_SIZE = 20;
 
 function getDateRangeStart(range: DateRange): Date {
   const now = new Date();
@@ -29,21 +31,44 @@ function getDateRangeStart(range: DateRange): Date {
 export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
   const [dateRange, setDateRange] = useState<DateRange>('7days');
   const [isVisible, setIsVisible] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [accumulatedData, setAccumulatedData] = useState<AssetHistoryItem[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Memoize params to prevent infinite refetching
   const historyParams = useMemo(
     () => ({
-      limit: 50,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset,
       start_date: getDateRangeStart(dateRange).toISOString(),
     }),
-    [dateRange]
+    [dateRange, offset]
   );
 
-  const { data: historyData, isLoading, error } = useAssetHistory(
+  const { data: historyData, totalCount, isLoading, error } = useAssetHistory(
     asset?.asset_id ?? null,
     historyParams
   );
+
+  // Accumulate data when new data arrives
+  useEffect(() => {
+    if (historyData && historyData.length > 0) {
+      if (offset === 0) {
+        // First page - replace data
+        setAccumulatedData(historyData);
+      } else {
+        // Subsequent pages - append data
+        setAccumulatedData((prev) => [...prev, ...historyData]);
+      }
+      setIsLoadingMore(false);
+    }
+  }, [historyData, offset]);
+
+  // Reset when date range or asset changes
+  useEffect(() => {
+    setOffset(0);
+    setAccumulatedData([]);
+  }, [dateRange, asset?.asset_id]);
 
   // Animate in when asset changes
   useEffect(() => {
@@ -54,6 +79,13 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
       setIsVisible(false);
     }
   }, [asset]);
+
+  const handleLoadMore = useCallback(() => {
+    setIsLoadingMore(true);
+    setOffset((prev) => prev + PAGE_SIZE);
+  }, []);
+
+  const hasMore = accumulatedData.length < totalCount;
 
   const handleClose = () => {
     setIsVisible(false);
@@ -133,7 +165,13 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
             </p>
           </div>
         ) : (
-          <MovementTimeline data={historyData} isLoading={isLoading} />
+          <MovementTimeline
+            data={accumulatedData}
+            isLoading={isLoading && offset === 0}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={handleLoadMore}
+          />
         )}
       </div>
 
