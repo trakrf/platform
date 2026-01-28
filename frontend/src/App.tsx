@@ -28,8 +28,10 @@ const CreateOrgScreen = lazyWithRetry(() => import('@/components/CreateOrgScreen
 const MembersScreen = lazyWithRetry(() => import('@/components/MembersScreen'));
 const OrgSettingsScreen = lazyWithRetry(() => import('@/components/OrgSettingsScreen'));
 const AcceptInviteScreen = lazyWithRetry(() => import('@/components/AcceptInviteScreen'));
+const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
+const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -202,6 +204,8 @@ export default function App() {
       'org-members': MembersScreen,
       'org-settings': OrgSettingsScreen,
       'accept-invite': AcceptInviteScreen,
+      reports: ReportsScreen,
+      'reports-history': ReportsHistoryScreen,
     };
 
     const loadingScreens: Record<string, React.ComponentType> = {
@@ -221,6 +225,8 @@ export default function App() {
       'org-members': LoadingScreen,
       'org-settings': LoadingScreen,
       'accept-invite': LoadingScreen,
+      reports: LoadingScreen,
+      'reports-history': LoadingScreen,
     };
 
     const Component = tabComponents[activeTab] || HomeScreen;
