@@ -22,3 +22,15 @@ export type {
 
 // Re-export shared types
 export type { TagIdentifier, IdentifierType } from './shared';
+
+// Re-export report types
+export type {
+  CurrentLocationItem,
+  CurrentLocationsResponse,
+  CurrentLocationsParams,
+  AssetInfo,
+  AssetHistoryItem,
+  AssetHistoryResponse,
+  AssetHistoryParams,
+  FreshnessStatus,
+} from './reports';
