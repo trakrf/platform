@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { X, Download } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Download, ChevronDown } from 'lucide-react';
 import { useAssetHistory } from '@/hooks/reports';
 import { FreshnessBadge } from './FreshnessBadge';
-import { formatDuration } from '@/lib/reports/utils';
+import { MovementTimeline } from './MovementTimeline';
 import type { CurrentLocationItem } from '@/types/reports';
 
 interface AssetDetailPanelProps {
@@ -30,13 +30,20 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
   const [dateRange, setDateRange] = useState<DateRange>('7days');
   const [isVisible, setIsVisible] = useState(false);
 
-  const startDate = getDateRangeStart(dateRange);
+  // Memoize params to prevent infinite refetching
+  const historyParams = useMemo(
+    () => ({
+      limit: 50,
+      offset: 0,
+      start_date: getDateRangeStart(dateRange).toISOString(),
+    }),
+    [dateRange]
+  );
 
-  const { data: historyData, isLoading } = useAssetHistory(asset?.asset_id ?? null, {
-    limit: 50,
-    offset: 0,
-    start_date: startDate.toISOString(),
-  });
+  const { data: historyData, isLoading, error } = useAssetHistory(
+    asset?.asset_id ?? null,
+    historyParams
+  );
 
   // Animate in when asset changes
   useEffect(() => {
@@ -63,178 +70,146 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
     { value: '90days', label: '90 Days' },
   ];
 
+  const panelContent = (
+    <>
+      {/* Asset Info Grid */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Asset ID</p>
+          <p className="font-medium text-gray-900 dark:text-white">
+            {asset.asset_identifier || '—'}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Type</p>
+          <p className="font-medium text-gray-900 dark:text-white">Asset</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Current Location</p>
+          <p className="font-medium text-blue-600 dark:text-blue-400">
+            {asset.location_name || 'Unknown'}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
+          <FreshnessBadge lastSeen={asset.last_seen} />
+        </div>
+      </div>
+
+      {/* Date Range */}
+      <div className="mb-6">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Date Range
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {dateRangeOptions.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setDateRange(option.value)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                dateRange === option.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Movement Timeline */}
+      <div className="mb-6">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          Movement Timeline
+        </p>
+        {error ? (
+          <div className="text-center py-4">
+            <p className="text-sm text-red-500 dark:text-red-400">
+              Failed to load movement history
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {error instanceof Error ? error.message : 'Unknown error'}
+            </p>
+          </div>
+        ) : (
+          <MovementTimeline data={historyData} isLoading={isLoading} />
+        )}
+      </div>
+
+      {/* Download Button */}
+      <button
+        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700
+          text-white font-medium py-3 px-4 rounded-lg transition-colors"
+        onClick={() => {
+          // TODO: Implement CSV download
+          console.log('Download history CSV for asset:', asset.asset_id);
+        }}
+      >
+        <Download className="w-4 h-4" />
+        Download History CSV
+      </button>
+    </>
+  );
+
   return (
     <>
       {/* Backdrop */}
       <div
         className={`fixed inset-0 bg-black/30 z-40 transition-opacity duration-200 ${
-          isVisible ? 'opacity-100' : 'opacity-0'
+          isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={handleClose}
       />
 
-      {/* Panel */}
+      {/* Desktop: Side Panel (hidden on mobile) */}
       <div
-        className={`fixed right-0 top-0 h-full w-full max-w-md bg-white dark:bg-gray-900 shadow-xl z-50
+        className={`hidden md:block fixed right-0 top-0 h-full w-full max-w-md bg-white dark:bg-gray-900 shadow-xl z-50
           transform transition-transform duration-200 ease-out overflow-y-auto
           ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
             {asset.asset_name}
           </h2>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
-        <div className="p-4 space-y-6">
-          {/* Asset Info Grid */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Asset ID</p>
-              <p className="font-medium text-gray-900 dark:text-white">
-                {asset.asset_identifier || '—'}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Type</p>
-              <p className="font-medium text-gray-900 dark:text-white">Asset</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Current Location</p>
-              <p className="font-medium text-blue-600 dark:text-blue-400">
-                {asset.location_name || 'Unknown'}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
-              <FreshnessBadge lastSeen={asset.last_seen} />
-            </div>
+        <div className="p-4">{panelContent}</div>
+      </div>
+
+      {/* Mobile: Bottom Sheet (hidden on desktop) */}
+      <div
+        className={`md:hidden fixed inset-x-0 bottom-0 z-50 transform transition-transform duration-300 ease-out
+          ${isVisible ? 'translate-y-0' : 'translate-y-full'}`}
+      >
+        <div className="bg-white dark:bg-gray-900 rounded-t-2xl shadow-xl max-h-[85vh] flex flex-col">
+          {/* Drag handle */}
+          <div className="flex justify-center py-2">
+            <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
           </div>
 
-          {/* Date Range */}
-          <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Date Range
-            </p>
-            <div className="flex gap-2">
-              {dateRangeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setDateRange(option.value)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    dateRange === option.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
+              {asset.asset_name}
+            </h2>
+            <button
+              onClick={handleClose}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
+            >
+              <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            </button>
           </div>
 
-          {/* Movement Timeline */}
-          <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Movement Timeline
-            </p>
-
-            {isLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="animate-pulse flex items-center gap-4">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16" />
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded flex-1" />
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12" />
-                  </div>
-                ))}
-              </div>
-            ) : historyData.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No movement history in this date range
-              </p>
-            ) : (
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Time
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Location
-                      </th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Duration
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {historyData.map((item, index) => {
-                      const isFirst = index === 0;
-                      const time = new Date(item.timestamp);
-                      const isToday = new Date().toDateString() === time.toDateString();
-
-                      return (
-                        <tr
-                          key={`${item.timestamp}-${index}`}
-                          className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                        >
-                          <td className="px-3 py-2">
-                            <div className="text-sm text-gray-900 dark:text-white">
-                              {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                            {!isToday && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {time.toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            <span
-                              className={`text-sm ${
-                                isFirst
-                                  ? 'text-green-600 dark:text-green-400 font-medium'
-                                  : 'text-gray-700 dark:text-gray-300'
-                              }`}
-                            >
-                              {item.location_name || 'Unknown'}
-                              {isFirst && ' *'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-right text-sm text-gray-600 dark:text-gray-400">
-                            {item.duration_seconds ? formatDuration(item.duration_seconds) : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400">
-                  * Current location
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Download Button */}
-          <button
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700
-              text-white font-medium py-3 px-4 rounded-lg transition-colors"
-            onClick={() => {
-              // TODO: Implement CSV download
-              console.log('Download history CSV for asset:', asset.asset_id);
-            }}
-          >
-            <Download className="w-4 h-4" />
-            Download History CSV
-          </button>
+          {/* Content */}
+          <div className="p-4 overflow-y-auto flex-1">{panelContent}</div>
         </div>
       </div>
     </>
