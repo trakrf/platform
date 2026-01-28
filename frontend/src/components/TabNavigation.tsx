@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned } from 'lucide-react';
+import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3 } from 'lucide-react';
 import { version } from '../../package.json';
 
 interface NavItemProps {
@@ -204,6 +204,15 @@ export default function TabNavigation() {
             onClick={() => handleTabClick('locations')}
             icon={<MapPinned className="w-5 h-5" />}
             tooltip="Manage your locations - create, view, and organize location data"
+          />
+
+          <NavItem
+            id="reports"
+            label="Reports"
+            isActive={activeTab === 'reports' || activeTab === 'reports-history'}
+            onClick={() => handleTabClick('reports')}
+            icon={<BarChart3 className="w-5 h-5" />}
+            tooltip="View asset location reports and movement history"
           />
 
           <NavItem

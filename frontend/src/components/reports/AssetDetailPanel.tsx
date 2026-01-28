@@ -1,0 +1,255 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { X, Download, ChevronDown } from 'lucide-react';
+import { useAssetHistory } from '@/hooks/reports';
+import { FreshnessBadge } from './FreshnessBadge';
+import { MovementTimeline } from './MovementTimeline';
+import type { CurrentLocationItem, AssetHistoryItem } from '@/types/reports';
+
+interface AssetDetailPanelProps {
+  asset: CurrentLocationItem | null;
+  onClose: () => void;
+}
+
+type DateRange = 'today' | '7days' | '30days' | '90days';
+
+const PAGE_SIZE = 20;
+
+function getDateRangeStart(range: DateRange): Date {
+  const now = new Date();
+  switch (range) {
+    case 'today':
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    case '7days':
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case '30days':
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case '90days':
+      return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  }
+}
+
+export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
+  const [dateRange, setDateRange] = useState<DateRange>('7days');
+  const [isVisible, setIsVisible] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [accumulatedData, setAccumulatedData] = useState<AssetHistoryItem[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Memoize params to prevent infinite refetching
+  const historyParams = useMemo(
+    () => ({
+      limit: PAGE_SIZE,
+      offset,
+      start_date: getDateRangeStart(dateRange).toISOString(),
+    }),
+    [dateRange, offset]
+  );
+
+  const { data: historyData, totalCount, isLoading, error } = useAssetHistory(
+    asset?.asset_id ?? null,
+    historyParams
+  );
+
+  // Accumulate data when new data arrives
+  useEffect(() => {
+    if (historyData && historyData.length > 0) {
+      if (offset === 0) {
+        // First page - replace data
+        setAccumulatedData(historyData);
+      } else {
+        // Subsequent pages - append data
+        setAccumulatedData((prev) => [...prev, ...historyData]);
+      }
+      setIsLoadingMore(false);
+    }
+  }, [historyData, offset]);
+
+  // Reset when date range or asset changes
+  useEffect(() => {
+    setOffset(0);
+    setAccumulatedData([]);
+  }, [dateRange, asset?.asset_id]);
+
+  // Animate in when asset changes
+  useEffect(() => {
+    if (asset) {
+      // Small delay to trigger CSS transition
+      requestAnimationFrame(() => setIsVisible(true));
+    } else {
+      setIsVisible(false);
+    }
+  }, [asset]);
+
+  const handleLoadMore = useCallback(() => {
+    setIsLoadingMore(true);
+    setOffset((prev) => prev + PAGE_SIZE);
+  }, []);
+
+  const hasMore = accumulatedData.length < totalCount;
+
+  const handleClose = () => {
+    setIsVisible(false);
+    // Wait for animation to complete
+    setTimeout(onClose, 200);
+  };
+
+  if (!asset) return null;
+
+  const dateRangeOptions: { value: DateRange; label: string }[] = [
+    { value: 'today', label: 'Today' },
+    { value: '7days', label: '7 Days' },
+    { value: '30days', label: '30 Days' },
+    { value: '90days', label: '90 Days' },
+  ];
+
+  const panelContent = (
+    <>
+      {/* Asset Info Grid */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Asset ID</p>
+          <p className="font-medium text-gray-900 dark:text-white">
+            {asset.asset_identifier || '—'}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Type</p>
+          <p className="font-medium text-gray-900 dark:text-white">Asset</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Current Location</p>
+          <p className="font-medium text-blue-600 dark:text-blue-400">
+            {asset.location_name || 'Unknown'}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
+          <FreshnessBadge lastSeen={asset.last_seen} />
+        </div>
+      </div>
+
+      {/* Date Range */}
+      <div className="mb-6">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Date Range
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {dateRangeOptions.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setDateRange(option.value)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                dateRange === option.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Movement Timeline */}
+      <div className="mb-6">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          Movement Timeline
+        </p>
+        {error ? (
+          <div className="text-center py-4">
+            <p className="text-sm text-red-500 dark:text-red-400">
+              Failed to load movement history
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {error instanceof Error ? error.message : 'Unknown error'}
+            </p>
+          </div>
+        ) : (
+          <MovementTimeline
+            data={accumulatedData}
+            isLoading={isLoading && offset === 0}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={handleLoadMore}
+          />
+        )}
+      </div>
+
+      {/* Download Button */}
+      <button
+        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700
+          text-white font-medium py-3 px-4 rounded-lg transition-colors"
+        onClick={() => {
+          // TODO: Implement CSV download
+          console.log('Download history CSV for asset:', asset.asset_id);
+        }}
+      >
+        <Download className="w-4 h-4" />
+        Download History CSV
+      </button>
+    </>
+  );
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/30 z-40 transition-opacity duration-200 ${
+          isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={handleClose}
+      />
+
+      {/* Desktop: Side Panel (hidden on mobile) */}
+      <div
+        className={`hidden md:block fixed right-0 top-0 h-full w-full max-w-md bg-white dark:bg-gray-900 shadow-xl z-50
+          transform transition-transform duration-200 ease-out overflow-y-auto
+          ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
+            {asset.asset_name}
+          </h2>
+          <button
+            onClick={handleClose}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
+          >
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+          </button>
+        </div>
+
+        <div className="p-4">{panelContent}</div>
+      </div>
+
+      {/* Mobile: Bottom Sheet (hidden on desktop) */}
+      <div
+        className={`md:hidden fixed inset-x-0 bottom-0 z-50 transform transition-transform duration-300 ease-out
+          ${isVisible ? 'translate-y-0' : 'translate-y-full'}`}
+      >
+        <div className="bg-white dark:bg-gray-900 rounded-t-2xl shadow-xl max-h-[85vh] flex flex-col">
+          {/* Drag handle */}
+          <div className="flex justify-center py-2">
+            <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
+          </div>
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
+              {asset.asset_name}
+            </h2>
+            <button
+              onClick={handleClose}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
+            >
+              <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 overflow-y-auto flex-1">{panelContent}</div>
+        </div>
+      </div>
+    </>
+  );
+}
