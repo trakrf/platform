@@ -4,7 +4,35 @@ import { DataTable, type Column } from '@/components/shared/DataTable';
 import { FreshnessBadge } from './FreshnessBadge';
 import { formatRelativeTime } from '@/lib/reports/utils';
 import type { CurrentLocationItem } from '@/types/reports';
-import { FileText } from 'lucide-react';
+import { FileText, ChevronRight } from 'lucide-react';
+
+// Generate initials from asset name (max 2 characters)
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+// Generate consistent color based on name
+function getAvatarColor(name: string): string {
+  const colors = [
+    'bg-blue-500',
+    'bg-green-500',
+    'bg-purple-500',
+    'bg-orange-500',
+    'bg-pink-500',
+    'bg-teal-500',
+    'bg-indigo-500',
+    'bg-cyan-500',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
 
 interface CurrentLocationsTableProps {
   data: CurrentLocationItem[];
@@ -89,12 +117,20 @@ export function CurrentLocationsTable({
           }}
         >
           <td className="px-4 py-3">
-            <div>
-              <div className="font-medium text-gray-900 dark:text-gray-100">
-                {item.asset_name}
+            <div className="flex items-center gap-3">
+              {/* Avatar */}
+              <div
+                className={`w-10 h-10 rounded-lg ${getAvatarColor(item.asset_name)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
+              >
+                {getInitials(item.asset_name)}
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                {item.asset_identifier}
+              <div className="min-w-0">
+                <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                  {item.asset_name}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                  {item.asset_identifier || '—'}
+                </div>
               </div>
             </div>
           </td>
@@ -107,7 +143,10 @@ export function CurrentLocationsTable({
             {formatRelativeTime(item.last_seen)}
           </td>
           <td className="px-4 py-3">
-            <FreshnessBadge lastSeen={item.last_seen} />
+            <div className="flex items-center justify-between">
+              <FreshnessBadge lastSeen={item.last_seen} />
+              <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 ml-2" />
+            </div>
           </td>
         </tr>
       )}
