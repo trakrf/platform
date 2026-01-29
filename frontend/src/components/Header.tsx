@@ -189,7 +189,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
                   className="hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors p-0.5"
                   aria-label="Show page info"
                 >
-                  <Info className="w-4 h-4 text-gray-400 dark:text-gray-500 block" />
+                  <Info className="w-4 h-4 text-gray-400 dark:text-gray-500 block translate-y-px" />
                 </button>
                 {showInfoTooltip && (
                   <>
