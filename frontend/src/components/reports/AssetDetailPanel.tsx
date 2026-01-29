@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { X, Download, ChevronDown } from 'lucide-react';
+import { X, Download, ChevronDown, MapPin } from 'lucide-react';
 import { useAssetHistory } from '@/hooks/reports';
 import { FreshnessBadge } from './FreshnessBadge';
 import { MovementTimeline } from './MovementTimeline';
@@ -156,14 +156,24 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
           Movement Timeline
         </p>
         {error ? (
-          <div className="text-center py-4">
-            <p className="text-sm text-red-500 dark:text-red-400">
-              Failed to load movement history
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {error instanceof Error ? error.message : 'Unknown error'}
-            </p>
-          </div>
+          // Check if it's a 404 (no history) vs actual error
+          (error as { response?: { status?: number } })?.response?.status === 404 ? (
+            <div className="text-center py-8">
+              <MapPin className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No movement history available for this asset
+              </p>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-sm text-red-500 dark:text-red-400">
+                Failed to load movement history
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {error instanceof Error ? error.message : 'Unknown error'}
+              </p>
+            </div>
+          )
         ) : (
           <MovementTimeline
             data={accumulatedData}
