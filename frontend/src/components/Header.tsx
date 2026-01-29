@@ -76,7 +76,8 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     settings: { title: "Device Setup", subtitle: "Configure your RFID reader" },
     help: { title: "Help", subtitle: "Quick answers to get you started" },
     assets: { title: "Assets", subtitle: "Manage your organization's assets" },
-    locations: { title: "Locations", subtitle: "Manage your organization's locations" }
+    locations: { title: "Locations", subtitle: "Manage your organization's locations" },
+    reports: { title: "Reports", subtitle: "View asset locations and movement history" }
   };
 
   const [isBrowserSupported, setIsBrowserSupported] = useState(true);

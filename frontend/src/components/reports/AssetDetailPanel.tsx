@@ -257,7 +257,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
           </div>
 
           {/* Content */}
-          <div className="p-4 overflow-y-auto flex-1">{panelContent}</div>
+          <div className="p-4 overflow-y-auto flex-1 min-h-0">{panelContent}</div>
         </div>
       </div>
     </>
