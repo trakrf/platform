@@ -107,6 +107,7 @@ export function CurrentLocationsTable({
       emptyStateIcon={FileText}
       emptyStateTitle="No Location Data"
       emptyStateDescription="No assets have been scanned yet. Assets will appear here once they are detected."
+      className="flex-1 min-h-0"
       renderRow={(item, _index, props) => (
         <tr
           key={item.id}

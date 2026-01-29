@@ -172,7 +172,7 @@ export function DataTable<T extends { id: number | string }>({
 
   return (
     <div className={`hidden md:flex md:flex-col ${className}`}>
-      <div className="overflow-x-auto flex-1">
+      <div className="overflow-auto flex-1">
         <table className="w-full">
           <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700 z-20 border-b border-gray-200 dark:border-gray-600">
             <tr>

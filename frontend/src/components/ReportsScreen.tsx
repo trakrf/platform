@@ -177,7 +177,7 @@ export default function ReportsScreen() {
 
         {/* Content based on active tab */}
         {activeTab === 'current' && (
-          <>
+          <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             {!isLoading && data.length === 0 && !search && (
               <EmptyState
                 icon={FileText}
@@ -197,21 +197,19 @@ export default function ReportsScreen() {
             {(isLoading || data.length > 0) && (
               <>
                 {/* Desktop: Table */}
-                <div className="hidden md:block flex-1 overflow-auto">
-                  <CurrentLocationsTable
-                    data={data}
-                    loading={isLoading}
-                    totalItems={totalCount}
-                    currentPage={currentPage}
-                    pageSize={pageSize}
-                    onPageChange={setCurrentPage}
-                    onPageSizeChange={setPageSize}
-                    onRowClick={handleRowClick}
-                  />
-                </div>
+                <CurrentLocationsTable
+                  data={data}
+                  loading={isLoading}
+                  totalItems={totalCount}
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  onRowClick={handleRowClick}
+                />
 
                 {/* Mobile: Cards */}
-                <div className="md:hidden space-y-3 flex-1 overflow-auto">
+                <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
                   {isLoading ? (
                     Array.from({ length: 3 }).map((_, i) => (
                       <div
@@ -235,7 +233,7 @@ export default function ReportsScreen() {
                 </div>
               </>
             )}
-          </>
+          </div>
         )}
 
         {activeTab === 'movement' && (
