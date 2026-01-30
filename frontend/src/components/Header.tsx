@@ -76,7 +76,8 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     settings: { title: "Device Setup", subtitle: "Configure your RFID reader" },
     help: { title: "Help", subtitle: "Quick answers to get you started" },
     assets: { title: "Assets", subtitle: "Manage your organization's assets" },
-    locations: { title: "Locations", subtitle: "Manage your organization's locations" }
+    locations: { title: "Locations", subtitle: "Manage your organization's locations" },
+    reports: { title: "Reports", subtitle: "View asset locations and movement history" }
   };
 
   const [isBrowserSupported, setIsBrowserSupported] = useState(true);
@@ -180,15 +181,15 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
               </button>
             )}
 
-            <div className="inline-flex items-center gap-1">
-              <h1 className="text-base md:text-xl font-semibold text-gray-900 dark:text-gray-100 leading-none m-0">{currentPage.title}</h1>
-              <div className="relative inline-flex items-center">
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-base md:text-xl font-semibold text-gray-900 dark:text-gray-100">{currentPage.title}</h1>
+              <div className="relative flex items-center">
                 <button
                   onClick={() => setShowInfoTooltip(!showInfoTooltip)}
-                  className="hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors inline-flex items-center justify-center"
+                  className="hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors p-0.5"
                   aria-label="Show page info"
                 >
-                  <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                  <Info className="w-4 h-4 text-gray-400 dark:text-gray-500 block translate-y-px" />
                 </button>
                 {showInfoTooltip && (
                   <>
