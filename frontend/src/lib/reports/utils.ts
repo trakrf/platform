@@ -17,6 +17,30 @@ export const DATE_RANGE_OPTIONS: { value: DateRange; label: string }[] = [
   { value: '90days', label: '90 Days' },
 ];
 
+// ============================================
+// Time Range Filter (for Reports filtering)
+// ============================================
+
+export type TimeRangeFilter = 'all' | 'live' | 'today' | 'week' | 'stale';
+
+export const TIME_RANGE_OPTIONS: { value: TimeRangeFilter; label: string }[] = [
+  { value: 'all', label: 'All Time' },
+  { value: 'live', label: 'Live (< 15min)' },
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'Last 7 days' },
+  { value: 'stale', label: 'Stale (> 7 days)' },
+];
+
+/**
+ * Check if an item matches the time range filter
+ */
+export function matchesTimeRange(lastSeen: string, filter: TimeRangeFilter): boolean {
+  if (filter === 'all') return true;
+  const status = getFreshnessStatus(lastSeen);
+  if (filter === 'week') return status !== 'stale'; // live, today, or recent
+  return status === filter;
+}
+
 /**
  * Get the start date for a given date range
  */

@@ -8,32 +8,42 @@ import { CurrentLocationCard } from '@/components/reports/CurrentLocationCard';
 import { ReportStatCard } from '@/components/reports/ReportStatCard';
 import { AssetDetailPanel } from '@/components/reports/AssetDetailPanel';
 import { AssetHistoryTab } from '@/components/reports/AssetHistoryTab';
-import { useCurrentLocations } from '@/hooks/reports';
-import { useDebounce } from '@/hooks/useDebounce';
+import { LocationFilter } from '@/components/reports/LocationFilter';
+import { TimeRangeFilter } from '@/components/reports/TimeRangeFilter';
+import { useCurrentLocations, useReportsFilters } from '@/hooks/reports';
 import { getFreshnessStatus } from '@/lib/reports/utils';
 import type { CurrentLocationItem } from '@/types/reports';
 
 type TabId = 'current' | 'movement' | 'stale';
 
 export default function ReportsScreen() {
-  const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [activeTab, setActiveTab] = useState<TabId>('current');
   const [selectedAsset, setSelectedAsset] = useState<CurrentLocationItem | null>(null);
 
-  const debouncedSearch = useDebounce(search, 300);
+  const {
+    selectedLocationId,
+    setSelectedLocationId,
+    selectedTimeRange,
+    setSelectedTimeRange,
+    search,
+    setSearch,
+    locations,
+    isLoadingLocations,
+    filteredData,
+    totalCount,
+    isLoading,
+    error,
+    hasActiveFilters,
+    clearFilters,
+    activeFilterDescription,
+  } = useReportsFilters({ pageSize, currentPage });
 
-  // Reset to page 1 when search changes
+  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch]);
-
-  const { data, totalCount, isLoading, error } = useCurrentLocations({
-    search: debouncedSearch || undefined,
-    limit: pageSize,
-    offset: (currentPage - 1) * pageSize,
-  });
+  }, [selectedLocationId, selectedTimeRange, search]);
 
   // Fetch all data for stats (no pagination)
   const { data: allData } = useCurrentLocations({
@@ -162,81 +172,85 @@ export default function ReportsScreen() {
                 />
               </div>
 
-              {/* Placeholder filters - for future TRA-322 */}
+              {/* Filters */}
               <div className="flex gap-2">
-                <select
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
-                  disabled
-                >
-                  <option>All Locations</option>
-                </select>
-                <select
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
-                  disabled
-                >
-                  <option>Last 24 hours</option>
-                </select>
+                <LocationFilter
+                  value={selectedLocationId}
+                  onChange={setSelectedLocationId}
+                  locations={locations}
+                  isLoading={isLoadingLocations}
+                />
+                <TimeRangeFilter
+                  value={selectedTimeRange}
+                  onChange={setSelectedTimeRange}
+                />
               </div>
             </div>
 
             {/* Current Locations content */}
             <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            {!isLoading && data.length === 0 && !search && (
-              <EmptyState
-                icon={FileText}
-                title="No Location Data"
-                description="No assets have been scanned yet. Assets will appear here once they are detected by RFID readers."
-              />
-            )}
-
-            {!isLoading && data.length === 0 && search && (
-              <EmptyState
-                icon={Search}
-                title="No Results"
-                description={`No assets matching "${search}" were found.`}
-              />
-            )}
-
-            {(isLoading || data.length > 0) && (
-              <>
-                {/* Desktop: Table */}
-                <CurrentLocationsTable
-                  data={data}
-                  loading={isLoading}
-                  totalItems={totalCount}
-                  currentPage={currentPage}
-                  pageSize={pageSize}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={setPageSize}
-                  onRowClick={handleRowClick}
+              {/* Empty state: no data at all */}
+              {!isLoading && filteredData.length === 0 && !hasActiveFilters && (
+                <EmptyState
+                  icon={FileText}
+                  title="No Location Data"
+                  description="No assets have been scanned yet. Assets will appear here once they are detected by RFID readers."
                 />
+              )}
 
-                {/* Mobile: Cards */}
-                <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
-                  {isLoading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse"
-                      >
-                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
-                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3" />
-                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
-                      </div>
-                    ))
-                  ) : (
-                    data.map((item) => (
-                      <CurrentLocationCard
-                        key={item.asset_id}
-                        item={item}
-                        onClick={() => handleRowClick(item)}
-                      />
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+              {/* Empty state: filters applied but no results */}
+              {!isLoading && filteredData.length === 0 && hasActiveFilters && (
+                <EmptyState
+                  icon={Search}
+                  title="No Results"
+                  description={`No assets found ${activeFilterDescription}.`}
+                  action={{
+                    label: 'Clear filters',
+                    onClick: clearFilters,
+                  }}
+                />
+              )}
+
+              {(isLoading || filteredData.length > 0) && (
+                <>
+                  {/* Desktop: Table */}
+                  <CurrentLocationsTable
+                    data={filteredData}
+                    loading={isLoading}
+                    totalItems={totalCount}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                    onRowClick={handleRowClick}
+                  />
+
+                  {/* Mobile: Cards */}
+                  <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
+                    {isLoading ? (
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse"
+                        >
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
+                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3" />
+                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+                        </div>
+                      ))
+                    ) : (
+                      filteredData.map((item) => (
+                        <CurrentLocationCard
+                          key={item.asset_id}
+                          item={item}
+                          onClick={() => handleRowClick(item)}
+                        />
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </>
         )}
 
