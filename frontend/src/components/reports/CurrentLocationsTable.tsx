@@ -2,37 +2,9 @@
 import { useMemo } from 'react';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { FreshnessBadge } from './FreshnessBadge';
-import { formatRelativeTime } from '@/lib/reports/utils';
+import { formatRelativeTime, getInitials, getAvatarColor } from '@/lib/reports/utils';
 import type { CurrentLocationItem } from '@/types/reports';
 import { FileText, ChevronRight } from 'lucide-react';
-
-// Generate initials from asset name (max 2 characters)
-function getInitials(name: string): string {
-  const words = name.trim().split(/\s+/);
-  if (words.length >= 2) {
-    return (words[0][0] + words[1][0]).toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase();
-}
-
-// Generate consistent color based on name
-function getAvatarColor(name: string): string {
-  const colors = [
-    'bg-blue-500',
-    'bg-green-500',
-    'bg-purple-500',
-    'bg-orange-500',
-    'bg-pink-500',
-    'bg-teal-500',
-    'bg-indigo-500',
-    'bg-cyan-500',
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
 
 interface CurrentLocationsTableProps {
   data: CurrentLocationItem[];
@@ -45,30 +17,13 @@ interface CurrentLocationsTableProps {
   onRowClick: (item: CurrentLocationItem) => void;
 }
 
-// Extend CurrentLocationItem to include id for DataTable
 type TableItem = CurrentLocationItem & { id: number };
 
 const columns: Column<TableItem>[] = [
-  {
-    key: 'asset',
-    label: 'Asset',
-    sortable: true,
-  },
-  {
-    key: 'location',
-    label: 'Location',
-    sortable: true,
-  },
-  {
-    key: 'last_seen',
-    label: 'Last Seen',
-    sortable: true,
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    sortable: false,
-  },
+  { key: 'asset', label: 'Asset', sortable: true },
+  { key: 'location', label: 'Location', sortable: true },
+  { key: 'last_seen', label: 'Last Seen', sortable: true },
+  { key: 'status', label: 'Status', sortable: false },
 ];
 
 export function CurrentLocationsTable({
@@ -81,13 +36,11 @@ export function CurrentLocationsTable({
   onPageSizeChange,
   onRowClick,
 }: CurrentLocationsTableProps) {
-  // Transform data to include id field for DataTable
   const tableData: TableItem[] = useMemo(
     () => data.map((item) => ({ ...item, id: item.asset_id })),
     [data]
   );
 
-  // Map from TableItem back to original
   const originalItems = useMemo(() => {
     const map = new Map<number, CurrentLocationItem>();
     data.forEach((item) => map.set(item.asset_id, item));
@@ -119,7 +72,6 @@ export function CurrentLocationsTable({
         >
           <td className="px-4 py-3">
             <div className="flex items-center gap-3">
-              {/* Avatar */}
               <div
                 className={`w-10 h-10 rounded-lg ${getAvatarColor(item.asset_name)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
               >

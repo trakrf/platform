@@ -1,5 +1,12 @@
 import { useMemo } from 'react';
-import { formatDuration } from '@/lib/reports/utils';
+import {
+  formatDuration,
+  formatDate,
+  formatTime,
+  getEndTime,
+  groupTimelineByDate,
+  calculateDurationProgress,
+} from '@/lib/reports/utils';
 import type { AssetHistoryItem } from '@/types/reports';
 import { MapPin, Loader2 } from 'lucide-react';
 
@@ -11,43 +18,6 @@ interface MovementTimelineProps {
   onLoadMore: () => void;
 }
 
-interface GroupedItem {
-  date: string;
-  dateLabel: string;
-  items: AssetHistoryItem[];
-}
-
-function getDateLabel(date: Date): string {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (date.toDateString() === today.toDateString()) {
-    return 'Today';
-  }
-  if (date.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday';
-  }
-  return '';
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function getEndTime(startTime: Date, durationSeconds: number | null): Date | null {
-  if (!durationSeconds) return null;
-  return new Date(startTime.getTime() + durationSeconds * 1000);
-}
-
 export function MovementTimeline({
   data,
   isLoading,
@@ -55,29 +25,7 @@ export function MovementTimeline({
   isLoadingMore,
   onLoadMore,
 }: MovementTimelineProps) {
-  // Group items by date
-  const groupedData = useMemo(() => {
-    const groups: GroupedItem[] = [];
-    let currentDate = '';
-
-    data.forEach((item) => {
-      const itemDate = new Date(item.timestamp);
-      const dateKey = itemDate.toDateString();
-
-      if (dateKey !== currentDate) {
-        currentDate = dateKey;
-        groups.push({
-          date: dateKey,
-          dateLabel: getDateLabel(itemDate),
-          items: [item],
-        });
-      } else {
-        groups[groups.length - 1].items.push(item);
-      }
-    });
-
-    return groups;
-  }, [data]);
+  const groupedData = useMemo(() => groupTimelineByDate(data), [data]);
 
   if (isLoading) {
     return (
@@ -142,14 +90,10 @@ export function MovementTimeline({
                 const startTime = new Date(item.timestamp);
                 const endTime = getEndTime(startTime, item.duration_seconds);
                 const isOngoing = isFirstOverall && !endTime;
-
-                // Calculate progress bar width (max 8 hours = 100%)
-                const maxDuration = 8 * 60 * 60; // 8 hours in seconds
-                const progressPercent = item.duration_seconds
-                  ? Math.min((item.duration_seconds / maxDuration) * 100, 100)
-                  : isOngoing
-                    ? 30
-                    : 0;
+                const progressPercent = calculateDurationProgress(
+                  item.duration_seconds,
+                  isOngoing
+                );
 
                 return (
                   <div key={`${item.timestamp}-${itemIndex}`} className="flex gap-3">
@@ -203,17 +147,13 @@ export function MovementTimeline({
                           <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden w-full max-w-[200px]">
                             <div
                               className={`h-full rounded-full ${
-                                isFirstOverall
-                                  ? 'bg-green-500'
-                                  : 'bg-blue-500'
+                                isFirstOverall ? 'bg-green-500' : 'bg-blue-500'
                               }`}
                               style={{ width: `${progressPercent}%` }}
                             />
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {item.duration_seconds
-                              ? formatDuration(item.duration_seconds)
-                              : ''}
+                            {item.duration_seconds ? formatDuration(item.duration_seconds) : ''}
                             {isOngoing && ' (ongoing)'}
                           </p>
                         </div>
