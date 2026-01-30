@@ -7,6 +7,7 @@ import { CurrentLocationsTable } from '@/components/reports/CurrentLocationsTabl
 import { CurrentLocationCard } from '@/components/reports/CurrentLocationCard';
 import { ReportStatCard } from '@/components/reports/ReportStatCard';
 import { AssetDetailPanel } from '@/components/reports/AssetDetailPanel';
+import { AssetHistoryTab } from '@/components/reports/AssetHistoryTab';
 import { useCurrentLocations } from '@/hooks/reports';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getFreshnessStatus } from '@/lib/reports/utils';
@@ -83,7 +84,7 @@ export default function ReportsScreen() {
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'current', label: 'Current Locations' },
-    { id: 'movement', label: 'Movement History' },
+    { id: 'movement', label: 'Asset History' },
     { id: 'stale', label: 'Stale Assets' },
   ];
 
@@ -236,13 +237,7 @@ export default function ReportsScreen() {
           </div>
         )}
 
-        {activeTab === 'movement' && (
-          <EmptyState
-            icon={FileText}
-            title="Coming Soon"
-            description="Movement History report will be available in a future update."
-          />
-        )}
+        {activeTab === 'movement' && <AssetHistoryTab />}
 
         {activeTab === 'stale' && (
           <EmptyState
