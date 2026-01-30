@@ -43,6 +43,7 @@ export function AssetHistoryTab() {
           onFromDateChange={setFromDate}
           onToDateChange={setToDate}
         />
+        <div className="flex-1" />
         <ExportCsvButton
           data={timelineData}
           assetName={selectedAsset?.name || 'asset'}
@@ -63,16 +64,15 @@ export function AssetHistoryTab() {
 
       {/* Empty state when no asset selected */}
       {!selectedAssetId && (
-        <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <EmptyState
-            icon={FileText}
-            title="Select an Asset"
-            description="Choose an asset from the dropdown above to view its movement history."
-          />
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="Select an Asset"
+          description="Choose an asset from the dropdown above to view its movement history."
+          className="flex-1"
+        />
       )}
 
-      {/* Timeline - shown when asset is selected */}
+      {/* Timeline card - shown when asset is selected */}
       {selectedAssetId && (
         <div className="flex-1 min-h-0 overflow-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">

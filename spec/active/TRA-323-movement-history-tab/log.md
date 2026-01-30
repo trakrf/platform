@@ -120,3 +120,48 @@ Ready for /check: YES
 ## Files Modified
 - `frontend/src/hooks/reports/index.ts`
 - `frontend/src/components/ReportsScreen.tsx`
+
+---
+
+## Bug Fix Session: 2026-01-30T14:12:00Z
+
+### Issue: Asset History Tab UI Mess
+**Problem**: The search bar and filter dropdowns from the "Current Locations" tab were showing on ALL tabs, including the Asset History tab. This created duplicate/conflicting controls.
+
+**Root Cause**: In `ReportsScreen.tsx`, the search/filter section (lines 149-177) was rendered outside the `activeTab === 'current'` conditional, causing it to appear on all tabs.
+
+**Fix**:
+1. Moved the search/filter section inside the `activeTab === 'current'` conditional (wrapped in a Fragment)
+2. Added a flex spacer (`<div className="flex-1" />`) to the AssetHistoryTab controls row to push the Export button to the right, matching the mockup
+
+**Files Modified**:
+- `frontend/src/components/ReportsScreen.tsx` - Moved search/filters into current tab conditional
+- `frontend/src/components/reports/AssetHistoryTab.tsx` - Added flex spacer for proper button alignment
+
+**Validation**: `pnpm typecheck`, `pnpm lint`, `pnpm build` all passed
+
+---
+
+## Bug Fix Session: 2026-01-30T15:45:00Z
+
+### Issue: AssetSelector UI Improvements & Tab Default
+**Problems**:
+1. Search input was separate from dropdown - should be integrated
+2. Empty state had nested card styling
+3. Default tab was "Stale Assets" instead of "Current Locations"
+
+**Fixes**:
+1. Rewrote `AssetSelector` as a searchable dropdown:
+   - Shows "Select an asset..." when closed
+   - Shows search input when opened
+   - Integrated clear button (X) and chevron indicator
+   - Click-outside detection to close dropdown
+2. Removed nested card wrapper from empty state, added `className="flex-1"` to fill width
+3. Changed default tab from 'stale' to 'current' in ReportsScreen
+
+**Files Modified**:
+- `frontend/src/components/reports/AssetSelector.tsx` - Complete rewrite as searchable dropdown
+- `frontend/src/components/reports/AssetHistoryTab.tsx` - Fixed empty state styling
+- `frontend/src/components/ReportsScreen.tsx` - Fixed default tab
+
+**Validation**: `just validate` passed - 0 errors, 1013 tests passing, build successful
