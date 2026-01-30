@@ -6,3 +6,4 @@ export { useAssetDetailPanel } from './useAssetDetailPanel';
 export { useAssetHistoryTab } from './useAssetHistoryTab';
 export type { AssetOption } from './useAssetHistoryTab';
 export { useExportCsv } from './useExportCsv';
+export { useAssetSelector } from './useAssetSelector';

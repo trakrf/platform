@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronDown, Loader2, X } from 'lucide-react';
+import { useAssetSelector } from '@/hooks/reports/useAssetSelector';
 import type { AssetOption } from '@/hooks/reports';
 
 interface AssetSelectorProps {
@@ -17,54 +17,18 @@ export function AssetSelector({
   isLoading,
   className = '',
 }: AssetSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const filteredAssets = useMemo(() => {
-    if (!search.trim()) return assets;
-    const query = search.toLowerCase();
-    return assets.filter(
-      (a) =>
-        a.name.toLowerCase().includes(query) ||
-        a.identifier.toLowerCase().includes(query)
-    );
-  }, [assets, search]);
-
-  const selectedAsset = useMemo(
-    () => assets.find((a) => a.id === value),
-    [assets, value]
-  );
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setSearch('');
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleSelect = (assetId: number) => {
-    onChange(assetId);
-    setIsOpen(false);
-    setSearch('');
-  };
-
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onChange(null);
-    setSearch('');
-  };
-
-  const handleInputClick = () => {
-    setIsOpen(true);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  };
+  const {
+    isOpen,
+    search,
+    containerRef,
+    inputRef,
+    filteredAssets,
+    selectedAsset,
+    handleSelect,
+    handleClear,
+    handleInputClick,
+    handleSearchChange,
+  } = useAssetSelector({ value, onChange, assets });
 
   return (
     <div className={`flex flex-col gap-1 ${className}`} ref={containerRef}>
@@ -82,7 +46,7 @@ export function AssetSelector({
               ref={inputRef}
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Type to search..."
               className="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-500 text-sm"
               autoFocus

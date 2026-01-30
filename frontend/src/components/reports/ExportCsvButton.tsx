@@ -1,5 +1,5 @@
 import { Download, Loader2 } from 'lucide-react';
-import { useExportCsv } from '@/hooks/reports';
+import { useExportCsv } from '@/hooks/reports/useExportCsv';
 import type { AssetHistoryItem } from '@/types/reports';
 
 interface ExportCsvButtonProps {
@@ -13,19 +13,15 @@ export function ExportCsvButton({
   assetName,
   disabled = false,
 }: ExportCsvButtonProps) {
-  const { exportToCsv, isExporting } = useExportCsv();
-
-  const isDisabled = disabled || data.length === 0 || isExporting;
-
-  const handleClick = () => {
-    if (!isDisabled) {
-      exportToCsv(data, assetName);
-    }
-  };
+  const { isExporting, isDisabled, handleExport } = useExportCsv({
+    data,
+    assetName,
+    disabled,
+  });
 
   return (
     <button
-      onClick={handleClick}
+      onClick={handleExport}
       disabled={isDisabled}
       className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400
         text-white font-medium rounded-lg transition-colors disabled:cursor-not-allowed"
