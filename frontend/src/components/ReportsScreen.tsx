@@ -96,7 +96,7 @@ export default function ReportsScreen() {
         </h1>
 
         {/* Stat Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-6">
           <ReportStatCard
             title="Total Assets Tracked"
             value={stats.total}

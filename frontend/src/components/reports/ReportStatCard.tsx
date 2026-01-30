@@ -26,23 +26,23 @@ export function ReportStatCard({
       onClick={onClick}
       className={`
         bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700
-        p-4 flex items-center justify-between
+        p-3 md:p-4 flex items-center justify-between gap-2
         ${onClick ? 'cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors' : ''}
       `}
     >
-      <div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-        <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 truncate">{title}</p>
+        <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-0.5 md:mt-1">
           {value.toLocaleString()}
         </p>
         {subtitle && (
-          <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+          <p className="text-xs md:text-sm text-green-600 dark:text-green-400 mt-0.5 md:mt-1 truncate">
             {subtitle}
           </p>
         )}
       </div>
-      <div className={`w-12 h-12 rounded-xl ${iconBgColor} flex items-center justify-center`}>
-        <Icon className={`w-6 h-6 ${iconColor}`} />
+      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl ${iconBgColor} flex items-center justify-center flex-shrink-0`}>
+        <Icon className={`w-5 h-5 md:w-6 md:h-6 ${iconColor}`} />
       </div>
     </Wrapper>
   );
