@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, FileText, Package, CheckCircle, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -10,11 +10,20 @@ import { AssetDetailPanel } from '@/components/reports/AssetDetailPanel';
 import { AssetHistoryTab } from '@/components/reports/AssetHistoryTab';
 import { LocationFilter } from '@/components/reports/LocationFilter';
 import { TimeRangeFilter } from '@/components/reports/TimeRangeFilter';
+import { ShareButton } from '@/components/ShareButton';
+import { ExportModal } from '@/components/export';
 import { useCurrentLocations, useReportsFilters } from '@/hooks/reports';
+import { useExport } from '@/hooks/useExport';
 import { getFreshnessStatus } from '@/lib/reports/utils';
+import {
+  generateCurrentLocationsCSV,
+  generateCurrentLocationsExcel,
+  generateCurrentLocationsPDF,
+} from '@/utils/export';
 import type { CurrentLocationItem } from '@/types/reports';
+import type { ExportFormat, ExportResult } from '@/types/export';
 
-type TabId = 'current' | 'movement' | 'stale';
+type TabId = 'current' | 'movement';
 
 export default function ReportsScreen() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -39,6 +48,8 @@ export default function ReportsScreen() {
     clearFilters,
     activeFilterDescription,
   } = useReportsFilters({ pageSize, currentPage });
+
+  const { isModalOpen: isExportModalOpen, selectedFormat, openExport, closeExport } = useExport();
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -77,6 +88,23 @@ export default function ReportsScreen() {
     };
   }, [allData]);
 
+  // Generate export based on filtered data
+  const generateExport = useCallback(
+    (format: ExportFormat): ExportResult => {
+      switch (format) {
+        case 'csv':
+          return generateCurrentLocationsCSV(filteredData);
+        case 'xlsx':
+          return generateCurrentLocationsExcel(filteredData);
+        case 'pdf':
+          return generateCurrentLocationsPDF(filteredData);
+        default:
+          throw new Error(`Unsupported format: ${format}`);
+      }
+    },
+    [filteredData]
+  );
+
   // Show error toast
   useEffect(() => {
     if (error) {
@@ -95,7 +123,6 @@ export default function ReportsScreen() {
   const tabs: { id: TabId; label: string }[] = [
     { id: 'current', label: 'Current Locations' },
     { id: 'movement', label: 'Asset History' },
-    { id: 'stale', label: 'Stale Assets' },
   ];
 
   return (
@@ -131,11 +158,14 @@ export default function ReportsScreen() {
           <ReportStatCard
             title="Stale Assets (>7 days)"
             value={stats.stale}
-            subtitle={stats.stale > 0 ? 'Click to view →' : undefined}
+            subtitle={
+              stats.total > 0
+                ? `${Math.round((stats.stale / stats.total) * 100)}% of total`
+                : undefined
+            }
             icon={AlertTriangle}
             iconColor="text-amber-500"
             iconBgColor="bg-amber-500/10"
-            onClick={stats.stale > 0 ? () => setActiveTab('stale') : undefined}
           />
         </div>
 
@@ -185,6 +215,12 @@ export default function ReportsScreen() {
                   onChange={setSelectedTimeRange}
                 />
               </div>
+
+              {/* Share Button */}
+              <ShareButton
+                onFormatSelect={openExport}
+                disabled={filteredData.length === 0}
+              />
             </div>
 
             {/* Current Locations content */}
@@ -255,18 +291,21 @@ export default function ReportsScreen() {
         )}
 
         {activeTab === 'movement' && <AssetHistoryTab />}
-
-        {activeTab === 'stale' && (
-          <EmptyState
-            icon={AlertTriangle}
-            title="Coming Soon"
-            description="Stale Assets report will be available in a future update."
-          />
-        )}
       </div>
 
       {/* Asset Detail Side Panel */}
       <AssetDetailPanel asset={selectedAsset} onClose={handleClosePanel} />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={closeExport}
+        selectedFormat={selectedFormat}
+        itemCount={filteredData.length}
+        itemLabel="assets"
+        generateExport={generateExport}
+        shareTitle="Current Locations"
+      />
     </ProtectedRoute>
   );
 }

@@ -1,11 +1,20 @@
+import { useCallback } from 'react';
 import { FileText } from 'lucide-react';
 import { EmptyState } from '@/components/shared';
+import { ShareButton } from '@/components/ShareButton';
+import { ExportModal } from '@/components/export';
 import { useAssetHistoryTab } from '@/hooks/reports';
+import { useExport } from '@/hooks/useExport';
 import { AssetSelector } from './AssetSelector';
 import { DateRangeInputs } from './DateRangeInputs';
-import { ExportCsvButton } from './ExportCsvButton';
 import { AssetSummaryCard } from './AssetSummaryCard';
 import { MovementTimeline } from './MovementTimeline';
+import {
+  generateAssetHistoryCSV,
+  generateAssetHistoryExcel,
+  generateAssetHistoryPDF,
+} from '@/utils/export';
+import type { ExportFormat, ExportResult } from '@/types/export';
 
 export function AssetHistoryTab() {
   const {
@@ -26,6 +35,26 @@ export function AssetHistoryTab() {
     selectedAsset,
   } = useAssetHistoryTab();
 
+  const { isModalOpen: isExportModalOpen, selectedFormat, openExport, closeExport } = useExport();
+
+  const generateExport = useCallback(
+    (format: ExportFormat): ExportResult => {
+      const assetName = selectedAsset?.name || 'asset';
+      const assetIdentifier = selectedAsset?.identifier || '';
+      switch (format) {
+        case 'csv':
+          return generateAssetHistoryCSV(timelineData, assetName);
+        case 'xlsx':
+          return generateAssetHistoryExcel(timelineData, assetName, assetIdentifier);
+        case 'pdf':
+          return generateAssetHistoryPDF(timelineData, assetName, assetIdentifier);
+        default:
+          throw new Error(`Unsupported format: ${format}`);
+      }
+    },
+    [timelineData, selectedAsset]
+  );
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Controls Row */}
@@ -44,10 +73,9 @@ export function AssetHistoryTab() {
           onToDateChange={setToDate}
         />
         <div className="flex-1" />
-        <ExportCsvButton
-          data={timelineData}
-          assetName={selectedAsset?.name || 'asset'}
-          disabled={!selectedAssetId}
+        <ShareButton
+          onFormatSelect={openExport}
+          disabled={!selectedAssetId || timelineData.length === 0}
         />
       </div>
 
@@ -87,6 +115,17 @@ export function AssetHistoryTab() {
           />
         </div>
       )}
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={closeExport}
+        selectedFormat={selectedFormat}
+        itemCount={timelineData.length}
+        itemLabel="movements"
+        generateExport={generateExport}
+        shareTitle={selectedAsset ? `${selectedAsset.name} History` : 'Asset History'}
+      />
     </div>
   );
 }
