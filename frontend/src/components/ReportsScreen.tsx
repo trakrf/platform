@@ -7,6 +7,7 @@ import { CurrentLocationsTable } from '@/components/reports/CurrentLocationsTabl
 import { CurrentLocationCard } from '@/components/reports/CurrentLocationCard';
 import { ReportStatCard } from '@/components/reports/ReportStatCard';
 import { AssetDetailPanel } from '@/components/reports/AssetDetailPanel';
+import { AssetHistoryTab } from '@/components/reports/AssetHistoryTab';
 import { useCurrentLocations } from '@/hooks/reports';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getFreshnessStatus } from '@/lib/reports/utils';
@@ -83,7 +84,7 @@ export default function ReportsScreen() {
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'current', label: 'Current Locations' },
-    { id: 'movement', label: 'Movement History' },
+    { id: 'movement', label: 'Asset History' },
     { id: 'stale', label: 'Stale Assets' },
   ];
 
@@ -145,39 +146,41 @@ export default function ReportsScreen() {
           ))}
         </div>
 
-        {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-3 mb-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by asset name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Placeholder filters - for future TRA-322 */}
-          <div className="flex gap-2">
-            <select
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
-              disabled
-            >
-              <option>All Locations</option>
-            </select>
-            <select
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
-              disabled
-            >
-              <option>Last 24 hours</option>
-            </select>
-          </div>
-        </div>
-
         {/* Content based on active tab */}
         {activeTab === 'current' && (
-          <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <>
+            {/* Search and Filters - only for Current Locations tab */}
+            <div className="flex flex-col md:flex-row gap-3 mb-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by asset name..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Placeholder filters - for future TRA-322 */}
+              <div className="flex gap-2">
+                <select
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
+                  disabled
+                >
+                  <option>All Locations</option>
+                </select>
+                <select
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
+                  disabled
+                >
+                  <option>Last 24 hours</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Current Locations content */}
+            <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             {!isLoading && data.length === 0 && !search && (
               <EmptyState
                 icon={FileText}
@@ -234,15 +237,10 @@ export default function ReportsScreen() {
               </>
             )}
           </div>
+          </>
         )}
 
-        {activeTab === 'movement' && (
-          <EmptyState
-            icon={FileText}
-            title="Coming Soon"
-            description="Movement History report will be available in a future update."
-          />
-        )}
+        {activeTab === 'movement' && <AssetHistoryTab />}
 
         {activeTab === 'stale' && (
           <EmptyState
