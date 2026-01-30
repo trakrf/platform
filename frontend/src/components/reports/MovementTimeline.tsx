@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { formatDuration } from '@/lib/reports/utils';
 import type { AssetHistoryItem } from '@/types/reports';
 import { MapPin, Loader2 } from 'lucide-react';
@@ -10,6 +11,43 @@ interface MovementTimelineProps {
   onLoadMore: () => void;
 }
 
+interface GroupedItem {
+  date: string;
+  dateLabel: string;
+  items: AssetHistoryItem[];
+}
+
+function getDateLabel(date: Date): string {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return 'Today';
+  }
+  if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  }
+  return '';
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function getEndTime(startTime: Date, durationSeconds: number | null): Date | null {
+  if (!durationSeconds) return null;
+  return new Date(startTime.getTime() + durationSeconds * 1000);
+}
+
 export function MovementTimeline({
   data,
   isLoading,
@@ -17,18 +55,44 @@ export function MovementTimeline({
   isLoadingMore,
   onLoadMore,
 }: MovementTimelineProps) {
+  // Group items by date
+  const groupedData = useMemo(() => {
+    const groups: GroupedItem[] = [];
+    let currentDate = '';
+
+    data.forEach((item) => {
+      const itemDate = new Date(item.timestamp);
+      const dateKey = itemDate.toDateString();
+
+      if (dateKey !== currentDate) {
+        currentDate = dateKey;
+        groups.push({
+          date: dateKey,
+          dateLabel: getDateLabel(itemDate),
+          items: [item],
+        });
+      } else {
+        groups[groups.length - 1].items.push(item);
+      }
+    });
+
+    return groups;
+  }, [data]);
+
   if (isLoading) {
     return (
       <div className="space-y-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex gap-3 animate-pulse">
-            <div className="flex flex-col items-center">
-              <div className="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600" />
-              <div className="w-0.5 flex-1 bg-gray-200 dark:bg-gray-700 mt-1" />
-            </div>
-            <div className="flex-1 pb-6">
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 mb-2" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="animate-pulse">
+            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-3" />
+            <div className="ml-4 space-y-3">
+              <div className="flex gap-3">
+                <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 mt-1.5" />
+                <div className="flex-1">
+                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 mb-1" />
+                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24" />
+                </div>
+              </div>
             </div>
           </div>
         ))}
@@ -48,67 +112,116 @@ export function MovementTimeline({
   }
 
   return (
-    <div className="relative">
-      {data.map((item, index) => {
-        const isFirst = index === 0;
-        const isLastItem = index === data.length - 1;
-        const showLine = !isLastItem || hasMore; // Continue line if more data available
-        const time = new Date(item.timestamp);
-        const isToday = new Date().toDateString() === time.toDateString();
+    <div className="space-y-5">
+      {groupedData.map((group, groupIndex) => {
+        const groupDate = new Date(group.date);
 
         return (
-          <div key={`${item.timestamp}-${index}`} className="flex gap-3">
-            {/* Timeline connector */}
-            <div className="flex flex-col items-center">
-              {/* Dot */}
-              <div
-                className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                  isFirst
-                    ? 'bg-green-500 ring-4 ring-green-500/20'
-                    : 'bg-gray-300 dark:bg-gray-600'
-                }`}
-              />
-              {/* Line */}
-              {showLine && (
-                <div className="w-0.5 flex-1 bg-gray-200 dark:bg-gray-700 min-h-[40px]" />
+          <div key={group.date}>
+            {/* Date Header */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                {formatDate(groupDate)}
+              </span>
+              {group.dateLabel && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {group.dateLabel}
+                </span>
               )}
             </div>
 
-            {/* Content */}
-            <div className={`flex-1 ${isLastItem && !hasMore ? 'pb-0' : 'pb-4'}`}>
-              {/* Location name */}
-              <p
-                className={`font-medium ${
-                  isFirst
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-gray-900 dark:text-white'
-                }`}
-              >
-                {item.location_name || 'Unknown Location'}
-                {isFirst && (
-                  <span className="ml-2 text-xs font-normal text-green-600 dark:text-green-400">
-                    (Current)
-                  </span>
-                )}
-              </p>
+            {/* Items for this date */}
+            <div className="relative ml-1">
+              {group.items.map((item, itemIndex) => {
+                const isFirstOverall = groupIndex === 0 && itemIndex === 0;
+                const isLastInGroup = itemIndex === group.items.length - 1;
+                const isLastOverall =
+                  groupIndex === groupedData.length - 1 && isLastInGroup;
+                const showLine = !isLastInGroup || hasMore || !isLastOverall;
 
-              {/* Time and duration */}
-              <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
-                <span>
-                  {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {!isToday && (
-                    <span className="ml-1">
-                      · {time.toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                    </span>
-                  )}
-                </span>
-                {item.duration_seconds && (
-                  <>
-                    <span className="text-gray-300 dark:text-gray-600">•</span>
-                    <span>{formatDuration(item.duration_seconds)}</span>
-                  </>
-                )}
-              </div>
+                const startTime = new Date(item.timestamp);
+                const endTime = getEndTime(startTime, item.duration_seconds);
+                const isOngoing = isFirstOverall && !endTime;
+
+                // Calculate progress bar width (max 8 hours = 100%)
+                const maxDuration = 8 * 60 * 60; // 8 hours in seconds
+                const progressPercent = item.duration_seconds
+                  ? Math.min((item.duration_seconds / maxDuration) * 100, 100)
+                  : isOngoing
+                    ? 30
+                    : 0;
+
+                return (
+                  <div key={`${item.timestamp}-${itemIndex}`} className="flex gap-3">
+                    {/* Timeline connector */}
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
+                          isFirstOverall
+                            ? 'bg-green-500 ring-2 ring-green-500/30'
+                            : 'bg-gray-300 dark:bg-gray-600'
+                        }`}
+                      />
+                      {showLine && (
+                        <div className="w-0.5 flex-1 bg-gray-200 dark:bg-gray-700 min-h-[50px]" />
+                      )}
+                    </div>
+
+                    {/* Content */}
+                    <div className={`flex-1 ${isLastInGroup && !hasMore ? 'pb-0' : 'pb-4'}`}>
+                      {/* Time */}
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {formatTime(startTime)}
+                          {endTime && !isOngoing && (
+                            <span className="text-gray-400 dark:text-gray-500">
+                              {' '}- {formatTime(endTime)}
+                            </span>
+                          )}
+                        </span>
+                        {isFirstOverall && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
+                            NOW
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Location name */}
+                      <p
+                        className={`font-medium mt-0.5 ${
+                          isFirstOverall
+                            ? 'text-gray-900 dark:text-white'
+                            : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        {item.location_name || 'Unknown Location'}
+                      </p>
+
+                      {/* Duration bar */}
+                      {(item.duration_seconds || isOngoing) && (
+                        <div className="mt-2">
+                          <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden w-full max-w-[200px]">
+                            <div
+                              className={`h-full rounded-full ${
+                                isFirstOverall
+                                  ? 'bg-green-500'
+                                  : 'bg-blue-500'
+                              }`}
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {item.duration_seconds
+                              ? formatDuration(item.duration_seconds)
+                              : ''}
+                            {isOngoing && ' (ongoing)'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -116,9 +229,9 @@ export function MovementTimeline({
 
       {/* Load More Button */}
       {hasMore && (
-        <div className="flex gap-3">
+        <div className="ml-1 flex gap-3">
           <div className="flex flex-col items-center">
-            <div className="w-3 h-3 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+            <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0 mt-1" />
           </div>
           <div className="flex-1">
             <button
