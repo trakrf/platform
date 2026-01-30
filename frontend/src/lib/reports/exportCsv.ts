@@ -2,7 +2,7 @@
  * CSV Export Utilities for Reports
  */
 
-import { formatDuration } from './utils';
+import { formatDuration, formatTimestampForExport } from './utils';
 import type { AssetHistoryItem } from '@/types/reports';
 
 /**
@@ -27,7 +27,7 @@ export function generateHistoryCsv(
 
   const rows = data.map((item) => [
     escapeField(assetName),
-    item.timestamp,
+    formatTimestampForExport(item.timestamp),
     escapeField(item.location_name || 'Unknown'),
     item.duration_seconds ? formatDuration(item.duration_seconds) : 'ongoing',
   ]);

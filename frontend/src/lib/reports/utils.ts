@@ -74,6 +74,14 @@ export function formatTime(date: Date): string {
 }
 
 /**
+ * Format timestamp for CSV export as "Jan 30, 2026 10:30 AM"
+ */
+export function formatTimestampForExport(isoDate: string): string {
+  const date = new Date(isoDate);
+  return `${formatDate(date)} ${formatTime(date)}`;
+}
+
+/**
  * Calculate end time from start time and duration
  */
 export function getEndTime(startTime: Date, durationSeconds: number | null): Date | null {
