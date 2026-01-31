@@ -248,70 +248,70 @@ export default function ReportsScreen() {
               )}
             </div>
 
-            {/* Current Locations content */}
-            <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              {/* Empty state: no data at all */}
-              {!isLoading && filteredData.length === 0 && !hasActiveFilters && (
-                <EmptyState
-                  icon={FileText}
-                  title="No Location Data"
-                  description="No assets have been scanned yet. Assets will appear here once they are detected by RFID readers."
+            {/* Empty state: no data at all */}
+            {!isLoading && filteredData.length === 0 && !hasActiveFilters && (
+              <EmptyState
+                icon={FileText}
+                title="No Location Data"
+                description="No assets have been scanned yet. Assets will appear here once they are detected by RFID readers."
+                className="flex-1"
+              />
+            )}
+
+            {/* Empty state: filters applied but no results */}
+            {!isLoading && filteredData.length === 0 && hasActiveFilters && (
+              <EmptyState
+                icon={Search}
+                title="No Results"
+                description={`No assets found ${activeFilterDescription}.`}
+                action={{
+                  label: 'Clear filters',
+                  onClick: clearFilters,
+                }}
+                className="flex-1"
+              />
+            )}
+
+            {/* Current Locations content - only show when we have data or loading */}
+            {(isLoading || filteredData.length > 0) && (
+              <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                {/* Desktop: Table */}
+                <CurrentLocationsTable
+                  data={filteredData}
+                  loading={isLoading}
+                  totalItems={totalCount}
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  onRowClick={handleRowClick}
                 />
-              )}
 
-              {/* Empty state: filters applied but no results */}
-              {!isLoading && filteredData.length === 0 && hasActiveFilters && (
-                <EmptyState
-                  icon={Search}
-                  title="No Results"
-                  description={`No assets found ${activeFilterDescription}.`}
-                  action={{
-                    label: 'Clear filters',
-                    onClick: clearFilters,
-                  }}
-                />
-              )}
-
-              {(isLoading || filteredData.length > 0) && (
-                <>
-                  {/* Desktop: Table */}
-                  <CurrentLocationsTable
-                    data={filteredData}
-                    loading={isLoading}
-                    totalItems={totalCount}
-                    currentPage={currentPage}
-                    pageSize={pageSize}
-                    onPageChange={setCurrentPage}
-                    onPageSizeChange={setPageSize}
-                    onRowClick={handleRowClick}
-                  />
-
-                  {/* Mobile: Cards */}
-                  <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
-                    {isLoading ? (
-                      Array.from({ length: 3 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse"
-                        >
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
-                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3" />
-                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
-                        </div>
-                      ))
-                    ) : (
-                      filteredData.map((item) => (
-                        <CurrentLocationCard
-                          key={item.asset_id}
-                          item={item}
-                          onClick={() => handleRowClick(item)}
-                        />
-                      ))
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+                {/* Mobile: Cards */}
+                <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
+                  {isLoading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse"
+                      >
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
+                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3" />
+                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+                      </div>
+                    ))
+                  ) : (
+                    filteredData.map((item) => (
+                      <CurrentLocationCard
+                        key={item.asset_id}
+                        item={item}
+                        onClick={() => handleRowClick(item)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
 
