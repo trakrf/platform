@@ -58,25 +58,52 @@ export function AssetHistoryTab() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Controls Row */}
-      <div className="flex flex-wrap items-end gap-4 mb-4">
-        <AssetSelector
-          value={selectedAssetId}
-          onChange={setSelectedAssetId}
-          assets={assetOptions}
-          isLoading={isLoadingAssets}
-          className="w-full md:w-72"
-        />
-        <DateRangeInputs
-          fromDate={fromDate}
-          toDate={toDate}
-          onFromDateChange={setFromDate}
-          onToDateChange={setToDate}
-        />
-        <div className="flex-1" />
-        <ShareButton
-          onFormatSelect={openExport}
-          disabled={!selectedAssetId || timelineData.length === 0}
-        />
+      <div className="flex flex-col gap-3 mb-4">
+        {/* Asset selector row - full width on mobile */}
+        <div className="flex gap-2">
+          <AssetSelector
+            value={selectedAssetId}
+            onChange={setSelectedAssetId}
+            assets={assetOptions}
+            isLoading={isLoadingAssets}
+            className="flex-1 md:flex-none md:w-72"
+          />
+          {/* Share Button - icon only on mobile */}
+          <div className="md:hidden">
+            <ShareButton
+              onFormatSelect={openExport}
+              disabled={!selectedAssetId || timelineData.length === 0}
+              iconOnly
+            />
+          </div>
+        </div>
+
+        {/* Date range row */}
+        <div className="flex flex-col md:flex-row gap-2 md:items-end">
+          <DateRangeInputs
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            className="flex-1 md:flex-none"
+          />
+          <div className="hidden md:flex md:flex-1" />
+          {/* Share Button - full button on desktop */}
+          <div className="hidden md:block">
+            <ShareButton
+              onFormatSelect={openExport}
+              disabled={!selectedAssetId || timelineData.length === 0}
+            />
+          </div>
+        </div>
+
+        {/* Results count */}
+        {selectedAssetId && !isLoadingTimeline && timelineData.length > 0 && (
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Showing {timelineData.length} movement{timelineData.length === 1 ? '' : 's'}
+            {hasMore && ' (scroll to load more)'}
+          </div>
+        )}
       </div>
 
       {/* Summary Card - shown when asset selected and has stats */}
