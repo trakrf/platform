@@ -18,8 +18,8 @@ export function ShareButton({ onFormatSelect, disabled = false, className = '', 
   const formatOptions = getFormatOptions();
 
   const baseButtonClass = iconOnly
-    ? "p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center"
-    : "px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center text-sm";
+    ? "h-[42px] w-[42px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center"
+    : "h-[42px] px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center text-sm";
 
   return (
     <Menu as="div" className="relative inline-block text-left">

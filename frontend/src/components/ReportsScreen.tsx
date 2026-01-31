@@ -189,64 +189,54 @@ export default function ReportsScreen() {
         {/* Content based on active tab */}
         {activeTab === 'current' && (
           <>
-            {/* Search and Filters - only for Current Locations tab */}
-            <div className="flex flex-col gap-3 mb-4">
-              {/* Search row - full width on mobile */}
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by asset name..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                {/* Share Button - icon only on mobile */}
-                <div className="md:hidden">
-                  <ShareButton
-                    onFormatSelect={openExport}
-                    disabled={filteredData.length === 0}
-                    iconOnly
-                  />
-                </div>
+            {/* Search and Filters - all on one line, wraps on mobile */}
+            <div className="flex flex-wrap items-end gap-2 md:gap-3 mb-4">
+              {/* Search input */}
+              <div className="relative min-w-[200px] flex-1 md:flex-none md:w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by asset name..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full h-[42px] pl-10 pr-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
 
-              {/* Filters row - full width on mobile */}
-              <div className="flex flex-col md:flex-row gap-2">
-                <div className="flex gap-2 flex-1">
-                  <LocationFilter
-                    value={selectedLocationId}
-                    onChange={setSelectedLocationId}
-                    locations={locations}
-                    isLoading={isLoadingLocations}
-                    className="flex-1 md:flex-none"
-                  />
-                  <TimeRangeFilter
-                    value={selectedTimeRange}
-                    onChange={setSelectedTimeRange}
-                    className="flex-1 md:flex-none"
-                  />
-                </div>
+              <LocationFilter
+                value={selectedLocationId}
+                onChange={setSelectedLocationId}
+                locations={locations}
+                isLoading={isLoadingLocations}
+              />
+              <TimeRangeFilter
+                value={selectedTimeRange}
+                onChange={setSelectedTimeRange}
+              />
 
-                {/* Share Button - full button on desktop */}
-                <div className="hidden md:block">
-                  <ShareButton
-                    onFormatSelect={openExport}
-                    disabled={filteredData.length === 0}
-                  />
-                </div>
+              {/* Share Button - icon only on mobile, full on desktop */}
+              <div className="md:hidden">
+                <ShareButton
+                  onFormatSelect={openExport}
+                  disabled={filteredData.length === 0}
+                  iconOnly
+                />
               </div>
-
-              {/* Results count */}
-              {!isLoading && filteredData.length > 0 && (
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Showing {filteredData.length} {filteredData.length === 1 ? 'result' : 'results'}
-                  {hasActiveFilters && ' (filtered)'}
-                </div>
-              )}
+              <div className="hidden md:block">
+                <ShareButton
+                  onFormatSelect={openExport}
+                  disabled={filteredData.length === 0}
+                />
+              </div>
             </div>
+
+            {/* Results count */}
+            {!isLoading && filteredData.length > 0 && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Showing {filteredData.length} {filteredData.length === 1 ? 'result' : 'results'}
+                {hasActiveFilters && ' (filtered)'}
+              </div>
+            )}
 
             {/* Empty state: no data at all */}
             {!isLoading && filteredData.length === 0 && !hasActiveFilters && (
