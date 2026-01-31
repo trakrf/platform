@@ -3,6 +3,7 @@ interface DateRangeInputsProps {
   toDate: string;
   onFromDateChange: (date: string) => void;
   onToDateChange: (date: string) => void;
+  className?: string;
 }
 
 export function DateRangeInputs({
@@ -10,9 +11,10 @@ export function DateRangeInputs({
   toDate,
   onFromDateChange,
   onToDateChange,
+  className = '',
 }: DateRangeInputsProps) {
   return (
-    <div className="flex items-end gap-3">
+    <div className={`flex items-end gap-2 ${className}`}>
       <div className="flex flex-col gap-1">
         <label
           htmlFor="from-date"
@@ -26,7 +28,7 @@ export function DateRangeInputs({
           value={fromDate}
           onChange={(e) => onFromDateChange(e.target.value)}
           max={toDate}
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="h-[42px] px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div className="flex flex-col gap-1">
@@ -42,7 +44,7 @@ export function DateRangeInputs({
           value={toDate}
           onChange={(e) => onToDateChange(e.target.value)}
           min={fromDate}
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="h-[42px] px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
     </div>

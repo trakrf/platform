@@ -39,7 +39,7 @@ export function AssetSelector({
         {/* Trigger / Input */}
         <div
           onClick={handleInputClick}
-          className="flex items-center w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent"
+          className="flex items-center w-full h-[42px] px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent"
         >
           {isOpen ? (
             <input

@@ -1,11 +1,20 @@
+import { useCallback } from 'react';
 import { FileText } from 'lucide-react';
 import { EmptyState } from '@/components/shared';
+import { ShareButton } from '@/components/ShareButton';
+import { ExportModal } from '@/components/export';
 import { useAssetHistoryTab } from '@/hooks/reports';
+import { useExport } from '@/hooks/useExport';
 import { AssetSelector } from './AssetSelector';
 import { DateRangeInputs } from './DateRangeInputs';
-import { ExportCsvButton } from './ExportCsvButton';
 import { AssetSummaryCard } from './AssetSummaryCard';
 import { MovementTimeline } from './MovementTimeline';
+import {
+  generateAssetHistoryCSV,
+  generateAssetHistoryExcel,
+  generateAssetHistoryPDF,
+} from '@/utils/export';
+import type { ExportFormat, ExportResult } from '@/types/export';
 
 export function AssetHistoryTab() {
   const {
@@ -26,16 +35,36 @@ export function AssetHistoryTab() {
     selectedAsset,
   } = useAssetHistoryTab();
 
+  const { isModalOpen: isExportModalOpen, selectedFormat, openExport, closeExport } = useExport();
+
+  const generateExport = useCallback(
+    (format: ExportFormat): ExportResult => {
+      const assetName = selectedAsset?.name || 'asset';
+      const assetIdentifier = selectedAsset?.identifier || '';
+      switch (format) {
+        case 'csv':
+          return generateAssetHistoryCSV(timelineData, assetName);
+        case 'xlsx':
+          return generateAssetHistoryExcel(timelineData, assetName, assetIdentifier);
+        case 'pdf':
+          return generateAssetHistoryPDF(timelineData, assetName, assetIdentifier);
+        default:
+          throw new Error(`Unsupported format: ${format}`);
+      }
+    },
+    [timelineData, selectedAsset]
+  );
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Controls Row */}
-      <div className="flex flex-wrap items-end gap-4 mb-4">
+      {/* Controls Row - all inputs on same line, wraps on mobile */}
+      <div className="flex flex-wrap items-end gap-2 md:gap-3 mb-4">
         <AssetSelector
           value={selectedAssetId}
           onChange={setSelectedAssetId}
           assets={assetOptions}
           isLoading={isLoadingAssets}
-          className="w-full md:w-72"
+          className="min-w-[200px] flex-1 md:flex-none md:w-72"
         />
         <DateRangeInputs
           fromDate={fromDate}
@@ -43,13 +72,29 @@ export function AssetHistoryTab() {
           onFromDateChange={setFromDate}
           onToDateChange={setToDate}
         />
-        <div className="flex-1" />
-        <ExportCsvButton
-          data={timelineData}
-          assetName={selectedAsset?.name || 'asset'}
-          disabled={!selectedAssetId}
-        />
+        {/* Share Button - icon only on mobile, full on desktop */}
+        <div className="md:hidden">
+          <ShareButton
+            onFormatSelect={openExport}
+            disabled={!selectedAssetId || timelineData.length === 0}
+            iconOnly
+          />
+        </div>
+        <div className="hidden md:block">
+          <ShareButton
+            onFormatSelect={openExport}
+            disabled={!selectedAssetId || timelineData.length === 0}
+          />
+        </div>
       </div>
+
+      {/* Results count */}
+      {selectedAssetId && !isLoadingTimeline && timelineData.length > 0 && (
+        <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Showing {timelineData.length} movement{timelineData.length === 1 ? '' : 's'}
+          {hasMore && ' (scroll to load more)'}
+        </div>
+      )}
 
       {/* Summary Card - shown when asset selected and has stats */}
       {selectedAsset && stats && (
@@ -87,6 +132,17 @@ export function AssetHistoryTab() {
           />
         </div>
       )}
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={closeExport}
+        selectedFormat={selectedFormat}
+        itemCount={timelineData.length}
+        itemLabel="movements"
+        generateExport={generateExport}
+        shareTitle={selectedAsset ? `${selectedAsset.name} History` : 'Asset History'}
+      />
     </div>
   );
 }

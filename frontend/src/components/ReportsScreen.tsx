@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, FileText, Package, CheckCircle, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -8,32 +8,53 @@ import { CurrentLocationCard } from '@/components/reports/CurrentLocationCard';
 import { ReportStatCard } from '@/components/reports/ReportStatCard';
 import { AssetDetailPanel } from '@/components/reports/AssetDetailPanel';
 import { AssetHistoryTab } from '@/components/reports/AssetHistoryTab';
-import { useCurrentLocations } from '@/hooks/reports';
-import { useDebounce } from '@/hooks/useDebounce';
+import { LocationFilter } from '@/components/reports/LocationFilter';
+import { TimeRangeFilter } from '@/components/reports/TimeRangeFilter';
+import { ShareButton } from '@/components/ShareButton';
+import { ExportModal } from '@/components/export';
+import { useCurrentLocations, useReportsFilters } from '@/hooks/reports';
+import { useExport } from '@/hooks/useExport';
 import { getFreshnessStatus } from '@/lib/reports/utils';
+import {
+  generateCurrentLocationsCSV,
+  generateCurrentLocationsExcel,
+  generateCurrentLocationsPDF,
+} from '@/utils/export';
 import type { CurrentLocationItem } from '@/types/reports';
+import type { ExportFormat, ExportResult } from '@/types/export';
 
-type TabId = 'current' | 'movement' | 'stale';
+type TabId = 'current' | 'movement';
 
 export default function ReportsScreen() {
-  const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [activeTab, setActiveTab] = useState<TabId>('current');
   const [selectedAsset, setSelectedAsset] = useState<CurrentLocationItem | null>(null);
 
-  const debouncedSearch = useDebounce(search, 300);
+  const {
+    selectedLocationId,
+    setSelectedLocationId,
+    selectedTimeRange,
+    setSelectedTimeRange,
+    search,
+    setSearch,
+    locations,
+    isLoadingLocations,
+    filteredData,
+    totalCount,
+    isLoading,
+    error,
+    hasActiveFilters,
+    clearFilters,
+    activeFilterDescription,
+  } = useReportsFilters({ pageSize, currentPage });
 
-  // Reset to page 1 when search changes
+  const { isModalOpen: isExportModalOpen, selectedFormat, openExport, closeExport } = useExport();
+
+  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch]);
-
-  const { data, totalCount, isLoading, error } = useCurrentLocations({
-    search: debouncedSearch || undefined,
-    limit: pageSize,
-    offset: (currentPage - 1) * pageSize,
-  });
+  }, [selectedLocationId, selectedTimeRange, search]);
 
   // Fetch all data for stats (no pagination)
   const { data: allData } = useCurrentLocations({
@@ -67,6 +88,23 @@ export default function ReportsScreen() {
     };
   }, [allData]);
 
+  // Generate export based on filtered data
+  const generateExport = useCallback(
+    (format: ExportFormat): ExportResult => {
+      switch (format) {
+        case 'csv':
+          return generateCurrentLocationsCSV(filteredData);
+        case 'xlsx':
+          return generateCurrentLocationsExcel(filteredData);
+        case 'pdf':
+          return generateCurrentLocationsPDF(filteredData);
+        default:
+          throw new Error(`Unsupported format: ${format}`);
+      }
+    },
+    [filteredData]
+  );
+
   // Show error toast
   useEffect(() => {
     if (error) {
@@ -83,9 +121,8 @@ export default function ReportsScreen() {
   };
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'current', label: 'Current Locations' },
+    { id: 'current', label: 'Locations History' },
     { id: 'movement', label: 'Asset History' },
-    { id: 'stale', label: 'Stale Assets' },
   ];
 
   return (
@@ -121,11 +158,14 @@ export default function ReportsScreen() {
           <ReportStatCard
             title="Stale Assets (>7 days)"
             value={stats.stale}
-            subtitle={stats.stale > 0 ? 'Click to view →' : undefined}
+            subtitle={
+              stats.total > 0
+                ? `${Math.round((stats.stale / stats.total) * 100)}% of total`
+                : undefined
+            }
             icon={AlertTriangle}
             iconColor="text-amber-500"
             iconBgColor="bg-amber-500/10"
-            onClick={stats.stale > 0 ? () => setActiveTab('stale') : undefined}
           />
         </div>
 
@@ -149,59 +189,85 @@ export default function ReportsScreen() {
         {/* Content based on active tab */}
         {activeTab === 'current' && (
           <>
-            {/* Search and Filters - only for Current Locations tab */}
-            <div className="flex flex-col md:flex-row gap-3 mb-4">
-              <div className="relative flex-1 max-w-md">
+            {/* Search and Filters - all on one line, wraps on mobile */}
+            <div className="flex flex-wrap items-end gap-2 md:gap-3 mb-4">
+              {/* Search input */}
+              <div className="relative min-w-[200px] flex-1 md:flex-none md:w-64">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by asset name..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full h-[42px] pl-10 pr-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
 
-              {/* Placeholder filters - for future TRA-322 */}
-              <div className="flex gap-2">
-                <select
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
-                  disabled
-                >
-                  <option>All Locations</option>
-                </select>
-                <select
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm"
-                  disabled
-                >
-                  <option>Last 24 hours</option>
-                </select>
+              <LocationFilter
+                value={selectedLocationId}
+                onChange={setSelectedLocationId}
+                locations={locations}
+                isLoading={isLoadingLocations}
+              />
+              <TimeRangeFilter
+                value={selectedTimeRange}
+                onChange={setSelectedTimeRange}
+              />
+
+              {/* Share Button - icon only on mobile, full on desktop */}
+              <div className="md:hidden">
+                <ShareButton
+                  onFormatSelect={openExport}
+                  disabled={filteredData.length === 0}
+                  iconOnly
+                />
+              </div>
+              <div className="hidden md:block">
+                <ShareButton
+                  onFormatSelect={openExport}
+                  disabled={filteredData.length === 0}
+                />
               </div>
             </div>
 
-            {/* Current Locations content */}
-            <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            {!isLoading && data.length === 0 && !search && (
+            {/* Results count */}
+            {!isLoading && filteredData.length > 0 && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Showing {filteredData.length} {filteredData.length === 1 ? 'result' : 'results'}
+                {hasActiveFilters && ' (filtered)'}
+              </div>
+            )}
+
+            {/* Empty state: no data at all */}
+            {!isLoading && filteredData.length === 0 && !hasActiveFilters && (
               <EmptyState
                 icon={FileText}
                 title="No Location Data"
                 description="No assets have been scanned yet. Assets will appear here once they are detected by RFID readers."
+                className="flex-1"
               />
             )}
 
-            {!isLoading && data.length === 0 && search && (
+            {/* Empty state: filters applied but no results */}
+            {!isLoading && filteredData.length === 0 && hasActiveFilters && (
               <EmptyState
                 icon={Search}
                 title="No Results"
-                description={`No assets matching "${search}" were found.`}
+                description={`No assets found ${activeFilterDescription}.`}
+                action={{
+                  label: 'Clear filters',
+                  onClick: clearFilters,
+                }}
+                className="flex-1"
               />
             )}
 
-            {(isLoading || data.length > 0) && (
-              <>
+            {/* Locations History content - only show when we have data or loading */}
+            {(isLoading || filteredData.length > 0) && (
+              <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                 {/* Desktop: Table */}
                 <CurrentLocationsTable
-                  data={data}
+                  data={filteredData}
                   loading={isLoading}
                   totalItems={totalCount}
                   currentPage={currentPage}
@@ -225,7 +291,7 @@ export default function ReportsScreen() {
                       </div>
                     ))
                   ) : (
-                    data.map((item) => (
+                    filteredData.map((item) => (
                       <CurrentLocationCard
                         key={item.asset_id}
                         item={item}
@@ -234,25 +300,27 @@ export default function ReportsScreen() {
                     ))
                   )}
                 </div>
-              </>
+              </div>
             )}
-          </div>
           </>
         )}
 
         {activeTab === 'movement' && <AssetHistoryTab />}
-
-        {activeTab === 'stale' && (
-          <EmptyState
-            icon={AlertTriangle}
-            title="Coming Soon"
-            description="Stale Assets report will be available in a future update."
-          />
-        )}
       </div>
 
       {/* Asset Detail Side Panel */}
       <AssetDetailPanel asset={selectedAsset} onClose={handleClosePanel} />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={closeExport}
+        selectedFormat={selectedFormat}
+        itemCount={filteredData.length}
+        itemLabel="assets"
+        generateExport={generateExport}
+        shareTitle="Locations History"
+      />
     </ProtectedRoute>
   );
 }

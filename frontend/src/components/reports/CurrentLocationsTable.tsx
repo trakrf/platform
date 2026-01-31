@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { FreshnessBadge } from './FreshnessBadge';
-import { formatRelativeTime, getInitials, getAvatarColor } from '@/lib/reports/utils';
+import { formatRelativeTime, formatTimestampForExport, getInitials, getAvatarColor } from '@/lib/reports/utils';
 import type { CurrentLocationItem } from '@/types/reports';
 import { FileText, ChevronRight } from 'lucide-react';
 
@@ -92,8 +92,13 @@ export function CurrentLocationsTable({
               <span className="text-gray-400 dark:text-gray-500">Unknown</span>
             )}
           </td>
-          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-            {formatRelativeTime(item.last_seen)}
+          <td className="px-4 py-3">
+            <div className="text-gray-900 dark:text-gray-100">
+              {formatTimestampForExport(item.last_seen)}
+            </div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              {formatRelativeTime(item.last_seen)}
+            </div>
           </td>
           <td className="px-4 py-3">
             <div className="flex items-center justify-between">

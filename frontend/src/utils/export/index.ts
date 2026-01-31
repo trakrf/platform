@@ -6,3 +6,13 @@
 
 // Asset exports
 export { generateAssetCSV, generateAssetExcel, generateAssetPDF } from './assetExport';
+
+// Reports exports
+export {
+  generateCurrentLocationsCSV,
+  generateCurrentLocationsExcel,
+  generateCurrentLocationsPDF,
+  generateAssetHistoryCSV,
+  generateAssetHistoryExcel,
+  generateAssetHistoryPDF,
+} from './reportsExport';
