@@ -19,7 +19,7 @@ import {
 } from '@/lib/reports/utils';
 
 // ============================================
-// Current Locations Export
+// Locations History Export
 // ============================================
 
 /**
@@ -145,7 +145,7 @@ export function generateCurrentLocationsExcel(data: CurrentLocationItem[]): Expo
     { wch: 10 }, // Status
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws, 'Current Locations');
+  XLSX.utils.book_append_sheet(wb, ws, 'Locations History');
 
   // Summary sheet
   const liveCount = data.filter((d) => getFreshnessStatus(d.last_seen) === 'live').length;

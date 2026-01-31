@@ -5,7 +5,7 @@
  * Backend: backend/internal/models/report/
  */
 
-// ============ Current Locations (TRA-217) ============
+// ============ Locations History (TRA-217) ============
 
 /**
  * Single asset's current location

@@ -48,7 +48,7 @@ export default function ReportsHistoryScreen() {
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Current Locations
+            Back to Locations History
           </button>
 
           <EmptyState
@@ -56,7 +56,7 @@ export default function ReportsHistoryScreen() {
             title="Invalid Asset"
             description="No asset ID was provided. Please select an asset from the current locations report."
             action={{
-              label: 'View Current Locations',
+              label: 'View Locations History',
               onClick: handleBack,
             }}
           />
@@ -74,7 +74,7 @@ export default function ReportsHistoryScreen() {
           className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-4 w-fit"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Current Locations
+          Back to Locations History
         </button>
 
         {/* Asset header */}
@@ -105,7 +105,7 @@ export default function ReportsHistoryScreen() {
             title="Asset Not Found"
             description="This asset could not be found or you don't have permission to view it."
             action={{
-              label: 'View Current Locations',
+              label: 'View Locations History',
               onClick: handleBack,
             }}
           />

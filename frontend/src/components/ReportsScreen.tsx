@@ -121,7 +121,7 @@ export default function ReportsScreen() {
   };
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'current', label: 'Current Locations' },
+    { id: 'current', label: 'Locations History' },
     { id: 'movement', label: 'Asset History' },
   ];
 
@@ -262,7 +262,7 @@ export default function ReportsScreen() {
               />
             )}
 
-            {/* Current Locations content - only show when we have data or loading */}
+            {/* Locations History content - only show when we have data or loading */}
             {(isLoading || filteredData.length > 0) && (
               <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                 {/* Desktop: Table */}
@@ -319,7 +319,7 @@ export default function ReportsScreen() {
         itemCount={filteredData.length}
         itemLabel="assets"
         generateExport={generateExport}
-        shareTitle="Current Locations"
+        shareTitle="Locations History"
       />
     </ProtectedRoute>
   );
