@@ -74,8 +74,9 @@ vi.mock('./event.js', async (importOriginal) => {
     ...actual,
     // Keep the actual exports but ensure the ones we need are defined
     BARCODE_SEND_COMMAND: actual.BARCODE_SEND_COMMAND || { command: 0x0013, name: 'BARCODE_SEND_COMMAND' },
-    BARCODE_ESC_TRIGGER: actual.BARCODE_ESC_TRIGGER || new Uint8Array([0x1B, 0x30]),
-    BARCODE_ESC_STOP: actual.BARCODE_ESC_STOP || new Uint8Array([0x1B, 0x31])
+    BARCODE_ESC_START: actual.BARCODE_ESC_START || new Uint8Array([0x1B, 0x33]),
+    BARCODE_ESC_TRIGGER: actual.BARCODE_ESC_TRIGGER || new Uint8Array([0x1B, 0x31]),
+    BARCODE_ESC_STOP: actual.BARCODE_ESC_STOP || new Uint8Array([0x1B, 0x30])
   };
 });
 
