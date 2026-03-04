@@ -398,6 +398,17 @@ class CS108Reader extends BaseReader {
         this.scheduleBatteryCheck();
       }
 
+      // After switching to a scanning mode, if the trigger is already held,
+      // start scanning immediately. This handles the case where the trigger
+      // press triggered the mode switch (e.g., useScanToInput) and the reader
+      // missed the original trigger notification because it was in IDLE mode.
+      if (this.triggerState &&
+          this.readerState === ReaderState.CONNECTED &&
+          (mode === ReaderMode.BARCODE || mode === ReaderMode.INVENTORY || mode === ReaderMode.LOCATE)) {
+        logger.debug('[setMode] Trigger held after mode change - auto-starting scan');
+        await this.startScanning();
+      }
+
     } catch (error) {
       logger.error(`[setMode] Failed to set ${mode} mode:`, error);
 
