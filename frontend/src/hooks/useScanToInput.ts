@@ -47,8 +47,11 @@ function stripAimIdentifier(data: string): string {
 
 
 interface UseScanToInputOptions {
-  /** Callback when a scan is captured */
+  /** Callback when a scan is captured (final value, triggers API checks) */
   onScan: (value: string) => void;
+
+  /** Callback for live preview during trigger hold (visual feedback only, no API calls) */
+  onPreview?: (value: string) => void;
 
   /** Auto-stop scanning after first result (default: true) */
   autoStop?: boolean;
@@ -91,6 +94,7 @@ interface ScanSession {
 
 export function useScanToInput({
   onScan,
+  onPreview,
   autoStop = true,
   returnMode = ReaderMode.IDLE,
   triggerEnabled = false
@@ -124,6 +128,7 @@ export function useScanToInput({
 
     const dm = DeviceManager.getInstance();
     if (dm) {
+      await dm.stopScanning();
       await dm.setMode(returnMode);
     }
   }, [returnMode]);
@@ -176,6 +181,7 @@ export function useScanToInput({
       // If trigger is held, defer to release (last non-empty response wins)
       if (useDeviceStore.getState().triggerState) {
         lastTriggerBarcodeRef.current = cleanedData;
+        onPreview?.(cleanedData);
         return;
       }
 
@@ -186,7 +192,7 @@ export function useScanToInput({
         endScanSession();
       }
     }
-  }, [barcodeCount, barcodes, onScan, autoStop, endScanSession]);
+  }, [barcodeCount, barcodes, onScan, onPreview, autoStop, endScanSession]);
 
   // Cleanup on unmount - always return to returnMode
   useEffect(() => {
@@ -197,6 +203,7 @@ export function useScanToInput({
       if (isScanningRef.current) {
         const dm = DeviceManager.getInstance();
         if (dm) {
+          dm.stopScanning().catch(console.error);
           dm.setMode(returnMode).catch(console.error);
         }
       }
@@ -298,6 +305,9 @@ export function useScanToInput({
     isScanningRef.current = true;
 
     await dm.setMode(ReaderMode.BARCODE);
+    // If mode was already BARCODE (e.g., assets tab), setMode is a no-op.
+    // Explicitly start scanning to send the continuous reading command.
+    await dm.startScanning();
   }, [isConnected]);
 
   const stopScan = useCallback(async () => {

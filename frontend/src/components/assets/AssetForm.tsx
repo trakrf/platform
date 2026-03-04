@@ -5,6 +5,7 @@ import { ErrorBanner } from '@/components/shared';
 import { useDeviceStore, useLocationStore } from '@/stores';
 import { useLocations } from '@/hooks/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
+import { ReaderMode } from '@/worker/types/reader';
 import { lookupApi } from '@/lib/api/lookup';
 import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
 import { Plus, QrCode, Loader2 } from 'lucide-react';
@@ -54,7 +55,20 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
   const { startBarcodeScan, stopScan, setFocused } = useScanToInput({
     onScan: (epc) => handleBarcodeScan(epc),
+    onPreview: (value) => {
+      // Live preview: update focused tag input value directly (no API calls)
+      if (focusedTagIndex !== null) {
+        setTagIdentifiers((prev) => {
+          const updated = [...prev];
+          if (updated[focusedTagIndex]) {
+            updated[focusedTagIndex] = { ...updated[focusedTagIndex], value };
+          }
+          return updated;
+        });
+      }
+    },
     autoStop: true,
+    returnMode: ReaderMode.BARCODE,
     triggerEnabled: true,
   });
 
