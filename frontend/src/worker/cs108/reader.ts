@@ -168,9 +168,14 @@ class CS108Reader extends BaseReader {
       }
 
       case 'BARCODE_AUTO_STOP_REQUEST':
-        // Auto-stop scanning after successful barcode read
+        // If trigger is held, don't auto-stop — let user sweep and capture
+        // the last valid barcode on release (last non-empty response wins)
+        if (this.triggerState) {
+          logger.debug('[Reader] Auto-stop suppressed - trigger held (last response wins)');
+          return;
+        }
+        // Button-initiated scans: auto-stop on first valid read
         await this.stopScanning();
-        // Don't emit this internal control event
         return;
     }
 
