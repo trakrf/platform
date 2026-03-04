@@ -51,6 +51,7 @@ export class DeviceManager {
     'inventory': ReaderMode.INVENTORY,
     'locate': ReaderMode.LOCATE,
     'barcode': ReaderMode.BARCODE,
+    'assets': ReaderMode.BARCODE,
     // Everything else gets IDLE
   };
 
