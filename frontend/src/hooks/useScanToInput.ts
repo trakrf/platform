@@ -47,8 +47,11 @@ function stripAimIdentifier(data: string): string {
 
 
 interface UseScanToInputOptions {
-  /** Callback when a scan is captured */
+  /** Callback when a scan is captured (final value, triggers API checks) */
   onScan: (value: string) => void;
+
+  /** Callback for live preview during trigger hold (visual feedback only, no API calls) */
+  onPreview?: (value: string) => void;
 
   /** Auto-stop scanning after first result (default: true) */
   autoStop?: boolean;
@@ -91,6 +94,7 @@ interface ScanSession {
 
 export function useScanToInput({
   onScan,
+  onPreview,
   autoStop = true,
   returnMode = ReaderMode.IDLE,
   triggerEnabled = false
@@ -107,11 +111,15 @@ export function useScanToInput({
   const scanSessionRef = useRef<ScanSession | null>(null);
   const sessionCleanupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Last valid barcode captured during trigger hold (last non-empty response wins)
+  const lastTriggerBarcodeRef = useRef<string | null>(null);
+
   // Helper to end scan session and return to idle mode
   const endScanSession = useCallback(async () => {
     scanSessionRef.current = null;
     isScanningRef.current = false;
     scanTypeRef.current = null;
+    lastTriggerBarcodeRef.current = null;
 
     if (sessionCleanupRef.current) {
       clearTimeout(sessionCleanupRef.current);
@@ -120,6 +128,7 @@ export function useScanToInput({
 
     const dm = DeviceManager.getInstance();
     if (dm) {
+      await dm.stopScanning();
       await dm.setMode(returnMode);
     }
   }, [returnMode]);
@@ -168,13 +177,22 @@ export function useScanToInput({
         rawLength: latestBarcode.data.length,
         cleanedLength: cleanedData.length
       });
+
+      // If trigger is held, defer to release (last non-empty response wins)
+      if (useDeviceStore.getState().triggerState) {
+        lastTriggerBarcodeRef.current = cleanedData;
+        onPreview?.(cleanedData);
+        return;
+      }
+
+      // Button-initiated: first non-empty response wins
       onScan(cleanedData);
 
       if (autoStop) {
         endScanSession();
       }
     }
-  }, [barcodeCount, barcodes, onScan, autoStop, endScanSession]);
+  }, [barcodeCount, barcodes, onScan, onPreview, autoStop, endScanSession]);
 
   // Cleanup on unmount - always return to returnMode
   useEffect(() => {
@@ -185,6 +203,7 @@ export function useScanToInput({
       if (isScanningRef.current) {
         const dm = DeviceManager.getInstance();
         if (dm) {
+          dm.stopScanning().catch(console.error);
           dm.setMode(returnMode).catch(console.error);
         }
       }
@@ -213,12 +232,19 @@ export function useScanToInput({
           await dm.setMode(ReaderMode.BARCODE);
         }
       } else if (!triggerState && scanSessionRef.current) {
-        // Trigger released - DON'T switch modes yet
-        // Let CS108 stay in barcode mode until data arrives or timeout
-        // This is more forgiving for slow machines
+        // Trigger released
         isScanningRef.current = false;
 
-        // Full 2s timeout before cleanup - no early mode switch
+        // If we captured a barcode during hold, use it (last non-empty response wins)
+        if (lastTriggerBarcodeRef.current) {
+          const data = lastTriggerBarcodeRef.current;
+          lastTriggerBarcodeRef.current = null;
+          onScan(data);
+          endScanSession();
+          return;
+        }
+
+        // No barcode captured yet - wait for delayed data
         sessionCleanupRef.current = setTimeout(async () => {
           // If data already arrived, session is null - nothing to do
           if (!scanSessionRef.current) {
@@ -279,6 +305,9 @@ export function useScanToInput({
     isScanningRef.current = true;
 
     await dm.setMode(ReaderMode.BARCODE);
+    // If mode was already BARCODE (e.g., assets tab), setMode is a no-op.
+    // Explicitly start scanning to send the continuous reading command.
+    await dm.startScanning();
   }, [isConnected]);
 
   const stopScan = useCallback(async () => {

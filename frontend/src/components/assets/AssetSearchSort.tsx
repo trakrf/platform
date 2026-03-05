@@ -3,6 +3,7 @@ import { Search, X, ArrowUpDown, MapPin, QrCode, Loader2 } from 'lucide-react';
 import { useAssetStore, useLocationStore, useDeviceStore } from '@/stores';
 import { useLocations } from '@/hooks/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
+import { ReaderMode } from '@/worker/types/reader';
 import type { SortState } from '@/types/assets';
 
 interface AssetSearchSortProps {
@@ -48,7 +49,11 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
       setLocalSearch(value);
       setSearchTerm(value);
     },
+    onPreview: (value) => {
+      setLocalSearch(value);
+    },
     autoStop: true,
+    returnMode: ReaderMode.BARCODE,
     triggerEnabled: true,
   });
 

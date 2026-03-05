@@ -53,6 +53,16 @@ export default function BarcodeScreen() {
   // State for the scan mode selector
   const [scanMode, setScanMode] = useState<BarcodeScanMode>(BarcodeScanMode.SCAN_ONE);
 
+  // 3-second auto-stop timer for button-initiated scans
+  const buttonTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearButtonTimeout = useCallback(() => {
+    if (buttonTimeoutRef.current) {
+      clearTimeout(buttonTimeoutRef.current);
+      buttonTimeoutRef.current = null;
+    }
+  }, []);
+
   // Reset scan button when leaving the barcode tab
   useEffect(() => {
     return () => {
@@ -60,6 +70,10 @@ export default function BarcodeScreen() {
       if (useDeviceStore.getState().scanButtonActive) {
         console.debug('[BarcodeScreen] Unmounting - turning off scan button');
         useDeviceStore.setState({ scanButtonActive: false });
+      }
+      if (buttonTimeoutRef.current) {
+        clearTimeout(buttonTimeoutRef.current);
+        buttonTimeoutRef.current = null;
       }
     };
   }, []);
@@ -109,15 +123,15 @@ export default function BarcodeScreen() {
   useEffect(() => {
     // If in SCAN_ONE mode and we get a new barcode, stop scanning automatically
     if (scanMode === BarcodeScanMode.SCAN_ONE && barcodes.length > 0 && scanning) {
-      // const latestBarcode = barcodes[barcodes.length - 1];
       console.debug('SCAN_ONE mode: Automatically stopping after successful scan');
-      
+      clearButtonTimeout();
+
       // Set short timeout to allow barcode reader to finish processing
       setTimeout(() => {
         stopBarcodeScan();
       }, 500);
     }
-  }, [barcodes.length, scanMode, scanning, stopBarcodeScan]);
+  }, [barcodes.length, scanMode, scanning, stopBarcodeScan, clearButtonTimeout]);
   
   // Set up trigger-based barcode control
   useEffect(() => {
@@ -210,8 +224,22 @@ export default function BarcodeScreen() {
 
           <button
             onClick={() => {
-              // Toggle the UI button state - DeviceManager will react to this
+              const willActivate = !scanButtonActive;
               toggleScanButton();
+              if (willActivate && scanMode === BarcodeScanMode.SCAN_ONE) {
+                // Auto-stop after 3 seconds if no barcode read
+                buttonTimeoutRef.current = setTimeout(() => {
+                  buttonTimeoutRef.current = null;
+                  if (useBarcodeStore.getState().scanning) {
+                    useBarcodeStore.getState().setScanning(false);
+                  }
+                  if (useDeviceStore.getState().scanButtonActive) {
+                    useDeviceStore.getState().toggleScanButton();
+                  }
+                }, 3000);
+              } else if (!willActivate) {
+                clearButtonTimeout();
+              }
             }}
             disabled={readerState === 'Disconnected' || readerState === 'Busy' || readerState === 'Connecting'}
             className={`px-3 py-1 rounded-md font-medium transition-colors ${

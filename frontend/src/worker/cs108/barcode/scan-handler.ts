@@ -81,6 +81,13 @@ export class BarcodeDataHandler implements NotificationHandler {
       timestamp: now,
     };
 
+    // Ignore empty barcode data - the module may send status/empty notifications
+    // when entering continuous reading mode. Don't auto-stop on these.
+    if (!barcodeData.data || barcodeData.data.trim() === '') {
+      logger.debug('[BarcodeHandler] Ignoring empty barcode notification (no data)');
+      return;
+    }
+
     // Check for duplicate scan
     if (this.isDuplicate(barcodeData, now)) {
       if (context.metadata?.debug) {

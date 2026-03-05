@@ -191,12 +191,14 @@ export const BARCODE_SEND_COMMAND: CS108Event = {
 };
 
 // Barcode ESC command constants
-// NOTE: CS108 appears to have these inverted compared to Newland documentation
-// Newland docs say 0x31 = trigger, 0x30 = stop
-// But CS108 hardware responds to 0x30 = trigger, 0x31 = stop
-export const BARCODE_ESC_TRIGGER = new Uint8Array([0x1b, 0x30]); // ESC + "0" - Trigger scan (CS108)
-export const BARCODE_ESC_STOP = new Uint8Array([0x1b, 0x31]);    // ESC + "1" - Stop scan (CS108)
-export const BARCODE_ESC_CONTINUOUS = new Uint8Array([0x1b, 0x33]); // ESC + "3" - Continuous reading
+// Per CS108 BLE API Spec Appendix D.2 and Newland Serial Programming Manual V1.3.0-2:
+//   0x1B 0x30 = Stop scanning (Newland: "Trigger Stop" / CS108: stop)
+//   0x1B 0x31 = Single trigger (Newland: "Analog Trigger", default 3000ms timeout)
+//   0x1B 0x33 = Continuous reading (Newland: "Continuous Reading" / CS108: start)
+export const BARCODE_ESC_START = new Uint8Array([0x1b, 0x33]);      // Continuous reading - stays active until stop
+export const BARCODE_ESC_STOP = new Uint8Array([0x1b, 0x30]);       // Trigger stop - halts scanning
+export const BARCODE_ESC_TRIGGER = new Uint8Array([0x1b, 0x31]);    // Single-shot analog trigger (legacy, not used)
+export const BARCODE_ESC_CONTINUOUS = new Uint8Array([0x1b, 0x33]); // Alias for BARCODE_ESC_START
 
 export const VIBRATOR_ON: CS108Event = {
   name: 'VIBRATOR_ON',

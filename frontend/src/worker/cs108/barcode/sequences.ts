@@ -7,7 +7,7 @@ import {
   BARCODE_POWER_ON,
   BARCODE_SEND_COMMAND,
   BARCODE_ESC_STOP,
-  BARCODE_ESC_TRIGGER,
+  BARCODE_ESC_START,
 } from '../event.js';
 import { ReaderState } from '../../types/reader.js';
 
@@ -33,12 +33,13 @@ export const BARCODE_CONFIG_SEQUENCE: CommandSequence = [
 /**
  * Start Barcode Scanning Sequence
  *
- * Sends trigger command to start barcode scanning
+ * Sends continuous reading command to start barcode scanning.
+ * Scanner stays active until explicitly stopped via BARCODE_STOP_SEQUENCE.
  */
 export const BARCODE_START_SEQUENCE: CommandSequence = [
   {
     event: BARCODE_SEND_COMMAND,
-    payload: BARCODE_ESC_TRIGGER,
+    payload: BARCODE_ESC_START,
     finalState: ReaderState.SCANNING  // Transition to Scanning state on success
   }
 ];
