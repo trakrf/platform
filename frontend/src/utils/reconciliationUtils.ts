@@ -99,6 +99,17 @@ export const removeLeadingZeros = (epc: string): string => {
 };
 
 /**
+ * Compute the canonical matching key for an EPC.
+ * Used by both mergeReconciliationTags and addTag so that
+ * reconciliation stubs (short EPC from CSV) and scanned tags
+ * (full EPC from reader) resolve to the same key.
+ */
+export function getMatchingKey(epc: string, showLeadingZeros: boolean): string {
+  const normalized = normalizeEpc(epc);
+  return showLeadingZeros ? normalized : removeLeadingZeros(normalized);
+}
+
+/**
  * Parse CSV content and extract reconciliation items
  */
 export const parseReconciliationCSV = (csvData: string): {

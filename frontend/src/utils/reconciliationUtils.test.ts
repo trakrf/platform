@@ -5,6 +5,7 @@ import {
   getAssetReconciliationStats,
   normalizeEpc,
   removeLeadingZeros,
+  getMatchingKey,
   type ReconciliationItem,
 } from './reconciliationUtils';
 
@@ -254,5 +255,24 @@ describe('removeLeadingZeros', () => {
 
   it('preserves single zero', () => {
     expect(removeLeadingZeros('0')).toBe('0');
+  });
+});
+
+describe('getMatchingKey', () => {
+  it('matches full EPC to short CSV EPC when showLeadingZeros=false', () => {
+    const fullEpc = '000000000000000000010018';
+    const csvEpc = '10018';
+    expect(getMatchingKey(fullEpc, false)).toBe(getMatchingKey(csvEpc, false));
+    expect(getMatchingKey(fullEpc, false)).toBe('10018');
+  });
+
+  it('does NOT match full vs short when showLeadingZeros=true', () => {
+    const fullEpc = '000000000000000000010018';
+    const csvEpc = '10018';
+    expect(getMatchingKey(fullEpc, true)).not.toBe(getMatchingKey(csvEpc, true));
+  });
+
+  it('normalizes non-hex characters before matching', () => {
+    expect(getMatchingKey('dead-beef', false)).toBe('DEADBEEF');
   });
 });
