@@ -8,6 +8,7 @@ import { ShareModal } from '@/components/ShareModal';
 import type { ExportFormat } from '@/types/export';
 import { useInventoryAudio } from '@/hooks/useInventoryAudio';
 import { useReconciliation } from '@/hooks/useReconciliation';
+import { getAssetReconciliationStats } from '@/utils/reconciliationUtils';
 import { useInventorySave } from '@/hooks/inventory/useInventorySave';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useSortableInventory } from '@/hooks/useSortableInventory';
@@ -153,18 +154,41 @@ export default function InventoryScreen() {
   const { paginatedTags, startIndex, endIndex } = usePagination(filteredTags, currentPage, pageSize);
 
   const stats = useMemo(() => {
-    const foundTags = filteredTags.filter(tag => tag.reconciled === true).length;
-    const missingTags = filteredTags.filter(tag => tag.reconciled === false).length;
-    const notListedTags = filteredTags.filter(tag => tag.reconciled === null || tag.reconciled === undefined).length;
     const hasReconciliation = filteredTags.some(tag => tag.reconciled !== null && tag.reconciled !== undefined);
+
+    if (hasReconciliation) {
+      // Asset-level stats: group by assetIdentifier, Found if ANY tag found
+      const reconItems = filteredTags
+        .filter(t => t.reconciled !== null && t.reconciled !== undefined)
+        .map(t => ({
+          epc: t.epc,
+          assetIdentifier: t.assetIdentifier,
+          found: t.reconciled === true,
+          count: t.count,
+        }));
+      const assetStats = getAssetReconciliationStats(reconItems);
+      const notListed = filteredTags.filter(t =>
+        t.reconciled === null || t.reconciled === undefined
+      ).length;
+
+      return {
+        total: filteredTags.length,
+        totalScanned: filteredTags.filter(t => t.source !== 'reconciliation').length,
+        found: assetStats.foundAssets,
+        missing: assetStats.missingAssets,
+        notListed,
+        hasReconciliation,
+        saveable: saveableCount,
+      };
+    }
 
     return {
       total: filteredTags.length,
       totalScanned: filteredTags.length,
-      found: foundTags,
-      missing: missingTags,
-      notListed: notListedTags,
-      hasReconciliation,
+      found: 0,
+      missing: 0,
+      notListed: filteredTags.length,
+      hasReconciliation: false,
       saveable: saveableCount,
     };
   }, [filteredTags, saveableCount]);

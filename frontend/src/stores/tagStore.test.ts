@@ -267,3 +267,59 @@ describe('TagStore - Tag Classification (TRA-312)', () => {
     expect(useTagStore.getState()._lookupQueue.has('EXISTINGTAG')).toBe(false);
   });
 });
+
+describe('TagStore - mergeReconciliationTags', () => {
+  beforeEach(() => {
+    useTagStore.getState().clearTags();
+  });
+
+  it('should mark RFID-scanned tags as reconciled: true when merged', () => {
+    // Add a tag via RFID scan (source: 'rfid')
+    useTagStore.getState().addTag({ epc: 'DEADBEEF', rssi: -60 });
+    const before = useTagStore.getState().tags[0];
+    expect(before.source).toBe('rfid');
+
+    // Merge reconciliation data for this tag
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'DEADBEEF', count: 0, found: false, description: 'Laptop' },
+    ]);
+
+    const after = useTagStore.getState().tags.find(t => t.epc === 'DEADBEEF');
+    expect(after?.reconciled).toBe(true); // Was bug: source === 'scan' → always false
+    expect(after?.description).toBe('Laptop');
+  });
+
+  it('should leave reconciliation-only tags as reconciled: false', () => {
+    // Merge a tag that was NOT previously scanned
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'CAFE7731', count: 0, found: false, description: 'Monitor' },
+    ]);
+
+    const tag = useTagStore.getState().tags.find(t => t.epc === 'CAFE7731');
+    expect(tag?.reconciled).toBe(false);
+    expect(tag?.source).toBe('reconciliation');
+  });
+
+  it('should pass assetIdentifier through to TagInfo', () => {
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'DEADBEEF', assetIdentifier: 'ASSET-0003', count: 0, found: false },
+    ]);
+
+    const tag = useTagStore.getState().tags.find(t => t.epc === 'DEADBEEF');
+    expect(tag?.assetIdentifier).toBe('ASSET-0003');
+  });
+
+  it('should set assetIdentifier on existing scanned tags during merge', () => {
+    // Scan a tag first
+    useTagStore.getState().addTag({ epc: 'DEADBEEF', rssi: -50 });
+
+    // Merge reconciliation with assetIdentifier
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'DEADBEEF', assetIdentifier: 'ASSET-0003', count: 0, found: false },
+    ]);
+
+    const tag = useTagStore.getState().tags.find(t => t.epc === 'DEADBEEF');
+    expect(tag?.assetIdentifier).toBe('ASSET-0003');
+    expect(tag?.reconciled).toBe(true);
+  });
+});

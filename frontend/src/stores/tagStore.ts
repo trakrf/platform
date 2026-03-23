@@ -225,7 +225,8 @@ export const useTagStore = create<TagState>()(
       
       if (existing) {
         // Update existing tag with reconciliation data
-        existing.reconciled = existing.source === 'scan' ? true : false;
+        existing.reconciled = existing.source !== 'reconciliation';
+        existing.assetIdentifier = item.assetIdentifier;
         existing.description = item.description;
         existing.location = item.location;
         // Copy RSSI from reconciliation data if not already set
@@ -243,6 +244,7 @@ export const useTagStore = create<TagState>()(
           reconciled: false,
           source: 'reconciliation' as const,
           type: 'unknown',
+          assetIdentifier: item.assetIdentifier,
           description: item.description,
           location: item.location,
           rssi: item.rssi,
