@@ -4,6 +4,9 @@
 - **Backend**: `go mod`, `go get`
 - **Frontend**: `pnpm` exclusively (`pnpm dlx` instead of `npx`)
 
+## Working Directory
+- **Always run commands from the project root** — use `just frontend <cmd>` / `just backend <cmd>` delegation rather than `cd`-ing into subdirectories
+
 ## Task Runner (Just)
 - Root delegates: `just frontend <cmd>`, `just backend <cmd>`
 - Combined: `just lint`, `just test`, `just validate` runs both workspaces
