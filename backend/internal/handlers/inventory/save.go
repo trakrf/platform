@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -17,13 +18,18 @@ import (
 
 var validate = validator.New()
 
+// InventoryStorage defines the storage operations needed by the inventory handler.
+type InventoryStorage interface {
+	SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error)
+}
+
 // Handler handles inventory-related API requests
 type Handler struct {
-	storage *storage.Storage
+	storage InventoryStorage
 }
 
 // NewHandler creates a new inventory handler
-func NewHandler(storage *storage.Storage) *Handler {
+func NewHandler(storage InventoryStorage) *Handler {
 	return &Handler{
 		storage: storage,
 	}
