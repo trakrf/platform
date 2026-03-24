@@ -22,6 +22,31 @@ type SaveInventoryResult struct {
 	Timestamp    time.Time `json:"timestamp"`
 }
 
+// InventoryAccessError provides diagnostic context for 403 responses.
+type InventoryAccessError struct {
+	Reason     string // "location" or "assets"
+	OrgID      int
+	LocationID int
+	AssetIDs   []int
+	ValidCount int
+	TotalCount int
+}
+
+func (e *InventoryAccessError) Error() string {
+	switch e.Reason {
+	case "location":
+		return fmt.Sprintf("location not found or access denied (org_id=%d, location_id=%d)", e.OrgID, e.LocationID)
+	case "assets":
+		return fmt.Sprintf("assets not found or access denied (org_id=%d, valid=%d/%d)", e.OrgID, e.ValidCount, e.TotalCount)
+	default:
+		return "access denied"
+	}
+}
+
+func (e *InventoryAccessError) IsAccessDenied() bool {
+	return true
+}
+
 // SaveInventoryScans persists scanned assets to the asset_scans hypertable.
 // It validates that both the location and all assets belong to the specified org,
 // then batch inserts records within a transaction.
@@ -39,7 +64,11 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 	err := s.pool.QueryRow(ctx, locationQuery, req.LocationID, orgID).Scan(&locationName)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("location not found or access denied")
+			return nil, &InventoryAccessError{
+				Reason:     "location",
+				OrgID:      orgID,
+				LocationID: req.LocationID,
+			}
 		}
 		return nil, fmt.Errorf("failed to validate location: %w", err)
 	}
@@ -55,7 +84,13 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 		return nil, fmt.Errorf("failed to validate assets: %w", err)
 	}
 	if validAssetCount != len(req.AssetIDs) {
-		return nil, fmt.Errorf("one or more assets not found or access denied")
+		return nil, &InventoryAccessError{
+			Reason:     "assets",
+			OrgID:      orgID,
+			AssetIDs:   req.AssetIDs,
+			ValidCount: validAssetCount,
+			TotalCount: len(req.AssetIDs),
+		}
 	}
 
 	// 3. Begin transaction and batch INSERT into asset_scans
