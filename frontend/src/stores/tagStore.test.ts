@@ -267,3 +267,110 @@ describe('TagStore - Tag Classification (TRA-312)', () => {
     expect(useTagStore.getState()._lookupQueue.has('EXISTINGTAG')).toBe(false);
   });
 });
+
+describe('TagStore - mergeReconciliationTags', () => {
+  beforeEach(() => {
+    useTagStore.getState().clearTags();
+  });
+
+  it('should mark RFID-scanned tags as reconciled: true when merged', () => {
+    // Add a tag via RFID scan (source: 'rfid')
+    useTagStore.getState().addTag({ epc: 'DEADBEEF', rssi: -60 });
+    const before = useTagStore.getState().tags[0];
+    expect(before.source).toBe('rfid');
+
+    // Merge reconciliation data for this tag
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'DEADBEEF', count: 0, found: false, description: 'Laptop' },
+    ]);
+
+    const after = useTagStore.getState().tags.find(t => t.epc === 'DEADBEEF');
+    expect(after?.reconciled).toBe(true); // Was bug: source === 'scan' → always false
+    expect(after?.description).toBe('Laptop');
+  });
+
+  it('should leave reconciliation-only tags as reconciled: false', () => {
+    // Merge a tag that was NOT previously scanned
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'CAFE7731', count: 0, found: false, description: 'Monitor' },
+    ]);
+
+    const tag = useTagStore.getState().tags.find(t => t.epc === 'CAFE7731');
+    expect(tag?.reconciled).toBe(false);
+    expect(tag?.source).toBe('reconciliation');
+  });
+
+  it('should pass assetIdentifier through to TagInfo', () => {
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'DEADBEEF', assetIdentifier: 'ASSET-0003', count: 0, found: false },
+    ]);
+
+    const tag = useTagStore.getState().tags.find(t => t.epc === 'DEADBEEF');
+    expect(tag?.assetIdentifier).toBe('ASSET-0003');
+  });
+
+  it('should set assetIdentifier on existing scanned tags during merge', () => {
+    // Scan a tag first
+    useTagStore.getState().addTag({ epc: 'DEADBEEF', rssi: -50 });
+
+    // Merge reconciliation with assetIdentifier
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'DEADBEEF', assetIdentifier: 'ASSET-0003', count: 0, found: false },
+    ]);
+
+    const tag = useTagStore.getState().tags.find(t => t.epc === 'DEADBEEF');
+    expect(tag?.assetIdentifier).toBe('ASSET-0003');
+    expect(tag?.reconciled).toBe(true);
+  });
+
+  it('should promote reconciliation stub when scanned tag matches (import-then-scan)', () => {
+    // Step 1: Import CSV — creates reconciliation stub with short EPC
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: '10018', assetIdentifier: 'ASSET-0020', count: 0, found: false, description: 'sss' },
+    ]);
+
+    const stub = useTagStore.getState().tags[0];
+    expect(stub.source).toBe('reconciliation');
+    expect(stub.reconciled).toBe(false);
+    expect(stub.count).toBe(0);
+
+    // Step 2: Scan tag — full EPC with leading zeros should match the stub
+    useTagStore.getState().addTag({ epc: '000000000000000000010018', rssi: -45 });
+
+    // Should have ONE entry (merged), not two
+    const tags = useTagStore.getState().tags;
+    expect(tags).toHaveLength(1);
+
+    const tag = tags[0];
+    expect(tag.source).toBe('rfid');           // Promoted from 'reconciliation'
+    expect(tag.reconciled).toBe(true);          // Marked as found
+    expect(tag.assetIdentifier).toBe('ASSET-0020'); // Kept from stub
+    expect(tag.description).toBe('sss');        // Kept from stub
+    expect(tag.count).toBe(1);                  // First scan
+    expect(tag.rssi).toBe(-45);                 // From scan
+    expect(tag.epc).toBe('000000000000000000010018'); // Updated to full EPC
+  });
+
+  it('should not duplicate when scanning tag that already has reconciliation stub', () => {
+    // Import two tags for same asset
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: '10018', assetIdentifier: 'ASSET-0020', count: 0, found: false },
+      { epc: '10019', assetIdentifier: 'ASSET-0020', count: 0, found: false },
+    ]);
+    expect(useTagStore.getState().tags).toHaveLength(2);
+
+    // Scan first tag
+    useTagStore.getState().addTag({ epc: '000000000000000000010018', rssi: -50 });
+
+    // Still 2 entries (one promoted, one still stub)
+    const tags = useTagStore.getState().tags;
+    expect(tags).toHaveLength(2);
+
+    const scanned = tags.find(t => t.reconciled === true);
+    const missing = tags.find(t => t.reconciled === false);
+    expect(scanned).toBeDefined();
+    expect(missing).toBeDefined();
+    expect(scanned!.assetIdentifier).toBe('ASSET-0020');
+    expect(missing!.epc).toBe('10019');
+  });
+});

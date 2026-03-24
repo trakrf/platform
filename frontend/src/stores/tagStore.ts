@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ReconciliationItem } from '@/utils/reconciliationUtils';
-import { normalizeEpc, removeLeadingZeros } from '@/utils/reconciliationUtils';
+import { normalizeEpc, removeLeadingZeros, getMatchingKey } from '@/utils/reconciliationUtils';
 import { useSettingsStore } from './settingsStore';
 import { useAuthStore } from './authStore';
 import { useOrgStore } from './orgStore';
@@ -202,30 +202,24 @@ export const useTagStore = create<TagState>()(
   mergeReconciliationTags: (items) => set((state) => {
     const tagMap = new Map<string, TagInfo>();
     
-    // Get showLeadingZeros setting
     const { showLeadingZeros } = useSettingsStore.getState();
-    
-    // Helper function to get the matching key based on settings
-    const getMatchingKey = (epc: string) => {
-      const normalized = normalizeEpc(epc);
-      return showLeadingZeros ? normalized : removeLeadingZeros(normalized);
-    };
-    
-    // Add existing tags to map using the matching key
+
+    // Add existing tags to map using the canonical matching key
     state.tags.forEach(tag => {
-      const key = getMatchingKey(tag.epc);
+      const key = getMatchingKey(tag.epc, showLeadingZeros);
       tagMap.set(key, tag);
     });
-    
+
     // Merge reconciliation items
     items.forEach(item => {
       const normalizedEpc = normalizeEpc(item.epc);
-      const matchingKey = getMatchingKey(normalizedEpc);
+      const matchingKey = getMatchingKey(normalizedEpc, showLeadingZeros);
       const existing = tagMap.get(matchingKey);
       
       if (existing) {
         // Update existing tag with reconciliation data
-        existing.reconciled = existing.source === 'scan' ? true : false;
+        existing.reconciled = existing.source !== 'reconciliation';
+        existing.assetIdentifier = item.assetIdentifier;
         existing.description = item.description;
         existing.location = item.location;
         // Copy RSSI from reconciliation data if not already set
@@ -243,6 +237,7 @@ export const useTagStore = create<TagState>()(
           reconciled: false,
           source: 'reconciliation' as const,
           type: 'unknown',
+          assetIdentifier: item.assetIdentifier,
           description: item.description,
           location: item.location,
           rssi: item.rssi,
@@ -265,7 +260,14 @@ export const useTagStore = create<TagState>()(
     const epc = tag.epc || '';
     const displayEpc = removeLeadingZeros(epc);
     const state = get();
-    const existingIndex = state.tags.findIndex(t => t.epc === epc);
+    const { showLeadingZeros } = useSettingsStore.getState();
+
+    // Use canonical matching key so scanned tags (full EPC) match
+    // reconciliation stubs (short EPC from CSV)
+    const matchKey = getMatchingKey(epc, showLeadingZeros);
+    const existingIndex = state.tags.findIndex(
+      t => getMatchingKey(t.epc, showLeadingZeros) === matchKey
+    );
     const isNewTag = existingIndex < 0;
 
     // Tag classification will be done asynchronously via the lookup API
@@ -276,15 +278,26 @@ export const useTagStore = create<TagState>()(
 
       let newTags;
       if (existingIndex >= 0) {
-        // Update existing tag (don't re-enrich, keep existing asset/location data)
+        const existing = state.tags[existingIndex];
+        // If this is a reconciliation stub being scanned for the first time,
+        // promote it: update source, mark as found, keep reconciliation metadata
+        const isReconStub = existing.source === 'reconciliation';
         newTags = [...state.tags];
         newTags[existingIndex] = {
-          ...newTags[existingIndex],
+          ...existing,
           ...tag,
+          // Keep reconciliation metadata from the stub
+          assetIdentifier: existing.assetIdentifier ?? tag.assetIdentifier,
+          description: existing.description ?? tag.description,
+          location: existing.location ?? tag.location,
+          // Promote stub to scanned tag
+          epc: isReconStub ? epc : existing.epc,
           displayEpc,
+          source: isReconStub ? 'rfid' as const : existing.source,
+          reconciled: existing.reconciled != null ? true : existing.reconciled,
           lastSeenTime: now,
-          readCount: (newTags[existingIndex].readCount || 0) + 1,
-          count: (newTags[existingIndex].count || 0) + 1,
+          readCount: (existing.readCount || 0) + 1,
+          count: (existing.count || 0) + 1,
           timestamp: now
         };
       } else {

@@ -4,6 +4,10 @@
 
 This specification emerges from completing TRA-311 (CSV export format alignment) which now enables the round-trip workflow: **Asset List → Export CSV → Inventory Scan → Reconciliation**
 
+## Scope Note
+
+Reconciliation is a **paid-only feature** (requires authentication). The auth gate and upsell messaging for free users is tracked separately in **TRA-341**. This spec covers the reconciliation logic itself for authenticated users.
+
 ## Outcome
 
 Update reconciliation matching logic to handle multi-tagged assets. When a CSV with multiple "Tag ID" columns is imported, ALL tag IDs for each asset are mapped to that asset, enabling reconciliation to work correctly when:
@@ -61,7 +65,7 @@ const tagIds = tagIdColumnIndices
 **New type** (or extend existing):
 ```typescript
 interface ReconciliationAsset {
-  assetId: string;           // "ASSET-0003"
+  assetIdentifier: string;   // "ASSET-0003" (matches TagInfo.assetIdentifier)
   tagIds: string[];          // ["DEADBEEF", "CAFE7731"]
   name?: string;
   description?: string;
@@ -71,6 +75,10 @@ interface ReconciliationAsset {
 }
 ```
 
+> **Note:** Use `assetIdentifier` (string, e.g. "ASSET-0003") not `assetId` (numeric DB ID).
+> `TagInfo` already has both fields: `assetId?: number`, `assetIdentifier?: string`.
+> CSV contains the human-readable identifier, so reconciliation parsing should populate `assetIdentifier`.
+
 **Lookup map**:
 ```typescript
 type TagToAssetMap = Map<string, ReconciliationAsset>;
@@ -79,7 +87,9 @@ type TagToAssetMap = Map<string, ReconciliationAsset>;
 // "CAFE7731" → ReconciliationAsset for ASSET-0003 (same reference)
 ```
 
-### 3. Update Matching Logic
+### 3. Fix Source Matching Bug and Update Matching Logic
+
+**Bug**: `tagStore.ts:228` — `existing.source === 'scan'` is always false for RFID-scanned tags because they have `source: 'rfid'`. This causes ALL matched tags to show as "Missing". Fix: `existing.source !== 'reconciliation'`.
 
 **Current** (`mergeReconciliationTags` in `tagStore.ts`): Matches at EPC/tag level
 
@@ -115,13 +125,13 @@ Asset ID, Name, Description, Location, Tag ID, RSSI (dBm), Count, Last Seen
 - `Created` - Asset creation date not needed
 
 **Behavior**:
-- When tag has `assetId` (from reconciliation): use asset data
-- When tag has no `assetId` (unexpected/scanned-only): leave Asset ID empty or use tag as fallback
+- When tag has `assetIdentifier` (from reconciliation): use asset data
+- When tag has no `assetIdentifier` (unexpected/scanned-only): leave Asset ID empty or use tag as fallback
 
 **Export columns**:
 | Column | Source (reconciled) | Source (unexpected) |
 |--------|---------------------|---------------------|
-| Asset ID | `tag.assetId` | (empty) |
+| Asset ID | `tag.assetIdentifier` | (empty) |
 | Name | `tag.description` | - |
 | Description | - | - |
 | Location | `tag.location` | - |
@@ -141,8 +151,8 @@ Asset ID, Name, Description, Location, Tag ID, RSSI (dBm), Count, Last Seen
 
 ## Implementation Approach
 
-Extend existing `ReconciliationItem` with `assetId` field:
-- Parse creates one ReconciliationItem per tag, with shared `assetId`
+Extend existing `ReconciliationItem` with `assetIdentifier` field:
+- Parse creates one ReconciliationItem per tag, with shared `assetIdentifier`
 - Tag-level detail preserved in UI (see which specific tags were read)
 - Asset-level aggregation for summary stats (Found/Missing counts)
 
@@ -153,7 +163,7 @@ Extend existing `ReconciliationItem`:
 interface ReconciliationItem {
   epc: string;              // Normalized EPC for matching
   originalEpc?: string;     // Original EPC from CSV
-  assetId?: string;         // NEW: Asset ID from CSV row
+  assetIdentifier?: string; // NEW: "ASSET-0003" from CSV (matches TagInfo.assetIdentifier)
   description?: string;     // Asset name/description
   location?: string;
   rssi?: number;
@@ -170,21 +180,21 @@ Then add aggregation in display layer to show asset-level stats.
 1. **`frontend/src/utils/reconciliationUtils.ts`**
    - `parseReconciliationCSV()`: Read ALL Tag ID columns
    - Extract Asset ID from first column
-   - Create one ReconciliationItem per tag, with shared assetId
+   - Create one ReconciliationItem per tag, with shared assetIdentifier
 
 2. **`frontend/src/stores/tagStore.ts`**
-   - Update `mergeReconciliationTags()` to store assetId on TagInfo
-   - Add `assetId?: string` field to TagInfo type
+   - Update `mergeReconciliationTags()` to store assetIdentifier on TagInfo
+   - `TagInfo` already has `assetIdentifier?: string` — populate it from reconciliation CSV
 
 3. **`frontend/src/utils/excelExportUtils.ts`**
    - Update `generateInventoryCSV()` to match asset export format
    - Column order: `Asset ID, Name, Description, Status, Location, Tag ID`
-   - Include assetId from reconciliation data when available
-   - For scanned tags without assetId, use tag as row identifier
+   - Include assetIdentifier from reconciliation data when available
+   - For scanned tags without assetIdentifier, use tag as row identifier
 
-4. **`frontend/src/components/InventoryStats.tsx`** (or similar)
+4. **`frontend/src/components/inventory/InventoryStats.tsx`**
    - Display asset-level counts (Found/Missing/Unexpected)
-   - Group by assetId for display
+   - Group by assetIdentifier for display
 
 5. **Tests**: Update/add tests for multi-tag CSV parsing, matching, and export format
 
@@ -200,11 +210,12 @@ Then add aggregation in display layer to show asset-level stats.
 - [ ] Inventory CSV export matches asset export column format
 - [ ] Exported inventory includes Asset ID when reconciliation data present
 - [ ] Round-trip: Export assets → Import CSV → Scan → Export inventory → formats align
+- [ ] Source matching bug fixed: RFID-scanned tags (`source: 'rfid'`) correctly marked as Found
 
 ## Design Decisions
 
 - **Display format**: Tag-level detail preserved (see which specific tags were read per asset)
-- **Aggregation**: Asset-level summary stats derived by grouping on `assetId`
+- **Aggregation**: Asset-level summary stats derived by grouping on `assetIdentifier`
 
 ## References
 

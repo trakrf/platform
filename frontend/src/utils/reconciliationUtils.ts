@@ -7,6 +7,7 @@
 export interface ReconciliationItem {
   epc: string;            // Normalized EPC for matching
   originalEpc?: string;   // Original EPC from CSV for display
+  assetIdentifier?: string; // "ASSET-0003" from CSV Asset ID column (matches TagInfo.assetIdentifier)
   description?: string;
   location?: string;
   rssi?: number;         // RSSI value from CSV
@@ -14,6 +15,20 @@ export interface ReconciliationItem {
   found: boolean;
   lastSeen?: number;
 }
+
+// Asset-level reconciliation for grouping tags by parent asset
+export interface ReconciliationAsset {
+  assetIdentifier: string;
+  tagIds: string[];
+  name?: string;
+  description?: string;
+  location?: string;
+  found: boolean;
+  foundTagIds: string[];
+}
+
+// Lookup map: normalized tag EPC → parent ReconciliationAsset
+export type TagToAssetMap = Map<string, ReconciliationAsset>;
 
 /**
  * Helper function to properly parse CSV rows (handling quoted fields with commas)
@@ -84,6 +99,17 @@ export const removeLeadingZeros = (epc: string): string => {
 };
 
 /**
+ * Compute the canonical matching key for an EPC.
+ * Used by both mergeReconciliationTags and addTag so that
+ * reconciliation stubs (short EPC from CSV) and scanned tags
+ * (full EPC from reader) resolve to the same key.
+ */
+export function getMatchingKey(epc: string, showLeadingZeros: boolean): string {
+  const normalized = normalizeEpc(epc);
+  return showLeadingZeros ? normalized : removeLeadingZeros(normalized);
+}
+
+/**
  * Parse CSV content and extract reconciliation items
  */
 export const parseReconciliationCSV = (csvData: string): {
@@ -101,31 +127,43 @@ export const parseReconciliationCSV = (csvData: string): {
     const headers = lines[0].split(',').map(h => h.trim());
     console.info(`CSV headers: ${headers.join(', ')}`);
     
-    // Find the column index for EPC/Tag ID with multiple possible name formats
-    const epcHeaderPatterns = [
-      /epc/i, 
-      /tag\s*id/i, 
-      /rfid/i, 
-      /id/i, 
-      /code/i, 
-      /number/i, 
-      /serial/i
-    ];
-    
-    let epcColumnIndex = -1;
-    for (const pattern of epcHeaderPatterns) {
-      epcColumnIndex = headers.findIndex(header => pattern.test(header));
-      if (epcColumnIndex !== -1) {
-        console.info(`Found EPC column at index ${epcColumnIndex} (${headers[epcColumnIndex]}) using pattern ${pattern}`);
-        break;
+    // Find ALL Tag ID column indices (supports multi-tag asset CSVs)
+    // First check for exact "Tag ID" columns (from asset export format)
+    const tagIdColumnIndices: number[] = headers
+      .map((h, i) => /^tag\s*id$/i.test(h.trim()) ? i : -1)
+      .filter(i => i !== -1);
+
+    // If no "Tag ID" columns found, fall back to broader EPC pattern matching
+    if (tagIdColumnIndices.length === 0) {
+      const epcHeaderPatterns = [
+        /epc/i,
+        /rfid/i,
+        /id/i,
+        /code/i,
+        /number/i,
+        /serial/i
+      ];
+
+      let epcColumnIndex = -1;
+      for (const pattern of epcHeaderPatterns) {
+        epcColumnIndex = headers.findIndex(header => pattern.test(header));
+        if (epcColumnIndex !== -1) {
+          console.info(`Found EPC column at index ${epcColumnIndex} (${headers[epcColumnIndex]}) using pattern ${pattern}`);
+          break;
+        }
       }
+
+      if (epcColumnIndex === -1) {
+        console.warn('Could not find a clear EPC column, using first column as fallback');
+        epcColumnIndex = 0;
+      }
+      tagIdColumnIndices.push(epcColumnIndex);
+    } else {
+      console.info(`Found ${tagIdColumnIndices.length} Tag ID column(s) at indices: ${tagIdColumnIndices.join(', ')}`);
     }
-    
-    // If still not found, use the first column as a fallback
-    if (epcColumnIndex === -1) {
-      console.warn('Could not find a clear EPC column, using first column as fallback');
-      epcColumnIndex = 0;
-    }
+
+    // Find Asset ID column (from asset export format)
+    const assetIdColumnIndex = headers.findIndex(h => /^asset\s*id$/i.test(h.trim()));
     
     // Find optional description, location, and RSSI columns with broader patterns
     const descriptionPatterns = [/desc/i, /name/i, /title/i, /item/i, /product/i];
@@ -170,31 +208,25 @@ export const parseReconciliationCSV = (csvData: string): {
       }
       
       const values = parseCSVRow(lines[i]);
-      if (values.length <= epcColumnIndex) {
-        skippedCount++;
-        continue; // Skip invalid rows
-      }
-      
-      const epc = values[epcColumnIndex].trim();
-      if (!epc) {
-        skippedCount++;
-        continue; // Skip empty EPC values
-      }
-      
-      const description = descriptionColumnIndex !== -1 && descriptionColumnIndex < values.length 
-        ? values[descriptionColumnIndex]?.trim() 
+
+      // Extract shared row metadata
+      const assetIdentifier = assetIdColumnIndex !== -1 && assetIdColumnIndex < values.length
+        ? values[assetIdColumnIndex]?.trim() || undefined
         : undefined;
-        
+
+      const description = descriptionColumnIndex !== -1 && descriptionColumnIndex < values.length
+        ? values[descriptionColumnIndex]?.trim()
+        : undefined;
+
       const location = locationColumnIndex !== -1 && locationColumnIndex < values.length
-        ? values[locationColumnIndex]?.trim() 
+        ? values[locationColumnIndex]?.trim()
         : undefined;
-      
+
       // Parse RSSI value
       let rssi: number | undefined;
       if (rssiColumnIndex !== -1 && rssiColumnIndex < values.length) {
         const rssiValue = values[rssiColumnIndex]?.trim();
         if (rssiValue) {
-          // Remove any non-numeric characters except minus sign
           const cleanRssi = rssiValue.replace(/[^-0-9.]/g, '');
           rssi = parseFloat(cleanRssi);
           if (isNaN(rssi)) {
@@ -202,32 +234,39 @@ export const parseReconciliationCSV = (csvData: string): {
           }
         }
       }
-      
-      // Normalize the EPC - keep both original and normalized versions for reference
-      const normalizedEpc = normalizeEpc(epc);
-      
-      // Skip if normalized EPC is empty
-      if (!normalizedEpc) {
-        skippedCount++;
-        continue;
+
+      // Emit one ReconciliationItem per non-empty tag column
+      let rowHasTag = false;
+      for (const colIdx of tagIdColumnIndices) {
+        if (colIdx >= values.length) continue;
+
+        const epc = values[colIdx]?.trim();
+        if (!epc) continue;
+
+        const normalizedEpc = normalizeEpc(epc);
+        if (!normalizedEpc) continue;
+
+        if (normalizedEpc.length < 4) {
+          console.warn(`Skipping invalid EPC at line ${i+1}: "${epc}" (normalized: "${normalizedEpc}") - too short`);
+          continue;
+        }
+
+        rowHasTag = true;
+        parsedData.push({
+          epc: normalizedEpc,
+          originalEpc: epc,
+          assetIdentifier,
+          description,
+          location,
+          rssi,
+          count: 0,
+          found: false,
+        });
       }
-      
-      // Add validation: must be at least 4 hex chars after normalization
-      if (normalizedEpc.length < 4) {
-        console.warn(`Skipping invalid EPC at line ${i+1}: "${epc}" (normalized: "${normalizedEpc}") - too short`);
+
+      if (!rowHasTag) {
         skippedCount++;
-        continue;
       }
-      
-      parsedData.push({
-        epc: normalizedEpc,  // Store normalized EPC
-        originalEpc: epc,     // Store original EPC for reference
-        description,
-        location,
-        rssi,
-        count: 0,
-        found: false,
-      });
     }
     
     if (parsedData.length === 0) {
@@ -282,6 +321,57 @@ export const getReconciliationStats = (data: ReconciliationItem[]) => {
     missing
   };
 };
+
+/**
+ * Build a lookup map from tag EPC → parent ReconciliationAsset.
+ * Tags without assetIdentifier are excluded.
+ */
+export function buildAssetMap(items: ReconciliationItem[]): TagToAssetMap {
+  const assetsByIdentifier = new Map<string, ReconciliationAsset>();
+  const tagToAsset = new Map<string, ReconciliationAsset>();
+
+  for (const item of items) {
+    if (!item.assetIdentifier) continue;
+
+    let asset = assetsByIdentifier.get(item.assetIdentifier);
+    if (!asset) {
+      asset = {
+        assetIdentifier: item.assetIdentifier,
+        tagIds: [],
+        name: item.description,
+        description: item.description,
+        location: item.location,
+        found: false,
+        foundTagIds: [],
+      };
+      assetsByIdentifier.set(item.assetIdentifier, asset);
+    }
+    asset.tagIds.push(item.epc);
+    tagToAsset.set(item.epc, asset);
+  }
+  return tagToAsset;
+}
+
+/**
+ * Compute asset-level reconciliation stats.
+ * Groups items by assetIdentifier (falls back to epc for items without one).
+ * An asset is "Found" if ANY of its tags are found.
+ */
+export function getAssetReconciliationStats(items: ReconciliationItem[]): {
+  totalAssets: number;
+  foundAssets: number;
+  missingAssets: number;
+} {
+  const assetStatus = new Map<string, boolean>();
+  for (const item of items) {
+    const key = item.assetIdentifier ?? item.epc;
+    const current = assetStatus.get(key) ?? false;
+    assetStatus.set(key, current || item.found);
+  }
+  const totalAssets = assetStatus.size;
+  const foundAssets = [...assetStatus.values()].filter(Boolean).length;
+  return { totalAssets, foundAssets, missingAssets: totalAssets - foundAssets };
+}
 
 /**
  * Update reconciliation items with found tags

@@ -32,7 +32,7 @@ export function InventoryStats({ stats, activeFilters, onToggleFilter, onClearFi
             </div>
             <div className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-green-800 dark:text-green-200">{stats.found}</div>
             <div className="text-green-600 dark:text-green-400 text-[10px] xs:text-xs lg:text-sm truncate">
-              {stats.hasReconciliation ? 'Matched' : 'Upload CSV'}
+              {stats.hasReconciliation ? 'Assets matched' : 'Upload CSV'}
             </div>
           </div>
         </div>
@@ -53,7 +53,7 @@ export function InventoryStats({ stats, activeFilters, onToggleFilter, onClearFi
             </div>
             <div className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-red-800 dark:text-red-200">{stats.missing}</div>
             <div className="text-red-600 dark:text-red-400 text-[10px] xs:text-xs lg:text-sm truncate">
-              {stats.hasReconciliation ? 'From CSV' : 'Upload CSV'}
+              {stats.hasReconciliation ? 'Assets missing' : 'Upload CSV'}
             </div>
           </div>
         </div>
@@ -74,7 +74,7 @@ export function InventoryStats({ stats, activeFilters, onToggleFilter, onClearFi
             </div>
             <div className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-800 dark:text-gray-200">{stats.notListed}</div>
             <div className="text-gray-600 dark:text-gray-400 text-[10px] xs:text-xs lg:text-sm truncate">
-              {stats.hasReconciliation ? 'Not in CSV' : 'Scanned'}
+              {stats.hasReconciliation ? 'Tags not in CSV' : 'Scanned'}
             </div>
           </div>
         </div>
