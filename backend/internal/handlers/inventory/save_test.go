@@ -19,23 +19,30 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
-// mockStorage implements the storage methods needed for testing
-type mockStorage struct {
+// mockInventoryStorage implements InventoryStorage for testing.
+type mockInventoryStorage struct {
 	saveResult *storage.SaveInventoryResult
 	saveError  error
 }
 
-func (m *mockStorage) SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error) {
-	if m.saveError != nil {
-		return nil, m.saveError
-	}
-	return m.saveResult, nil
+func (m *mockInventoryStorage) SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error) {
+	return m.saveResult, m.saveError
 }
 
-// storageWrapper wraps mockStorage to satisfy *storage.Storage interface requirement
-// In a real test, we'd use dependency injection with an interface
-type testHandler struct {
-	mockSave func(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error)
+// newTestRequest creates a POST request with JSON body and org claims set.
+func newTestRequest(t *testing.T, body any, orgID int) *http.Request {
+	t.Helper()
+	bodyBytes, err := json.Marshal(body)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	claims := &jwt.Claims{
+		UserID:       1,
+		Email:        "test@example.com",
+		CurrentOrgID: &orgID,
+	}
+	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
+	return req.WithContext(ctx)
 }
 
 func TestSave_MissingOrgContext(t *testing.T) {
@@ -74,7 +81,6 @@ func TestSave_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add user claims
 	orgID := 1
 	claims := &jwt.Claims{
 		UserID:       1,
@@ -251,31 +257,7 @@ func TestSaveInventoryResult_JSON(t *testing.T) {
 	assert.Equal(t, "Warehouse A - Rack 12", parsed["location_name"])
 }
 
-// Integration-style tests that require a mock storage
-// These test the handler's error handling paths
-
-func TestSave_LocationNotOwnedByOrg(t *testing.T) {
-	// This test documents the expected behavior when storage returns
-	// a "not found or access denied" error for location validation
-	// In a full integration test, we'd use a real or properly mocked storage
-
-	// For now, verify the handler exists and can be instantiated
-	handler := NewHandler(nil)
-	assert.NotNil(t, handler)
-}
-
-func TestSave_AssetNotOwnedByOrg(t *testing.T) {
-	// This test documents the expected behavior when storage returns
-	// a "not found or access denied" error for asset validation
-	// In a full integration test, we'd use a real or properly mocked storage
-
-	// For now, verify the handler exists
-	handler := NewHandler(nil)
-	assert.NotNil(t, handler)
-}
-
 func TestSaveInventoryRequest_Struct(t *testing.T) {
-	// Test the storage request struct
 	req := storage.SaveInventoryRequest{
 		LocationID: 123,
 		AssetIDs:   []int{1, 2, 3},
@@ -287,7 +269,6 @@ func TestSaveInventoryRequest_Struct(t *testing.T) {
 }
 
 func TestAccessDeniedErrorDetection(t *testing.T) {
-	// Test that the error detection logic works correctly
 	tests := []struct {
 		name            string
 		err             error
@@ -313,7 +294,7 @@ func TestAccessDeniedErrorDetection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errStr := tt.err.Error()
-			containsAccessDenied := contains(errStr, "not found or access denied")
+			containsAccessDenied := strings.Contains(errStr, "not found or access denied")
 			assert.Equal(t, tt.expectForbidden, containsAccessDenied)
 		})
 	}
@@ -368,15 +349,85 @@ func TestSave_AccessErrorDetection(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+// --- Handler-level tests using mockInventoryStorage ---
+
+func TestSave_LocationAccessDenied(t *testing.T) {
+	mock := &mockInventoryStorage{
+		saveError: &storage.InventoryAccessError{
+			Reason:     "location",
+			OrgID:      1,
+			LocationID: 999,
+		},
+	}
+	handler := NewHandler(mock)
+
+	req := newTestRequest(t, SaveRequest{LocationID: 999, AssetIDs: []int{100, 101}}, 1)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "not found or access denied")
 }
 
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+func TestSave_AssetAccessDenied(t *testing.T) {
+	mock := &mockInventoryStorage{
+		saveError: &storage.InventoryAccessError{
+			Reason:     "assets",
+			OrgID:      1,
+			AssetIDs:   []int{1, 2, 3},
+			ValidCount: 2,
+			TotalCount: 3,
+		},
 	}
-	return false
+	handler := NewHandler(mock)
+
+	req := newTestRequest(t, SaveRequest{LocationID: 1, AssetIDs: []int{1, 2, 3}}, 1)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "not found or access denied")
+}
+
+func TestSave_InternalStorageError(t *testing.T) {
+	mock := &mockInventoryStorage{
+		saveError: errors.New("database connection failed"),
+	}
+	handler := NewHandler(mock)
+
+	req := newTestRequest(t, SaveRequest{LocationID: 1, AssetIDs: []int{100}}, 1)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "database connection failed")
+}
+
+func TestSave_Success(t *testing.T) {
+	ts := time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC)
+	mock := &mockInventoryStorage{
+		saveResult: &storage.SaveInventoryResult{
+			Count:        3,
+			LocationID:   42,
+			LocationName: "Warehouse B",
+			Timestamp:    ts,
+		},
+	}
+	handler := NewHandler(mock)
+
+	req := newTestRequest(t, SaveRequest{LocationID: 42, AssetIDs: []int{1, 2, 3}}, 1)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var response struct {
+		Data storage.SaveInventoryResult `json:"data"`
+	}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, 3, response.Data.Count)
+	assert.Equal(t, 42, response.Data.LocationID)
+	assert.Equal(t, "Warehouse B", response.Data.LocationName)
+	assert.Equal(t, ts, response.Data.Timestamp)
 }
