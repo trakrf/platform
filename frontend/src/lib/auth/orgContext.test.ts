@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Unit tests for getTokenOrgId helper.
- * This validates that the JWT org context guard correctly
- * extracts and validates the org_id from stored tokens.
+ * Unit tests for org context utilities.
+ * Validates JWT org_id extraction, token refresh, and ensureOrgContext guard.
  */
 
 // Mock jwt-decode
@@ -12,9 +11,7 @@ vi.mock('jwt-decode', () => ({
 }));
 
 import { jwtDecode } from 'jwt-decode';
-
-// Import after mocking
-import { getTokenOrgId } from './useInventorySave';
+import { getTokenOrgId } from './orgContext';
 
 describe('getTokenOrgId', () => {
   beforeEach(() => {
