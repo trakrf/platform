@@ -55,14 +55,24 @@ export function generateInventoryExcel(
   
   // Create summary worksheet if reconciliation is active
   if (reconciliationList) {
+    // Asset-level summary: group by assetIdentifier to count unique assets
+    const assetStatus = new Map<string, boolean>();
+    for (const t of tags) {
+      if (t.reconciled == null) continue;
+      const key = t.assetIdentifier ?? t.epc;
+      assetStatus.set(key, assetStatus.get(key) || t.reconciled === true);
+    }
+    const assetsFound = [...assetStatus.values()].filter(Boolean).length;
+    const assetsMissing = assetStatus.size - assetsFound;
+
     const summaryData = [
       { 'Metric': 'Report Generated', 'Value': getTimestamp() },
-      { 'Metric': 'Total Tags Scanned', 'Value': tags.length },
-      { 'Metric': 'Reconciliation List Size', 'Value': reconciliationList.length },
-      { 'Metric': 'Tags Found', 'Value': tags.filter(t => t.reconciled === true).length },
-      { 'Metric': 'Tags Missing', 'Value': tags.filter(t => t.reconciled === false).length },
-      { 'Metric': 'Tags Not on List', 'Value': tags.filter(t => t.reconciled === null).length },
-      { 'Metric': 'Found Percentage', 'Value': `${Math.round((tags.filter(t => t.reconciled === true).length / reconciliationList.length) * 100)}%` },
+      { 'Metric': 'Total Tags Scanned', 'Value': tags.filter(t => t.source !== 'reconciliation').length },
+      { 'Metric': 'Assets in Reconciliation List', 'Value': assetStatus.size },
+      { 'Metric': 'Assets Found', 'Value': assetsFound },
+      { 'Metric': 'Assets Missing', 'Value': assetsMissing },
+      { 'Metric': 'Tags Not on List', 'Value': tags.filter(t => t.reconciled == null).length },
+      { 'Metric': 'Found Percentage', 'Value': assetStatus.size > 0 ? `${Math.round((assetsFound / assetStatus.size) * 100)}%` : '0%' },
     ];
     
     const summaryWS = XLSX.utils.json_to_sheet(summaryData);
@@ -73,13 +83,14 @@ export function generateInventoryExcel(
     const missingTags = tags.filter(t => t.reconciled === false);
     if (missingTags.length > 0) {
       const missingData = missingTags.map(tag => ({
+        'Asset ID': tag.assetIdentifier || '',
         'Tag ID': tag.displayEpc || tag.epc,
-        'Description': tag.description || 'N/A',
-        'Location': tag.location || 'N/A',
+        'Name': tag.assetName || tag.description || 'N/A',
+        'Location': tag.locationName || tag.location || 'N/A',
       }));
-      
+
       const missingWS = XLSX.utils.json_to_sheet(missingData);
-      missingWS['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 20 }];
+      missingWS['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 25 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, missingWS, 'Missing Items');
     }
   }
