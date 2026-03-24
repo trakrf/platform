@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -314,6 +315,55 @@ func TestAccessDeniedErrorDetection(t *testing.T) {
 			errStr := tt.err.Error()
 			containsAccessDenied := contains(errStr, "not found or access denied")
 			assert.Equal(t, tt.expectForbidden, containsAccessDenied)
+		})
+	}
+}
+
+func TestSave_AccessErrorDetection(t *testing.T) {
+	tests := []struct {
+		name            string
+		err             error
+		expectForbidden bool
+		expectOrgInMsg  bool
+	}{
+		{
+			name: "typed location error includes org context",
+			err: &storage.InventoryAccessError{
+				Reason:     "location",
+				OrgID:      123,
+				LocationID: 456,
+			},
+			expectForbidden: true,
+			expectOrgInMsg:  true,
+		},
+		{
+			name: "typed asset error includes org context",
+			err: &storage.InventoryAccessError{
+				Reason:     "assets",
+				OrgID:      123,
+				AssetIDs:   []int{1, 2, 3},
+				ValidCount: 2,
+				TotalCount: 3,
+			},
+			expectForbidden: true,
+			expectOrgInMsg:  true,
+		},
+		{
+			name:            "internal error is not forbidden",
+			err:             errors.New("database connection failed"),
+			expectForbidden: false,
+			expectOrgInMsg:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errStr := tt.err.Error()
+			isForbidden := strings.Contains(errStr, "not found or access denied")
+			assert.Equal(t, tt.expectForbidden, isForbidden)
+			if tt.expectOrgInMsg {
+				assert.Contains(t, errStr, "org_id=123")
+			}
 		})
 	}
 }

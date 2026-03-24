@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/trakrf/platform/backend/internal/apierrors"
+	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -81,14 +82,20 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		// Check for ownership validation errors (return 403)
 		errStr := err.Error()
 		if strings.Contains(errStr, "not found or access denied") {
+			logger.Get().Warn().
+				Int("org_id", orgID).
+				Int("location_id", request.LocationID).
+				Ints("asset_ids", request.AssetIDs).
+				Str("request_id", requestID).
+				Str("error", errStr).
+				Msg("Inventory save denied: org context mismatch")
+
 			httputil.WriteJSONError(w, r, http.StatusForbidden, modelerrors.ErrForbidden,
 				apierrors.InventorySaveForbidden, errStr, requestID)
 			return
 		}
-		// Other errors are internal
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.InventorySaveFailed, err.Error(), requestID)
 		return
