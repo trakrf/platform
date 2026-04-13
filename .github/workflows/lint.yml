@@ -42,6 +42,19 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
+      - name: Build frontend (required for backend go:embed)
+        run: |
+          pnpm --filter frontend build
+          mkdir -p backend/frontend
+          cp -r frontend/dist backend/frontend/dist
+
+      - name: Install swag CLI
+        run: go install github.com/swaggo/swag/cmd/swag@latest
+
+      - name: Generate backend Swagger docs (required for main.go import)
+        working-directory: backend
+        run: swag init -g main.go --parseDependency --parseInternal
+
       - name: Lint
         run: just lint
 
