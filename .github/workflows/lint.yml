@@ -1,0 +1,62 @@
+name: Lint and Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend (required for backend go:embed)
+        run: |
+          pnpm --filter frontend build
+          mkdir -p backend/frontend
+          cp -r frontend/dist backend/frontend/dist
+
+      - name: Install swag CLI
+        run: go install github.com/swaggo/swag/cmd/swag@latest
+
+      - name: Generate backend Swagger docs (required for main.go import)
+        working-directory: backend
+        run: swag init -g main.go --parseDependency --parseInternal
+
+      - name: Lint
+        run: just lint
+
+      - name: Test
+        run: just test
