@@ -21,8 +21,8 @@ jobs:
       matrix:
         include:
           - image: backend
-            context: ./backend
-            dockerfile: ./backend/Dockerfile
+            context: .
+            dockerfile: ./Dockerfile
             target: production
           - image: ingester
             context: ./ingester
