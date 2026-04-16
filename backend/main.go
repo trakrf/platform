@@ -18,6 +18,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/trakrf/platform/backend/docs"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
@@ -125,6 +126,8 @@ func setupRouter(
 	r.Handle("/og-image.png", http.HandlerFunc(frontendHandler.ServeFrontend))
 
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
+	r.Handle("/metrics", promhttp.Handler())
 
 	healthHandler.RegisterRoutes(r)
 

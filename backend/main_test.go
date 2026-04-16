@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +70,7 @@ func TestRouterRegistration(t *testing.T) {
 		{"GET", "/healthz"},
 		{"GET", "/readyz"},
 		{"GET", "/health"},
+		{"GET", "/metrics"},
 		{"POST", "/api/v1/auth/signup"},
 		{"POST", "/api/v1/auth/login"},
 		{"POST", "/api/v1/auth/forgot-password"},
@@ -97,5 +101,26 @@ func TestRouterRegistration(t *testing.T) {
 				t.Errorf("Route not found: %s %s", tt.method, tt.path)
 			}
 		})
+	}
+}
+
+func TestMetricsEndpoint(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /metrics: got status %d, want 200", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "# HELP ") {
+		t.Errorf("GET /metrics: response missing Prometheus '# HELP' marker; got first 200 bytes: %q", body[:min(200, len(body))])
+	}
+	if !strings.Contains(body, "go_goroutines") {
+		t.Errorf("GET /metrics: response missing default Go runtime metric 'go_goroutines'")
 	}
 }
