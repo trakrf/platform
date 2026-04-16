@@ -55,7 +55,7 @@ backend/
 - Creates root context via `signal.NotifyContext(ctx, SIGINT, SIGTERM)`.
 - Each subcommand exports `Run(ctx context.Context, version string) error`. Dispatcher logs any returned error and calls `os.Exit(1)`. If migrate fails during the bare default path, serve does not start.
 
-The combined-default behavior is a transitional convenience. TRA-85 retires it once every deployment target explicitly invokes `serve` or `migrate` with a role-matched `DB_URL`.
+The combined-default behavior is a transitional convenience. TRA-85 retires it once every deployment target explicitly invokes `serve` or `migrate` with a role-matched `PG_URL`.
 
 **Testability**
 
@@ -76,12 +76,12 @@ The dispatch decision is extracted into a pure function (takes `[]string`, retur
 - Initializes Sentry, storage, services, handlers, router, HTTP server, signal-driven graceful shutdown — unchanged.
 - Assumes schema is current. A stale-schema query fails at first DB access and surfaces via existing Sentry + health check.
 - Does not import `embed`, `golang-migrate`, or `iofs`.
-- Connects using the existing `DB_URL` env var. Operator points that at the non-DDL runtime role.
+- Connects using the existing `PG_URL` env var. Operator points that at the non-DDL runtime role.
 
 **`server migrate`**
 
 - Creates its own minimal `pgxpool.Pool` (no storage wrapper, no services, no handlers).
-- Connects using the same `DB_URL` env var. Operator points that at the DDL migration role for this invocation.
+- Connects using the same `PG_URL` env var. Operator points that at the DDL migration role for this invocation.
 - Runs `m.Up()` on embedded migrations.
 - On success: logs `{version, dirty: false}`, exits 0.
 - On `migrate.ErrNoChange`: logs "no pending migrations", exits 0.
@@ -110,7 +110,7 @@ The combined-default behavior preserves today's contract for bare `./server`, so
 
 **`justfile`**
 
-- Add a `backend: migrate` convenience recipe that invokes `go run . migrate` with the local `DB_URL`. Useful for running migrate standalone during dev (e.g. after pulling new migrations without restarting the server).
+- Add a `backend: migrate` convenience recipe that invokes `go run . migrate` with the local `PG_URL`. Useful for running migrate standalone during dev (e.g. after pulling new migrations without restarting the server).
 - Root `just migrate` delegates to `just backend migrate`.
 
 **Tests**
