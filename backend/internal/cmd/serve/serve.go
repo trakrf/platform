@@ -122,6 +122,8 @@ func Run(ctx context.Context, version string, frontendFS fs.FS) error {
 		return err
 	}
 
+	<-serverErr
+
 	log.Info().Msg("Server stopped")
 	return nil
 }
