@@ -18,8 +18,8 @@ The decision to use a subcommand rather than shipping the upstream `migrate` CLI
 ## Goals
 
 1. Ship a `server migrate` subcommand that applies embedded migrations and exits.
-2. Remove inline `runMigrations()` from server startup so `server serve` can run under a DB role that has no DDL grants (infosec improvement — enables TRA-85).
-3. Keep bare `./server` invocation backward compatible — it defaults to `serve`.
+2. Ship a `server serve` subcommand that runs the HTTP server without performing any migrations — enabling a DB role with no DDL grants (infosec improvement; enables TRA-85).
+3. Preserve today's behavior for bare `./server` invocation (runs migrations inline, then serves) — zero breakage for existing deploys, Dockerfiles, compose, Air, or tests that rely on the combined behavior.
 4. Keep the change small and focused. Defer `migrate status`, `down`, `force`, and `goto` to a follow-up if a real need surfaces.
 
 ## Non-goals
@@ -47,13 +47,15 @@ backend/
 
 **Dispatcher (`main.go`)**
 
-- Parses `os.Args[1]`. Recognized: `serve`, `migrate`.
-- No arg → defaults to `serve` (backward compat — today's Dockerfile `CMD ["/server"]` keeps working).
+- Parses `os.Args[1]`. Recognized explicit subcommands: `serve`, `migrate`.
+- **No arg** → runs `migrate.Run` and then, if it returns nil, runs `serve.Run` in the same process. Preserves today's bare `./server` behavior for local dev, compose, Air, legacy Dockerfiles, and any test relying on inline-migrate-on-startup.
 - Unknown subcommand → prints `usage: server [serve|migrate]` to stderr, exits 2.
 - `-h` / `--help` → same usage line, exits 0.
-- Initializes logger once (shared by both subcommands).
+- Initializes logger once (shared across subcommands).
 - Creates root context via `signal.NotifyContext(ctx, SIGINT, SIGTERM)`.
-- Each subcommand exports `Run(ctx context.Context, version string) error`. Dispatcher logs any returned error and calls `os.Exit(1)`.
+- Each subcommand exports `Run(ctx context.Context, version string) error`. Dispatcher logs any returned error and calls `os.Exit(1)`. If migrate fails during the bare default path, serve does not start.
+
+The combined-default behavior is a transitional convenience. TRA-85 retires it once every deployment target explicitly invokes `serve` or `migrate` with a role-matched `DB_URL`.
 
 **Testability**
 
@@ -61,7 +63,14 @@ The dispatch decision is extracted into a pure function (takes `[]string`, retur
 
 ### 2. Subcommand behaviors
 
-**`server serve` (default)**
+**`server` (no arg — combined default, transitional)**
+
+- Runs `migrate.Run` then `serve.Run` in the same process. Matches today's `./server` behavior exactly.
+- Requires a DB role with DDL grants (same as today).
+- Intended for local dev, compose, Air, and any existing deployment target that hasn't yet been migrated to the explicit-subcommand model.
+- Retired by TRA-85.
+
+**`server serve`**
 
 - Current `main()` body minus the `runMigrations()` call.
 - Initializes Sentry, storage, services, handlers, router, HTTP server, signal-driven graceful shutdown — unchanged.
@@ -97,34 +106,26 @@ The dispatch decision is extracted into a pure function (takes `[]string`, retur
 
 ### 4. Ripple changes outside the binary
 
-**`docker-compose.yaml`**
-
-- Add `backend-migrate` service using the same backend image/build, running `./server migrate` with the same `DB_URL`, `depends_on` the db service.
-- Backend service gains `depends_on: { backend-migrate: { condition: service_completed_successfully } }`.
-- TimescaleDB service unchanged.
-
-**Dev (Air hot-reload)**
-
-- Compose overrides the dev backend service `command:` to run migrate-then-air (single shell step or small inline sequence). Dockerfile unchanged.
+The combined-default behavior preserves today's contract for bare `./server`, so most of the surrounding system keeps working untouched.
 
 **`justfile`**
 
-- Add `backend: migrate` recipe invoking `go run . migrate` (or the built binary) with local `DB_URL`.
+- Add a `backend: migrate` convenience recipe that invokes `go run . migrate` with the local `DB_URL`. Useful for running migrate standalone during dev (e.g. after pulling new migrations without restarting the server).
 - Root `just migrate` delegates to `just backend migrate`.
-- Existing `just backend dev` unchanged — compose handles the chain.
 
 **Tests**
 
-- `backend/main_test.go` — coverage for dispatch (table-driven: `[]`, `[serve]`, `[migrate]`, `[-h]`, `[--help]`, `[bogus]`).
+- `backend/main_test.go` — coverage for dispatch (table-driven: `[]` → combined, `["serve"]` → serve, `["migrate"]` → migrate, `["-h"]` / `["--help"]` → usage, `["bogus"]` → error).
 - `internal/cmd/migrate/migrate_test.go` — integration: run migrate against a test DB, assert `schema_migrations.version` matches highest embedded migration, second run returns nil (idempotent).
 - `internal/cmd/serve/serve_test.go` — port whatever exists in today's `backend/main_test.go` that tests router/handler wiring. No new serve coverage added in this PR.
-- Any test relying on the old inline-migrate-on-serve-startup behavior gets a `TestMain` that runs `migrate.Run` against the test DB first. Grep during implementation.
+- No ripple test changes expected — the combined-default path preserves inline-migrate-on-startup for any test that depends on it.
 
 **What stays unchanged**
 
-- Root `Dockerfile` — `CMD ["/server"]` still works (bare invocation defaults to serve).
-- `backend/Dockerfile` production stage — `CMD ["./server"]` still works.
-- `railway.json` — untouched (Railway split handled under TRA-85).
+- Root `Dockerfile` — `CMD ["/server"]` still works (bare invocation = combined default = today's behavior).
+- `backend/Dockerfile` production + development stages — bare invocation and Air hot-reload both keep working unchanged.
+- `docker-compose.yaml` — backend service runs bare `./server`, which still migrates and serves. No new `backend-migrate` service needed.
+- `railway.json` — untouched. Railway start command runs the combined default until TRA-85 flips it.
 - `go.mod` — no new deps. `embed`, `golang-migrate`, `iofs` move packages, nothing added.
 
 ### 5. Migration embedding
@@ -140,21 +141,21 @@ This spec picks **B**. Rationale: the `backend/migrations/` directory is the con
 
 - Rollback is clean — schema is unchanged by this PR (no new migrations). Redeploy the previous backend image to revert.
 - First prod rollout: verify the k8s migration Job completes before the backend Deployment rolls. Existing chart ordering handles this; confirm during implementation.
-- Railway preview will break after merge if the preview start command isn't updated. TRA-85 must land concurrently with or before this PR reaches Railway.
+- Railway preview is **not** affected by this PR — bare `./server` still runs migrate + serve. Railway's start command split moves under TRA-85.
 
 ## Success criteria
 
 - `./server migrate` applies embedded migrations and exits 0.
 - `./server migrate` against a current schema logs "no pending" and exits 0.
-- `./server serve` starts successfully with a DB role that has only CRUD grants.
-- `./server` (no args) still runs serve — zero breakage for current deploys.
+- `./server serve` starts successfully against a DB role with only CRUD grants (no DDL).
+- `./server` (no args) runs migrate + serve exactly as today — zero breakage for existing deploys, Dockerfiles, compose, Air, or tests.
 - `./server bogus` prints usage and exits 2.
-- Compose + `just test` flows run end-to-end without manual migration steps.
+- `just test` and `docker compose up` work end-to-end with no new setup steps.
 - Infra team can flip `migrate.image` in `helm/trakrf-backend` to the backend image with command `["./server", "migrate"]` after this ships.
 
 ## Sequencing
 
 - TRA-370 (/metrics endpoint) — **merged** to main as of 2026-04-16 (commit `512d177`). This spec is cut from that state.
 - TRA-367 implementation — this PR.
-- TRA-85 follow-up — DB user split + Railway preview start-command split. Must land concurrently with or before TRA-367 reaches Railway.
+- [TRA-85](https://linear.app/trakrf/issue/TRA-85) follow-up — DB user split + flip every deployment target (k8s prod, Railway preview, compose, Air) to explicit `migrate` / `serve` invocations, then retire the combined default. Not required for TRA-367 to ship.
 - Infra repo follow-up — after TRA-367 merges and the new backend image is published.
