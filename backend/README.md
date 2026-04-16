@@ -30,6 +30,7 @@ backend/
 - **GET /healthz** - Liveness probe (returns "ok" if process alive)
 - **GET /readyz** - Readiness probe (returns "ok" if ready for traffic)
 - **GET /health** - Detailed JSON health status (version, timestamp)
+- **GET /metrics** - Prometheus exposition (Go runtime + process collectors; no auth)
 
 ## API Routes
 
@@ -50,6 +51,7 @@ backend/
 | GET | `/healthz` | Liveness probe | `200 OK` - Plain text "ok" |
 | GET | `/readyz` | Readiness probe | `200 OK` - Plain text "ok" |
 | GET | `/health` | Detailed health check | `200 OK` - JSON with version, uptime, database status |
+| GET | `/metrics` | Prometheus metrics | `200 OK` - Prometheus exposition format |
 
 #### Authentication
 | Method | Endpoint | Description | Request Body | Response |
@@ -377,9 +379,10 @@ backend/
 
 **Routing Order**:
 1. Health checks (`/healthz`, `/readyz`, `/health`)
-2. Static assets (`/assets/*`, `/favicon.ico`, icons, manifest)
-3. API routes (`/api/v1/*` - protected by JWT)
-4. SPA catch-all (`/*` - serves index.html for React Router)
+2. Prometheus metrics (`/metrics`)
+3. Static assets (`/assets/*`, `/favicon.ico`, icons, manifest)
+4. API routes (`/api/v1/*` - protected by JWT)
+5. SPA catch-all (`/*` - serves index.html for React Router)
 
 **Cache Strategy**:
 - `index.html`: `no-cache, no-store, must-revalidate` (always fresh)
