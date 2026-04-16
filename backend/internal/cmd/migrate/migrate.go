@@ -62,6 +62,7 @@ func Run(ctx context.Context, version string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create migrator: %w", err)
 	}
+	defer m.Close()
 
 	log.Info().Str("version", version).Msg("Starting migrations")
 
