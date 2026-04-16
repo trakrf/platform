@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"embed"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -11,11 +10,11 @@ import (
 
 type Handler struct {
 	fileServer http.Handler
-	frontendFS embed.FS
+	frontendFS fs.FS
 }
 
 // NewHandler creates a new frontend handler instance.
-func NewHandler(frontendFS embed.FS, distPath string) *Handler {
+func NewHandler(frontendFS fs.FS, distPath string) *Handler {
 	subFS, err := fs.Sub(frontendFS, distPath)
 	if err != nil {
 		panic("failed to create sub filesystem: " + err.Error())
@@ -36,7 +35,7 @@ func (h *Handler) ServeFrontend(w http.ResponseWriter, r *http.Request) {
 
 // ServeSPA serves index.html for all frontend routes.
 func (h *Handler) ServeSPA(w http.ResponseWriter, r *http.Request, indexPath string) {
-	indexHTML, err := h.frontendFS.ReadFile(indexPath)
+	indexHTML, err := fs.ReadFile(h.frontendFS, indexPath)
 	if err != nil {
 		http.Error(w, "Frontend assets not found", http.StatusInternalServerError)
 		return

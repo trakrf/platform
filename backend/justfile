@@ -92,10 +92,10 @@ shell:
 # Database Migrations
 # ============================================================================
 
-# Run database migrations
+# Run database migrations using the embedded set (./server migrate)
 migrate:
     @echo "🔄 Running database migrations..."
-    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" up'
+    @env PG_URL="{{pg_url_local}}" go run . migrate
     @echo "✅ Migrations complete"
 
 # Alias for consistency
