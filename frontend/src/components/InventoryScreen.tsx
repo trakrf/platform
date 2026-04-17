@@ -53,6 +53,8 @@ export default function InventoryScreen() {
   const setTransmitPower = useSettingsStore((state) => state.setTransmitPower);
   const showLeadingZeros = useSettingsStore((state) => state.showLeadingZeros);
   const setShowLeadingZeros = useSettingsStore((state) => state.setShowLeadingZeros);
+  const autoClearOnSave = useSettingsStore((state) => state.autoClearOnSave);
+  const setAutoClearOnSave = useSettingsStore((state) => state.setAutoClearOnSave);
 
   const audio = useInventoryAudio();
   const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
@@ -246,12 +248,18 @@ export default function InventoryScreen() {
         location_id: resolvedLocation.id,
         asset_ids: saveableAssets,
       });
-      // Trigger clear button pulse animation on success
-      setShowClearPulse(true);
+      if (autoClearOnSave) {
+        // Brief delay so the success toast is readable before tags disappear
+        setTimeout(() => {
+          clearTags();
+        }, 1500);
+      } else {
+        setShowClearPulse(true);
+      }
     } catch {
       // Error handling is done in the hook with toast
     }
-  }, [isAuthenticated, resolvedLocation, tags, save]);
+  }, [isAuthenticated, resolvedLocation, tags, save, autoClearOnSave, clearTags]);
 
   useEffect(() => {
     const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
@@ -380,6 +388,8 @@ export default function InventoryScreen() {
         onRfPowerChange={setTransmitPower}
         showLeadingZeros={showLeadingZeros}
         onShowLeadingZerosChange={setShowLeadingZeros}
+        autoClearOnSave={autoClearOnSave}
+        onAutoClearOnSaveChange={setAutoClearOnSave}
       />
 
       <ShareModal

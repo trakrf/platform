@@ -38,6 +38,7 @@ interface SettingsState extends ReaderSettings {
   // UI-specific settings (not sent to worker)
   showDebugInfo: boolean;
   showLeadingZeros: boolean;
+  autoClearOnSave: boolean;
 
   // Actions for updating settings
   setTransmitPower: (power: number) => void;
@@ -45,6 +46,7 @@ interface SettingsState extends ReaderSettings {
   setTargetEPC: (epc: string) => boolean; // Returns true if valid and applied
   setShowDebugInfo: (show: boolean) => void;
   setShowLeadingZeros: (show: boolean) => void;
+  setAutoClearOnSave: (enabled: boolean) => void;
   setBatteryCheckInterval: (interval: number) => void;
   setWorkerLogLevel: (level: 'error' | 'warn' | 'info' | 'debug') => void;
 }
@@ -61,6 +63,9 @@ const initialShowDebugInfo = savedShowDebugInfo === 'true';
 
 const savedShowLeadingZeros = safeLocalStorage.getItem('rfid_show_leading_zeros');
 const initialShowLeadingZeros = savedShowLeadingZeros === 'true';
+
+const savedAutoClearOnSave = safeLocalStorage.getItem('inventory_auto_clear_on_save');
+const initialAutoClearOnSave = savedAutoClearOnSave === 'true';
 
 const savedTargetEPC = safeLocalStorage.getItem('locate_epc'); // Keep localStorage key for backward compatibility
 const initialTargetEPC = savedTargetEPC || '';
@@ -87,6 +92,7 @@ export const useSettingsStore = create<SettingsState>(createStoreWithTracking((s
   // UI-specific settings
   showDebugInfo: initialShowDebugInfo,
   showLeadingZeros: initialShowLeadingZeros,
+  autoClearOnSave: initialAutoClearOnSave,
 
   // Actions with localStorage persistence
   setTransmitPower: (power) => {
@@ -131,6 +137,10 @@ export const useSettingsStore = create<SettingsState>(createStoreWithTracking((s
     safeLocalStorage.setItem('rfid_show_leading_zeros', show.toString());
     // Update state
     set({ showLeadingZeros: show });
+  },
+  setAutoClearOnSave: (enabled) => {
+    safeLocalStorage.setItem('inventory_auto_clear_on_save', enabled.toString());
+    set({ autoClearOnSave: enabled });
   },
   setBatteryCheckInterval: (interval) => {
     // Save to localStorage

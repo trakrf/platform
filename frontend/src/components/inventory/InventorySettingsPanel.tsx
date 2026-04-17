@@ -7,6 +7,8 @@ interface InventorySettingsPanelProps {
   onRfPowerChange: (power: number) => void;
   showLeadingZeros: boolean;
   onShowLeadingZerosChange: (show: boolean) => void;
+  autoClearOnSave: boolean;
+  onAutoClearOnSaveChange: (enabled: boolean) => void;
 }
 
 export function InventorySettingsPanel({
@@ -16,6 +18,8 @@ export function InventorySettingsPanel({
   onRfPowerChange,
   showLeadingZeros,
   onShowLeadingZerosChange,
+  autoClearOnSave,
+  onAutoClearOnSaveChange,
 }: InventorySettingsPanelProps) {
   return (
     <div className="fixed bottom-4 right-4 z-50">
@@ -63,6 +67,16 @@ export function InventorySettingsPanel({
               className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
             />
             <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Show Leading Zeros</span>
+          </label>
+
+          <label className="flex items-center cursor-pointer mt-3">
+            <input
+              type="checkbox"
+              checked={autoClearOnSave}
+              onChange={(e) => onAutoClearOnSaveChange(e.target.checked)}
+              className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+            />
+            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Auto-clear after Save</span>
           </label>
         </div>
       )}
