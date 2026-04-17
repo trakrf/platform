@@ -21,6 +21,7 @@ describe('SettingsStore', () => {
       },
       showDebugInfo: false,
       showLeadingZeros: false,
+      autoClearOnSave: false,
     });
   });
 
@@ -86,6 +87,24 @@ describe('SettingsStore', () => {
         expect(useSettingsStore.getState().system?.workerLogLevel).toBe(level);
         expect(localStorage.getItem('workerLogLevel')).toBe(level);
       });
+    });
+  });
+
+  describe('Auto Clear On Save', () => {
+    it('defaults to false when localStorage is empty', () => {
+      expect(useSettingsStore.getState().autoClearOnSave).toBe(false);
+    });
+
+    it('persists autoClearOnSave to localStorage', () => {
+      const { setAutoClearOnSave } = useSettingsStore.getState();
+      setAutoClearOnSave(true);
+
+      expect(localStorage.getItem('inventory_auto_clear_on_save')).toBe('true');
+      expect(useSettingsStore.getState().autoClearOnSave).toBe(true);
+
+      setAutoClearOnSave(false);
+      expect(localStorage.getItem('inventory_auto_clear_on_save')).toBe('false');
+      expect(useSettingsStore.getState().autoClearOnSave).toBe(false);
     });
   });
 
