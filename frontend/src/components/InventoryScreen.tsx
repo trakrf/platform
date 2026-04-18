@@ -58,7 +58,7 @@ export default function InventoryScreen() {
   const setAutoClearOnSave = useSettingsStore((state) => state.setAutoClearOnSave);
 
   const audio = useInventoryAudio();
-  const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
+  const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload } = useReconciliation();
   const { save, isSaving } = useInventorySave();
 
   // Load assets for tag enrichment (only when authenticated)
@@ -270,7 +270,7 @@ export default function InventoryScreen() {
       return;
     }
     fileInputRef.current?.click();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fileInputRef]);
 
   useEffect(() => {
     const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
@@ -301,7 +301,6 @@ export default function InventoryScreen() {
           totalCount={displayableTags.length}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          onDownloadSample={downloadSampleReconFile}
           onUploadCSV={handleReconcileUpload}
           onClearInventory={handleClearInventory}
           onToggleAudio={audio.toggleSound}

@@ -73,4 +73,11 @@ describe('InventoryScreen Reconcile auth gate', () => {
 
     clickSpy.mockRestore();
   });
+
+  it('does not render a Download Sample menu item', () => {
+    renderWithQueryClient();
+
+    expect(screen.queryByRole('button', { name: /sample/i })).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/download sample/i)).not.toBeInTheDocument();
+  });
 });

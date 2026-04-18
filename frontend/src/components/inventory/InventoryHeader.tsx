@@ -1,4 +1,4 @@
-import { Download, Package2, Trash2, Upload, Volume2, VolumeX, Play, Pause, Save } from 'lucide-react';
+import { Package2, Trash2, Upload, Volume2, VolumeX, Play, Pause, Save } from 'lucide-react';
 import { ShareButton } from '@/components/ShareButton';
 import type { ExportFormat } from '@/types/export';
 import { InventorySearchBar } from './InventorySearchBar';
@@ -9,7 +9,6 @@ interface InventoryHeaderProps {
   totalCount: number;
   searchTerm: string;
   onSearchChange: (value: string) => void;
-  onDownloadSample: () => void;
   onUploadCSV: () => void;
   onClearInventory: () => void;
   onToggleAudio: () => void;
@@ -33,7 +32,6 @@ export function InventoryHeader({
   totalCount,
   searchTerm,
   onSearchChange,
-  onDownloadSample,
   onUploadCSV,
   onClearInventory,
   onToggleAudio,
@@ -77,23 +75,14 @@ export function InventoryHeader({
             >
               {scanButtonActive ? <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
             </button>
-            <div className="flex">
-              <button
-                onClick={onDownloadSample}
-                className="p-1.5 sm:p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-l-lg transition-colors border-r border-gray-200 dark:border-gray-600"
-                title="Download sample CSV"
-              >
-                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
-              <button
-                onClick={onUploadCSV}
-                disabled={isProcessingCSV}
-                className="p-1.5 sm:p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-r-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Upload reconciliation CSV"
-              >
-                <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
-            </div>
+            <button
+              onClick={onUploadCSV}
+              disabled={isProcessingCSV}
+              className="p-1.5 sm:p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Upload reconciliation CSV"
+            >
+              <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
             <button
               onClick={onClearInventory}
               onAnimationEnd={onClearPulseEnd}
@@ -162,23 +151,14 @@ export function InventoryHeader({
             <span className="md:hidden text-xs">{scanButtonActive ? '⏸' : '▶'}</span>
             <span className="hidden md:inline">{scanButtonActive ? 'Stop' : 'Start'}</span>
           </button>
-          <div className="flex">
-            <button
-              onClick={onDownloadSample}
-              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-l-lg font-medium transition-colors flex items-center text-sm border-r border-gray-200 dark:border-gray-600"
-            >
-              <Download className="w-4 h-4 mr-1.5" />
-              Sample
-            </button>
-            <button
-              onClick={onUploadCSV}
-              disabled={isProcessingCSV}
-              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-r-lg font-medium transition-colors flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Upload className="w-4 h-4 mr-1.5" />
-              Reconcile
-            </button>
-          </div>
+          <button
+            onClick={onUploadCSV}
+            disabled={isProcessingCSV}
+            className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Upload className="w-4 h-4 mr-1.5" />
+            Reconcile
+          </button>
           <button
             onClick={onClearInventory}
             onAnimationEnd={onClearPulseEnd}
