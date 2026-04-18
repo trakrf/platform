@@ -4,6 +4,7 @@ import { useAssets } from '@/hooks/assets';
 import { useLocations } from '@/hooks/locations';
 import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { ShareModal } from '@/components/ShareModal';
 import type { ExportFormat } from '@/types/export';
 import { useInventoryAudio } from '@/hooks/useInventoryAudio';
@@ -261,6 +262,16 @@ export default function InventoryScreen() {
     }
   }, [isAuthenticated, resolvedLocation, tags, save, autoClearOnSave, clearTags]);
 
+  const handleReconcileUpload = useCallback(() => {
+    if (!isAuthenticated) {
+      toast('Reconciliation is a paid feature. Log in to start your free trial.');
+      sessionStorage.setItem('redirectAfterLogin', 'inventory');
+      window.location.hash = '#login';
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
     const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
@@ -291,7 +302,7 @@ export default function InventoryScreen() {
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           onDownloadSample={downloadSampleReconFile}
-          onUploadCSV={() => fileInputRef.current?.click()}
+          onUploadCSV={handleReconcileUpload}
           onClearInventory={handleClearInventory}
           onToggleAudio={audio.toggleSound}
           isAudioEnabled={audio.isEnabled}
