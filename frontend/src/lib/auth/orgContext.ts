@@ -34,11 +34,20 @@ export function getTokenOrgId(): number | null {
 }
 
 /**
+ * Call setCurrentOrg for the given org and persist the returned token.
+ *
+ * Zustand persist middleware wraps setState, so the token persists to localStorage.
+ */
+export async function setOrgToken(orgId: number): Promise<void> {
+  const response = await orgsApi.setCurrentOrg({ org_id: orgId });
+  useAuthStore.setState({ token: response.data.token });
+}
+
+/**
  * Refresh the JWT with the current org context.
  *
  * Fetches the user profile if not loaded, then calls setCurrentOrg
- * to get a new token with the org_id claim. Uses the same pattern
- * as orgStore.switchOrg and authStore.refreshTokenWithOrg.
+ * to get a new token with the org_id claim.
  *
  * Returns true if the token was successfully refreshed.
  */
@@ -51,10 +60,7 @@ export async function refreshOrgToken(): Promise<boolean> {
     const currentOrgId = useAuthStore.getState().profile?.current_org?.id;
     if (!currentOrgId) return false;
 
-    const response = await orgsApi.setCurrentOrg({ org_id: currentOrgId });
-    // Zustand persist middleware wraps setState, so this persists to localStorage.
-    // Same pattern used in orgStore.switchOrg (orgStore.ts:62).
-    useAuthStore.setState({ token: response.data.token });
+    await setOrgToken(currentOrgId);
     return true;
   } catch {
     return false;

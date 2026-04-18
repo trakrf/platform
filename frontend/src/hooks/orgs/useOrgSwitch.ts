@@ -12,7 +12,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useOrgStore } from '@/stores/orgStore';
 import { useAuthStore } from '@/stores/authStore';
-import { orgsApi } from '@/lib/api/orgs';
+import { setOrgToken } from '@/lib/auth/orgContext';
 import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 
 export function useOrgSwitch() {
@@ -28,8 +28,7 @@ export function useOrgSwitch() {
     const newOrg = await storeCreateOrg(name);
 
     // Switch to new org to get valid JWT token with org_id claim
-    const response = await orgsApi.setCurrentOrg({ org_id: newOrg.id });
-    useAuthStore.setState({ token: response.data.token });
+    await setOrgToken(newOrg.id);
 
     await useAuthStore.getState().fetchProfile();
 
