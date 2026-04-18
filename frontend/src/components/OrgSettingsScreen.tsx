@@ -7,14 +7,18 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOrgStore, useAuthStore } from '@/stores';
 import { orgsApi } from '@/lib/api/orgs';
+import { refreshOrgToken } from '@/lib/auth/orgContext';
+import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import toast from 'react-hot-toast';
 
 export default function OrgSettingsScreen() {
   const { currentOrg, currentRole } = useOrgStore();
   const { fetchProfile } = useAuthStore();
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [originalName, setOriginalName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -63,8 +67,12 @@ export default function OrgSettingsScreen() {
 
     try {
       await orgsApi.delete(currentOrg.id, confirmName);
-      // Refresh profile to update org list
+      // Refresh profile to update org list (backend auto-selects a new current_org)
       await fetchProfile();
+      // JWT still carries the deleted org's claim — mint a fresh token
+      // matching the new current_org before any org-scoped query fires.
+      await refreshOrgToken();
+      await invalidateAllOrgScopedData(queryClient);
       toast.success('Organization deleted');
       // Redirect to home
       window.location.hash = '#home';

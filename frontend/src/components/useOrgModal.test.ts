@@ -2,8 +2,10 @@
  * Tests for useOrgModal hook - TRA-204 regression prevention
  */
 
+import React, { type ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useOrgModal } from './useOrgModal';
 
 // Mock dependencies
@@ -32,12 +34,29 @@ vi.mock('@/lib/api/orgs', () => ({
   },
 }));
 
+vi.mock('@/lib/auth/orgContext', () => ({
+  refreshOrgToken: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('@/lib/cache/orgScopedCache', () => ({
+  invalidateAllOrgScopedData: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), {
     success: vi.fn(),
     error: vi.fn(),
   }),
 }));
+
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+};
 
 describe('useOrgModal', () => {
   const mockOnClose = vi.fn();
@@ -55,14 +74,14 @@ describe('useOrgModal', () => {
 
   describe('TRA-204: showDeleteModal state management', () => {
     it('initializes showDeleteModal as false', () => {
-      const { result } = renderHook(() => useOrgModal(defaultProps));
+      const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
       expect(result.current.showDeleteModal).toBe(false);
     });
 
     it('resets showDeleteModal when modal opens in manage mode', () => {
       const { result, rerender } = renderHook(
         ({ isOpen }) => useOrgModal({ ...defaultProps, isOpen }),
-        { initialProps: { isOpen: false } }
+        { initialProps: { isOpen: false }, wrapper: createWrapper() }
       );
 
       // Simulate having stale state by opening delete modal
@@ -80,7 +99,7 @@ describe('useOrgModal', () => {
     });
 
     it('resets showDeleteModal after successful org deletion', async () => {
-      const { result } = renderHook(() => useOrgModal(defaultProps));
+      const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
 
       // Open delete modal
       act(() => {
@@ -101,7 +120,7 @@ describe('useOrgModal', () => {
 
   describe('openDeleteModal and closeDeleteModal', () => {
     it('opens and closes delete modal', () => {
-      const { result } = renderHook(() => useOrgModal(defaultProps));
+      const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
 
       expect(result.current.showDeleteModal).toBe(false);
 
