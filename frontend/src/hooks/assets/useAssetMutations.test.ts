@@ -5,9 +5,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAssetMutations } from './useAssetMutations';
 import { useAssetStore } from '@/stores/assets/assetStore';
 import { assetsApi } from '@/lib/api/assets';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type { Asset, CreateAssetRequest } from '@/types/assets';
 
 vi.mock('@/lib/api/assets');
+vi.mock('@/lib/auth/orgContext');
 
 const mockAsset: Asset = {
   id: 1,
@@ -38,6 +40,7 @@ describe('useAssetMutations', () => {
   beforeEach(() => {
     useAssetStore.getState().invalidateCache();
     vi.clearAllMocks();
+    vi.mocked(ensureOrgContext).mockResolvedValue(42);
   });
 
   it('should create asset', async () => {

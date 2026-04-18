@@ -8,9 +8,11 @@ import { useAssetMutations } from '../useAssetMutations';
 import { useBulkUpload } from '../useBulkUpload';
 import { useAssetStore } from '@/stores/assets/assetStore';
 import { assetsApi } from '@/lib/api/assets';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type { Asset } from '@/types/assets';
 
 vi.mock('@/lib/api/assets');
+vi.mock('@/lib/auth/orgContext');
 
 const mockAsset: Asset = {
   id: 1,
@@ -41,6 +43,7 @@ describe('Asset Hooks Integration', () => {
   beforeEach(() => {
     useAssetStore.getState().invalidateCache();
     vi.clearAllMocks();
+    vi.mocked(ensureOrgContext).mockResolvedValue(42);
   });
 
   describe('Full CRUD Flow', () => {
