@@ -10,6 +10,7 @@ import { useAuthStore } from './authStore';
 import { useOrgStore } from './orgStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 
 // Module-level canary: track which org enrichment data belongs to
 // Used to detect if central invalidation was bypassed (fail loudly)
@@ -413,6 +414,7 @@ export const useTagStore = create<TagState>()(
     });
 
     try {
+      await ensureOrgContext();
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
       const results = response.data.data;
 

@@ -3,11 +3,18 @@ import { useTagStore } from './tagStore';
 import { useAuthStore } from './authStore';
 import { useLocationStore } from './locations/locationStore';
 import { lookupApi } from '@/lib/api/lookup';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import { LOCATE_TEST_TAG, PRIMARY_TEST_TAG, EPC_FORMATS } from '@test-utils/constants';
 import type { Location } from '@/types/locations';
 
 // Mock the lookup API
 vi.mock('@/lib/api/lookup');
+vi.mock('@/lib/auth/orgContext', () => ({
+  ensureOrgContext: vi.fn().mockResolvedValue(42),
+  refreshOrgToken: vi.fn().mockResolvedValue(true),
+  getTokenOrgId: vi.fn().mockReturnValue(42),
+  setOrgToken: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Helper to create a minimal mock location
 const createMockLocation = (id: number, name: string, tagEpc?: string): Location => ({
@@ -137,6 +144,7 @@ describe('TagStore - Auth Guard for Lookup', () => {
     // Reset auth state
     useAuthStore.setState({ isAuthenticated: false });
     vi.clearAllMocks();
+    vi.mocked(ensureOrgContext).mockResolvedValue(42);
   });
 
   it('should skip API call when not authenticated', async () => {
@@ -161,18 +169,14 @@ describe('TagStore - Auth Guard for Lookup', () => {
   });
 
   it('should call API when authenticated', async () => {
-    // Add a tag to trigger queue setup
-    useTagStore.getState().addTag({
-      epc: 'EPC001',
-      rssi: -60
-    });
+    // Authenticate first (with empty tags) so the auth subscription's
+    // refreshAssetEnrichment is a no-op and doesn't race with our flush.
+    useAuthStore.setState({ isAuthenticated: true });
 
     // Set up queue directly
     useTagStore.setState({
       _lookupQueue: new Set(['EPC001'])
     });
-
-    useAuthStore.setState({ isAuthenticated: true });
 
     vi.mocked(lookupApi.byTags).mockResolvedValue({
       data: { data: {} }

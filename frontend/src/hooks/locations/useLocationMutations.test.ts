@@ -5,9 +5,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useLocationMutations } from './useLocationMutations';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { locationsApi } from '@/lib/api/locations';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type { Location, CreateLocationRequest } from '@/types/locations';
 
 vi.mock('@/lib/api/locations');
+vi.mock('@/lib/auth/orgContext');
 
 const mockLocation: Location = {
   id: 1,
@@ -39,6 +41,7 @@ describe('useLocationMutations', () => {
   beforeEach(() => {
     useLocationStore.getState().invalidateCache();
     vi.clearAllMocks();
+    vi.mocked(ensureOrgContext).mockResolvedValue(42);
   });
 
   it('should create location', async () => {

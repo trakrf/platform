@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAssetStore } from '@/stores/assets/assetStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { assetsApi } from '@/lib/api/assets';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type { CreateAssetRequest, UpdateAssetRequest } from '@/types/assets';
 
 export function useAssetMutations() {
@@ -10,6 +11,7 @@ export function useAssetMutations() {
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateAssetRequest) => {
+      await ensureOrgContext();
       const response = await assetsApi.create(data);
       return response.data.data;
     },
@@ -27,6 +29,7 @@ export function useAssetMutations() {
       id: number;
       updates: UpdateAssetRequest;
     }) => {
+      await ensureOrgContext();
       const response = await assetsApi.update(id, updates);
       return response.data.data;
     },
@@ -39,6 +42,7 @@ export function useAssetMutations() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
+      await ensureOrgContext();
       await assetsApi.delete(id);
       return id;
     },

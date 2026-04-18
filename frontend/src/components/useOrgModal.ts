@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOrgStore, useAuthStore } from '@/stores';
 import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { orgsApi } from '@/lib/api/orgs';
+import { refreshOrgToken } from '@/lib/auth/orgContext';
+import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import { extractErrorMessage } from '@/lib/asset/helpers';
 import type { OrgMember, OrgRole } from '@/types/org';
 import toast from 'react-hot-toast';
@@ -21,6 +24,7 @@ export function useOrgModal({ isOpen, onClose, mode, defaultTab }: UseOrgModalPr
   const { currentOrg, currentRole, isLoading: isOrgLoading } = useOrgStore();
   const { createOrg } = useOrgSwitch();
   const { profile, fetchProfile } = useAuthStore();
+  const queryClient = useQueryClient();
 
   // Manage mode state
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
@@ -153,6 +157,10 @@ export function useOrgModal({ isOpen, onClose, mode, defaultTab }: UseOrgModalPr
     try {
       await orgsApi.delete(currentOrg.id, confirmName);
       await fetchProfile();
+      // JWT still carries the deleted org's claim — mint a fresh token
+      // matching the new current_org before any org-scoped query fires.
+      await refreshOrgToken();
+      await invalidateAllOrgScopedData(queryClient);
       toast.success('Organization deleted');
       setShowDeleteModal(false);
       onClose();

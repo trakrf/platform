@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { locationsApi } from '@/lib/api/locations';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type {
   CreateLocationRequest,
   UpdateLocationRequest,
@@ -11,6 +12,7 @@ export function useLocationMutations() {
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateLocationRequest) => {
+      await ensureOrgContext();
       const response = await locationsApi.create(data);
       return response.data.data;
     },
@@ -28,6 +30,7 @@ export function useLocationMutations() {
       id: number;
       updates: UpdateLocationRequest;
     }) => {
+      await ensureOrgContext();
       const response = await locationsApi.update(id, updates);
       return response.data.data;
     },
@@ -40,6 +43,7 @@ export function useLocationMutations() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
+      await ensureOrgContext();
       await locationsApi.delete(id);
       return id;
     },
@@ -58,6 +62,7 @@ export function useLocationMutations() {
       id: number;
       newParentId: number | null;
     }) => {
+      await ensureOrgContext();
       const response = await locationsApi.move(id, { new_parent_id: newParentId });
       return response.data.data;
     },

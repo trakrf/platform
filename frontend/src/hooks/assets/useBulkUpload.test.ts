@@ -4,8 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useBulkUpload } from './useBulkUpload';
 import { assetsApi } from '@/lib/api/assets';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 
 vi.mock('@/lib/api/assets');
+vi.mock('@/lib/auth/orgContext');
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -19,6 +21,7 @@ const createWrapper = () => {
 describe('useBulkUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(ensureOrgContext).mockResolvedValue(42);
   });
 
   it('should upload file and start polling', async () => {

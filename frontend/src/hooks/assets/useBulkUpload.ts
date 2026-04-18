@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { assetsApi } from '@/lib/api/assets';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import { useAssetStore } from '@/stores/assets/assetStore';
 
 export function useBulkUpload() {
@@ -9,6 +10,7 @@ export function useBulkUpload() {
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
+      await ensureOrgContext();
       const response = await assetsApi.uploadCSV(file);
       return response.data;
     },

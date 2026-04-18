@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createStoreWithTracking } from './createStore';
 import { orgsApi } from '@/lib/api/orgs';
+import { setOrgToken } from '@/lib/auth/orgContext';
 import { useAuthStore } from './authStore';
 import type { UserOrgWithRole, UserOrg, OrgRole, Organization } from '@/types/org';
 
@@ -55,11 +56,7 @@ export const useOrgStore = create<OrgState>()(
       switchOrg: async (orgId: number) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await orgsApi.setCurrentOrg({ org_id: orgId });
-
-          // Update the token with new org_id claim
-          const authState = useAuthStore.getState();
-          useAuthStore.setState({ ...authState, token: response.data.token });
+          await setOrgToken(orgId);
 
           // Call central invalidation
           const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
