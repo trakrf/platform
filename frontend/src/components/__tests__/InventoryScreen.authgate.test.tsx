@@ -33,7 +33,7 @@ describe('InventoryScreen Reconcile auth gate', () => {
     useAuthStore.setState({ isAuthenticated: false, token: null, user: null });
   });
 
-  it('shows upsell toast and redirects to login when an unauthenticated user clicks Reconcile', async () => {
+  it('shows upsell toast and stays on inventory when an unauthenticated user clicks Reconcile', async () => {
     const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click');
 
     renderWithQueryClient();
@@ -46,8 +46,8 @@ describe('InventoryScreen Reconcile auth gate', () => {
         'Reconciliation is a paid feature. Log in to start your free trial.'
       );
     });
-    expect(sessionStorage.getItem('redirectAfterLogin')).toBe('inventory');
-    expect(window.location.hash).toBe('#login');
+    expect(sessionStorage.getItem('redirectAfterLogin')).toBeNull();
+    expect(window.location.hash).toBe('');
     expect(clickSpy).not.toHaveBeenCalled();
 
     clickSpy.mockRestore();

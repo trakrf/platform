@@ -265,8 +265,6 @@ export default function InventoryScreen() {
   const handleReconcileUpload = useCallback(() => {
     if (!isAuthenticated) {
       toast('Reconciliation is a paid feature. Log in to start your free trial.');
-      sessionStorage.setItem('redirectAfterLogin', 'inventory');
-      window.location.hash = '#login';
       return;
     }
     fileInputRef.current?.click();
