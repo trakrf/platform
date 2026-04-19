@@ -53,12 +53,20 @@ vendor:
 build:
     go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
 
-# Generate Swagger API documentation
-swagger:
-    @echo "📚 Generating Swagger documentation..."
-    swag init -g main.go --parseDependency --parseInternal
-    @echo "✅ Swagger docs generated at docs/"
-    @echo "📖 View at: http://localhost:8080/swagger/index.html"
+# Generate OpenAPI 3.0 specs (public → docs/api/, internal → embedded into binary)
+api-spec:
+    @echo "📚 Generating OpenAPI 3.0 specs..."
+    swag init -g main.go --parseDependency --parseInternal -o docs
+    @mkdir -p internal/handlers/swaggerspec ../docs/api
+    go run ./internal/tools/apispec \
+        --in docs/swagger.json \
+        --public-out ../docs/api/openapi.public \
+        --internal-out internal/handlers/swaggerspec/openapi.internal
+    @echo "✅ Public spec:   docs/api/openapi.public.{json,yaml}  (committed)"
+    @echo "✅ Internal spec: backend/internal/handlers/swaggerspec/openapi.internal.{json,yaml}  (gitignored, embedded)"
+
+# Legacy alias retained for muscle memory
+swagger: api-spec
 
 # Smoke test - verifies binary starts without panic (uses PG_URL_LOCAL for host → docker)
 smoke-test:
