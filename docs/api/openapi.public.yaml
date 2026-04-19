@@ -684,16 +684,17 @@ openapi: 3.0.3
 paths:
     /api/v1/assets:
         get:
-            description: Get a paginated list of all assets with their tag identifiers
+            description: Return a paginated list of all assets in the organization, each with their associated tag identifiers.
             parameters:
-                - description: 'Number of assets to return (default: 10)'
+                - description: Max results (default 10, max 200)
                   in: query
                   name: limit
                   schema:
                     default: 10
+                    maximum: 200
                     minimum: 1
                     type: integer
-                - description: 'Number of assets to skip for pagination (default: 0)'
+                - description: Pagination offset
                   in: query
                   name: offset
                   schema:
@@ -707,19 +708,46 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/internal_handlers_assets.ListAssetsResponse'
                     description: Paginated list of assets with metadata
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - assets:read
             summary: List assets
             tags:
                 - assets
         post:
-            description: Create a new asset, optionally with tag identifiers
+            description: |-
+                Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
+                Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
             requestBody:
                 content:
                     application/json:
@@ -741,21 +769,46 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid JSON or validation error
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: conflict
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Create asset
+                - APIKey:
+                    - assets:write
+            summary: Create an asset
             tags:
                 - assets
     /api/v1/assets/{id}:
         delete:
-            description: Soft delete an asset by ID
+            description: Soft-delete an asset by its numeric ID. The asset is marked inactive and removed from future list results.
             parameters:
                 - description: Asset ID
                   in: path
@@ -772,25 +825,44 @@ paths:
                                     type: boolean
                                 type: object
                     description: 'deleted: true/false'
-                "400":
+                "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid asset ID
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Delete asset
+                - APIKey:
+                    - assets:write
+            summary: Delete an asset
             tags:
                 - assets
         get:
-            description: Get an asset by ID with its tag identifiers
+            description: Fetch a single asset by its numeric ID, including all associated tag identifiers.
             parameters:
                 - description: Asset ID
                   in: path
@@ -806,31 +878,44 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: 'data: asset.AssetView'
-                "400":
+                "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid asset ID
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Asset not found
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Get asset
+                - APIKey:
+                    - assets:read
+            summary: Retrieve an asset
             tags:
                 - assets
         put:
-            description: Update an existing asset by ID
+            description: Update mutable fields on an existing asset. Only fields included in the request body are changed.
             parameters:
                 - description: Asset ID
                   in: path
@@ -843,7 +928,7 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_asset.UpdateAssetRequest'
-                description: Asset update data
+                description: Fields to update
                 required: true
                 x-originalParamName: request
             responses:
@@ -859,21 +944,54 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid ID, JSON, or validation error
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: not_found
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: conflict
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Update asset
+                - APIKey:
+                    - assets:write
+            summary: Update an asset
             tags:
                 - assets
     /api/v1/assets/{id}/identifiers:
         post:
-            description: Add a tag identifier (RFID, BLE, barcode) to an existing asset
+            description: |-
+                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
+                The identifier must be unique within the organization.
             parameters:
                 - description: Asset ID
                   in: path
@@ -886,7 +1004,7 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifierRequest'
-                description: Tag identifier to add
+                description: Tag identifier to attach
                 required: true
                 x-originalParamName: request
             responses:
@@ -902,27 +1020,46 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid request
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Asset not found
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Add identifier to asset
+                - APIKey:
+                    - assets:write
+            summary: Add an identifier to an asset
             tags:
                 - assets
     /api/v1/assets/{id}/identifiers/{identifierId}:
         delete:
-            description: Remove a tag identifier from an asset
+            description: Detach a tag identifier from an asset by its identifier record ID.
             parameters:
                 - description: Asset ID
                   in: path
@@ -950,22 +1087,41 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid request
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Asset or identifier not found
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Remove identifier from asset
+                - APIKey:
+                    - assets:write
+            summary: Remove an identifier from an asset
             tags:
                 - assets
     /api/v1/locations:

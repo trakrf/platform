@@ -995,20 +995,21 @@
   "paths": {
     "/api/v1/assets": {
       "get": {
-        "description": "Get a paginated list of all assets with their tag identifiers",
+        "description": "Return a paginated list of all assets in the organization, each with their associated tag identifiers.",
         "parameters": [
           {
-            "description": "Number of assets to return (default: 10)",
+            "description": "Max results (default 10, max 200)",
             "in": "query",
             "name": "limit",
             "schema": {
               "default": 10,
+              "maximum": 200,
               "minimum": 1,
               "type": "integer"
             }
           },
           {
-            "description": "Number of assets to skip for pagination (default: 0)",
+            "description": "Pagination offset",
             "in": "query",
             "name": "offset",
             "schema": {
@@ -1029,6 +1030,46 @@
             },
             "description": "Paginated list of assets with metadata"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1037,12 +1078,14 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "internal_error"
           }
         },
         "security": [
           {
-            "BearerAuth": []
+            "APIKey": [
+              "assets:read"
+            ]
           }
         ],
         "summary": "List assets",
@@ -1051,7 +1094,7 @@
         ]
       },
       "post": {
-        "description": "Create a new asset, optionally with tag identifiers",
+        "description": "Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).\nReturns the created asset with its assigned identifiers. The Location response header contains the canonical URL.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1084,7 +1127,47 @@
                 }
               }
             },
-            "description": "Invalid JSON or validation error"
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
           },
           "500": {
             "content": {
@@ -1094,15 +1177,17 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "internal_error"
           }
         },
         "security": [
           {
-            "BearerAuth": []
+            "APIKey": [
+              "assets:write"
+            ]
           }
         ],
-        "summary": "Create asset",
+        "summary": "Create an asset",
         "tags": [
           "assets"
         ]
@@ -1110,7 +1195,7 @@
     },
     "/api/v1/assets/{id}": {
       "delete": {
-        "description": "Soft delete an asset by ID",
+        "description": "Soft-delete an asset by its numeric ID. The asset is marked inactive and removed from future list results.",
         "parameters": [
           {
             "description": "Asset ID",
@@ -1136,7 +1221,7 @@
             },
             "description": "deleted: true/false"
           },
-          "400": {
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1144,7 +1229,37 @@
                 }
               }
             },
-            "description": "Invalid asset ID"
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
           },
           "500": {
             "content": {
@@ -1154,21 +1269,23 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "internal_error"
           }
         },
         "security": [
           {
-            "BearerAuth": []
+            "APIKey": [
+              "assets:write"
+            ]
           }
         ],
-        "summary": "Delete asset",
+        "summary": "Delete an asset",
         "tags": [
           "assets"
         ]
       },
       "get": {
-        "description": "Get an asset by ID with its tag identifiers",
+        "description": "Fetch a single asset by its numeric ID, including all associated tag identifiers.",
         "parameters": [
           {
             "description": "Asset ID",
@@ -1192,7 +1309,7 @@
             },
             "description": "data: asset.AssetView"
           },
-          "400": {
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1200,7 +1317,17 @@
                 }
               }
             },
-            "description": "Invalid asset ID"
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
           },
           "404": {
             "content": {
@@ -1210,7 +1337,17 @@
                 }
               }
             },
-            "description": "Asset not found"
+            "description": "not_found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
           },
           "500": {
             "content": {
@@ -1220,21 +1357,23 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "internal_error"
           }
         },
         "security": [
           {
-            "BearerAuth": []
+            "APIKey": [
+              "assets:read"
+            ]
           }
         ],
-        "summary": "Get asset",
+        "summary": "Retrieve an asset",
         "tags": [
           "assets"
         ]
       },
       "put": {
-        "description": "Update an existing asset by ID",
+        "description": "Update mutable fields on an existing asset. Only fields included in the request body are changed.",
         "parameters": [
           {
             "description": "Asset ID",
@@ -1254,7 +1393,7 @@
               }
             }
           },
-          "description": "Asset update data",
+          "description": "Fields to update",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -1278,7 +1417,57 @@
                 }
               }
             },
-            "description": "Invalid ID, JSON, or validation error"
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
           },
           "500": {
             "content": {
@@ -1288,15 +1477,17 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "internal_error"
           }
         },
         "security": [
           {
-            "BearerAuth": []
+            "APIKey": [
+              "assets:write"
+            ]
           }
         ],
-        "summary": "Update asset",
+        "summary": "Update an asset",
         "tags": [
           "assets"
         ]
@@ -1304,7 +1495,7 @@
     },
     "/api/v1/assets/{id}/identifiers": {
       "post": {
-        "description": "Add a tag identifier (RFID, BLE, barcode) to an existing asset",
+        "description": "Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.\nThe identifier must be unique within the organization.",
         "parameters": [
           {
             "description": "Asset ID",
@@ -1324,7 +1515,7 @@
               }
             }
           },
-          "description": "Tag identifier to add",
+          "description": "Tag identifier to attach",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -1348,7 +1539,27 @@
                 }
               }
             },
-            "description": "Invalid request"
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
           },
           "404": {
             "content": {
@@ -1358,7 +1569,17 @@
                 }
               }
             },
-            "description": "Asset not found"
+            "description": "not_found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
           },
           "500": {
             "content": {
@@ -1368,15 +1589,17 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "internal_error"
           }
         },
         "security": [
           {
-            "BearerAuth": []
+            "APIKey": [
+              "assets:write"
+            ]
           }
         ],
-        "summary": "Add identifier to asset",
+        "summary": "Add an identifier to an asset",
         "tags": [
           "assets"
         ]
@@ -1384,7 +1607,7 @@
     },
     "/api/v1/assets/{id}/identifiers/{identifierId}": {
       "delete": {
-        "description": "Remove a tag identifier from an asset",
+        "description": "Detach a tag identifier from an asset by its identifier record ID.",
         "parameters": [
           {
             "description": "Asset ID",
@@ -1427,7 +1650,27 @@
                 }
               }
             },
-            "description": "Invalid request"
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
           },
           "404": {
             "content": {
@@ -1437,7 +1680,17 @@
                 }
               }
             },
-            "description": "Asset or identifier not found"
+            "description": "not_found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
           },
           "500": {
             "content": {
@@ -1447,15 +1700,17 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "internal_error"
           }
         },
         "security": [
           {
-            "BearerAuth": []
+            "APIKey": [
+              "assets:write"
+            ]
           }
         ],
-        "summary": "Remove identifier from asset",
+        "summary": "Remove an identifier from an asset",
         "tags": [
           "assets"
         ]
