@@ -49,7 +49,7 @@ jobs:
           cp -r frontend/dist backend/frontend/dist
 
       - name: Install swag CLI
-        run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
+        run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Generate OpenAPI specs (swag init + apispec — required for swaggerspec go:embed)
         run: just backend api-spec

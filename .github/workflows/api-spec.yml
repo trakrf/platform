@@ -44,7 +44,7 @@ jobs:
         uses: extractions/setup-just@v2
 
       - name: Install swag CLI
-        run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
+        run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Stub backend/frontend/dist (satisfies go:embed in main.go during swag parse)
         run: |
