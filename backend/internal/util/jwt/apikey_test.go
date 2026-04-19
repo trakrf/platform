@@ -74,4 +74,20 @@ func TestValidateAPIKeyRejectsBadSignature(t *testing.T) {
     assert.Error(t, err)
 }
 
+// TestValidateRejectsAPIKeyToken verifies the session-side discriminator:
+// an API-key JWT must NOT parse as a valid session token even though both
+// share the signing secret. Without this guard, the session middleware
+// would silently accept an API-key JWT with zero-value UserID/CurrentOrgID,
+// and downstream handlers would fail with misleading "missing org context"
+// errors instead of a clear 401.
+func TestValidateRejectsAPIKeyToken(t *testing.T) {
+    t.Setenv("JWT_SECRET", "test-secret-abc123")
+
+    apiToken, err := GenerateAPIKey("jti", 42, []string{"assets:read"}, nil)
+    require.NoError(t, err)
+
+    _, err = Validate(apiToken)
+    assert.Error(t, err, "session Validate must reject api-key tokens")
+}
+
 func intPtr(i int) *int { return &i }
