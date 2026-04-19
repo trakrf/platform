@@ -4,6 +4,7 @@ import { useAssets } from '@/hooks/assets';
 import { useLocations } from '@/hooks/locations';
 import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { ShareModal } from '@/components/ShareModal';
 import type { ExportFormat } from '@/types/export';
 import { useInventoryAudio } from '@/hooks/useInventoryAudio';
@@ -57,7 +58,7 @@ export default function InventoryScreen() {
   const setAutoClearOnSave = useSettingsStore((state) => state.setAutoClearOnSave);
 
   const audio = useInventoryAudio();
-  const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload, downloadSampleReconFile } = useReconciliation();
+  const { error, setError, isProcessingCSV, fileInputRef, handleReconciliationUpload } = useReconciliation();
   const { save, isSaving } = useInventorySave();
 
   // Load assets for tag enrichment (only when authenticated)
@@ -261,6 +262,14 @@ export default function InventoryScreen() {
     }
   }, [isAuthenticated, resolvedLocation, tags, save, autoClearOnSave, clearTags]);
 
+  const handleReconcileUpload = useCallback(() => {
+    if (!isAuthenticated) {
+      toast('Reconciliation is a paid feature. Log in to start your free trial.');
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [isAuthenticated, fileInputRef]);
+
   useEffect(() => {
     const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
     const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
@@ -290,8 +299,7 @@ export default function InventoryScreen() {
           totalCount={displayableTags.length}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          onDownloadSample={downloadSampleReconFile}
-          onUploadCSV={() => fileInputRef.current?.click()}
+          onUploadCSV={handleReconcileUpload}
           onClearInventory={handleClearInventory}
           onToggleAudio={audio.toggleSound}
           isAudioEnabled={audio.isEnabled}
