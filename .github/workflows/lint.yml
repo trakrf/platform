@@ -51,9 +51,8 @@ jobs:
       - name: Install swag CLI
         run: go install github.com/swaggo/swag/cmd/swag@latest
 
-      - name: Generate backend Swagger docs (required for main.go import)
-        working-directory: backend
-        run: swag init -g main.go --parseDependency --parseInternal
+      - name: Generate OpenAPI specs (swag init + apispec — required for swaggerspec go:embed)
+        run: just backend api-spec
 
       - name: Lint
         run: just lint
