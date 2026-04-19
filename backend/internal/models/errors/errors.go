@@ -13,6 +13,7 @@ const (
 	ErrBadRequest   ErrorType = "bad_request"
 	ErrUnauthorized ErrorType = "unauthorized"
 	ErrForbidden    ErrorType = "forbidden"
+	ErrRateLimited  ErrorType = "rate_limited"
 )
 
 // ErrorResponse implements RFC 7807 Problem Details
