@@ -31,6 +31,8 @@ describe('InventoryScreen Reconcile auth gate', () => {
   beforeEach(() => {
     useTagStore.getState().clearTags();
     useAuthStore.setState({ isAuthenticated: false, token: null, user: null });
+    sessionStorage.clear();
+    window.location.hash = '';
   });
 
   it('shows upsell toast and stays on inventory when an unauthenticated user clicks Reconcile', async () => {
