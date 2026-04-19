@@ -46,6 +46,11 @@ jobs:
       - name: Install swag CLI
         run: go install github.com/swaggo/swag/cmd/swag@latest
 
+      - name: Stub backend/frontend/dist (satisfies go:embed in main.go during swag parse)
+        run: |
+          mkdir -p backend/frontend/dist
+          echo "stub for CI" > backend/frontend/dist/index.html
+
       - name: Regenerate public + internal specs
         run: just backend api-spec
 
