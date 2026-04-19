@@ -697,7 +697,7 @@ info:
     license:
         name: Business Source License 1.1
         url: https://github.com/trakrf/platform/blob/main/LICENSE
-    title: TrakRF Internal API — not for customer use
+    title: TrakRF API
     version: v1
 openapi: 3.0.3
 paths:

@@ -57,12 +57,19 @@ func partition(doc *openapi3.T) (public, internal *openapi3.T, err error) {
 	return public, internal, nil
 }
 
-// cloneDocShell returns a copy of doc with an empty Paths map. Info, components,
-// security schemes, and servers are shared (shallow copy) — post-processing
-// step rewrites those separately for public vs internal.
+// cloneDocShell returns a copy of doc with an empty Paths map and an
+// independently-owned Info pointer, so postprocessPublic and postprocessInternal
+// don't clobber each other's Info.Title. Components and securitySchemes remain
+// shared; postprocessing replaces leaf values (including the APIKey scheme ref),
+// not the containers.
 func cloneDocShell(doc *openapi3.T) *openapi3.T {
 	shell := *doc
 	shell.Paths = openapi3.NewPaths()
+	if doc.Info != nil {
+		info := *doc.Info
+		shell.Info = &info
+	}
+	shell.Servers = nil
 	return &shell
 }
 
