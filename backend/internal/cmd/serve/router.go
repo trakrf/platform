@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 
-	_ "github.com/trakrf/platform/backend/docs"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -23,6 +22,7 @@ import (
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
+	"github.com/trakrf/platform/backend/internal/handlers/swaggerspec"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/logger"
@@ -60,8 +60,6 @@ func setupRouter(
 	r.Handle("/manifest.json", http.HandlerFunc(frontendHandler.ServeFrontend))
 	r.Handle("/og-image.png", http.HandlerFunc(frontendHandler.ServeFrontend))
 
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
-
 	r.Handle("/metrics", promhttp.Handler())
 
 	healthHandler.RegisterRoutes(r)
@@ -80,6 +78,12 @@ func setupRouter(
 		inventoryHandler.RegisterRoutes(r)
 		reportsHandler.RegisterRoutes(r)
 		lookupHandler.RegisterRoutes(r)
+
+		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)
+		r.Get("/swagger/openapi.internal.yaml", swaggerspec.ServeYAML)
+		r.Get("/swagger/*", httpSwagger.Handler(
+			httpSwagger.URL("/swagger/openapi.internal.json"),
+		))
 	})
 
 	if os.Getenv("APP_ENV") != "production" {
