@@ -170,6 +170,25 @@ export default function OrgSettingsScreen() {
           )}
         </form>
 
+        {/* API Keys */}
+        {isAdmin && (
+          <section className="mt-8 border-t border-gray-700 pt-6">
+            <h2 className="text-lg font-semibold text-white mb-2">API Keys</h2>
+            <p className="text-sm text-gray-400 mb-3">
+              Create and manage tokens for external integrations.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = '#api-keys';
+              }}
+              className="px-4 py-2 text-sm border border-gray-600 rounded text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
+            >
+              Manage API keys →
+            </button>
+          </section>
+        )}
+
         {/* Danger Zone */}
         {isAdmin && (
           <div className="mt-8 pt-6 border-t border-gray-700">
