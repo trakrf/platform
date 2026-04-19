@@ -1,12 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Props {
   apiKey: string;
   onClose: () => void;
 }
 
+// Fallback dwell time (ms) before dismissal is enabled without a clipboard copy —
+// protects users on browsers without navigator.clipboard or insecure origins.
+const DWELL_MS = 3000;
+
 export function ShowOnceModal({ apiKey, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  const [dwellReady, setDwellReady] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDwellReady(true), DWELL_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   const copy = async () => {
     await navigator.clipboard.writeText(apiKey);
@@ -35,7 +45,7 @@ export function ShowOnceModal({ apiKey, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            disabled={!copied}
+            disabled={!copied && !dwellReady}
             className="px-4 py-2 text-sm border rounded disabled:opacity-50"
           >
             I&apos;ve saved it

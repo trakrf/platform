@@ -1,3 +1,7 @@
+// NOTE: Unlike `orgs.ts` (which returns the raw AxiosResponse so callers
+// unwrap `.data.data`), this module unwraps Axios `.data` internally so
+// callers get the server body directly. Keeps the contract consistent with
+// test mocks and avoids the double-`.data.data` access pattern.
 import { apiClient } from './client';
 import type { APIKey, CreateAPIKeyRequest, APIKeyCreateResponse } from '../../types/apiKey';
 

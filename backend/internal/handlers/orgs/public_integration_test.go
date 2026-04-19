@@ -21,11 +21,6 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
-func newTestHandler(t *testing.T, store interface{ Pool() any }) *orgs.Handler {
-	t.Helper()
-	return nil // replaced inline below
-}
-
 func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-public")
 	store, cleanup := testutil.SetupTestDB(t)
@@ -86,8 +81,5 @@ func TestGetOrgMe_SessionTokenRejected(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
-
-// Unused stub — remove if linter complains.
-var _ = newTestHandler
 
 func intPtr(i int) *int { return &i }

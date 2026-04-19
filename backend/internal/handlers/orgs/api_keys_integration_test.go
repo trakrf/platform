@@ -221,3 +221,54 @@ func TestRevokeAPIKey(t *testing.T) {
 	r.ServeHTTP(w2, req2)
 	assert.Equal(t, http.StatusNotFound, w2.Code)
 }
+
+// TestRevokeAPIKey_CrossOrgReturns404 verifies that admin of org1 cannot revoke
+// a key belonging to org2, even if they know its numeric id. The explicit
+// WHERE org_id filter in storage.RevokeAPIKey enforces isolation.
+func TestRevokeAPIKey_CrossOrgReturns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-crud")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	org1 := testutil.CreateTestAccount(t, pool)
+	_, sessionToken := seedAdminUser(t, pool, org1)
+
+	// Second org via raw SQL (CreateTestAccount uses a unique identifier, so one call max)
+	var org2 int
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.organizations (name, identifier, is_active) VALUES ('Org 2', 'org-2', true) RETURNING id`,
+	).Scan(&org2)
+	require.NoError(t, err)
+
+	// Create a creator user for org2's key (any user will do for FK)
+	var creatorID int
+	err = pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.users (name, email, password_hash)
+		VALUES ('creator2', 'creator2@example.com', 'stub') RETURNING id`,
+	).Scan(&creatorID)
+	require.NoError(t, err)
+
+	// Key belonging to org2
+	victimKey, err := store.CreateAPIKey(context.Background(), org2, "victim",
+		[]string{"assets:read"}, creatorID, nil)
+	require.NoError(t, err)
+
+	r := newAdminRouter(t, store)
+
+	// Admin of org1 tries to delete via /orgs/{org1}/api-keys/{victimKey.ID} — RBAC passes,
+	// but the handler's RevokeAPIKey call filters WHERE org_id=org1 AND id=victimKey.ID → 0 rows.
+	req := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%d", org1, victimKey.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Verify the victim key is still active in org2
+	list, err := store.ListActiveAPIKeys(context.Background(), org2)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, victimKey.ID, list[0].ID)
+}

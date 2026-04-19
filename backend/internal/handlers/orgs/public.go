@@ -26,6 +26,12 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 			"Failed to get organization", "", reqID)
 		return
 	}
+	if org == nil {
+		// Org was deleted between key issuance and this request — treat the key as unauthorized.
+		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			"Unauthorized", "Organization no longer exists", reqID)
+		return
+	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"id":   org.ID,
