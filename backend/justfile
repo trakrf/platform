@@ -49,8 +49,8 @@ test-coverage:
 vendor:
     go mod vendor
 
-# Build backend binary with version injection
-build:
+# Build backend binary with version injection (regenerates internal spec first)
+build: api-spec
     go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
 
 # Generate OpenAPI 3.0 specs (public → docs/api/, internal → embedded into binary)
@@ -89,8 +89,12 @@ smoke-test:
     exit 1
     fi
 
+# Lint the public OpenAPI spec with Redocly CLI (uses pnpm)
+api-lint:
+    pnpm --package=@redocly/cli dlx redocly lint ../docs/api/openapi.public.yaml --extends=recommended
+
 # Run all backend validation checks
-validate: lint test build smoke-test
+validate: api-spec api-lint lint test build smoke-test
 
 # Shell access
 shell:
