@@ -41,7 +41,13 @@ func Generate(userID int, email string, orgID *int) (string, error) {
 	return tokenString, nil
 }
 
-// Validate parses and validates a JWT token.
+// Validate parses and validates a session JWT.
+//
+// Session and API-key JWTs share the signing secret (TRA-393 / TRA-392 design),
+// so a valid API-key JWT would otherwise parse cleanly against the session
+// claims struct with zero-value UserID / CurrentOrgID and slip through.
+// Reject them explicitly by issuer — session JWTs carry no iss, API-key JWTs
+// carry "trakrf-api-key".
 func Validate(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 
@@ -58,6 +64,10 @@ func Validate(tokenString string) (*Claims, error) {
 
 	if !token.Valid {
 		return nil, fmt.Errorf("invalid JWT token")
+	}
+
+	if claims.Issuer == apiKeyIssuer {
+		return nil, fmt.Errorf("api-key token cannot be used for session auth")
 	}
 
 	return claims, nil

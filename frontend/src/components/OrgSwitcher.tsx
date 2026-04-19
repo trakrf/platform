@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { Menu } from '@headlessui/react';
-import { ChevronDown, Plus, Check, Settings, Users, LogOut } from 'lucide-react';
+import { ChevronDown, Plus, Check, Settings, Users, Key, LogOut } from 'lucide-react';
 import { useOrgStore } from '@/stores';
 import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { RoleBadge } from './RoleBadge';
@@ -144,6 +144,21 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
                 >
                   <Users className="w-4 h-4" />
                   Members
+                </button>
+              )}
+            </Menu.Item>
+            <Menu.Item>
+              {({ active }) => (
+                <button
+                  onClick={() => {
+                    window.location.hash = '#api-keys';
+                  }}
+                  className={`${
+                    active ? 'bg-gray-100 dark:bg-gray-700' : ''
+                  } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
+                >
+                  <Key className="w-4 h-4" />
+                  API Keys
                 </button>
               )}
             </Menu.Item>

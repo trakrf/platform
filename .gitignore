@@ -172,3 +172,6 @@ tmp/
 
 # Git worktrees
 .worktrees/
+
+# Superpowers brainstorm / visual companion session data
+.superpowers/
