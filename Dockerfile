@@ -38,8 +38,17 @@ RUN go install github.com/swaggo/swag/cmd/swag@latest
 # Copy backend source
 COPY backend/ .
 
-# Generate Swagger documentation (docs directory is gitignored)
+# Generate Swagger 2.0 spec (docs directory is gitignored; swag emits docs/swagger.json)
 RUN swag init -g main.go --parseDependency --parseInternal
+
+# Generate the internal OpenAPI 3.0 spec that swaggerspec embeds via go:embed.
+# Public spec output goes to /tmp — CI owns the drift check; Docker only needs
+# internal/handlers/swaggerspec/openapi.internal.{json,yaml} for the build.
+RUN mkdir -p internal/handlers/swaggerspec && \
+    go run ./internal/tools/apispec \
+        --in docs/swagger.json \
+        --public-out /tmp/openapi.public \
+        --internal-out internal/handlers/swaggerspec/openapi.internal
 
 # Copy frontend dist to expected location for go:embed
 # go:embed at backend/main.go:27 expects backend/frontend/dist
