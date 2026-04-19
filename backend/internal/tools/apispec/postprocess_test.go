@@ -28,9 +28,11 @@ func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
 
 	assert.Equal(t, "TrakRF API", doc.Info.Title)
 	assert.Equal(t, "v1", doc.Info.Version)
-	require.Len(t, doc.Servers, 1)
-	assert.Equal(t, "https://trakrf.id", doc.Servers[0].URL)
+	require.Len(t, doc.Servers, 2)
+	assert.Equal(t, "https://app.trakrf.id", doc.Servers[0].URL,
+		"production server must be app.trakrf.id — the marketing site at trakrf.id does not serve /api/v1/*")
 	assert.Equal(t, "Production", doc.Servers[0].Description)
+	assert.Equal(t, "https://app.preview.trakrf.id", doc.Servers[1].URL)
 }
 
 func TestPostprocess_SetsInternalInfoAndServers(t *testing.T) {

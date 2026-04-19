@@ -5,13 +5,13 @@
 // @contact.email support@trakrf.id
 // @license.name Business Source License 1.1
 // @license.url https://github.com/trakrf/platform/blob/main/LICENSE
-// @host trakrf.id
+// @host app.trakrf.id
 // @BasePath /api/v1
 // @schemes https
 // @securityDefinitions.apikey APIKey
 // @in header
 // @name Authorization
-// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Create in Settings → API Keys.
+// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account (key-management UI is tracked by TRA-393).
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization

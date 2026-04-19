@@ -987,7 +987,7 @@
     "securitySchemes": {
       "APIKey": {
         "bearerFormat": "JWT",
-        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Create in Settings → API Keys.",
+        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account (key-management UI is tracked by TRA-393).",
         "scheme": "bearer",
         "type": "http"
       },
@@ -2988,7 +2988,11 @@
   "servers": [
     {
       "description": "Production",
-      "url": "https://trakrf.id"
+      "url": "https://app.trakrf.id"
+    },
+    {
+      "description": "Preview (per-PR deploys)",
+      "url": "https://app.preview.trakrf.id"
     }
   ]
 }

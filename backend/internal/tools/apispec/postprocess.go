@@ -5,13 +5,17 @@ import "github.com/getkin/kin-openapi/openapi3"
 // postprocessPublic rewrites the doc for customer-facing publication:
 // converts the APIKey security scheme from swaggo's 2.0 "apiKey" form
 // to 3.0 HTTP-Bearer with bearerFormat JWT, and sets the customer-facing
-// info and server URLs.
+// info and server URLs. Production is app.trakrf.id (the TrakRF application
+// serves both the UI and /api/v1/*); trakrf.id is the marketing site and
+// must not appear here — a Bearer token sent there would hit the marketing
+// HTML page and silently succeed.
 func postprocessPublic(doc *openapi3.T) {
 	rewriteAPIKeyScheme(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
-		{URL: "https://trakrf.id", Description: "Production"},
+		{URL: "https://app.trakrf.id", Description: "Production"},
+		{URL: "https://app.preview.trakrf.id", Description: "Preview (per-PR deploys)"},
 	}
 }
 
