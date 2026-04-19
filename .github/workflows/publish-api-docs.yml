@@ -35,11 +35,11 @@ jobs:
           token: ${{ secrets.TRAKRF_DOCS_PAT }}
           path: docs-repo
 
-      - name: Copy spec + collection into docs-repo/static/api/
+      - name: Copy spec + collection into docs-repo/static/api/ (rename to short customer-facing names)
         run: |
           mkdir -p docs-repo/static/api
-          cp platform/docs/api/openapi.public.json docs-repo/static/api/
-          cp platform/docs/api/openapi.public.yaml docs-repo/static/api/
+          cp platform/docs/api/openapi.public.json docs-repo/static/api/openapi.json
+          cp platform/docs/api/openapi.public.yaml docs-repo/static/api/openapi.yaml
           cp platform/docs/api/trakrf-api.postman_collection.json docs-repo/static/api/
 
       - name: Open PR against trakrf-docs
