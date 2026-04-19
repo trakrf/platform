@@ -30,5 +30,29 @@ func main() {
 }
 
 func run(inPath, publicOut, internalOut string) error {
-	return fmt.Errorf("not implemented")
+	data, err := os.ReadFile(inPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", inPath, err)
+	}
+
+	doc3, err := convertV2ToV3(data)
+	if err != nil {
+		return err
+	}
+
+	public, internal, err := partition(doc3)
+	if err != nil {
+		return err
+	}
+
+	postprocessPublic(public)
+	postprocessInternal(internal)
+
+	if err := emit(public, publicOut); err != nil {
+		return fmt.Errorf("emit public: %w", err)
+	}
+	if err := emit(internal, internalOut); err != nil {
+		return fmt.Errorf("emit internal: %w", err)
+	}
+	return nil
 }
