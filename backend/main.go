@@ -1,3 +1,21 @@
+// @title TrakRF API
+// @version v1
+// @description TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.
+// @contact.name TrakRF Support
+// @contact.email support@trakrf.id
+// @license.name Business Source License 1.1
+// @license.url https://github.com/trakrf/platform/blob/main/LICENSE
+// @host trakrf.id
+// @BasePath /api/v1
+// @schemes https
+// @securityDefinitions.apikey APIKey
+// @in header
+// @name Authorization
+// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Create in Settings → API Keys.
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Session JWT for internal endpoints (platform frontend uses this).
 package main
 
 import (
