@@ -42,7 +42,7 @@ Public-key infrastructure lives alongside session auth, not layered over it. Two
 3. **Handlers** — CRUD at `/api/v1/org/api-keys` (session-auth'd, admin-only) + canary `GET /api/v1/orgs/me` (API-key-auth'd)
 4. **Frontend** — `APIKeysScreen` at route `#api-keys`, linked from `OrgSettingsScreen`
 
-Non-public frontend routes keep using `middleware.Auth` unchanged. Both middlewares set `app.current_org_id` for RLS; everything downstream is oblivious to which authenticated the request.
+Non-public frontend routes keep using `middleware.Auth` unchanged. Each middleware puts its own principal type on request context (`UserClaimsKey` vs. `APIKeyPrincipalKey`); handlers extract `OrgID` from whichever is present and pass it into the existing storage transaction helper, which sets `app.current_org_id` for RLS. The storage layer stays principal-agnostic.
 
 ---
 
@@ -174,8 +174,9 @@ func APIKeyAuth(next http.Handler) http.Handler
    - 401 if `revoked_at IS NOT NULL`
    - 401 if `expires_at IS NOT NULL AND expires_at < NOW()` (defense in depth vs. JWT `exp`)
 4. `UPDATE api_keys SET last_used_at = NOW() WHERE jti = $1` — fire-and-forget; logs at error level on failure, does **not** fail the request
-5. `SET LOCAL app.current_org_id = <org_id>` — same RLS mechanism session auth uses
-6. `ctx.WithValue(APIKeyPrincipalKey, &APIKeyPrincipal{...})`, pass to `next`
+5. `ctx.WithValue(APIKeyPrincipalKey, &APIKeyPrincipal{...})`, pass to `next`
+
+The RLS session variable `app.current_org_id` is **not** set by the middleware. The storage/transaction layer (`backend/internal/storage/transactions.go`) already calls `SET LOCAL app.current_org_id = <orgID>` at tx start; handlers pull `OrgID` from whichever principal is on context (`UserClaimsKey` or `APIKeyPrincipalKey`) and pass it in. This matches how session-authenticated requests already work.
 
 Step 3 is one indexed (`jti UNIQUE`) lookup — O(1). The `last_used_at` write is also O(1) on the same index. At the rate-limited tier (60 req/min/key, placeholder), write pressure is negligible.
 
@@ -337,7 +338,7 @@ No Zustand store — the screen is small enough to use React Query directly (Tan
 ### Backend integration (real DB per project convention)
 
 `backend/internal/middleware/apikey_test.go`
-- Valid key → 200, principal set, `app.current_org_id` set
+- Valid key → 200, `APIKeyPrincipal` on context with expected `OrgID` / `Scopes` / `JTI`
 - Missing header → 401 `unauthorized`
 - Malformed header → 401
 - Invalid signature → 401
@@ -429,7 +430,6 @@ Each commit compiles and tests green on its own; the PR preview exercises the fu
 
 ## Open questions
 
-- **`ErrRateLimited` inclusion** — pulling this error type into TRA-393 aligns the error catalog with TRA-392 for the future rate-limit sub-issue, but adds one line of non-393 work. Cut if you'd prefer pure scope.
 - **Admin RBAC helper name** — design assumes a `RequireOrgRole` or equivalent exists; will verify against the codebase before implementing and update the spec/plan if the helper is shaped differently.
 
 ---
