@@ -35,6 +35,21 @@ jobs:
           token: ${{ secrets.TRAKRF_DOCS_PAT }}
           path: docs-repo
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Postman collection from published spec
+        run: |
+          pnpm dlx openapi-to-postmanv2 \
+            -s platform/docs/api/openapi.public.json \
+            -o platform/docs/api/trakrf-api.postman_collection.json \
+            -p -O folderStrategy=Paths
+
       - name: Copy spec + collection into docs-repo/static/api/ (rename to short customer-facing names)
         run: |
           mkdir -p docs-repo/static/api
