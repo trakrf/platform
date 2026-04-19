@@ -41,7 +41,12 @@
             "type": "integer"
           },
           "type": {
-            "type": "string"
+            "enum": [
+              "asset"
+            ],
+            "example": "asset",
+            "type": "string",
+            "x-extensible-enum": "true"
           },
           "updated_at": {
             "type": "string"
@@ -316,7 +321,19 @@
                 "type": "string"
               },
               "type": {
-                "type": "string"
+                "enum": [
+                  "validation_error",
+                  "bad_request",
+                  "unauthorized",
+                  "forbidden",
+                  "not_found",
+                  "conflict",
+                  "rate_limited",
+                  "internal_error"
+                ],
+                "example": "validation_error",
+                "type": "string",
+                "x-extensible-enum": "true"
               }
             },
             "type": "object"
@@ -740,7 +757,9 @@
               "ble",
               "barcode"
             ],
-            "type": "string"
+            "example": "rfid",
+            "type": "string",
+            "x-extensible-enum": "true"
           },
           "value": {
             "maxLength": 255,
@@ -762,7 +781,9 @@
               "ble",
               "barcode"
             ],
-            "type": "string"
+            "example": "rfid",
+            "type": "string",
+            "x-extensible-enum": "true"
           },
           "value": {
             "maxLength": 255,

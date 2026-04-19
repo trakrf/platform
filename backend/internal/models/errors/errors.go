@@ -18,7 +18,7 @@ const (
 // ErrorResponse implements RFC 7807 Problem Details
 type ErrorResponse struct {
 	Error struct {
-		Type      string `json:"type"`
+		Type      string `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error" extensions:"x-extensible-enum=true"`
 		Title     string `json:"title"`
 		Status    int    `json:"status"`
 		Detail    string `json:"detail"`

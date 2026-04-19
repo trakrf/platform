@@ -4,13 +4,13 @@ const DefaultIdentifierType = "rfid"
 
 type TagIdentifier struct {
 	ID       int    `json:"id,omitempty"`
-	Type     string `json:"type" validate:"required,oneof=rfid ble barcode"`
+	Type     string `json:"type" validate:"required,oneof=rfid ble barcode" example:"rfid" extensions:"x-extensible-enum=true"`
 	Value    string `json:"value" validate:"required,min=1,max=255"`
 	IsActive bool   `json:"is_active"`
 }
 
 type TagIdentifierRequest struct {
-	Type  string `json:"type" validate:"omitempty,oneof=rfid ble barcode"`
+	Type  string `json:"type" validate:"omitempty,oneof=rfid ble barcode" example:"rfid" extensions:"x-extensible-enum=true"`
 	Value string `json:"value" validate:"required,min=1,max=255"`
 }
 

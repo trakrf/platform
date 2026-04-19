@@ -28,7 +28,11 @@ components:
                 org_id:
                     type: integer
                 type:
+                    enum:
+                        - asset
+                    example: asset
                     type: string
+                    x-extensible-enum: "true"
                 updated_at:
                     type: string
                 valid_from:
@@ -218,7 +222,18 @@ components:
                         title:
                             type: string
                         type:
+                            enum:
+                                - validation_error
+                                - bad_request
+                                - unauthorized
+                                - forbidden
+                                - not_found
+                                - conflict
+                                - rate_limited
+                                - internal_error
+                            example: validation_error
                             type: string
+                            x-extensible-enum: "true"
                     type: object
             type: object
         github_com_trakrf_platform_backend_internal_models_location.CreateLocationWithIdentifiersRequest:
@@ -507,7 +522,9 @@ components:
                         - rfid
                         - ble
                         - barcode
+                    example: rfid
                     type: string
+                    x-extensible-enum: "true"
                 value:
                     maxLength: 255
                     minLength: 1
@@ -523,7 +540,9 @@ components:
                         - rfid
                         - ble
                         - barcode
+                    example: rfid
                     type: string
+                    x-extensible-enum: "true"
                 value:
                     maxLength: 255
                     minLength: 1
