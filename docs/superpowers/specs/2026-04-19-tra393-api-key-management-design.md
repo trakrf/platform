@@ -42,7 +42,7 @@ Public-key infrastructure lives alongside session auth, not layered over it. Two
 3. **Handlers** — CRUD at `/api/v1/orgs/{id}/api-keys` (session-auth'd, admin-only) + canary `GET /api/v1/orgs/me` (API-key-auth'd)
 4. **Frontend** — `APIKeysScreen` at route `#api-keys`, linked from `OrgSettingsScreen`
 
-Non-public frontend routes keep using `middleware.Auth` unchanged. Each middleware puts its own principal type on request context (`UserClaimsKey` vs. `APIKeyPrincipalKey`); handlers extract `OrgID` from whichever is present and pass it into the existing storage transaction helper, which sets `app.current_org_id` for RLS. The storage layer stays principal-agnostic.
+Non-public frontend routes keep using `middleware.Auth` unchanged. Each middleware puts its own principal type on request context (`UserClaimsKey` vs. `APIKeyPrincipalKey`); handlers extract `OrgID` from whichever is present and pass it into the existing storage transaction helper, which sets `app.current_org_id` for RLS on tables that do have RLS. `api_keys` itself has no RLS (see "Data model" below); its storage methods filter by `org_id` explicitly. Queries against RLS-protected tables (e.g., org lookups in the canary handler) still pass through `WithOrgTx`.
 
 ---
 
@@ -53,8 +53,8 @@ Non-public frontend routes keep using `middleware.Auth` unchanged. Each middlewa
 ```sql
 -- up
 CREATE TABLE api_keys (
-    id           BIGINT PRIMARY KEY,
-    jti          UUID NOT NULL UNIQUE,
+    id           INT PRIMARY KEY,
+    jti          UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
     org_id       INT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name         VARCHAR(255) NOT NULL,
     scopes       TEXT[] NOT NULL,
@@ -65,19 +65,26 @@ CREATE TABLE api_keys (
     revoked_at   TIMESTAMPTZ
 );
 
+-- permuted id trigger mirrors the assets / locations convention
+CREATE TRIGGER generate_api_key_id_trigger
+    BEFORE INSERT ON api_keys
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_permuted_id('api_key_seq');
+
 -- partial index for "list active keys for this org" — the dominant UI query
-CREATE INDEX api_keys_active_by_org_idx
+CREATE INDEX idx_api_keys_active_by_org
     ON api_keys(org_id)
     WHERE revoked_at IS NULL;
 
-ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY api_keys_org_isolation ON api_keys
-    USING      (org_id = current_setting('app.current_org_id')::INT)
-    WITH CHECK (org_id = current_setting('app.current_org_id')::INT);
-
--- id is populated by application code via the existing generate_permuted_id machinery;
--- mirrors the approach used for assets, locations, etc.
+-- No RLS on api_keys.
+-- Following the precedent set by migration 000020 (users, org_users): tables
+-- that must be readable BEFORE session variables are bound cannot use RLS,
+-- because (a) our DB user lacks BYPASSRLS on TimescaleDB Cloud and
+-- (b) current_setting('app.current_org_id') throws on missing session vars.
+-- The middleware looks up api_keys by jti before knowing which org is making
+-- the request, so the same exception applies. Org isolation is enforced at
+-- the application layer: every storage method takes orgID explicitly and
+-- includes it in WHERE clauses (see storage/apikeys.go).
 ```
 
 ```sql
@@ -87,11 +94,12 @@ DROP TABLE api_keys;  -- cascades index + policy
 
 ### Schema rationale
 
-- `id` is a permuted BIGINT (consistent with the rest of the schema). Used as the path param on `DELETE`.
-- `jti` is the join key from JWT claim → row. UUID keeps tokens opaque and lets us regenerate IDs without collisions if we ever need to.
+- `id` is a permuted INT (consistent with the rest of the schema). Used as the path param on `DELETE`.
+- `jti` is the join key from JWT claim → row. UUID keeps tokens opaque and lets us regenerate IDs without collisions if we ever need to. Default `gen_random_uuid()` removes a tiny bit of Go code.
 - `scopes TEXT[]` stores TRA-392's five strings: `assets:read`, `assets:write`, `locations:read`, `locations:write`, `scans:read`. A custom enum type was considered and rejected — adding scopes (e.g., `webhooks:write`) would require a migration.
 - No `key_hash`. No `key_prefix`. JWTs are self-validating; the signature *is* the proof. Storing a hash would be dead weight. The original Linear ticket called for both; TRA-392 supersedes that.
 - `revoked_at IS NULL` partial index keeps the list query hot without carrying the full table in memory as revoked keys accumulate.
+- **No RLS** — see migration 000020 precedent; org isolation is enforced at the application layer by passing `orgID` explicitly to every storage method.
 
 ### Soft cap — 10 active keys per org
 
@@ -447,6 +455,7 @@ Each commit compiles and tests green on its own; the PR preview exercises the fu
 - **B-1.** Table schema verbatim from TRA-392 §Authentication. No `key_hash`, no `key_prefix` — JWTs are self-validating.
 - **B-2.** Partial index `api_keys(org_id) WHERE revoked_at IS NULL` for the list query.
 - **B-3.** Soft cap at 10 active keys per org, enforced in handler, returned as 409.
+- **B-4.** No RLS on `api_keys` (migration 000020 precedent). Middleware looks up keys by `jti` before any org context exists; RLS would require BYPASSRLS which the DB user lacks. Org isolation is enforced by explicit `WHERE org_id = $1` in every storage method.
 
 ### C. Authentication
 
