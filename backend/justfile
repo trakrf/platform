@@ -94,7 +94,11 @@ api-lint:
     pnpm --package=@redocly/cli dlx redocly lint ../docs/api/openapi.public.yaml --extends=recommended
 
 # Run all backend validation checks
-validate: api-spec api-lint lint test build smoke-test
+# Note: api-spec is NOT in this chain — swag's output depends on the local Go/swag
+# build cache in ways that differ between dev machines and CI. The committed spec
+# is whatever CI produces; local regeneration may legitimately diverge without
+# indicating stale annotations. The drift check runs only in CI (api-spec.yml).
+validate: api-lint lint test build smoke-test
 
 # Shell access
 shell:
