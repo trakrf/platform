@@ -205,5 +205,10 @@ func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations", h.CreateInvitation)
 		r.With(middleware.RequireOrgAdmin(store)).Delete("/invitations/{inviteId}", h.CancelInvitation)
 		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations/{inviteId}/resend", h.ResendInvitation)
+
+		// API keys (admin only)
+		r.With(middleware.RequireOrgAdmin(store)).Post("/api-keys", h.CreateAPIKey)
+		r.With(middleware.RequireOrgAdmin(store)).Get("/api-keys", h.ListAPIKeys)
+		r.With(middleware.RequireOrgAdmin(store)).Delete("/api-keys/{keyID}", h.RevokeAPIKey)
 	})
 }
