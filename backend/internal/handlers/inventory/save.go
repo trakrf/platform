@@ -44,7 +44,7 @@ type SaveRequest struct {
 // Save handles POST /api/v1/inventory/save
 // @Summary Save inventory scans
 // @Description Persist scanned RFID assets to the asset_scans hypertable
-// @Tags inventory
+// @Tags inventory,internal
 // @Accept json
 // @Produce json
 // @Param request body SaveRequest true "Save request with location and asset IDs"

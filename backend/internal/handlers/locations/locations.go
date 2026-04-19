@@ -57,17 +57,21 @@ func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, or
 	return &location.LocationView{Location: *baseLoc, Identifiers: []shared.TagIdentifier{}}, nil
 }
 
-// @Summary Create location
-// @Description Create a new location in the hierarchy, optionally with tag identifiers
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param request body location.CreateLocationWithIdentifiersRequest true "Location to create with optional identifiers"
-// @Success 201 {object} map[string]any "data: location.LocationView"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid JSON or validation error"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations [post]
+// @Summary      Create a location
+// @Description  Create a new location in the hierarchy, optionally with one or more tag identifiers.
+// @Description  Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        request  body  location.CreateLocationWithIdentifiersRequest  true  "Location to create with optional identifiers"
+// @Success      201  {object}  map[string]any                "data: location.LocationView"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:write]
+// @Router       /api/v1/locations [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -111,19 +115,23 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
 }
 
-// @Summary Update location
-// @Description Update an existing location by ID
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Param request body location.UpdateLocationRequest true "Location update data"
-// @Success 202 {object} map[string]any "data: location.Location"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID, JSON, or validation error"
-// @Failure 404 {object} modelerrors.ErrorResponse "Location not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id} [put]
+// @Summary      Update a location
+// @Description  Update mutable fields on an existing location. Only fields included in the request body are changed.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id       path  int                              true  "Location ID"
+// @Param        request  body  location.UpdateLocationRequest   true  "Fields to update"
+// @Success      202  {object}  map[string]any                "data: location.Location"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:write]
+// @Router       /api/v1/locations/{id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 	idParam := chi.URLParam(req, "id")
@@ -166,19 +174,22 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]*location.Location{"data": result})
 }
 
-// @Summary Get location
-// @Description Get a location by ID with tag identifiers, optionally including children and ancestors
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Param include query string false "Include relations: 'relations' for children+ancestors"
-// @Success 202 {object} map[string]any "data: location.LocationView"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid location ID"
-// @Failure 404 {object} modelerrors.ErrorResponse "Location not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id} [get]
+// @Summary      Retrieve a location
+// @Description  Fetch a single location by its numeric ID, including associated tag identifiers.
+// @Description  Pass include=relations to also receive the location's ancestors and immediate children in the response.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id       path   int     true   "Location ID"
+// @Param        include  query  string  false  "Pass 'relations' to include ancestors and children"  Enums(relations)
+// @Success      202  {object}  map[string]any                "data: location.LocationView"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:read]
+// @Router       /api/v1/locations/{id} [get]
 func (handler *Handler) Get(w http.ResponseWriter, req *http.Request) {
 	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
@@ -217,17 +228,20 @@ func (handler *Handler) Get(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]*location.LocationView{"data": result})
 }
 
-// @Summary Delete location
-// @Description Soft delete a location by ID
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Success 202 {object} map[string]bool "deleted: true/false"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid location ID"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id} [delete]
+// @Summary      Delete a location
+// @Description  Soft-delete a location by its numeric ID. The location is marked inactive and removed from future list results.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id  path  int  true  "Location ID"
+// @Success      202  {object}  map[string]bool               "deleted: true/false"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:write]
+// @Router       /api/v1/locations/{id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
@@ -257,17 +271,21 @@ type ListLocationsResponse struct {
 	TotalCount int                     `json:"total_count" example:"100"`
 }
 
-// @Summary List locations
-// @Description Get a paginated list of all locations with their tag identifiers
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param limit query int false "Number of locations to return (default: 10)" minimum(1) default(10)
-// @Param offset query int false "Number of locations to skip for pagination (default: 0)" minimum(0) default(0)
-// @Success 202 {object} ListLocationsResponse "Paginated list of locations with metadata"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations [get]
+// @Summary      List locations
+// @Description  Return a paginated list of all locations in the organization, each with their associated tag identifiers.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        limit   query  int  false  "Max results (default 10, max 200)"  default(10)  minimum(1)  maximum(200)
+// @Param        offset  query  int  false  "Pagination offset"                   default(0)   minimum(0)
+// @Success      202  {object}  ListLocationsResponse             "Paginated list of locations with metadata"
+// @Failure      400  {object}  modelerrors.ErrorResponse         "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse         "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse         "forbidden"
+// @Failure      429  {object}  modelerrors.ErrorResponse         "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse         "internal_error"
+// @Security     APIKey[locations:read]
+// @Router       /api/v1/locations [get]
 func (handler *Handler) List(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
@@ -318,17 +336,20 @@ func (handler *Handler) List(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, response)
 }
 
-// @Summary Get location ancestors
-// @Description Get all ancestor locations from root to parent
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Success 202 {object} map[string]any "data: []location.Location"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid location ID"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id}/ancestors [get]
+// @Summary      List location ancestors
+// @Description  Return all ancestor locations from the root of the hierarchy down to the immediate parent of the specified location.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id  path  int  true  "Location ID"
+// @Success      202  {object}  map[string]any                "data: []location.Location"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:read]
+// @Router       /api/v1/locations/{id}/ancestors [get]
 func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
@@ -350,17 +371,20 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, map[string][]location.Location{"data": results})
 }
 
-// @Summary Get location descendants
-// @Description Get all descendant locations (children at all levels)
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Success 202 {object} map[string]any "data: []location.Location"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid location ID"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id}/descendants [get]
+// @Summary      List location descendants
+// @Description  Return all descendant locations (children, grandchildren, etc.) beneath the specified location in the hierarchy.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id  path  int  true  "Location ID"
+// @Success      202  {object}  map[string]any                "data: []location.Location"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:read]
+// @Router       /api/v1/locations/{id}/descendants [get]
 func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request) {
 	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
@@ -382,17 +406,20 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 	httputil.WriteJSON(w, http.StatusAccepted, map[string][]location.Location{"data": results})
 }
 
-// @Summary Get location children
-// @Description Get immediate children of a location
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Success 202 {object} map[string]any "data: []location.Location"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid location ID"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id}/children [get]
+// @Summary      List location children
+// @Description  Return the immediate child locations of the specified location (one level deep only).
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id  path  int  true  "Location ID"
+// @Success      202  {object}  map[string]any                "data: []location.Location"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:read]
+// @Router       /api/v1/locations/{id}/children [get]
 func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
@@ -414,19 +441,23 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, map[string][]location.Location{"data": results})
 }
 
-// @Summary Add identifier to location
-// @Description Add a tag identifier (RFID, BLE, barcode) to an existing location
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Param request body shared.TagIdentifierRequest true "Tag identifier to add"
-// @Success 201 {object} map[string]any "data: shared.TagIdentifier"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
-// @Failure 404 {object} modelerrors.ErrorResponse "Location not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id}/identifiers [post]
+// @Summary      Add an identifier to a location
+// @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
+// @Description  The identifier must be unique within the organization.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id       path  int                            true  "Location ID"
+// @Param        request  body  shared.TagIdentifierRequest    true  "Tag identifier to attach"
+// @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:write]
+// @Router       /api/v1/locations/{id}/identifiers [post]
 func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -481,19 +512,22 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": identifier})
 }
 
-// @Summary Remove identifier from location
-// @Description Remove a tag identifier from a location
-// @Tags locations
-// @Accept json
-// @Produce json
-// @Param id path int true "Location ID"
-// @Param identifierId path int true "Identifier ID"
-// @Success 202 {object} map[string]bool "deleted: true/false"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
-// @Failure 404 {object} modelerrors.ErrorResponse "Location or identifier not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/locations/{id}/identifiers/{identifierId} [delete]
+// @Summary      Remove an identifier from a location
+// @Description  Detach a tag identifier from a location by its identifier record ID.
+// @Tags         locations,public
+// @Accept       json
+// @Produce      json
+// @Param        id            path  int  true  "Location ID"
+// @Param        identifierId  path  int  true  "Identifier ID"
+// @Success      202  {object}  map[string]bool               "deleted: true/false"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[locations:write]
+// @Router       /api/v1/locations/{id}/identifiers/{identifierId} [delete]
 func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 

@@ -63,17 +63,22 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 	return &asset.AssetView{Asset: *baseAsset, Identifiers: []shared.TagIdentifier{}}, nil
 }
 
-// @Summary Create asset
-// @Description Create a new asset, optionally with tag identifiers
-// @Tags assets
-// @Accept json
-// @Produce json
-// @Param request body asset.CreateAssetWithIdentifiersRequest true "Asset to create with optional identifiers"
-// @Success 201 {object} map[string]any "data: asset.AssetView"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid JSON or validation error"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/assets [post]
+// @Summary      Create an asset
+// @Description  Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
+// @Description  Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
+// @Tags         assets,public
+// @Accept       json
+// @Produce      json
+// @Param        request  body  asset.CreateAssetWithIdentifiersRequest  true  "Asset to create with optional identifiers"
+// @Success      201  {object}  map[string]any                "data: asset.AssetView"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[assets:write]
+// @Router       /api/v1/assets [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -125,18 +130,23 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
 }
 
-// @Summary Update asset
-// @Description Update an existing asset by ID
-// @Tags assets
-// @Accept json
-// @Produce json
-// @Param id path int true "Asset ID"
-// @Param request body asset.UpdateAssetRequest true "Asset update data"
-// @Success 202 {object} map[string]any "data: asset.Asset"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID, JSON, or validation error"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/assets/{id} [put]
+// @Summary      Update an asset
+// @Description  Update mutable fields on an existing asset. Only fields included in the request body are changed.
+// @Tags         assets,public
+// @Accept       json
+// @Produce      json
+// @Param        id       path  int                         true  "Asset ID"
+// @Param        request  body  asset.UpdateAssetRequest    true  "Fields to update"
+// @Success      202  {object}  map[string]any                "data: asset.Asset"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[assets:write]
+// @Router       /api/v1/assets/{id} [put]
 func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 	idParam := chi.URLParam(req, "id")
@@ -179,18 +189,20 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]*asset.Asset{"data": result})
 }
 
-// @Summary Get asset
-// @Description Get an asset by ID with its tag identifiers
-// @Tags assets
-// @Accept json
-// @Produce json
-// @Param id path int true "Asset ID"
-// @Success 202 {object} map[string]any "data: asset.AssetView"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid asset ID"
-// @Failure 404 {object} modelerrors.ErrorResponse "Asset not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/assets/{id} [get]
+// @Summary      Retrieve an asset
+// @Description  Fetch a single asset by its numeric ID, including all associated tag identifiers.
+// @Tags         assets,public
+// @Accept       json
+// @Produce      json
+// @Param        id  path  int  true  "Asset ID"
+// @Success      202  {object}  map[string]any                "data: asset.AssetView"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[assets:read]
+// @Router       /api/v1/assets/{id} [get]
 func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
@@ -219,17 +231,20 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]*asset.AssetView{"data": result})
 }
 
-// @Summary Delete asset
-// @Description Soft delete an asset by ID
-// @Tags assets
-// @Accept json
-// @Produce json
-// @Param id path int true "Asset ID"
-// @Success 202 {object} map[string]bool "deleted: true/false"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid asset ID"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/assets/{id} [delete]
+// @Summary      Delete an asset
+// @Description  Soft-delete an asset by its numeric ID. The asset is marked inactive and removed from future list results.
+// @Tags         assets,public
+// @Accept       json
+// @Produce      json
+// @Param        id  path  int  true  "Asset ID"
+// @Success      202  {object}  map[string]bool               "deleted: true/false"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[assets:write]
+// @Router       /api/v1/assets/{id} [delete]
 func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
@@ -259,17 +274,21 @@ type ListAssetsResponse struct {
 	TotalCount int               `json:"total_count" example:"100"`
 }
 
-// @Summary List assets
-// @Description Get a paginated list of all assets with their tag identifiers
-// @Tags assets
-// @Accept json
-// @Produce json
-// @Param limit query int false "Number of assets to return (default: 10)" minimum(1) default(10)
-// @Param offset query int false "Number of assets to skip for pagination (default: 0)" minimum(0) default(0)
-// @Success 202 {object} ListAssetsResponse "Paginated list of assets with metadata"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/assets [get]
+// @Summary      List assets
+// @Description  Return a paginated list of all assets in the organization, each with their associated tag identifiers.
+// @Tags         assets,public
+// @Accept       json
+// @Produce      json
+// @Param        limit   query  int  false  "Max results (default 10, max 200)"  default(10)  minimum(1)  maximum(200)
+// @Param        offset  query  int  false  "Pagination offset"                   default(0)   minimum(0)
+// @Success      202  {object}  ListAssetsResponse                "Paginated list of assets with metadata"
+// @Failure      400  {object}  modelerrors.ErrorResponse         "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse         "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse         "forbidden"
+// @Failure      429  {object}  modelerrors.ErrorResponse         "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse         "internal_error"
+// @Security     APIKey[assets:read]
+// @Router       /api/v1/assets [get]
 func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
@@ -320,19 +339,23 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusAccepted, response)
 }
 
-// @Summary Add identifier to asset
-// @Description Add a tag identifier (RFID, BLE, barcode) to an existing asset
-// @Tags assets
-// @Accept json
-// @Produce json
-// @Param id path int true "Asset ID"
-// @Param request body shared.TagIdentifierRequest true "Tag identifier to add"
-// @Success 201 {object} map[string]any "data: shared.TagIdentifier"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
-// @Failure 404 {object} modelerrors.ErrorResponse "Asset not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/assets/{id}/identifiers [post]
+// @Summary      Add an identifier to an asset
+// @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
+// @Description  The identifier must be unique within the organization.
+// @Tags         assets,public
+// @Accept       json
+// @Produce      json
+// @Param        id       path  int                            true  "Asset ID"
+// @Param        request  body  shared.TagIdentifierRequest    true  "Tag identifier to attach"
+// @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[assets:write]
+// @Router       /api/v1/assets/{id}/identifiers [post]
 func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -387,19 +410,22 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": identifier})
 }
 
-// @Summary Remove identifier from asset
-// @Description Remove a tag identifier from an asset
-// @Tags assets
-// @Accept json
-// @Produce json
-// @Param id path int true "Asset ID"
-// @Param identifierId path int true "Identifier ID"
-// @Success 202 {object} map[string]bool "deleted: true/false"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
-// @Failure 404 {object} modelerrors.ErrorResponse "Asset or identifier not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/assets/{id}/identifiers/{identifierId} [delete]
+// @Summary      Remove an identifier from an asset
+// @Description  Detach a tag identifier from an asset by its identifier record ID.
+// @Tags         assets,public
+// @Accept       json
+// @Produce      json
+// @Param        id            path  int  true  "Asset ID"
+// @Param        identifierId  path  int  true  "Identifier ID"
+// @Success      202  {object}  map[string]bool               "deleted: true/false"
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[assets:write]
+// @Router       /api/v1/assets/{id}/identifiers/{identifierId} [delete]
 func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 

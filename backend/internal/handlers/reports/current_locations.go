@@ -29,20 +29,24 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 // ListCurrentLocations handles GET /api/v1/reports/current-locations
-// @Summary List current asset locations
-// @Description Get paginated list of assets with their most recent location
-// @Tags reports
-// @Accept json
-// @Produce json
-// @Param limit query int false "Results per page (default 50, max 100)" minimum(1) maximum(100) default(50)
-// @Param offset query int false "Pagination offset (default 0)" minimum(0) default(0)
-// @Param location_id query int false "Filter by location ID"
-// @Param search query string false "Search asset name or identifier"
-// @Success 200 {object} report.CurrentLocationsResponse
-// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/reports/current-locations [get]
+// @Summary      List current asset locations
+// @Description  Return a paginated snapshot of every asset paired with its most recent scan location.
+// @Description  Optionally filter by a specific location or search by asset name/identifier.
+// @Tags         reports,public
+// @Accept       json
+// @Produce      json
+// @Param        limit        query  int     false  "Max results (default 50, max 100)"     minimum(1)   maximum(100)  default(50)
+// @Param        offset       query  int     false  "Pagination offset (default 0)"          minimum(0)   default(0)
+// @Param        location_id  query  int     false  "Filter to assets last seen at this location ID"
+// @Param        search       query  string  false  "Full-text match on asset name or identifier"
+// @Success      200  {object}  report.CurrentLocationsResponse
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[scans:read]
+// @Router       /api/v1/reports/current-locations [get]
 func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
