@@ -39,7 +39,7 @@ Public-key infrastructure lives alongside session auth, not layered over it. Two
 
 1. **Migration** — `000027_api_keys.up.sql` / `.down.sql`, table + partial index + RLS policy
 2. **Middleware** — `APIKeyAuth` (parse → lookup → principal) and `RequireScope(scope)` (authorize)
-3. **Handlers** — CRUD at `/api/v1/org/api-keys` (session-auth'd, admin-only) + canary `GET /api/v1/orgs/me` (API-key-auth'd)
+3. **Handlers** — CRUD at `/api/v1/orgs/{id}/api-keys` (session-auth'd, admin-only) + canary `GET /api/v1/orgs/me` (API-key-auth'd)
 4. **Frontend** — `APIKeysScreen` at route `#api-keys`, linked from `OrgSettingsScreen`
 
 Non-public frontend routes keep using `middleware.Auth` unchanged. Each middleware puts its own principal type on request context (`UserClaimsKey` vs. `APIKeyPrincipalKey`); handlers extract `OrgID` from whichever is present and pass it into the existing storage transaction helper, which sets `app.current_org_id` for RLS. The storage layer stays principal-agnostic.
@@ -104,7 +104,7 @@ Enforced in the `POST` handler, not as a DB constraint, so the 11th request retu
     "title": "Key limit reached",
     "status": 409,
     "detail": "Organization has reached the 10 active API key limit. Revoke an unused key first.",
-    "instance": "/api/v1/org/api-keys",
+    "instance": "/api/v1/orgs/{id}/api-keys",
     "request_id": "01J..."
   }
 }
@@ -217,15 +217,15 @@ Unchanged. Any refactoring of the existing `Auth` to share code with `APIKeyAuth
 
 Derives from the `APIKeyPrincipal.OrgID` on context; single `SELECT id, name FROM organizations WHERE id = $1`. Exists purely so customers can verify their key is working without needing TRA-396's endpoints to have shipped.
 
-### `/api/v1/org/api-keys` — admin CRUD
+### `/api/v1/orgs/{id}/api-keys` — admin CRUD
 
 `backend/internal/handlers/orgs/apikeys.go`. Registered behind the existing session `Auth` middleware plus an admin-role RBAC check (`owner` or `admin`). Non-admins get 403.
 
 | Method | Path | Behavior |
 |---|---|---|
-| `POST` | `/api/v1/org/api-keys` | Create row, mint JWT, return `{key, id, name, scopes, created_at, expires_at}` — `key` appears **only** here |
-| `GET` | `/api/v1/org/api-keys` | List active keys for caller's org (excludes revoked via partial index); never returns `key` |
-| `DELETE` | `/api/v1/org/api-keys/{id}` | Set `revoked_at = NOW()`; 204 on success, 404 on unknown/cross-org id |
+| `POST` | `/api/v1/orgs/{id}/api-keys` | Create row, mint JWT, return `{key, id, name, scopes, created_at, expires_at}` — `key` appears **only** here |
+| `GET` | `/api/v1/orgs/{id}/api-keys` | List active keys for caller's org (excludes revoked via partial index); never returns `key` |
+| `DELETE` | `/api/v1/orgs/{id}/api-keys/{id}` | Set `revoked_at = NOW()`; 204 on success, 404 on unknown/cross-org id |
 
 **`POST` request body:**
 
@@ -258,7 +258,7 @@ Handler order: begin tx → count active keys for org (409 if ≥ 10) → insert
 
 ### RBAC
 
-Reused: `middleware.RequireOrgRole("owner", "admin")` (or whatever the existing RBAC helper is named — validate before implementation). Mirrors the existing `OrgSettingsScreen` gate.
+Reused: `middleware.RequireOrgAdmin(store)` — already exists in `backend/internal/middleware/rbac.go`, expects `{id}` in the URL, returns 403 for non-admins. Superadmins are bypassed and granted admin role (audit-logged). The route shape `/api/v1/orgs/{id}/api-keys` matches the existing `/api/v1/orgs/{id}/members` and `/api/v1/orgs/{id}/invitations` conventions and plugs into this helper directly.
 
 ---
 
@@ -430,7 +430,7 @@ Each commit compiles and tests green on its own; the PR preview exercises the fu
 
 ## Open questions
 
-- **Admin RBAC helper name** — design assumes a `RequireOrgRole` or equivalent exists; will verify against the codebase before implementing and update the spec/plan if the helper is shaped differently.
+*(None open — RBAC helper identified as `middleware.RequireOrgAdmin`; route shape aligned with existing `/api/v1/orgs/{id}/...` conventions.)*
 
 ---
 
