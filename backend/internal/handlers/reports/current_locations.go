@@ -31,7 +31,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // ListCurrentLocations handles GET /api/v1/reports/current-locations
 // @Summary List current asset locations
 // @Description Get paginated list of assets with their most recent location
-// @Tags reports
+// @Tags reports,public
 // @Accept json
 // @Produce json
 // @Param limit query int false "Results per page (default 50, max 100)" minimum(1) maximum(100) default(50)

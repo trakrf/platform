@@ -1,0 +1,2330 @@
+{
+  "components": {
+    "schemas": {
+      "github_com_trakrf_platform_backend_internal_models_asset.AssetView": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "current_location_id": {
+            "type": "integer"
+          },
+          "deleted_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifier"
+            },
+            "type": "array"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "metadata": {},
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_org.Org"
+          },
+          "org_id": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "valid_from": {
+            "type": "string"
+          },
+          "valid_to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_asset.CreateAssetWithIdentifiersRequest": {
+        "properties": {
+          "current_location_id": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "description": {
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "identifier": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifierRequest"
+            },
+            "type": "array"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "metadata": {},
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "asset"
+            ],
+            "type": "string"
+          },
+          "valid_from": {
+            "example": "2025-01-01",
+            "type": "string"
+          },
+          "valid_to": {
+            "example": "2026-01-01",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_asset.UpdateAssetRequest": {
+        "properties": {
+          "current_location_id": {
+            "type": "integer"
+          },
+          "description": {
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "identifier": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "metadata": {},
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "asset"
+            ],
+            "type": "string"
+          },
+          "valid_from": {
+            "example": "2025-01-01",
+            "type": "string"
+          },
+          "valid_to": {
+            "example": "2026-01-01",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_auth.ForgotPasswordRequest": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "reset_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "reset_url"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_auth.LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_auth.MessageResponse": {
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_auth.ResetPasswordRequest": {
+        "properties": {
+          "password": {
+            "minLength": 8,
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "token"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_auth.SignupRequest": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "invitation_token": {
+            "type": "string"
+          },
+          "org_name": {
+            "maxLength": 100,
+            "minLength": 2,
+            "type": "string"
+          },
+          "password": {
+            "minLength": 8,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_bulkimport.ErrorDetail": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "row": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_bulkimport.JobStatusResponse": {
+        "properties": {
+          "completed_at": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_bulkimport.ErrorDetail"
+            },
+            "type": "array"
+          },
+          "failed_rows": {
+            "type": "integer"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "processed_rows": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "successful_rows": {
+            "description": "Calculated: processed - failed",
+            "type": "integer"
+          },
+          "tags_created": {
+            "type": "integer"
+          },
+          "total_rows": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_bulkimport.UploadResponse": {
+        "properties": {
+          "job_id": {
+            "description": "UUID string",
+            "type": "string"
+          },
+          "message": {
+            "description": "User-friendly message",
+            "type": "string"
+          },
+          "status": {
+            "description": "\"accepted\"",
+            "type": "string"
+          },
+          "status_url": {
+            "description": "\"/api/v1/assets/bulk/{jobId}\"",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse": {
+        "properties": {
+          "error": {
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_location.CreateLocationWithIdentifiersRequest": {
+        "properties": {
+          "description": {
+            "example": "Main warehouse location",
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "identifier": {
+            "example": "wh1",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifierRequest"
+            },
+            "type": "array"
+          },
+          "is_active": {
+            "example": true,
+            "type": "boolean"
+          },
+          "name": {
+            "example": "Warehouse 1",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "parent_location_id": {
+            "example": 1,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "valid_from": {
+            "example": "2025-12-14",
+            "type": "string"
+          },
+          "valid_to": {
+            "example": "2026-12-14",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identifier",
+          "name"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_location.Location": {
+        "properties": {
+          "ancestors": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.Location"
+            },
+            "type": "array"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.Location"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "deleted_at": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "identifier": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_org.Org"
+          },
+          "org_id": {
+            "type": "integer"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.Location"
+          },
+          "parent_location_id": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "valid_from": {
+            "type": "string"
+          },
+          "valid_to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "identifier"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_location.LocationView": {
+        "properties": {
+          "ancestors": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.Location"
+            },
+            "type": "array"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.Location"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "deleted_at": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "identifier": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifier"
+            },
+            "type": "array"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_org.Org"
+          },
+          "org_id": {
+            "type": "integer"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.Location"
+          },
+          "parent_location_id": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "valid_from": {
+            "type": "string"
+          },
+          "valid_to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "identifier"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_location.UpdateLocationRequest": {
+        "properties": {
+          "description": {
+            "example": "Updated description",
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "identifier": {
+            "example": "wh1",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "is_active": {
+            "example": true,
+            "type": "boolean"
+          },
+          "name": {
+            "example": "Warehouse 1",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "parent_location_id": {
+            "example": 1,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "valid_from": {
+            "example": "2025-12-14",
+            "type": "string"
+          },
+          "valid_to": {
+            "example": "2026-12-14",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_org.Org": {
+        "properties": {
+          "billing_email": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "max_storage_gb": {
+            "type": "integer"
+          },
+          "max_users": {
+            "type": "integer"
+          },
+          "metadata": {
+            "description": "JSONB"
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "description": "JSONB"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subscription_tier": {
+            "type": "string"
+          },
+          "technical_email": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_organization.AcceptInvitationRequest": {
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_report.AssetHistoryItem": {
+        "properties": {
+          "duration_seconds": {
+            "type": "integer"
+          },
+          "location_id": {
+            "type": "integer"
+          },
+          "location_name": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_report.AssetHistoryResponse": {
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_report.AssetInfo"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_report.AssetHistoryItem"
+            },
+            "type": "array"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "total_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_report.AssetInfo": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_report.CurrentLocationItem": {
+        "properties": {
+          "asset_id": {
+            "type": "integer"
+          },
+          "asset_identifier": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "last_seen": {
+            "type": "string"
+          },
+          "location_id": {
+            "description": "nullable",
+            "type": "integer"
+          },
+          "location_name": {
+            "description": "nullable",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_report.CurrentLocationsResponse": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_report.CurrentLocationItem"
+            },
+            "type": "array"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "total_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_shared.Pagination": {
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "per_page": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_shared.TagIdentifier": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "rfid",
+              "ble",
+              "barcode"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "value"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_shared.TagIdentifierRequest": {
+        "properties": {
+          "type": {
+            "enum": [
+              "rfid",
+              "ble",
+              "barcode"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_user.CreateUserRequest": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "password_hash": {
+            "description": "Temporary, Phase 5 will hash",
+            "minLength": 8,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password_hash"
+        ],
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_user.UpdateUserRequest": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "github_com_trakrf_platform_backend_internal_models_user.User": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "is_superadmin": {
+            "description": "RBAC fields",
+            "type": "boolean"
+          },
+          "last_login_at": {
+            "type": "string"
+          },
+          "last_org_id": {
+            "type": "integer"
+          },
+          "metadata": {
+            "description": "JSONB"
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "description": "JSONB"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "internal_handlers_assets.ListAssetsResponse": {
+        "properties": {
+          "count": {
+            "example": 10,
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_asset.AssetView"
+            },
+            "type": "array"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "internal_handlers_health.Response": {
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "uptime": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "internal_handlers_inventory.SaveRequest": {
+        "properties": {
+          "asset_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "location_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_ids",
+          "location_id"
+        ],
+        "type": "object"
+      },
+      "internal_handlers_locations.ListLocationsResponse": {
+        "properties": {
+          "count": {
+            "example": 10,
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.LocationView"
+            },
+            "type": "array"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "internal_handlers_lookup.BatchLookupRequest": {
+        "properties": {
+          "type": {
+            "description": "e.g., \"rfid\"",
+            "type": "string"
+          },
+          "values": {
+            "description": "EPCs to lookup",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "internal_handlers_users.ListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_user.User"
+            },
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.Pagination"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "APIKey": {
+        "bearerFormat": "JWT",
+        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Create in Settings → API Keys.",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "BearerAuth": {
+        "description": "Session JWT for internal endpoints (platform frontend uses this).",
+        "in": "header",
+        "name": "Authorization",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "email": "support@trakrf.id",
+      "name": "TrakRF Support"
+    },
+    "description": "TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.",
+    "license": {
+      "name": "Business Source License 1.1",
+      "url": "https://github.com/trakrf/platform/blob/main/LICENSE"
+    },
+    "title": "TrakRF Internal API — not for customer use",
+    "version": "v1"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/v1/assets": {
+      "get": {
+        "description": "Get a paginated list of all assets with their tag identifiers",
+        "parameters": [
+          {
+            "description": "Number of assets to return (default: 10)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of assets to skip for pagination (default: 0)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/internal_handlers_assets.ListAssetsResponse"
+                }
+              }
+            },
+            "description": "Paginated list of assets with metadata"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List assets",
+        "tags": [
+          "assets"
+        ]
+      },
+      "post": {
+        "description": "Create a new asset, optionally with tag identifiers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_asset.CreateAssetWithIdentifiersRequest"
+              }
+            }
+          },
+          "description": "Asset to create with optional identifiers",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: asset.AssetView"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid JSON or validation error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/assets/{id}": {
+      "delete": {
+        "description": "Soft delete an asset by ID",
+        "parameters": [
+          {
+            "description": "Asset ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "deleted: true/false"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid asset ID"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete asset",
+        "tags": [
+          "assets"
+        ]
+      },
+      "get": {
+        "description": "Get an asset by ID with its tag identifiers",
+        "parameters": [
+          {
+            "description": "Asset ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: asset.AssetView"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid asset ID"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Asset not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get asset",
+        "tags": [
+          "assets"
+        ]
+      },
+      "put": {
+        "description": "Update an existing asset by ID",
+        "parameters": [
+          {
+            "description": "Asset ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_asset.UpdateAssetRequest"
+              }
+            }
+          },
+          "description": "Asset update data",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: asset.Asset"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid ID, JSON, or validation error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/assets/{id}/identifiers": {
+      "post": {
+        "description": "Add a tag identifier (RFID, BLE, barcode) to an existing asset",
+        "parameters": [
+          {
+            "description": "Asset ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifierRequest"
+              }
+            }
+          },
+          "description": "Tag identifier to add",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: shared.TagIdentifier"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Asset not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Add identifier to asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/assets/{id}/identifiers/{identifierId}": {
+      "delete": {
+        "description": "Remove a tag identifier from an asset",
+        "parameters": [
+          {
+            "description": "Asset ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Identifier ID",
+            "in": "path",
+            "name": "identifierId",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "deleted: true/false"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Asset or identifier not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Remove identifier from asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/locations": {
+      "get": {
+        "description": "Get a paginated list of all locations with their tag identifiers",
+        "parameters": [
+          {
+            "description": "Number of locations to return (default: 10)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of locations to skip for pagination (default: 0)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/internal_handlers_locations.ListLocationsResponse"
+                }
+              }
+            },
+            "description": "Paginated list of locations with metadata"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List locations",
+        "tags": [
+          "locations"
+        ]
+      },
+      "post": {
+        "description": "Create a new location in the hierarchy, optionally with tag identifiers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.CreateLocationWithIdentifiersRequest"
+              }
+            }
+          },
+          "description": "Location to create with optional identifiers",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: location.LocationView"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid JSON or validation error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create location",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/locations/{id}": {
+      "delete": {
+        "description": "Soft delete a location by ID",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "deleted: true/false"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid location ID"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete location",
+        "tags": [
+          "locations"
+        ]
+      },
+      "get": {
+        "description": "Get a location by ID with tag identifiers, optionally including children and ancestors",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Include relations: 'relations' for children+ancestors",
+            "in": "query",
+            "name": "include",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: location.LocationView"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid location ID"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Location not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get location",
+        "tags": [
+          "locations"
+        ]
+      },
+      "put": {
+        "description": "Update an existing location by ID",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.UpdateLocationRequest"
+              }
+            }
+          },
+          "description": "Location update data",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: location.Location"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid ID, JSON, or validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Location not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update location",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/locations/{id}/ancestors": {
+      "get": {
+        "description": "Get all ancestor locations from root to parent",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: []location.Location"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid location ID"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get location ancestors",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/locations/{id}/children": {
+      "get": {
+        "description": "Get immediate children of a location",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: []location.Location"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid location ID"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get location children",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/locations/{id}/descendants": {
+      "get": {
+        "description": "Get all descendant locations (children at all levels)",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: []location.Location"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid location ID"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get location descendants",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/locations/{id}/identifiers": {
+      "post": {
+        "description": "Add a tag identifier (RFID, BLE, barcode) to an existing location",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifierRequest"
+              }
+            }
+          },
+          "description": "Tag identifier to add",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "data: shared.TagIdentifier"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Location not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Add identifier to location",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/locations/{id}/identifiers/{identifierId}": {
+      "delete": {
+        "description": "Remove a tag identifier from a location",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Identifier ID",
+            "in": "path",
+            "name": "identifierId",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "deleted: true/false"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Location or identifier not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Remove identifier from location",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/reports/assets/{id}/history": {
+      "get": {
+        "description": "Get paginated location history for a single asset with duration calculations",
+        "parameters": [
+          {
+            "description": "Asset ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Results per page (default 50, max 100)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination offset (default 0)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter scans after this time (ISO 8601)",
+            "in": "query",
+            "name": "start_date",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter scans before this time (ISO 8601)",
+            "in": "query",
+            "name": "end_date",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_report.AssetHistoryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid asset ID or date format"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Asset not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get asset location history",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/current-locations": {
+      "get": {
+        "description": "Get paginated list of assets with their most recent location",
+        "parameters": [
+          {
+            "description": "Results per page (default 50, max 100)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination offset (default 0)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter by location ID",
+            "in": "query",
+            "name": "location_id",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Search asset name or identifier",
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_report.CurrentLocationsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List current asset locations",
+        "tags": [
+          "reports"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Production",
+      "url": "https://trakrf.id"
+    }
+  ]
+}

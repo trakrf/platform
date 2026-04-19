@@ -59,7 +59,7 @@ func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, or
 
 // @Summary Create location
 // @Description Create a new location in the hierarchy, optionally with tag identifiers
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param request body location.CreateLocationWithIdentifiersRequest true "Location to create with optional identifiers"
@@ -113,7 +113,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Update location
 // @Description Update an existing location by ID
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -168,7 +168,7 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Get location
 // @Description Get a location by ID with tag identifiers, optionally including children and ancestors
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -219,7 +219,7 @@ func (handler *Handler) Get(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Delete location
 // @Description Soft delete a location by ID
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -259,7 +259,7 @@ type ListLocationsResponse struct {
 
 // @Summary List locations
 // @Description Get a paginated list of all locations with their tag identifiers
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param limit query int false "Number of locations to return (default: 10)" minimum(1) default(10)
@@ -320,7 +320,7 @@ func (handler *Handler) List(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Get location ancestors
 // @Description Get all ancestor locations from root to parent
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -352,7 +352,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Get location descendants
 // @Description Get all descendant locations (children at all levels)
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -384,7 +384,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 
 // @Summary Get location children
 // @Description Get immediate children of a location
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -416,7 +416,7 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Add identifier to location
 // @Description Add a tag identifier (RFID, BLE, barcode) to an existing location
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -483,7 +483,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Remove identifier from location
 // @Description Remove a tag identifier from a location
-// @Tags locations
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"

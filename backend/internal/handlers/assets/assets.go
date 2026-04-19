@@ -65,7 +65,7 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 
 // @Summary Create asset
 // @Description Create a new asset, optionally with tag identifiers
-// @Tags assets
+// @Tags assets,public
 // @Accept json
 // @Produce json
 // @Param request body asset.CreateAssetWithIdentifiersRequest true "Asset to create with optional identifiers"
@@ -127,7 +127,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Update asset
 // @Description Update an existing asset by ID
-// @Tags assets
+// @Tags assets,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"
@@ -181,7 +181,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Get asset
 // @Description Get an asset by ID with its tag identifiers
-// @Tags assets
+// @Tags assets,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"
@@ -221,7 +221,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Delete asset
 // @Description Soft delete an asset by ID
-// @Tags assets
+// @Tags assets,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"
@@ -261,7 +261,7 @@ type ListAssetsResponse struct {
 
 // @Summary List assets
 // @Description Get a paginated list of all assets with their tag identifiers
-// @Tags assets
+// @Tags assets,public
 // @Accept json
 // @Produce json
 // @Param limit query int false "Number of assets to return (default: 10)" minimum(1) default(10)
@@ -322,7 +322,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Add identifier to asset
 // @Description Add a tag identifier (RFID, BLE, barcode) to an existing asset
-// @Tags assets
+// @Tags assets,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"
@@ -389,7 +389,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Remove identifier from asset
 // @Description Remove a tag identifier from an asset
-// @Tags assets
+// @Tags assets,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"

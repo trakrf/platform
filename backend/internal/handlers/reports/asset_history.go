@@ -23,7 +23,7 @@ const (
 // GetAssetHistory handles GET /api/v1/reports/assets/{id}/history
 // @Summary Get asset location history
 // @Description Get paginated location history for a single asset with duration calculations
-// @Tags reports
+// @Tags reports,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Asset ID"
