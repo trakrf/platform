@@ -21,23 +21,26 @@ const (
 )
 
 // GetAssetHistory handles GET /api/v1/reports/assets/{id}/history
-// @Summary Get asset location history
-// @Description Get paginated location history for a single asset with duration calculations
-// @Tags reports,public
-// @Accept json
-// @Produce json
-// @Param id path int true "Asset ID"
-// @Param limit query int false "Results per page (default 50, max 100)" minimum(1) maximum(100) default(50)
-// @Param offset query int false "Pagination offset (default 0)" minimum(0) default(0)
-// @Param start_date query string false "Filter scans after this time (ISO 8601)"
-// @Param end_date query string false "Filter scans before this time (ISO 8601)"
-// @Success 200 {object} report.AssetHistoryResponse
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid asset ID or date format"
-// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
-// @Failure 404 {object} modelerrors.ErrorResponse "Asset not found"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/reports/assets/{id}/history [get]
+// @Summary      Get asset location history
+// @Description  Return a paginated timeline of where an asset has been scanned, with duration-at-location calculations.
+// @Description  Defaults to the last 30 days when no date range is supplied. Dates must be RFC 3339 (e.g. 2026-01-15T00:00:00Z).
+// @Tags         reports,public
+// @Accept       json
+// @Produce      json
+// @Param        id          path   int     true   "Asset ID"
+// @Param        limit       query  int     false  "Max results (default 50, max 100)"        minimum(1)  maximum(100)  default(50)
+// @Param        offset      query  int     false  "Pagination offset (default 0)"             minimum(0)  default(0)
+// @Param        start_date  query  string  false  "Include scans on or after this time (RFC 3339)"
+// @Param        end_date    query  string  false  "Include scans on or before this time (RFC 3339)"
+// @Success      200  {object}  report.AssetHistoryResponse
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     APIKey[scans:read]
+// @Router       /api/v1/reports/assets/{id}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 

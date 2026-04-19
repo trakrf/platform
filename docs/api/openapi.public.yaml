@@ -1126,16 +1126,17 @@ paths:
                 - assets
     /api/v1/locations:
         get:
-            description: Get a paginated list of all locations with their tag identifiers
+            description: Return a paginated list of all locations in the organization, each with their associated tag identifiers.
             parameters:
-                - description: 'Number of locations to return (default: 10)'
+                - description: Max results (default 10, max 200)
                   in: query
                   name: limit
                   schema:
                     default: 10
+                    maximum: 200
                     minimum: 1
                     type: integer
-                - description: 'Number of locations to skip for pagination (default: 0)'
+                - description: Pagination offset
                   in: query
                   name: offset
                   schema:
@@ -1149,19 +1150,46 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/internal_handlers_locations.ListLocationsResponse'
                     description: Paginated list of locations with metadata
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - locations:read
             summary: List locations
             tags:
                 - locations
         post:
-            description: Create a new location in the hierarchy, optionally with tag identifiers
+            description: |-
+                Create a new location in the hierarchy, optionally with one or more tag identifiers.
+                Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
             requestBody:
                 content:
                     application/json:
@@ -1183,21 +1211,40 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid JSON or validation error
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Create location
+                - APIKey:
+                    - locations:write
+            summary: Create a location
             tags:
                 - locations
     /api/v1/locations/{id}:
         delete:
-            description: Soft delete a location by ID
+            description: Soft-delete a location by its numeric ID. The location is marked inactive and removed from future list results.
             parameters:
                 - description: Location ID
                   in: path
@@ -1214,25 +1261,46 @@ paths:
                                     type: boolean
                                 type: object
                     description: 'deleted: true/false'
-                "400":
+                "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid location ID
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Delete location
+                - APIKey:
+                    - locations:write
+            summary: Delete a location
             tags:
                 - locations
         get:
-            description: Get a location by ID with tag identifiers, optionally including children and ancestors
+            description: |-
+                Fetch a single location by its numeric ID, including associated tag identifiers.
+                Pass include=relations to also receive the location's ancestors and immediate children in the response.
             parameters:
                 - description: Location ID
                   in: path
@@ -1240,10 +1308,12 @@ paths:
                   required: true
                   schema:
                     type: integer
-                - description: 'Include relations: ''relations'' for children+ancestors'
+                - description: Pass 'relations' to include ancestors and children
                   in: query
                   name: include
                   schema:
+                    enum:
+                        - relations
                     type: string
             responses:
                 "202":
@@ -1253,31 +1323,44 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: 'data: location.LocationView'
-                "400":
+                "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid location ID
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Location not found
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Get location
+                - APIKey:
+                    - locations:read
+            summary: Retrieve a location
             tags:
                 - locations
         put:
-            description: Update an existing location by ID
+            description: Update mutable fields on an existing location. Only fields included in the request body are changed.
             parameters:
                 - description: Location ID
                   in: path
@@ -1290,7 +1373,7 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_location.UpdateLocationRequest'
-                description: Location update data
+                description: Fields to update
                 required: true
                 x-originalParamName: request
             responses:
@@ -1306,27 +1389,52 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid ID, JSON, or validation error
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Location not found
+                    description: not_found
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: conflict
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Update location
+                - APIKey:
+                    - locations:write
+            summary: Update a location
             tags:
                 - locations
     /api/v1/locations/{id}/ancestors:
         get:
-            description: Get all ancestor locations from root to parent
+            description: Return all ancestor locations from the root of the hierarchy down to the immediate parent of the specified location.
             parameters:
                 - description: Location ID
                   in: path
@@ -1347,21 +1455,40 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid location ID
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Get location ancestors
+                - APIKey:
+                    - locations:read
+            summary: List location ancestors
             tags:
                 - locations
     /api/v1/locations/{id}/children:
         get:
-            description: Get immediate children of a location
+            description: Return the immediate child locations of the specified location (one level deep only).
             parameters:
                 - description: Location ID
                   in: path
@@ -1382,21 +1509,40 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid location ID
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Get location children
+                - APIKey:
+                    - locations:read
+            summary: List location children
             tags:
                 - locations
     /api/v1/locations/{id}/descendants:
         get:
-            description: Get all descendant locations (children at all levels)
+            description: Return all descendant locations (children, grandchildren, etc.) beneath the specified location in the hierarchy.
             parameters:
                 - description: Location ID
                   in: path
@@ -1417,21 +1563,42 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid location ID
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Get location descendants
+                - APIKey:
+                    - locations:read
+            summary: List location descendants
             tags:
                 - locations
     /api/v1/locations/{id}/identifiers:
         post:
-            description: Add a tag identifier (RFID, BLE, barcode) to an existing location
+            description: |-
+                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
+                The identifier must be unique within the organization.
             parameters:
                 - description: Location ID
                   in: path
@@ -1444,7 +1611,7 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_shared.TagIdentifierRequest'
-                description: Tag identifier to add
+                description: Tag identifier to attach
                 required: true
                 x-originalParamName: request
             responses:
@@ -1460,27 +1627,46 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid request
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Location not found
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Add identifier to location
+                - APIKey:
+                    - locations:write
+            summary: Add an identifier to a location
             tags:
                 - locations
     /api/v1/locations/{id}/identifiers/{identifierId}:
         delete:
-            description: Remove a tag identifier from a location
+            description: Detach a tag identifier from a location by its identifier record ID.
             parameters:
                 - description: Location ID
                   in: path
@@ -1508,27 +1694,48 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid request
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Location or identifier not found
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
-            summary: Remove identifier from location
+                - APIKey:
+                    - locations:write
+            summary: Remove an identifier from a location
             tags:
                 - locations
     /api/v1/reports/assets/{id}/history:
         get:
-            description: Get paginated location history for a single asset with duration calculations
+            description: |-
+                Return a paginated timeline of where an asset has been scanned, with duration-at-location calculations.
+                Defaults to the last 30 days when no date range is supplied. Dates must be RFC 3339 (e.g. 2026-01-15T00:00:00Z).
             parameters:
                 - description: Asset ID
                   in: path
@@ -1536,7 +1743,7 @@ paths:
                   required: true
                   schema:
                     type: integer
-                - description: Results per page (default 50, max 100)
+                - description: Max results (default 50, max 100)
                   in: query
                   name: limit
                   schema:
@@ -1551,12 +1758,12 @@ paths:
                     default: 0
                     minimum: 0
                     type: integer
-                - description: Filter scans after this time (ISO 8601)
+                - description: Include scans on or after this time (RFC 3339)
                   in: query
                   name: start_date
                   schema:
                     type: string
-                - description: Filter scans before this time (ISO 8601)
+                - description: Include scans on or before this time (RFC 3339)
                   in: query
                   name: end_date
                   schema:
@@ -1573,35 +1780,50 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Invalid asset ID or date format
+                    description: bad_request
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Unauthorized
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Asset not found
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - scans:read
             summary: Get asset location history
             tags:
                 - reports
     /api/v1/reports/current-locations:
         get:
-            description: Get paginated list of assets with their most recent location
+            description: |-
+                Return a paginated snapshot of every asset paired with its most recent scan location.
+                Optionally filter by a specific location or search by asset name/identifier.
             parameters:
-                - description: Results per page (default 50, max 100)
+                - description: Max results (default 50, max 100)
                   in: query
                   name: limit
                   schema:
@@ -1616,12 +1838,12 @@ paths:
                     default: 0
                     minimum: 0
                     type: integer
-                - description: Filter by location ID
+                - description: Filter to assets last seen at this location ID
                   in: query
                   name: location_id
                   schema:
                     type: integer
-                - description: Search asset name or identifier
+                - description: Full-text match on asset name or identifier
                   in: query
                   name: search
                   schema:
@@ -1633,20 +1855,39 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_report.CurrentLocationsResponse'
                     description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: bad_request
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Unauthorized
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/github_com_trakrf_platform_backend_internal_models_errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - scans:read
             summary: List current asset locations
             tags:
                 - reports
