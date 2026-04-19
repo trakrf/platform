@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ScopeSelector } from './ScopeSelector';
+
+afterEach(cleanup);
 
 describe('ScopeSelector', () => {
   it('emits assets:read for "Read" on Assets', () => {
