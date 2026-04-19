@@ -114,6 +114,11 @@ func getMigrationsPath(t *testing.T) string {
 		filepath.Join(wd, "..", "..", "database", "migrations"),
 		filepath.Join(wd, "..", "..", "..", "database", "migrations"),
 		filepath.Join(wd, "..", "..", "..", "..", "database", "migrations"),
+		// backend/migrations layout (no database/ subdirectory)
+		filepath.Join(wd, "..", "migrations"),
+		filepath.Join(wd, "..", "..", "migrations"),
+		filepath.Join(wd, "..", "..", "..", "migrations"),
+		filepath.Join(wd, "..", "..", "..", "..", "migrations"),
 	}
 
 	for _, path := range possiblePaths {
