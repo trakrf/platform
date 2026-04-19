@@ -82,6 +82,9 @@ func setupRouter(
 		lookupHandler.RegisterRoutes(r)
 	})
 
+	// Public API — API-key auth (TRA-393 canary; TRA-396 adds the rest)
+	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
+
 	if os.Getenv("APP_ENV") != "production" {
 		testHandler.RegisterRoutes(r)
 	}
