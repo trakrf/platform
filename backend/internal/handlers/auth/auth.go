@@ -31,7 +31,7 @@ func NewHandler(service *authservice.Service) *Handler {
 
 // @Summary User signup
 // @Description Register new user with auto-created personal organization
-// @Tags auth
+// @Tags auth,internal
 // @Accept json
 // @Produce json
 // @Param request body auth.SignupRequest true "Signup request (email and password only)"
@@ -102,7 +102,7 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 // @Summary User login
 // @Description Authenticate and receive JWT token
-// @Tags auth
+// @Tags auth,internal
 // @Accept json
 // @Produce json
 // @Param request body auth.LoginRequest true "Login credentials"
@@ -142,7 +142,7 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Request password reset
 // @Description Send a password reset email if account exists
-// @Tags auth
+// @Tags auth,internal
 // @Accept json
 // @Produce json
 // @Param request body auth.ForgotPasswordRequest true "Email address"
@@ -174,7 +174,7 @@ func (handler *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Reset password
 // @Description Reset password using a valid token
-// @Tags auth
+// @Tags auth,internal
 // @Accept json
 // @Produce json
 // @Param request body auth.ResetPasswordRequest true "Token and new password"
@@ -215,7 +215,7 @@ func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Accept organization invitation
 // @Description Accept an invitation to join an organization using the token
-// @Tags auth
+// @Tags auth,internal
 // @Accept json
 // @Produce json
 // @Param request body organization.AcceptInvitationRequest true "Invitation token"
@@ -286,7 +286,7 @@ func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Get invitation info
 // @Description Get invitation details (org name, role) without authentication
-// @Tags auth
+// @Tags auth,internal
 // @Produce json
 // @Param token query string true "Invitation token"
 // @Success 200 {object} map[string]any "data: auth.InvitationInfoResponse"

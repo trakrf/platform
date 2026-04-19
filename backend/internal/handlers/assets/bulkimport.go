@@ -16,7 +16,7 @@ import (
 
 // @Summary Get bulk import job status
 // @Description Retrieve the status of a bulk import job by ID
-// @Tags bulk-import
+// @Tags bulk-import,internal
 // @Accept json
 // @Produce json
 // @Param jobId path int true "Job ID"
@@ -82,7 +82,7 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Upload CSV for bulk asset creation
 // @Description Accepts CSV file and creates async job. Returns immediately with job ID.
-// @Tags bulk-import
+// @Tags bulk-import,internal
 // @Accept multipart/form-data
 // @Produce json
 // @Param file formData file true "CSV file with assets"
