@@ -33,7 +33,7 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
 # Install swag CLI for generating Swagger docs
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
 # Copy backend source
 COPY backend/ .

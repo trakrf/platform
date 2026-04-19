@@ -10,7 +10,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Install swag CLI for the pre-build spec generation
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
 # Copy source code
 COPY . .
@@ -38,7 +38,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Install swag CLI for spec generation
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
 # Copy source and build
 COPY . .
