@@ -76,3 +76,9 @@ type LocationViewListResponse struct {
 	Data       []LocationView    `json:"data"`
 	Pagination shared.Pagination `json:"pagination"`
 }
+
+// LocationWithParent is LocationView plus the resolved parent's natural key.
+type LocationWithParent struct {
+	LocationView
+	ParentIdentifier *string `json:"parent_identifier,omitempty"`
+}

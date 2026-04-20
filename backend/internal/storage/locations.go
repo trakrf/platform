@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -521,6 +522,54 @@ func parseLocationWithIdentifiersError(err error, identifier string) error {
 	}
 
 	return fmt.Errorf("failed to create location with identifiers: %w", err)
+}
+
+// GetLocationByIdentifier returns the live location with the given natural key
+// for the given org, plus the parent location's natural key. Returns (nil, nil)
+// if no match.
+func (s *Storage) GetLocationByIdentifier(
+	ctx context.Context, orgID int, identifier string,
+) (*location.LocationWithParent, error) {
+	query := `
+		SELECT
+			l.id, l.org_id, l.name, l.identifier, l.parent_location_id,
+			l.path, l.depth, l.description, l.valid_from, l.valid_to,
+			l.is_active, l.created_at, l.updated_at, l.deleted_at,
+			p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.deleted_at IS NULL
+		WHERE l.org_id = $1 AND l.identifier = $2 AND l.deleted_at IS NULL
+		LIMIT 1
+	`
+	var (
+		loc    location.Location
+		parIdt *string
+	)
+	err := s.pool.QueryRow(ctx, query, orgID, identifier).Scan(
+		&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+		&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+		&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+		&parIdt,
+	)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get location by identifier: %w", err)
+	}
+
+	identifiers, err := s.GetIdentifiersByLocationID(ctx, loc.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &location.LocationWithParent{
+		LocationView: location.LocationView{
+			Location:    loc,
+			Identifiers: identifiers,
+		},
+		ParentIdentifier: parIdt,
+	}, nil
 }
 
 func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any, error) {
