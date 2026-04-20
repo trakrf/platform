@@ -2,6 +2,7 @@ package orgs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -150,11 +151,16 @@ func (s *Service) GetUserProfile(ctx context.Context, userID int) (*organization
 }
 
 // SetCurrentOrg updates the user's last_org_id after verifying membership.
+// Returns an error wrapping storage.ErrOrgUserNotFound when the user is not a
+// member of the requested org so callers can distinguish 403 from 500.
 func (s *Service) SetCurrentOrg(ctx context.Context, userID, orgID int) error {
 	// Verify user is a member
 	_, err := s.storage.GetUserOrgRole(ctx, userID, orgID)
 	if err != nil {
-		return fmt.Errorf("you are not a member of this organization")
+		if errors.Is(err, storage.ErrOrgUserNotFound) {
+			return fmt.Errorf("%w", storage.ErrOrgUserNotFound)
+		}
+		return fmt.Errorf("verify org membership: %w", err)
 	}
 	return s.storage.UpdateUserLastOrg(ctx, userID, orgID)
 }

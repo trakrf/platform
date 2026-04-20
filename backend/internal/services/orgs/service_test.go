@@ -1,9 +1,16 @@
 package orgs
 
 import (
+	"context"
+	stderrors "errors"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/pashagolub/pgxmock/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/trakrf/platform/backend/internal/storage"
 )
 
 func TestMangleFormat(t *testing.T) {
@@ -72,4 +79,38 @@ func TestMangledNamePreservesOriginal(t *testing.T) {
 	if actualSuffix != expectedSuffix {
 		t.Errorf("original name not preserved: expected suffix %q, got %q", expectedSuffix, actualSuffix)
 	}
+}
+
+// TRA-319: SetCurrentOrg must surface storage.ErrOrgUserNotFound via errors.Is
+// so the handler can distinguish "not a member" (403) from generic failures (500).
+func TestSetCurrentOrg_NotMember_WrapsSentinel(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	t.Cleanup(mock.Close)
+
+	mock.ExpectQuery(`FROM trakrf.org_users`).
+		WithArgs(1, 99).
+		WillReturnError(storage.ErrOrgUserNotFound)
+
+	svc := &Service{storage: storage.NewWithPool(mock)}
+	err = svc.SetCurrentOrg(context.Background(), 1, 99)
+	require.Error(t, err)
+	assert.True(t, stderrors.Is(err, storage.ErrOrgUserNotFound),
+		"expected error to wrap storage.ErrOrgUserNotFound, got: %v", err)
+}
+
+func TestSetCurrentOrg_InternalStorageError_DoesNotLookLikeNotMember(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	t.Cleanup(mock.Close)
+
+	mock.ExpectQuery(`FROM trakrf.org_users`).
+		WithArgs(1, 99).
+		WillReturnError(fmt.Errorf("connection refused"))
+
+	svc := &Service{storage: storage.NewWithPool(mock)}
+	err = svc.SetCurrentOrg(context.Background(), 1, 99)
+	require.Error(t, err)
+	assert.False(t, stderrors.Is(err, storage.ErrOrgUserNotFound),
+		"generic DB error must not masquerade as membership error; got: %v", err)
 }

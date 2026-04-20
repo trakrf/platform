@@ -2,6 +2,7 @@ package orgs
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -9,6 +10,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/organization"
+	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -55,8 +57,13 @@ func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.SetCurrentOrg(r.Context(), claims.UserID, request.OrgID); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgNotMember, "", middleware.GetRequestID(r.Context()))
+		if errors.Is(err, storage.ErrOrgUserNotFound) {
+			httputil.WriteJSONError(w, r, http.StatusForbidden, modelerrors.ErrForbidden,
+				apierrors.OrgNotMember, "", middleware.GetRequestID(r.Context()))
+			return
+		}
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.OrgNotMember, err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
