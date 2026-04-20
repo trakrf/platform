@@ -61,7 +61,7 @@ func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, or
 // @Summary      Create a location
 // @Description  Create a new location in the hierarchy, optionally with one or more tag identifiers.
 // @Description  Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
-// @Tags         locations,internal
+// @Tags         locations,public
 // @Accept       json
 // @Produce      json
 // @Param        request  body  location.CreateLocationWithIdentifiersRequest  true  "Location to create with optional identifiers"
@@ -122,7 +122,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // @Summary      Update a location
 // @Description  Update mutable fields on an existing location. Only fields included in the request body are changed.
-// @Tags         locations,internal
+// @Tags         locations,public
 // @Accept       json
 // @Produce      json
 // @Param        id       path  int                              true  "Location ID"
@@ -192,7 +192,7 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Delete location
 // @Description Soft delete a location by ID
-// @Tags locations,internal
+// @Tags locations,public
 // @Accept json
 // @Produce json
 // @Param id path int true "Location ID"
@@ -513,7 +513,7 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 // @Summary      Add an identifier to a location
 // @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
 // @Description  The identifier must be unique within the organization.
-// @Tags         locations,internal
+// @Tags         locations,public
 // @Accept       json
 // @Produce      json
 // @Param        id       path  int                            true  "Location ID"
@@ -582,7 +582,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 
 // @Summary      Remove an identifier from a location
 // @Description  Detach a tag identifier from a location by its identifier record ID.
-// @Tags         locations,internal
+// @Tags         locations,public
 // @Accept       json
 // @Produce      json
 // @Param        id            path  int  true  "Location ID"
