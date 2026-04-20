@@ -10,14 +10,15 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
-const apiKeyIssuer = "trakrf-api-key"
-
-// EitherAuth dispatches a request to APIKeyAuth or session Auth based on the
-// JWT's "iss" claim. Public read routes use this so the frontend (session) and
-// external API-key callers share one handler registration.
+// EitherAuth dispatches a request to APIKeyAuth or session Auth based on a
+// signature-verified classification of the JWT. Public read routes use this
+// so the frontend (session) and external API-key callers share one handler
+// registration.
 //
-// The peek at iss is unverified; the delegated chain runs full signature +
-// expiry + revocation validation. Peek authorizes nothing on its own.
+// Classification verifies the HMAC signature against the shared secret before
+// reading the "iss" claim. The dispatched chain then runs full claim
+// validation (expiry, issuer, audience) and — for API-key tokens — the DB
+// checks for revocation, expiry, and last-used bump.
 func EitherAuth(store *storage.Storage) func(http.Handler) http.Handler {
 	apiChain := APIKeyAuth(store)
 
@@ -38,17 +39,17 @@ func EitherAuth(store *storage.Storage) func(http.Handler) http.Handler {
 				return
 			}
 
-			iss, err := jwt.PeekIssuer(parts[1])
+			kind, err := jwt.ClassifyToken(parts[1])
 			if err != nil {
 				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid or malformed token", "", reqID)
+					errors.ErrUnauthorized, "Invalid or expired token", "", reqID)
 				return
 			}
 
-			switch iss {
-			case apiKeyIssuer:
+			switch kind {
+			case jwt.TokenKindAPIKey:
 				apiChain(next).ServeHTTP(w, r)
-			case "":
+			case jwt.TokenKindSession:
 				Auth(next).ServeHTTP(w, r)
 			default:
 				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
