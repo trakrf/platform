@@ -66,7 +66,7 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 // @Summary      Create an asset
 // @Description  Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
 // @Description  Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
-// @Tags         assets,public
+// @Tags         assets,internal
 // @Accept       json
 // @Produce      json
 // @Param        request  body  asset.CreateAssetWithIdentifiersRequest  true  "Asset to create with optional identifiers"
@@ -132,7 +132,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // @Summary      Update an asset
 // @Description  Update mutable fields on an existing asset. Only fields included in the request body are changed.
-// @Tags         assets,public
+// @Tags         assets,internal
 // @Accept       json
 // @Produce      json
 // @Param        id       path  int                         true  "Asset ID"
@@ -237,7 +237,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 
 // @Summary      Delete an asset
 // @Description  Soft-delete an asset by its numeric ID. The asset is marked inactive and removed from future list results.
-// @Tags         assets,public
+// @Tags         assets,internal
 // @Accept       json
 // @Produce      json
 // @Param        id  path  int  true  "Asset ID"
@@ -410,7 +410,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 // @Summary      Add an identifier to an asset
 // @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
 // @Description  The identifier must be unique within the organization.
-// @Tags         assets,public
+// @Tags         assets,internal
 // @Accept       json
 // @Produce      json
 // @Param        id       path  int                            true  "Asset ID"
@@ -480,7 +480,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 
 // @Summary      Remove an identifier from an asset
 // @Description  Detach a tag identifier from an asset by its identifier record ID.
-// @Tags         assets,public
+// @Tags         assets,internal
 // @Accept       json
 // @Produce      json
 // @Param        id            path  int  true  "Asset ID"

@@ -216,3 +216,53 @@ func TestGetAssetHistory_ByIdentifier(t *testing.T) {
 	assert.True(t, locations["hist-loc-1"] || locations["hist-loc-2"],
 		"expected at least one of hist-loc-1 or hist-loc-2 in history")
 }
+
+// TestSessionJWT_PassesThroughRequireScope codifies the policy that a valid
+// session JWT with no api-key scopes reaches both scan-class endpoints
+// (/api/v1/locations/current, /api/v1/assets/{identifier}/history) through
+// EitherAuth + RequireScope. RequireScope is intentionally an API-key-only
+// gate; session access is governed elsewhere. A future refactor that tightens
+// session checks inside RequireScope would silently regress the frontend.
+func TestSessionJWT_PassesThroughRequireScope(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-reports")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	// Seed minimum data so the handlers don't bail on empty results.
+	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "sess-loc", Name: "SL", Path: "sess-loc",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	a, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "sess-asset", Name: "SA", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	insertAssetScan(t, pool, orgID, a.ID, loc.ID, time.Now())
+
+	sessToken, err := jwt.Generate(1, "sess-passthrough@t.com", &orgID)
+	require.NoError(t, err)
+
+	r := buildReportsPublicRouter(store)
+
+	// /locations/current — scans:read gate; session must pass through.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/current", nil)
+	req.Header.Set("Authorization", "Bearer "+sessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code,
+		"session JWT must pass through RequireScope on /locations/current; got %d %s",
+		w.Code, w.Body.String())
+
+	// /assets/{identifier}/history — scans:read gate; session must pass through.
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/assets/sess-asset/history", nil)
+	req.Header.Set("Authorization", "Bearer "+sessToken)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code,
+		"session JWT must pass through RequireScope on /assets/{identifier}/history; got %d %s",
+		w.Code, w.Body.String())
+}

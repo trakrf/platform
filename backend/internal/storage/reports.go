@@ -94,8 +94,8 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		)
 		SELECT COUNT(*)
 		FROM latest_scans ls
-		JOIN trakrf.assets    a ON a.id = ls.asset_id
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.deleted_at IS NULL
+		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
@@ -143,8 +143,8 @@ func buildCurrentLocationsQueryDistinctOn() string {
 			l.identifier AS location_identifier,
 			ls.last_seen
 		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.deleted_at IS NULL
+		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
@@ -176,8 +176,8 @@ func buildCurrentLocationsQueryTimescale() string {
 			l.identifier AS location_identifier,
 			ls.last_seen
 		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.deleted_at IS NULL
+		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
@@ -200,7 +200,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 				l.identifier AS location_identifier,
 				LEAD(s.timestamp) OVER (ORDER BY s.timestamp) AS next_timestamp
 			FROM trakrf.asset_scans s
-			LEFT JOIN trakrf.locations l ON l.id = s.location_id
+			LEFT JOIN trakrf.locations l ON l.id = s.location_id AND l.org_id = $2 AND l.deleted_at IS NULL
 			WHERE s.asset_id = $1
 			  AND s.org_id = $2
 			  AND ($3::timestamptz IS NULL OR s.timestamp >= $3)

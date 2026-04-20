@@ -537,7 +537,7 @@ func (s *Storage) GetLocationByIdentifier(
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
 			p.identifier
 		FROM trakrf.locations l
-		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.deleted_at IS NULL
+		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
 		WHERE l.org_id = $1 AND l.identifier = $2 AND l.deleted_at IS NULL
 		LIMIT 1
 	`
@@ -589,7 +589,7 @@ func (s *Storage) ListLocationsFiltered(
 			p.identifier
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
 		WHERE %s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
@@ -635,7 +635,7 @@ func (s *Storage) CountLocationsFiltered(
 		SELECT COUNT(*)
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
 		WHERE %s
 	`, where)
 

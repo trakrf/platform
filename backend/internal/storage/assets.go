@@ -523,7 +523,7 @@ func (s *Storage) GetAssetByIdentifier(
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.identifier
 		FROM trakrf.assets a
-		LEFT JOIN trakrf.locations l ON l.id = a.current_location_id AND l.deleted_at IS NULL
+		LEFT JOIN trakrf.locations l ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE a.org_id = $1 AND a.identifier = $2 AND a.deleted_at IS NULL
 		LIMIT 1
 	`
@@ -574,7 +574,7 @@ func (s *Storage) ListAssetsFiltered(
 			l.identifier
 		FROM trakrf.assets a
 		LEFT JOIN trakrf.locations l
-			ON l.id = a.current_location_id AND l.deleted_at IS NULL
+			ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE %s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
@@ -641,7 +641,7 @@ func (s *Storage) CountAssetsFiltered(
 		SELECT COUNT(*)
 		FROM trakrf.assets a
 		LEFT JOIN trakrf.locations l
-			ON l.id = a.current_location_id AND l.deleted_at IS NULL
+			ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE %s
 	`, where)
 

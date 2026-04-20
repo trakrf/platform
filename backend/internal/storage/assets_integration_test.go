@@ -165,3 +165,58 @@ func TestListAssetsFiltered_Q(t *testing.T) {
 	require.Len(t, items, 1)
 	assert.Equal(t, "forklift-1", items[0].Identifier)
 }
+
+// TestGetAssetByIdentifier_CrossOrgLocationFenced defends the cross-tenant
+// LEFT JOIN leak. An asset in org A whose current_location_id points at a
+// location in org B (possible in theory via admin error, corrupt data, or a
+// future cross-org move) must not expose the wrong-org location's natural
+// identifier in the public response. The query's org fence on the LEFT JOIN
+// ensures the current_location comes back as nil, not as the org B's name.
+func TestGetAssetByIdentifier_CrossOrgLocationFenced(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgA := testutil.CreateTestAccount(t, pool)
+
+	var orgB int
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.organizations (name, identifier) VALUES ($1, $2) RETURNING id`,
+		"cross-org-test", "cross-org-test",
+	).Scan(&orgB)
+	require.NoError(t, err)
+
+	// Location lives in org B.
+	locB, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgB, Identifier: "org-b-location", Name: "B", Path: "org-b-location",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Asset lives in org A but its current_location_id points at org B's location.
+	// CreateAsset enforces org context via RLS, so seed directly to simulate the
+	// corrupted / cross-org state the fence defends against.
+	var assetID int
+	err = pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.assets
+			(org_id, identifier, name, type, description, current_location_id,
+			 valid_from, metadata, is_active, created_at, updated_at)
+		 VALUES ($1, 'leaker', 'A', 'asset', '', $2, now(), '{}'::jsonb, true, now(), now())
+		 RETURNING id`,
+		orgA, locB.ID,
+	).Scan(&assetID)
+	require.NoError(t, err)
+
+	view, err := store.GetAssetByIdentifier(context.Background(), orgA, "leaker")
+	require.NoError(t, err)
+	require.NotNil(t, view)
+	assert.Equal(t, "leaker", view.Identifier)
+	assert.Nil(t, view.CurrentLocationIdentifier,
+		"LEFT JOIN must be fenced by org_id — wrong-org locations must not appear in current_location")
+
+	// List variant: same asset should appear with nil current_location.
+	items, err := store.ListAssetsFiltered(context.Background(), orgA, asset.ListFilter{Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Nil(t, items[0].CurrentLocationIdentifier)
+}
