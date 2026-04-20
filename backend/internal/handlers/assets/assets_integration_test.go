@@ -325,12 +325,9 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 
 	handler.DeleteAsset(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
-
-	var response map[string]bool
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.False(t, response["deleted"])
+	// Nonexistent asset now returns 404 (not 202 deleted=false) so clients can
+	// distinguish "already gone / never existed" from "successfully deleted".
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestListAssets(t *testing.T) {

@@ -120,6 +120,40 @@ func TestUpdateAsset_CrossOrg_Returns404(t *testing.T) {
 	assert.Equal(t, "A", fetched.Name)
 }
 
+func TestDeleteAsset_CrossOrg_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-delete-cross-org")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	// orgA owns the asset; orgB's API key attempts to delete.
+	orgA, _ := seedOrgAndKey(t, pool, store, "orgA-assets-write-delete", []string{"assets:write"})
+	_, tokenB := seedOrgAndKey(t, pool, store, "orgB-assets-write-delete", []string{"assets:write"})
+
+	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgA, Identifier: "orgA-delete-target", Name: "Survivor", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/"+strconv.Itoa(asset.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+tokenB)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Storage returns deleted=false for cross-org; handler must map that to 404,
+	// NOT 202 {"deleted":false}.
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	// Confirm the asset survives.
+	fetched, err := store.GetAssetByID(context.Background(), &asset.ID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched, "asset must survive cross-org DELETE attempt")
+	assert.Equal(t, "Survivor", fetched.Name)
+}
+
 func TestDeleteAsset_APIKey_HappyPath(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-assets-write-delete-happy")
 	store, cleanup := testutil.SetupTestDB(t)

@@ -119,6 +119,40 @@ func TestUpdateLocation_CrossOrg_Returns404(t *testing.T) {
 	assert.Equal(t, "A", fetched.Name)
 }
 
+func TestDeleteLocation_CrossOrg_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-write-delete-cross-org")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	// orgA owns the location; orgB's API key attempts to delete.
+	orgA, _ := seedLocOrgAndKey(t, pool, store, "orgA-locations-write-delete", []string{"locations:write"})
+	_, tokenB := seedLocOrgAndKey(t, pool, store, "orgB-locations-write-delete", []string{"locations:write"})
+
+	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgA, Identifier: "orgA-loc-delete", Name: "Survivor", Path: "orgA-loc-delete",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/"+strconv.Itoa(loc.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+tokenB)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Storage returns deleted=false for cross-org; handler must map that to 404,
+	// NOT 202 {"deleted":false}.
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	// Confirm the location survives.
+	fetched, err := store.GetLocationByID(context.Background(), loc.ID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched, "location must survive cross-org DELETE attempt")
+	assert.Equal(t, "Survivor", fetched.Name)
+}
+
 func TestDeleteLocation_APIKey_HappyPath(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations-write-delete-happy")
 	store, cleanup := testutil.SetupTestDB(t)

@@ -227,6 +227,12 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if !deleted {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
 }
 
