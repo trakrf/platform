@@ -48,6 +48,26 @@ func TestPartition_FailsOnBothTags(t *testing.T) {
 	assert.Contains(t, err.Error(), "both \"public\" and \"internal\"")
 }
 
+// TestPartition_PublicAndInternalHaveIndependentInfo guards cloneDocShell's
+// Info deep-copy (see dce1f58). A shallow copy would share *Info between the
+// public and internal shells; postprocessInternal would then overwrite the
+// title postprocessPublic just set.
+func TestPartition_PublicAndInternalHaveIndependentInfo(t *testing.T) {
+	doc := loadAndConvert(t, "testdata/minimal-with-internal-v2.json")
+	public, internal, err := partition(doc)
+	require.NoError(t, err)
+
+	postprocessPublic(public)
+	postprocessInternal(internal)
+
+	assert.Equal(t, "TrakRF API", public.Info.Title)
+	assert.Equal(t, "TrakRF Internal API — not for customer use", internal.Info.Title)
+	require.NotEmpty(t, public.Servers)
+	require.NotEmpty(t, internal.Servers)
+	assert.Equal(t, "https://app.trakrf.id", public.Servers[0].URL)
+	assert.Equal(t, "http://localhost:8080", internal.Servers[0].URL)
+}
+
 func TestPartition_PrunesUnreferencedPublicSchemas(t *testing.T) {
 	desc := "OK"
 	publicResp := func(ref string) *openapi3.ResponseRef {

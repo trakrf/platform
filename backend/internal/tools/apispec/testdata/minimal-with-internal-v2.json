@@ -1,0 +1,39 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Test", "version": "v1" },
+  "host": "example.com",
+  "basePath": "/api/v1",
+  "schemes": ["https"],
+  "securityDefinitions": {
+    "APIKey": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "Authorization",
+      "description": "TrakRF API key (JWT)."
+    }
+  },
+  "paths": {
+    "/assets": {
+      "get": {
+        "summary": "List assets",
+        "description": "Paginated list of assets.",
+        "tags": ["assets", "public"],
+        "security": [{"APIKey": []}],
+        "responses": {
+          "200": { "description": "OK", "schema": { "type": "object" } }
+        }
+      }
+    },
+    "/admin/audit": {
+      "get": {
+        "summary": "Audit log",
+        "description": "Internal audit log.",
+        "tags": ["admin", "internal"],
+        "security": [{"APIKey": []}],
+        "responses": {
+          "200": { "description": "OK", "schema": { "type": "object" } }
+        }
+      }
+    }
+  }
+}
