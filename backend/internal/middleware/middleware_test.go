@@ -264,3 +264,70 @@ func TestAuth_InvalidToken_Respond401(t *testing.T) {
 		t.Errorf("detail = %q, want canonical invalid-token string", resp.Error.Detail)
 	}
 }
+
+// APIKeyAuth unit tests (no DB required for early-exit branches).
+
+func TestAPIKey_MissingHeader_Respond401(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	h := APIKeyAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("should not reach handler") }))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/x", nil)
+	h.ServeHTTP(w, r)
+
+	if w.Code != 401 {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+	if w.Header().Get("WWW-Authenticate") != `Bearer realm="trakrf-api"` {
+		t.Errorf("missing/wrong WWW-Authenticate header: %q", w.Header().Get("WWW-Authenticate"))
+	}
+	var resp apierrors.ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Error.Title != "Authentication required" {
+		t.Errorf("title = %q, want %q", resp.Error.Title, "Authentication required")
+	}
+	if resp.Error.Detail != "Authorization header is required" {
+		t.Errorf("detail = %q, want canonical missing-header string", resp.Error.Detail)
+	}
+}
+
+func TestAPIKey_MalformedHeader_Respond401(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	h := APIKeyAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("should not reach handler") }))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/x", nil)
+	r.Header.Set("Authorization", "Basic abc123")
+	h.ServeHTTP(w, r)
+
+	if w.Code != 401 {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+	if w.Header().Get("WWW-Authenticate") != `Bearer realm="trakrf-api"` {
+		t.Errorf("missing/wrong WWW-Authenticate header: %q", w.Header().Get("WWW-Authenticate"))
+	}
+	var resp apierrors.ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Error.Detail != "Authorization header must be Bearer <token>" {
+		t.Errorf("detail = %q, want canonical malformed-header string", resp.Error.Detail)
+	}
+}
+
+func TestAPIKey_InvalidJWT_Respond401(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	h := APIKeyAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("should not reach handler") }))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/x", nil)
+	r.Header.Set("Authorization", "Bearer not-a-valid-jwt")
+	h.ServeHTTP(w, r)
+
+	if w.Code != 401 {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+	if w.Header().Get("WWW-Authenticate") != `Bearer realm="trakrf-api"` {
+		t.Errorf("missing/wrong WWW-Authenticate header: %q", w.Header().Get("WWW-Authenticate"))
+	}
+	var resp apierrors.ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Error.Detail != "Bearer token is invalid or expired" {
+		t.Errorf("detail = %q, want canonical invalid-token string", resp.Error.Detail)
+	}
+}

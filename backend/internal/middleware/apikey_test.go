@@ -77,6 +77,11 @@ func TestAPIKeyAuth_MissingHeader(t *testing.T) {
 	middleware.APIKeyAuth(store)(http.HandlerFunc(protectedHandler)).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, `Bearer realm="trakrf-api"`, w.Header().Get("WWW-Authenticate"))
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	errObj, _ := resp["error"].(map[string]any)
+	assert.Equal(t, "Authorization header is required", errObj["detail"])
 }
 
 func TestAPIKeyAuth_RejectsSessionToken(t *testing.T) {
@@ -111,6 +116,11 @@ func TestAPIKeyAuth_RevokedKeyRejected(t *testing.T) {
 	middleware.APIKeyAuth(store)(http.HandlerFunc(protectedHandler)).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, `Bearer realm="trakrf-api"`, w.Header().Get("WWW-Authenticate"))
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	errObj, _ := resp["error"].(map[string]any)
+	assert.Equal(t, "API key has been revoked", errObj["detail"])
 }
 
 func TestAPIKeyAuth_DBExpiredKeyRejected(t *testing.T) {
@@ -144,6 +154,11 @@ func TestAPIKeyAuth_DBExpiredKeyRejected(t *testing.T) {
 	middleware.APIKeyAuth(store)(http.HandlerFunc(protectedHandler)).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, `Bearer realm="trakrf-api"`, w.Header().Get("WWW-Authenticate"))
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	errObj, _ := resp["error"].(map[string]any)
+	assert.Equal(t, "API key has expired", errObj["detail"])
 }
 
 func TestAPIKeyAuth_LastUsedBumped(t *testing.T) {
