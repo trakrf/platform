@@ -446,17 +446,11 @@
           }
         },
         "security": [
-
           {
-
             "APIKey": [
-
               "assets:read"
-
             ]
-
           }
-
         ],
         "summary": "List assets",
         "tags": [
@@ -668,17 +662,11 @@
           }
         },
         "security": [
-
           {
-
             "APIKey": [
-
               "assets:read"
-
             ]
-
           }
-
         ],
         "summary": "Get asset by natural identifier",
         "tags": [
@@ -814,17 +802,11 @@
           }
         },
         "security": [
-
           {
-
             "APIKey": [
-
               "scans:read"
-
             ]
-
           }
-
         ],
         "summary": "Asset movement history",
         "tags": [
@@ -1452,17 +1434,11 @@
           }
         },
         "security": [
-
           {
-
             "APIKey": [
-
               "locations:read"
-
             ]
-
           }
-
         ],
         "summary": "List locations",
         "tags": [
@@ -1686,17 +1662,11 @@
           }
         },
         "security": [
-
           {
-
             "APIKey": [
-
               "scans:read"
-
             ]
-
           }
-
         ],
         "summary": "List current asset locations",
         "tags": [
@@ -1809,17 +1779,11 @@
           }
         },
         "security": [
-
           {
-
             "APIKey": [
-
               "locations:read"
-
             ]
-
           }
-
         ],
         "summary": "Get location by natural identifier",
         "tags": [
