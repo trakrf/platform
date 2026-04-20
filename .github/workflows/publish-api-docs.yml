@@ -69,11 +69,11 @@ jobs:
           git config user.name "trakrf-bot"
           git config user.email "bot@trakrf.id"
           git checkout -B "$BRANCH"
-          if git diff --quiet static/api/; then
+          git add static/api/
+          if git diff --cached --quiet; then
             echo "No spec changes to publish — exiting cleanly."
             exit 0
           fi
-          git add static/api/
           git commit -m "chore(api): sync spec from platform@${PLATFORM_SHA}"
           git push -u origin "$BRANCH" --force
           gh pr create \
