@@ -123,3 +123,68 @@ func TestLimiter_KeysAreIndependent(t *testing.T) {
 	require.True(t, d.Allowed)
 	require.Equal(t, 119, d.Remaining)
 }
+
+func TestLimiter_SweepEvictsIdleBuckets(t *testing.T) {
+	start := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	clock := NewFakeClock(start)
+	lim := NewLimiter(Config{
+		RatePerMinute: 60,
+		Burst:         120,
+		IdleTTL:       1 * time.Hour,
+		SweepInterval: 24 * time.Hour, // sweeper loop idle; tests drive sweep() directly
+		Clock:         clock,
+	})
+	defer lim.Close()
+
+	lim.Allow("key-a")
+	lim.Allow("key-b")
+
+	// Before cutoff — both present.
+	clock.Advance(30 * time.Minute)
+	lim.sweep()
+	_, aPresent := lim.buckets.Load("key-a")
+	_, bPresent := lim.buckets.Load("key-b")
+	require.True(t, aPresent)
+	require.True(t, bPresent)
+
+	// Bump key-a's lastSeen at t = start + 30min.
+	lim.Allow("key-a")
+
+	// Advance 31 more minutes → t = start + 61min.
+	// Cutoff = t - 60min = start + 1min.
+	//   key-a lastSeen = start + 30min, > cutoff → survives.
+	//   key-b lastSeen = start,          < cutoff → evicted.
+	clock.Advance(31 * time.Minute)
+	lim.sweep()
+
+	_, aPresent = lim.buckets.Load("key-a")
+	_, bPresent = lim.buckets.Load("key-b")
+	require.True(t, aPresent, "key-a was touched recently, must survive")
+	require.False(t, bPresent, "key-b idle >1h, must be evicted")
+}
+
+func TestLimiter_SweptKeyReturnsWithFullBucket(t *testing.T) {
+	clock := NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	lim := NewLimiter(Config{
+		RatePerMinute: 60,
+		Burst:         120,
+		IdleTTL:       1 * time.Hour,
+		SweepInterval: 24 * time.Hour,
+		Clock:         clock,
+	})
+	defer lim.Close()
+
+	// Drain key-a's burst.
+	for i := 0; i < 120; i++ {
+		lim.Allow("key-a")
+	}
+	require.False(t, lim.Allow("key-a").Allowed)
+
+	// Idle past TTL, sweep, return.
+	clock.Advance(2 * time.Hour)
+	lim.sweep()
+
+	d := lim.Allow("key-a")
+	require.True(t, d.Allowed)
+	require.Equal(t, 119, d.Remaining, "fresh bucket after eviction")
+}
