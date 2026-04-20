@@ -138,6 +138,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
                 "500":
                     content:
                         application/json:
@@ -209,6 +214,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: Get asset by natural identifier
@@ -289,6 +299,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: Asset movement history
@@ -354,6 +369,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: List locations
@@ -419,6 +439,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: Get location by natural identifier
@@ -492,6 +517,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: List current asset locations

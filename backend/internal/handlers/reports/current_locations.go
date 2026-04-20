@@ -42,6 +42,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security BearerAuth
 // @Router /api/v1/locations/current [get]
 func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {

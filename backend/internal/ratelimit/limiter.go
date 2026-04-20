@@ -47,10 +47,11 @@ type bucket struct {
 // Limiter is a per-key token-bucket rate limiter. Zero value is not usable;
 // construct with NewLimiter.
 type Limiter struct {
-	cfg     Config
-	buckets sync.Map // key string -> *bucket
-	stop    chan struct{}
-	done    chan struct{}
+	cfg       Config
+	buckets   sync.Map // key string -> *bucket
+	stop      chan struct{}
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 // NewLimiter constructs a Limiter and starts its background sweeper goroutine.
@@ -68,10 +69,13 @@ func NewLimiter(cfg Config) *Limiter {
 	return l
 }
 
-// Close stops the sweeper goroutine. Safe to call once; subsequent calls panic.
+// Close stops the sweeper goroutine. Safe to call multiple times; subsequent
+// calls are no-ops.
 func (l *Limiter) Close() {
-	close(l.stop)
-	<-l.done
+	l.closeOnce.Do(func() {
+		close(l.stop)
+		<-l.done
+	})
 }
 
 // Allow consumes one token for the given key and returns the decision.
@@ -106,6 +110,9 @@ func (l *Limiter) Allow(key string) Decision {
 			needed = 0
 		}
 		retry := time.Duration(needed / perSec * float64(time.Second))
+		// Load-bearing: under concurrent same-key bursts, `needed` can round to
+		// zero and produce a 0ns duration. A zero Retry-After would be a useless
+		// hint to clients (and is out of spec for RFC 9110). Floor at 1s.
 		if retry <= 0 {
 			retry = time.Second
 		}
