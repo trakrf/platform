@@ -2,7 +2,6 @@ package inventory
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -16,7 +15,11 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
-var validate = validator.New()
+var validate = func() *validator.Validate {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+	return v
+}()
 
 // InventoryStorage defines the storage operations needed by the inventory handler.
 type InventoryStorage interface {
@@ -67,15 +70,13 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Decode and validate request
 	var request SaveRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvalidJSON, err.Error(), requestID)
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.ValidationFailed, err.Error(), requestID)
+		httputil.RespondValidationError(w, r, err, requestID)
 		return
 	}
 
@@ -100,8 +101,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 				apierrors.InventorySaveForbidden, errStr, requestID)
 			return
 		}
-		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.InventorySaveFailed, err.Error(), requestID)
+		httputil.RespondStorageError(w, r, err, requestID)
 		return
 	}
 

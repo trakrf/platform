@@ -352,6 +352,88 @@ func TestSave_AccessErrorDetection(t *testing.T) {
 	}
 }
 
+// Bug reproduction: TRA-407 item 5 — malformed body must not leak encoding/json internals.
+func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
+	orgID := 1
+	claims := &jwt.Claims{
+		UserID:       1,
+		Email:        "test@example.com",
+		CurrentOrgID: &orgID,
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("not json")))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
+	req = req.WithContext(ctx)
+
+	handler := NewHandler(nil)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var body struct {
+		Error struct {
+			Detail string `json:"detail"`
+		} `json:"error"`
+	}
+	err := json.Unmarshal(w.Body.Bytes(), &body)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Request body is not valid JSON", body.Error.Detail,
+		"detail must be the stable string, not a raw Go error")
+	assert.NotContains(t, body.Error.Detail, "invalid character",
+		"must not leak encoding/json internals")
+	assert.NotContains(t, body.Error.Detail, "literal null",
+		"must not leak encoding/json internals")
+}
+
+// Bug reproduction: TRA-407 item 2 — bad body returns fields[] envelope.
+func TestInventorySave_BadBody_FieldsEnvelope(t *testing.T) {
+	orgID := 1
+	claims := &jwt.Claims{
+		UserID:       1,
+		Email:        "test@example.com",
+		CurrentOrgID: &orgID,
+	}
+	// Empty object — passes decode but fails validation (location_id=0, asset_ids=nil).
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("{}")))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
+	req = req.WithContext(ctx)
+
+	handler := NewHandler(nil)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var body struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	err := json.Unmarshal(w.Body.Bytes(), &body)
+	require.NoError(t, err)
+
+	assert.Equal(t, "validation_error", body.Error.Type)
+	require.NotEmpty(t, body.Error.Fields, "fields[] must be populated")
+
+	fieldCodes := make(map[string]string)
+	for _, f := range body.Error.Fields {
+		fieldCodes[f.Field] = f.Code
+	}
+	// location_id is required and zero → must appear
+	assert.Equal(t, "required", fieldCodes["location_id"],
+		"location_id must appear with code=required and snake_case JSON tag name")
+	// asset_ids is required → must appear
+	assert.Equal(t, "required", fieldCodes["asset_ids"],
+		"asset_ids must appear with code=required and snake_case JSON tag name")
+}
+
 // --- Handler-level tests using mockInventoryStorage ---
 
 func TestSave_LocationAccessDenied(t *testing.T) {
@@ -403,7 +485,8 @@ func TestSave_InternalStorageError(t *testing.T) {
 	handler.Save(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "database connection failed")
+	// Post-migration: RespondStorageError returns a stable message, not the raw error detail.
+	assert.Contains(t, w.Body.String(), "An unexpected error occurred")
 }
 
 func TestSave_Success(t *testing.T) {
