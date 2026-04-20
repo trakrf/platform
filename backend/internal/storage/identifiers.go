@@ -119,10 +119,20 @@ func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID
 	return &identifier, nil
 }
 
-func (s *Storage) RemoveIdentifier(ctx context.Context, identifierID int) (bool, error) {
-	query := `UPDATE trakrf.identifiers SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+func (s *Storage) RemoveIdentifier(ctx context.Context, orgID, identifierID int) (bool, error) {
+	query := `
+		UPDATE trakrf.identifiers
+		SET deleted_at = NOW()
+		WHERE id = $1
+		  AND deleted_at IS NULL
+		  AND (
+		    EXISTS (SELECT 1 FROM trakrf.assets    WHERE id = trakrf.identifiers.asset_id    AND org_id = $2)
+		    OR
+		    EXISTS (SELECT 1 FROM trakrf.locations WHERE id = trakrf.identifiers.location_id AND org_id = $2)
+		  )
+	`
 
-	result, err := s.pool.Exec(ctx, query, identifierID)
+	result, err := s.pool.Exec(ctx, query, identifierID, orgID)
 	if err != nil {
 		return false, fmt.Errorf("failed to remove identifier: %w", err)
 	}

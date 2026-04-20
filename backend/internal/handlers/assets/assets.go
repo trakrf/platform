@@ -526,8 +526,15 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetDeleteFailed, "missing organization context", requestID)
+		return
+	}
+
 	idParam := chi.URLParam(r, "id")
-	_, err := strconv.Atoi(idParam)
+	_, err = strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
@@ -542,7 +549,7 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	deleted, err := handler.storage.RemoveIdentifier(r.Context(), identifierID)
+	deleted, err := handler.storage.RemoveIdentifier(r.Context(), orgID, identifierID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetDeleteFailed, err.Error(), requestID)

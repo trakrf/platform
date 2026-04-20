@@ -242,13 +242,14 @@ func TestRemoveIdentifier(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	identifierID := 101
 
-	mock.ExpectExec(`UPDATE trakrf.identifiers SET deleted_at = NOW()`).
-		WithArgs(identifierID).
+	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
+		WithArgs(identifierID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
-	result, err := storage.RemoveIdentifier(context.Background(), identifierID)
+	result, err := storage.RemoveIdentifier(context.Background(), orgID, identifierID)
 
 	assert.NoError(t, err)
 	assert.True(t, result)
@@ -262,13 +263,14 @@ func TestRemoveIdentifier_NotFound(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	identifierID := 99999
 
-	mock.ExpectExec(`UPDATE trakrf.identifiers SET deleted_at = NOW()`).
-		WithArgs(identifierID).
+	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
+		WithArgs(identifierID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
-	result, err := storage.RemoveIdentifier(context.Background(), identifierID)
+	result, err := storage.RemoveIdentifier(context.Background(), orgID, identifierID)
 
 	assert.NoError(t, err)
 	assert.False(t, result)
@@ -282,13 +284,14 @@ func TestRemoveIdentifier_DatabaseError(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	identifierID := 101
 
-	mock.ExpectExec(`UPDATE trakrf.identifiers SET deleted_at = NOW()`).
-		WithArgs(identifierID).
+	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
+		WithArgs(identifierID, orgID).
 		WillReturnError(errors.New("database error"))
 
-	result, err := storage.RemoveIdentifier(context.Background(), identifierID)
+	result, err := storage.RemoveIdentifier(context.Background(), orgID, identifierID)
 
 	assert.Error(t, err)
 	assert.False(t, result)
