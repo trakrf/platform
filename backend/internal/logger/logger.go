@@ -54,6 +54,12 @@ func Get() *zerolog.Logger {
 	return globalLogger
 }
 
+// SetForTest replaces the global logger. Intended for tests only.
+func SetForTest(l zerolog.Logger) {
+	gl := l
+	globalLogger = &gl
+}
+
 func parseLevel(level string) zerolog.Level {
 	switch level {
 	case "debug":
