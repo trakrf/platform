@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -157,6 +158,21 @@ func TestContentType(t *testing.T) {
 					tt.contentType)
 			}
 		})
+	}
+}
+
+func TestGenerateRequestID_ULIDFormat(t *testing.T) {
+	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	h.ServeHTTP(w, r)
+
+	got := w.Header().Get("X-Request-ID")
+	ulidRE := regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{26}$`)
+	if !ulidRE.MatchString(got) {
+		t.Fatalf("X-Request-ID = %q, want ULID (26-char Crockford base32)", got)
 	}
 }
 

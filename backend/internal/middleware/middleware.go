@@ -3,13 +3,16 @@ package middleware
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/oklog/ulid/v2"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -210,8 +213,13 @@ func SentryContext(next http.Handler) http.Handler {
 	})
 }
 
+var (
+	ulidMu      sync.Mutex
+	ulidEntropy io.Reader = ulid.Monotonic(rand.Reader, 0)
+)
+
 func generateRequestID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	ulidMu.Lock()
+	defer ulidMu.Unlock()
+	return ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy).String()
 }
