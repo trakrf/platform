@@ -141,8 +141,15 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Router       /api/v1/locations/{id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
-	idParam := chi.URLParam(req, "id")
 
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationUpdateFailed, "missing organization context", ctx)
+		return
+	}
+
+	idParam := chi.URLParam(req, "id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -151,7 +158,6 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var request location.UpdateLocationRequest
-
 	if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			apierrors.LocationUpdateInvalidReq, err.Error(), ctx)
@@ -164,7 +170,7 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := handler.storage.UpdateLocation(req.Context(), id, request)
+	result, err := handler.storage.UpdateLocation(req.Context(), orgID, id, request)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
@@ -194,22 +200,29 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 // @Param id path int true "Location ID"
 // @Success 202 {object} map[string]bool "deleted: true/false"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid location ID"
+// @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security APIKey[locations:write]
 // @Router /api/v1/locations/{id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationDeleteFailed, "missing organization context", ctx)
+		return
+	}
 
+	idParam := chi.URLParam(req, "id")
+	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.LocationDeleteInvalidID, idParam), err.Error(), ctx)
 		return
 	}
 
-	deleted, err := handler.storage.DeleteLocation(req.Context(), id)
+	deleted, err := handler.storage.DeleteLocation(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationDeleteFailed, err.Error(), ctx)

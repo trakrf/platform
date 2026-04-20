@@ -41,10 +41,10 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 	return &loc, nil
 }
 
-func (s *Storage) UpdateLocation(ctx context.Context, id int, request location.UpdateLocationRequest) (*location.Location, error) {
+func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.Location, error) {
 	updates := []string{}
-	args := []any{id}
-	argPos := 2
+	args := []any{id, orgID}
+	argPos := 3
 	fields, err := mapLocationReqToFields(request)
 
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *Storage) UpdateLocation(ctx context.Context, id int, request location.U
 	query := fmt.Sprintf(`
 		UPDATE trakrf.locations
 		SET %s, updated_at = NOW()
-		WHERE id = $1 AND deleted_at IS NULL
+		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 		RETURNING id, org_id, name, identifier, parent_location_id, path, depth,
 		          description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	`, strings.Join(updates, ", "))
@@ -291,9 +291,9 @@ func (s *Storage) CountAllLocations(ctx context.Context, orgID int) (int, error)
 	return count, nil
 }
 
-func (s *Storage) DeleteLocation(ctx context.Context, id int) (bool, error) {
-	query := `UPDATE trakrf.locations SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
-	result, err := s.pool.Exec(ctx, query, id)
+func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, error) {
+	query := `UPDATE trakrf.locations SET deleted_at = NOW() WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`
+	result, err := s.pool.Exec(ctx, query, id, orgID)
 	if err != nil {
 		return false, fmt.Errorf("could not delete location: %w", err)
 	}
