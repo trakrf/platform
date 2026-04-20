@@ -82,7 +82,7 @@ func TestGetAssetByIdentifier_SoftDeletedNotReturned(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = store.DeleteAsset(context.Background(), &created.ID)
+	_, err = store.DeleteAsset(context.Background(), orgID, created.ID)
 	require.NoError(t, err)
 
 	view, err := store.GetAssetByIdentifier(context.Background(), orgID, "gone")

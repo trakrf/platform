@@ -210,10 +210,10 @@ func TestUpdateLocation(t *testing.T) {
 	)
 
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(rows)
 
-	result, err := storage.UpdateLocation(context.Background(), locationID, request)
+	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -249,10 +249,10 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 	)
 
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(rows)
 
-	result, err := storage.UpdateLocation(context.Background(), locationID, request)
+	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -273,7 +273,7 @@ func TestUpdateLocation_NoFields(t *testing.T) {
 	locationID := 1
 	request := location.UpdateLocationRequest{}
 
-	result, err := storage.UpdateLocation(context.Background(), locationID, request)
+	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -294,10 +294,10 @@ func TestUpdateLocation_NotFound(t *testing.T) {
 	}
 
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnError(errors.New("no rows in result set"))
 
-	result, err := storage.UpdateLocation(context.Background(), locationID, request)
+	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -457,12 +457,13 @@ func TestDeleteLocation(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	locationID := 1
+	orgID := 1
 
 	mock.ExpectExec(`UPDATE trakrf.locations SET deleted_at`).
-		WithArgs(locationID).
+		WithArgs(locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
-	result, err := storage.DeleteLocation(context.Background(), locationID)
+	result, err := storage.DeleteLocation(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	assert.True(t, result)
@@ -477,12 +478,13 @@ func TestDeleteLocation_NotFound(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	locationID := 99999
+	orgID := 1
 
 	mock.ExpectExec(`UPDATE trakrf.locations SET deleted_at`).
-		WithArgs(locationID).
+		WithArgs(locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
-	result, err := storage.DeleteLocation(context.Background(), locationID)
+	result, err := storage.DeleteLocation(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	assert.False(t, result)

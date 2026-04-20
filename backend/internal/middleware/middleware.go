@@ -186,6 +186,12 @@ func GetUserClaims(r *http.Request) *jwt.Claims {
 	return nil
 }
 
+// WithUserClaimsForTest attaches session user claims to the context.
+// Exported for tests only.
+func WithUserClaimsForTest(ctx context.Context, c *jwt.Claims) context.Context {
+	return context.WithValue(ctx, UserClaimsKey, c)
+}
+
 // SentryContext enriches Sentry scope with request ID and user info.
 // Should be placed AFTER RequestID and Auth middlewares in the chain.
 func SentryContext(next http.Handler) http.Handler {

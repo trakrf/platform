@@ -28,6 +28,14 @@ import (
 func setupTestRouter(handler *Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	// Public write + identifier routes are registered in cmd/serve/router.go
+	// under the public-write group (TRA-397). Wire them here directly so these
+	// handler-level tests continue to exercise the same handler paths.
+	r.Post("/api/v1/assets", handler.Create)
+	r.Put("/api/v1/assets/{id}", handler.UpdateAsset)
+	r.Delete("/api/v1/assets/{id}", handler.DeleteAsset)
+	r.Post("/api/v1/assets/{id}/identifiers", handler.AddIdentifier)
+	r.Delete("/api/v1/assets/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	handler.RegisterRoutes(r)
 	return r
 }
@@ -56,7 +64,7 @@ func TestCreateAsset(t *testing.T) {
 	requestBody := testutil.NewAssetFactory(accountID).
 		WithIdentifier("TEST-001").
 		WithName("Test Asset").
-		WithType("equipment").
+		WithType("asset").
 		WithDescription("Test description").
 		Build()
 
@@ -65,6 +73,7 @@ func TestCreateAsset(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -83,11 +92,16 @@ func TestCreateAsset_InvalidJSON(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
+	pool := store.Pool().(*pgxpool.Pool)
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -229,6 +243,7 @@ func TestUpdateAsset(t *testing.T) {
 			Values: []string{idStr},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	handler.UpdateAsset(w, req)
@@ -271,6 +286,7 @@ func TestDeleteAsset(t *testing.T) {
 			Values: []string{idStr},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	handler.DeleteAsset(w, req)
@@ -291,6 +307,10 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
+	pool := store.Pool().(*pgxpool.Pool)
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
 	handler := NewHandler(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/999999", nil)
@@ -300,16 +320,14 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 			Values: []string{"999999"},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	handler.DeleteAsset(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
-
-	var response map[string]bool
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.False(t, response["deleted"])
+	// Nonexistent asset now returns 404 (not 202 deleted=false) so clients can
+	// distinguish "already gone / never existed" from "successfully deleted".
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestListAssets(t *testing.T) {
@@ -385,6 +403,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req = req.WithContext(ctx)
+		req = withOrgContext(req, accountID)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
@@ -438,6 +457,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 				Values: []string{idStr},
 			},
 		}))
+		req = withOrgContext(req, accountID)
 		w := httptest.NewRecorder()
 
 		handler.UpdateAsset(w, req)
@@ -459,6 +479,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 				Values: []string{idStr},
 			},
 		}))
+		req = withOrgContext(req, accountID)
 		w := httptest.NewRecorder()
 
 		handler.DeleteAsset(w, req)

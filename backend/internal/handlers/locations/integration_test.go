@@ -31,6 +31,14 @@ import (
 func setupTestRouter(handler *Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	// Public write + identifier routes are registered in cmd/serve/router.go
+	// under the public-write group (TRA-397). Wire them here directly so these
+	// handler-level tests continue to exercise the same handler paths.
+	r.Post("/api/v1/locations", handler.Create)
+	r.Put("/api/v1/locations/{id}", handler.Update)
+	r.Delete("/api/v1/locations/{id}", handler.Delete)
+	r.Post("/api/v1/locations/{id}/identifiers", handler.AddIdentifier)
+	r.Delete("/api/v1/locations/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	handler.RegisterRoutes(r)
 	return r
 }

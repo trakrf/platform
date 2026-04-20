@@ -173,10 +173,13 @@ func TestSave_EmptyAssetIDs(t *testing.T) {
 }
 
 func TestSave_RouteRegistration(t *testing.T) {
+	// POST /api/v1/inventory/save is now wired in cmd/serve/router.go under the
+	// public-write group (TRA-397); Handler.RegisterRoutes is intentionally empty.
+	// Wire the route directly here to verify handler-level plumbing.
 	handler := NewHandler(nil)
 
 	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r.Post("/api/v1/inventory/save", handler.Save)
 
 	// Verify route is registered
 	rctx := chi.NewRouteContext()

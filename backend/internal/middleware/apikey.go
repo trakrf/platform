@@ -133,3 +133,9 @@ func RequireScope(required string) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// WithAPIKeyPrincipalForTest attaches an APIKey principal to the context.
+// Exported for tests only.
+func WithAPIKeyPrincipalForTest(ctx context.Context, p *APIKeyPrincipal) context.Context {
+	return context.WithValue(ctx, APIKeyPrincipalKey, p)
+}

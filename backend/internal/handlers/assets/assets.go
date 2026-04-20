@@ -66,7 +66,7 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 // @Summary      Create an asset
 // @Description  Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
 // @Description  Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
-// @Tags         assets,internal
+// @Tags         assets,public
 // @Accept       json
 // @Produce      json
 // @Param        request  body  asset.CreateAssetWithIdentifiersRequest  true  "Asset to create with optional identifiers"
@@ -82,13 +82,12 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			apierrors.AssetCreateFailed, "missing organization context", requestID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
 	var request asset.CreateAssetWithIdentifiersRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -106,7 +105,6 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	request.OrgID = orgID
 
 	var result *asset.AssetView
-	var err error
 
 	if len(request.Identifiers) > 0 {
 		result, err = handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
@@ -132,7 +130,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // @Summary      Update an asset
 // @Description  Update mutable fields on an existing asset. Only fields included in the request body are changed.
-// @Tags         assets,internal
+// @Tags         assets,public
 // @Accept       json
 // @Produce      json
 // @Param        id       path  int                         true  "Asset ID"
@@ -149,8 +147,15 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Router       /api/v1/assets/{id} [put]
 func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
-	idParam := chi.URLParam(req, "id")
 
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetUpdateFailed, "missing organization context", ctx)
+		return
+	}
+
+	idParam := chi.URLParam(req, "id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -172,7 +177,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := handler.storage.UpdateAsset(req.Context(), id, request)
+	result, err := handler.storage.UpdateAsset(req.Context(), orgID, id, request)
 
 	if err != nil {
 		// Check for duplicate identifier error (user error, not server error)
@@ -183,6 +188,12 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		}
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetUpdateFailed, err.Error(), ctx)
+		return
+	}
+
+	if result == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", ctx)
 		return
 	}
 
@@ -237,7 +248,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 
 // @Summary      Delete an asset
 // @Description  Soft-delete an asset by its numeric ID. The asset is marked inactive and removed from future list results.
-// @Tags         assets,internal
+// @Tags         assets,public
 // @Accept       json
 // @Produce      json
 // @Param        id  path  int  true  "Asset ID"
@@ -250,21 +261,33 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 // @Security     APIKey[assets:write]
 // @Router       /api/v1/assets/{id} [delete]
 func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetDeleteFailed, "missing organization context", ctx)
+		return
+	}
 
+	idParam := chi.URLParam(req, "id")
+	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.AssetDeleteInvalidID, idParam), err.Error(), ctx)
 		return
 	}
 
-	deleted, err := handler.storage.DeleteAsset(req.Context(), &id)
+	deleted, err := handler.storage.DeleteAsset(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetDeleteFailed, err.Error(), ctx)
+		return
+	}
+
+	if !deleted {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", ctx)
 		return
 	}
 
@@ -300,7 +323,7 @@ type ListAssetsResponse struct {
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security APIKey[assets:read]
 // @Router /api/v1/assets [get]
 func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -381,7 +404,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
-// @Security BearerAuth
+// @Security APIKey[assets:read]
 // @Router /api/v1/assets/{identifier} [get]
 func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -420,7 +443,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 // @Summary      Add an identifier to an asset
 // @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
 // @Description  The identifier must be unique within the organization.
-// @Tags         assets,internal
+// @Tags         assets,public
 // @Accept       json
 // @Produce      json
 // @Param        id       path  int                            true  "Asset ID"
@@ -437,13 +460,12 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			apierrors.AssetCreateFailed, "missing organization context", requestID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
 	idParam := chi.URLParam(r, "id")
 	assetID, err := strconv.Atoi(idParam)
@@ -490,7 +512,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 
 // @Summary      Remove an identifier from an asset
 // @Description  Detach a tag identifier from an asset by its identifier record ID.
-// @Tags         assets,internal
+// @Tags         assets,public
 // @Accept       json
 // @Produce      json
 // @Param        id            path  int  true  "Asset ID"
@@ -507,8 +529,15 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetDeleteFailed, "missing organization context", requestID)
+		return
+	}
+
 	idParam := chi.URLParam(r, "id")
-	_, err := strconv.Atoi(idParam)
+	assetID, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
@@ -523,7 +552,7 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	deleted, err := handler.storage.RemoveIdentifier(r.Context(), identifierID)
+	deleted, err := handler.storage.RemoveAssetIdentifier(r.Context(), orgID, assetID, identifierID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetDeleteFailed, err.Error(), requestID)
@@ -533,16 +562,11 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
 }
 
-// RegisterRoutes keeps write + identifier sub-routes that stay on session auth
-// with surrogate path params (TRA-397 will revisit). Read routes (list, detail,
-// by-id) are registered directly in internal/cmd/serve/router.go to split them
-// across the API-key and session-only groups.
+// RegisterRoutes keeps only session-only surface (bulk CSV). Public write and
+// identifier routes are registered directly in internal/cmd/serve/router.go
+// under the EitherAuth + WriteAudit + RequireScope group. Public reads are
+// also registered there (per TRA-396).
 func (handler *Handler) RegisterRoutes(r chi.Router) {
-	r.Post("/api/v1/assets", handler.Create)
-	r.Put("/api/v1/assets/{id}", handler.UpdateAsset)
-	r.Delete("/api/v1/assets/{id}", handler.DeleteAsset)
-	r.Post("/api/v1/assets/{id}/identifiers", handler.AddIdentifier)
-	r.Delete("/api/v1/assets/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	r.Post("/api/v1/assets/bulk", handler.UploadCSV)
 	r.Get("/api/v1/assets/bulk/{jobId}", handler.GetJobStatus)
 }
