@@ -229,6 +229,7 @@ func TestUpdateAsset(t *testing.T) {
 			Values: []string{idStr},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	handler.UpdateAsset(w, req)
@@ -271,6 +272,7 @@ func TestDeleteAsset(t *testing.T) {
 			Values: []string{idStr},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	handler.DeleteAsset(w, req)
@@ -291,6 +293,10 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
+	pool := store.Pool().(*pgxpool.Pool)
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
 	handler := NewHandler(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/999999", nil)
@@ -300,6 +306,7 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 			Values: []string{"999999"},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	handler.DeleteAsset(w, req)
@@ -438,6 +445,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 				Values: []string{idStr},
 			},
 		}))
+		req = withOrgContext(req, accountID)
 		w := httptest.NewRecorder()
 
 		handler.UpdateAsset(w, req)
@@ -459,6 +467,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 				Values: []string{idStr},
 			},
 		}))
+		req = withOrgContext(req, accountID)
 		w := httptest.NewRecorder()
 
 		handler.DeleteAsset(w, req)

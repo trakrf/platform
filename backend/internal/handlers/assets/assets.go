@@ -149,8 +149,15 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Router       /api/v1/assets/{id} [put]
 func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
-	idParam := chi.URLParam(req, "id")
 
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetUpdateFailed, "missing organization context", ctx)
+		return
+	}
+
+	idParam := chi.URLParam(req, "id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -172,7 +179,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := handler.storage.UpdateAsset(req.Context(), id, request)
+	result, err := handler.storage.UpdateAsset(req.Context(), orgID, id, request)
 
 	if err != nil {
 		// Check for duplicate identifier error (user error, not server error)
@@ -183,6 +190,12 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		}
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetUpdateFailed, err.Error(), ctx)
+		return
+	}
+
+	if result == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", ctx)
 		return
 	}
 
@@ -250,18 +263,24 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 // @Security     APIKey[assets:write]
 // @Router       /api/v1/assets/{id} [delete]
 func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetDeleteFailed, "missing organization context", ctx)
+		return
+	}
 
+	idParam := chi.URLParam(req, "id")
+	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.AssetDeleteInvalidID, idParam), err.Error(), ctx)
 		return
 	}
 
-	deleted, err := handler.storage.DeleteAsset(req.Context(), &id)
+	deleted, err := handler.storage.DeleteAsset(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetDeleteFailed, err.Error(), ctx)

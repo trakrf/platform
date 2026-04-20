@@ -80,10 +80,10 @@ func GenerateAssetIdentifier(seq int) string {
 	return fmt.Sprintf("ASSET-%04d", seq)
 }
 
-func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateAssetRequest) (*asset.Asset, error) {
+func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.Asset, error) {
 	updates := []string{}
-	args := []any{id}
-	argPos := 2
+	args := []any{id, orgID}
+	argPos := 3
 	fields, err := mapReqToFields(request)
 
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, id int, request asset.UpdateA
 	query := fmt.Sprintf(`
 		update trakrf.assets
 		set %s, updated_at = now()
-		where id = $1
+		where id = $1 and org_id = $2 and deleted_at is null
 		returning id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
 		          metadata, is_active, created_at, updated_at, deleted_at
 	`, strings.Join(updates, ", "))
@@ -250,9 +250,9 @@ func (s *Storage) CountAllAssets(ctx context.Context, orgID int) (int, error) {
 	return count, nil
 }
 
-func (s *Storage) DeleteAsset(ctx context.Context, id *int) (bool, error) {
-	query := `update trakrf.assets set deleted_at = now() where id = $1 and deleted_at is null`
-	result, err := s.pool.Exec(ctx, query, id)
+func (s *Storage) DeleteAsset(ctx context.Context, orgID, id int) (bool, error) {
+	query := `update trakrf.assets set deleted_at = now() where id = $1 and org_id = $2 and deleted_at is null`
+	result, err := s.pool.Exec(ctx, query, id, orgID)
 	if err != nil {
 		return false, fmt.Errorf("could not delete asset: %w", err)
 	}

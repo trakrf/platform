@@ -457,10 +457,10 @@ func TestUpdateAsset(t *testing.T) {
 	)
 
 	mock.ExpectQuery(`update trakrf.assets`).
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(rows)
 
-	result, err := storage.UpdateAsset(context.Background(), assetID, request)
+	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -480,7 +480,7 @@ func TestUpdateAsset_NoFields(t *testing.T) {
 	assetID := 1
 	request := asset.UpdateAssetRequest{}
 
-	result, err := storage.UpdateAsset(context.Background(), assetID, request)
+	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -501,10 +501,10 @@ func TestUpdateAsset_NotFound(t *testing.T) {
 	}
 
 	mock.ExpectQuery(`update trakrf.assets`).
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnError(errors.New("no rows in result set"))
 
-	result, err := storage.UpdateAsset(context.Background(), assetID, request)
+	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -538,10 +538,10 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 	)
 
 	mock.ExpectQuery(`update trakrf.assets`).
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(rows)
 
-	result, err := storage.UpdateAsset(context.Background(), assetID, request)
+	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -832,12 +832,13 @@ func TestDeleteAsset(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	assetID := 1
+	orgID := 1
 
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
-		WithArgs(&assetID).
+		WithArgs(assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
-	result, err := storage.DeleteAsset(context.Background(), &assetID)
+	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
 	assert.NoError(t, err)
 	assert.True(t, result)
@@ -852,12 +853,13 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	assetID := 99999
+	orgID := 1
 
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
-		WithArgs(&assetID).
+		WithArgs(assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
-	result, err := storage.DeleteAsset(context.Background(), &assetID)
+	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
 	assert.NoError(t, err)
 	assert.False(t, result)
@@ -872,12 +874,13 @@ func TestDeleteAsset_AlreadyDeleted(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	assetID := 1
+	orgID := 1
 
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
-		WithArgs(&assetID).
+		WithArgs(assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
-	result, err := storage.DeleteAsset(context.Background(), &assetID)
+	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
 	assert.NoError(t, err)
 	assert.False(t, result)
@@ -892,12 +895,13 @@ func TestDeleteAsset_DatabaseError(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	assetID := 1
+	orgID := 1
 
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
-		WithArgs(&assetID).
+		WithArgs(assetID, orgID).
 		WillReturnError(errors.New("database connection lost"))
 
-	result, err := storage.DeleteAsset(context.Background(), &assetID)
+	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
 	assert.Error(t, err)
 	assert.False(t, result)
