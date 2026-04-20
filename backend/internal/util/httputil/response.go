@@ -56,3 +56,27 @@ func WriteJSON(w http.ResponseWriter, status int, data any) error {
 	w.WriteHeader(status)
 	return json.NewEncoder(w).Encode(data)
 }
+
+// WriteJSONErrorWithFields is WriteJSONError plus a populated fields[]
+// array. Used by RespondValidationError.
+func WriteJSONErrorWithFields(w http.ResponseWriter, r *http.Request, status int, errType errors.ErrorType, title, detail, requestID string, fields []errors.FieldError) {
+	resp := ErrorResponse{}
+	resp.Error.Type = string(errType)
+	resp.Error.Title = title
+	resp.Error.Status = status
+	resp.Error.Detail = detail
+	resp.Error.Instance = r.URL.Path
+	resp.Error.RequestID = requestID
+	resp.Error.Fields = fields
+
+	slog.Info("Validation error",
+		"status", status,
+		"type", errType,
+		"request_id", requestID,
+		"path", r.URL.Path,
+		"field_count", len(fields))
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(resp)
+}
