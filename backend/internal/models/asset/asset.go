@@ -78,3 +78,20 @@ type AssetWithLocation struct {
 	AssetView
 	CurrentLocationIdentifier *string `json:"current_location_identifier,omitempty"`
 }
+
+// ListFilter carries the optional filters the assets list endpoint supports.
+type ListFilter struct {
+	LocationIdentifiers []string // OR semantics when multi-valued
+	IsActive            *bool
+	Type                *string
+	Q                   *string // fuzzy match on name, identifier, description
+	Sorts               []ListSort
+	Limit               int
+	Offset              int
+}
+
+// ListSort is one (field, direction) entry.
+type ListSort struct {
+	Field string
+	Desc  bool
+}

@@ -558,6 +558,150 @@ func (s *Storage) GetAssetByIdentifier(
 	}, nil
 }
 
+// ListAssetsFiltered returns assets matching the filter, joined with their
+// current location's natural key. Sort fields allowlisted by handler.
+func (s *Storage) ListAssetsFiltered(
+	ctx context.Context, orgID int, f asset.ListFilter,
+) ([]asset.AssetWithLocation, error) {
+	where, args := buildAssetsWhere(orgID, f)
+	orderBy := buildAssetsOrderBy(f.Sorts)
+
+	query := fmt.Sprintf(`
+		SELECT
+			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
+			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
+			a.is_active, a.created_at, a.updated_at, a.deleted_at,
+			l.identifier
+		FROM trakrf.assets a
+		LEFT JOIN trakrf.locations l
+			ON l.id = a.current_location_id AND l.deleted_at IS NULL
+		WHERE %s
+		ORDER BY %s
+		LIMIT $%d OFFSET $%d
+	`, where, orderBy, len(args)+1, len(args)+2)
+
+	args = append(args, clampAssetListLimit(f.Limit), f.Offset)
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list assets filtered: %w", err)
+	}
+	defer rows.Close()
+
+	out := []asset.AssetWithLocation{}
+	for rows.Next() {
+		var (
+			a      asset.Asset
+			locIdt *string
+		)
+		if err := rows.Scan(
+			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+			&locIdt,
+		); err != nil {
+			return nil, fmt.Errorf("scan asset: %w", err)
+		}
+		out = append(out, asset.AssetWithLocation{
+			AssetView:                 asset.AssetView{Asset: a, Identifiers: nil},
+			CurrentLocationIdentifier: locIdt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Bulk-fetch identifiers for the returned assets.
+	if len(out) > 0 {
+		ids := make([]int, len(out))
+		for i, a := range out {
+			ids[i] = a.ID
+		}
+		idMap, err := s.getIdentifiersForAssets(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for i := range out {
+			out[i].Identifiers = idMap[out[i].ID]
+			if out[i].Identifiers == nil {
+				out[i].Identifiers = []shared.TagIdentifier{}
+			}
+		}
+	}
+
+	return out, nil
+}
+
+// CountAssetsFiltered returns total matching count (ignores limit/offset/sort).
+func (s *Storage) CountAssetsFiltered(
+	ctx context.Context, orgID int, f asset.ListFilter,
+) (int, error) {
+	where, args := buildAssetsWhere(orgID, f)
+	query := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM trakrf.assets a
+		LEFT JOIN trakrf.locations l
+			ON l.id = a.current_location_id AND l.deleted_at IS NULL
+		WHERE %s
+	`, where)
+
+	var n int
+	if err := s.pool.QueryRow(ctx, query, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count assets filtered: %w", err)
+	}
+	return n, nil
+}
+
+func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
+	clauses := []string{"a.org_id = $1", "a.deleted_at IS NULL"}
+	args := []any{orgID}
+
+	if len(f.LocationIdentifiers) > 0 {
+		args = append(args, f.LocationIdentifiers)
+		clauses = append(clauses, fmt.Sprintf("l.identifier = ANY($%d::text[])", len(args)))
+	}
+	if f.IsActive != nil {
+		args = append(args, *f.IsActive)
+		clauses = append(clauses, fmt.Sprintf("a.is_active = $%d", len(args)))
+	}
+	if f.Type != nil {
+		args = append(args, *f.Type)
+		clauses = append(clauses, fmt.Sprintf("a.type = $%d", len(args)))
+	}
+	if f.Q != nil {
+		args = append(args, "%"+*f.Q+"%")
+		idx := len(args)
+		clauses = append(clauses, fmt.Sprintf(
+			"(a.name ILIKE $%d OR a.identifier ILIKE $%d OR a.description ILIKE $%d)", idx, idx, idx))
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func buildAssetsOrderBy(sorts []asset.ListSort) string {
+	if len(sorts) == 0 {
+		return "a.identifier ASC"
+	}
+	out := make([]string, 0, len(sorts))
+	for _, s := range sorts {
+		dir := "ASC"
+		if s.Desc {
+			dir = "DESC"
+		}
+		out = append(out, "a."+s.Field+" "+dir)
+	}
+	return strings.Join(out, ", ")
+}
+
+func clampAssetListLimit(n int) int {
+	if n <= 0 {
+		return 50
+	}
+	if n > 200 {
+		return 200
+	}
+	return n
+}
+
 func parseAssetWithIdentifiersError(err error, identifier string) error {
 	errStr := err.Error()
 

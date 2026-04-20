@@ -89,3 +89,79 @@ func TestGetAssetByIdentifier_SoftDeletedNotReturned(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, view)
 }
+
+func TestListAssetsFiltered_LocationAndSort(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	locA, _ := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-A", Name: "A", Path: "wh-A",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	locB, _ := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-B", Name: "B", Path: "wh-B",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+
+	for _, spec := range []struct {
+		id   string
+		name string
+		loc  *int
+	}{
+		{"aaa", "A Asset", &locA.ID},
+		{"bbb", "B Asset", &locB.ID},
+		{"ccc", "C Asset", &locA.ID},
+	} {
+		_, err := store.CreateAsset(context.Background(), asset.Asset{
+			OrgID: orgID, Identifier: spec.id, Name: spec.name, Type: "asset",
+			CurrentLocationID: spec.loc, ValidFrom: time.Now(), IsActive: true,
+		})
+		require.NoError(t, err)
+	}
+
+	items, err := store.ListAssetsFiltered(context.Background(), orgID, asset.ListFilter{
+		LocationIdentifiers: []string{"wh-A"},
+		Sorts:               []asset.ListSort{{Field: "identifier", Desc: false}},
+		Limit:               50, Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	assert.Equal(t, "aaa", items[0].Identifier)
+	assert.Equal(t, "ccc", items[1].Identifier)
+	require.NotNil(t, items[0].CurrentLocationIdentifier)
+	assert.Equal(t, "wh-A", *items[0].CurrentLocationIdentifier)
+
+	count, err := store.CountAssetsFiltered(context.Background(), orgID, asset.ListFilter{
+		LocationIdentifiers: []string{"wh-A"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+}
+
+func TestListAssetsFiltered_Q(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	_, _ = store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "forklift-1", Name: "Forklift One", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	_, _ = store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "widget-1", Name: "Widget", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+
+	q := "fork"
+	items, err := store.ListAssetsFiltered(context.Background(), orgID, asset.ListFilter{
+		Q: &q, Limit: 50,
+	})
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "forklift-1", items[0].Identifier)
+}
