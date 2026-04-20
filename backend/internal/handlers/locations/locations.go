@@ -607,7 +607,7 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	}
 
 	idParam := chi.URLParam(r, "id")
-	_, err = strconv.Atoi(idParam)
+	locationID, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), requestID)
@@ -622,7 +622,7 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	deleted, err := handler.storage.RemoveIdentifier(r.Context(), orgID, identifierID)
+	deleted, err := handler.storage.RemoveLocationIdentifier(r.Context(), orgID, locationID, identifierID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationDeleteFailed, err.Error(), requestID)

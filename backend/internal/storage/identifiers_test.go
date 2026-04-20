@@ -235,7 +235,7 @@ func TestAddIdentifierToLocation(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveIdentifier(t *testing.T) {
+func TestRemoveAssetIdentifier(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -243,20 +243,21 @@ func TestRemoveIdentifier(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	orgID := 1
+	assetID := 42
 	identifierID := 101
 
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, orgID).
+		WithArgs(identifierID, assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
-	result, err := storage.RemoveIdentifier(context.Background(), orgID, identifierID)
+	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
 
 	assert.NoError(t, err)
 	assert.True(t, result)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveIdentifier_NotFound(t *testing.T) {
+func TestRemoveAssetIdentifier_NotFound(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -264,20 +265,21 @@ func TestRemoveIdentifier_NotFound(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	orgID := 1
+	assetID := 42
 	identifierID := 99999
 
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, orgID).
+		WithArgs(identifierID, assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
-	result, err := storage.RemoveIdentifier(context.Background(), orgID, identifierID)
+	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
 
 	assert.NoError(t, err)
 	assert.False(t, result)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveIdentifier_DatabaseError(t *testing.T) {
+func TestRemoveAssetIdentifier_DatabaseError(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -285,17 +287,85 @@ func TestRemoveIdentifier_DatabaseError(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	orgID := 1
+	assetID := 42
 	identifierID := 101
 
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, orgID).
+		WithArgs(identifierID, assetID, orgID).
 		WillReturnError(errors.New("database error"))
 
-	result, err := storage.RemoveIdentifier(context.Background(), orgID, identifierID)
+	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
 
 	assert.Error(t, err)
 	assert.False(t, result)
-	assert.Contains(t, err.Error(), "failed to remove identifier")
+	assert.Contains(t, err.Error(), "failed to remove asset identifier")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRemoveLocationIdentifier(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+
+	orgID := 1
+	locationID := 77
+	identifierID := 201
+
+	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
+		WithArgs(identifierID, locationID, orgID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
+
+	assert.NoError(t, err)
+	assert.True(t, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRemoveLocationIdentifier_NotFound(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+
+	orgID := 1
+	locationID := 77
+	identifierID := 99999
+
+	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
+		WithArgs(identifierID, locationID, orgID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+
+	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
+
+	assert.NoError(t, err)
+	assert.False(t, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRemoveLocationIdentifier_DatabaseError(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+
+	orgID := 1
+	locationID := 77
+	identifierID := 201
+
+	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
+		WithArgs(identifierID, locationID, orgID).
+		WillReturnError(errors.New("database error"))
+
+	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
+
+	assert.Error(t, err)
+	assert.False(t, result)
+	assert.Contains(t, err.Error(), "failed to remove location identifier")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

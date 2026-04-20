@@ -119,22 +119,46 @@ func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID
 	return &identifier, nil
 }
 
-func (s *Storage) RemoveIdentifier(ctx context.Context, orgID, identifierID int) (bool, error) {
+// RemoveAssetIdentifier soft-deletes an identifier that is attached to the
+// given assetID AND is owned by an asset in the caller's org. The assetID
+// parameter is load-bearing: it guards against cross-asset path manipulation
+// (e.g. DELETE /assets/1/identifiers/42 where identifier 42 actually belongs
+// to asset 7).
+func (s *Storage) RemoveAssetIdentifier(ctx context.Context, orgID, assetID, identifierID int) (bool, error) {
 	query := `
 		UPDATE trakrf.identifiers
 		SET deleted_at = NOW()
 		WHERE id = $1
+		  AND asset_id = $2
 		  AND deleted_at IS NULL
-		  AND (
-		    EXISTS (SELECT 1 FROM trakrf.assets    WHERE id = trakrf.identifiers.asset_id    AND org_id = $2)
-		    OR
-		    EXISTS (SELECT 1 FROM trakrf.locations WHERE id = trakrf.identifiers.location_id AND org_id = $2)
-		  )
+		  AND EXISTS (SELECT 1 FROM trakrf.assets WHERE id = $2 AND org_id = $3)
 	`
 
-	result, err := s.pool.Exec(ctx, query, identifierID, orgID)
+	result, err := s.pool.Exec(ctx, query, identifierID, assetID, orgID)
 	if err != nil {
-		return false, fmt.Errorf("failed to remove identifier: %w", err)
+		return false, fmt.Errorf("failed to remove asset identifier: %w", err)
+	}
+
+	return result.RowsAffected() > 0, nil
+}
+
+// RemoveLocationIdentifier soft-deletes an identifier that is attached to the
+// given locationID AND is owned by a location in the caller's org. The
+// locationID parameter is load-bearing: it guards against cross-location path
+// manipulation.
+func (s *Storage) RemoveLocationIdentifier(ctx context.Context, orgID, locationID, identifierID int) (bool, error) {
+	query := `
+		UPDATE trakrf.identifiers
+		SET deleted_at = NOW()
+		WHERE id = $1
+		  AND location_id = $2
+		  AND deleted_at IS NULL
+		  AND EXISTS (SELECT 1 FROM trakrf.locations WHERE id = $2 AND org_id = $3)
+	`
+
+	result, err := s.pool.Exec(ctx, query, identifierID, locationID, orgID)
+	if err != nil {
+		return false, fmt.Errorf("failed to remove location identifier: %w", err)
 	}
 
 	return result.RowsAffected() > 0, nil

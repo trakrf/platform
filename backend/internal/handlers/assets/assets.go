@@ -531,7 +531,7 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	}
 
 	idParam := chi.URLParam(r, "id")
-	_, err = strconv.Atoi(idParam)
+	assetID, err := strconv.Atoi(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
@@ -546,7 +546,7 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	deleted, err := handler.storage.RemoveIdentifier(r.Context(), orgID, identifierID)
+	deleted, err := handler.storage.RemoveAssetIdentifier(r.Context(), orgID, assetID, identifierID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetDeleteFailed, err.Error(), requestID)
