@@ -66,8 +66,8 @@ func buildReportsPublicRouter(store *storage.Storage) *chi.Mux {
 	r.Use(middleware.RequestID)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.EitherAuth(store))
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/current", handler.ListCurrentLocations)
-		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}/history", handler.GetAssetHistory)
+		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/locations/current", handler.ListCurrentLocations)
+		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/assets/{identifier}/history", handler.GetAssetHistory)
 	})
 	return r
 }
@@ -88,7 +88,7 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
 
-	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"scans:read"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
 		OrgID:      orgID,
@@ -148,7 +148,7 @@ func TestGetAssetHistory_ByIdentifier(t *testing.T) {
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
 
-	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"assets:read"})
+	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"scans:read"})
 
 	loc1, err := store.CreateLocation(context.Background(), locmodel.Location{
 		OrgID:      orgID,

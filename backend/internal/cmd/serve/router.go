@@ -98,11 +98,15 @@ func setupRouter(
 
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}", assetsHandler.GetAssetByIdentifier)
-		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}/history", reportsHandler.GetAssetHistory)
 
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", locationsHandler.GetLocationByIdentifier)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
+
+		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
+		// require scans:read per TRA-392 — they moved under /locations/ and /assets/ for URL
+		// aesthetics but are scan data, not asset/location CRUD data.
+		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
+		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/assets/{identifier}/history", reportsHandler.GetAssetHistory)
 	})
 
 	// TRA-396 internal-only surrogate paths — session auth only, for frontend convenience.
