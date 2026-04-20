@@ -1,0 +1,93 @@
+# Publishes the preview OpenAPI spec + Postman collection from the platform
+# preview branch to trakrf/docs as the `sync/platform-preview` branch. That
+# branch is consumed by trakrf/docs sync-preview.yml, which merges it into its
+# own preview branch so docs.preview.trakrf.id/api renders the spec that
+# matches the preview backend at app.preview.trakrf.id.
+#
+# Triggered after platform sync-preview.yml completes successfully. Requires
+# repo secret TRAKRF_DOCS_PAT (fine-grained PAT on trakrf/docs with Contents
+# read/write).
+#
+# See docs/superpowers/specs/2026-04-20-tra-409-preview-api-docs-design.md.
+name: Publish Preview API Docs
+
+on:
+  workflow_run:
+    workflows: ["Sync Preview Branch"]
+    types: [completed]
+
+concurrency:
+  group: publish-preview-docs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout platform at preview ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          path: platform
+
+      - name: Get short SHA
+        id: sha
+        run: echo "sha=$(git -C platform rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trakrf-docs
+        uses: actions/checkout@v4
+        with:
+          repository: trakrf/docs
+          token: ${{ secrets.TRAKRF_DOCS_PAT }}
+          path: docs-repo
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: platform/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Postman collection from preview spec
+        run: |
+          pnpm dlx openapi-to-postmanv2 \
+            -s platform/docs/api/openapi.public.json \
+            -o platform/docs/api/trakrf-api.postman_collection.json \
+            -p -O folderStrategy=Paths
+
+      - name: Copy spec + collection into docs-repo/static/api/
+        run: |
+          mkdir -p docs-repo/static/api
+          cp platform/docs/api/openapi.public.json docs-repo/static/api/openapi.json
+          cp platform/docs/api/openapi.public.yaml docs-repo/static/api/openapi.yaml
+          cp platform/docs/api/trakrf-api.postman_collection.json docs-repo/static/api/
+
+      - name: Push sync/platform-preview branch
+        working-directory: docs-repo
+        env:
+          GH_TOKEN: ${{ secrets.TRAKRF_DOCS_PAT }}
+          PLATFORM_SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          BRANCH="sync/platform-preview"
+          git config user.name "trakrf-bot"
+          git config user.email "bot@trakrf.id"
+          # Always rebuild the branch as main + a single overlay commit so it
+          # stays clean and never accumulates merge history.
+          git checkout -B "$BRANCH" origin/main
+          git add static/api/
+          if git diff --cached --quiet; then
+            echo "No spec changes to publish — exiting cleanly."
+            exit 0
+          fi
+          git commit -m "chore(api): sync preview spec from platform@${PLATFORM_SHA}"
+          if ! git push --force-with-lease origin "$BRANCH"; then
+            echo "force-with-lease failed; falling back to force push."
+            git push --force origin "$BRANCH"
+          fi
