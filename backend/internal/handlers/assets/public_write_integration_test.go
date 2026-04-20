@@ -22,6 +22,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	assetmodel "github.com/trakrf/platform/backend/internal/models/asset"
 	locmodel "github.com/trakrf/platform/backend/internal/models/location"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
@@ -221,4 +222,90 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "rfid", data["type"])
 	assert.Equal(t, "EPC-ABC-123", data["value"])
+}
+
+func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-remove-ident-happy")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+
+	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "ident-host", Name: "A", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, asset.ID, shared.TagIdentifierRequest{
+		Type:  "rfid",
+		Value: "EPC-HAPPY-1",
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+
+	url := "/api/v1/assets/" + strconv.Itoa(asset.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp["deleted"])
+
+	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	require.NoError(t, err)
+	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
+}
+
+func TestRemoveAssetIdentifier_WrongAssetID_ReturnsDeletedFalse(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-remove-ident-wrong-owner")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+
+	owningAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "owning-asset", Name: "Owner", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	otherAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "other-asset", Name: "Other", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, owningAsset.ID, shared.TagIdentifierRequest{
+		Type:  "rfid",
+		Value: "EPC-WRONG-1",
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+
+	// DELETE via otherAsset's {id} targeting ident (which belongs to owningAsset).
+	url := "/api/v1/assets/" + strconv.Itoa(otherAsset.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.False(t, resp["deleted"], "mismatched {id} must not delete the identifier")
+
+	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched, "identifier must still exist since the path ID didn't match its owner")
+	assert.Equal(t, "EPC-WRONG-1", fetched.Value)
 }

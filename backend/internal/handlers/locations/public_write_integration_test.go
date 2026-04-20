@@ -21,6 +21,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/handlers/locations"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	locmodel "github.com/trakrf/platform/backend/internal/models/location"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
@@ -213,4 +214,90 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "rfid", data["type"])
 	assert.Equal(t, "EPC-LOC-ABC-123", data["value"])
+}
+
+func TestRemoveLocationIdentifier_APIKey_HappyPath(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-write-remove-ident-happy")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+
+	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "ident-host", Name: "Host", Path: "ident-host",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	ident, err := store.AddIdentifierToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
+		Type:  "rfid",
+		Value: "EPC-LOC-HAPPY-1",
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+
+	url := "/api/v1/locations/" + strconv.Itoa(loc.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp["deleted"])
+
+	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	require.NoError(t, err)
+	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
+}
+
+func TestRemoveLocationIdentifier_WrongLocationID_ReturnsDeletedFalse(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-write-remove-ident-wrong-owner")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+
+	owningLoc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "owning-loc", Name: "Owner", Path: "owning-loc",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	otherLoc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "other-loc", Name: "Other", Path: "other-loc",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	ident, err := store.AddIdentifierToLocation(context.Background(), orgID, owningLoc.ID, shared.TagIdentifierRequest{
+		Type:  "rfid",
+		Value: "EPC-LOC-WRONG-1",
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+
+	// DELETE via otherLoc's {id} targeting ident (which belongs to owningLoc).
+	url := "/api/v1/locations/" + strconv.Itoa(otherLoc.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.False(t, resp["deleted"], "mismatched {id} must not delete the identifier")
+
+	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched, "identifier must still exist since the path ID didn't match its owner")
+	assert.Equal(t, "EPC-LOC-WRONG-1", fetched.Value)
 }
