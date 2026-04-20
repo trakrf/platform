@@ -1753,21 +1753,125 @@ git commit -m "test(tra-397): integration tests for inventory save via API key"
 
 ---
 
-## Task 11: Public OpenAPI spec — add write paths
+## Task 11: Public OpenAPI spec — flip write endpoints from `internal` to `public` tag
 
 **Files:**
-- Modify: `docs/api/openapi.public.yaml`
+- Modify: `backend/internal/handlers/assets/assets.go` — 5 `@Tags` lines
+- Modify: `backend/internal/handlers/locations/locations.go` — 5 `@Tags` lines
+- Regenerate: `docs/api/openapi.public.{json,yaml}` and `docs/api/openapi.internal.{json,yaml}` via `just backend api-spec`
 
-**Goal:** Document every TRA-397 public write endpoint in the public OpenAPI spec so customers can see the write surface in Redoc/Swagger. Must list required scope, request body schema reference, and standard error responses (400/401/403/404/409/429/500).
+**Goal:** Expose the 10 write endpoints in the public OpenAPI spec. The repo's `apispec` partitioner (TRA-394) splits handlers into `openapi.public` and `openapi.internal` based on the `public` / `internal` discriminator tag in the swagger `@Tags` annotation. Task 11 is a tag-flip + regen task, NOT a hand-authored YAML task — the original plan's YAML snippets are obsolete because the spec is machine-generated.
 
-- [ ] **Step 11.1: Inspect current spec shape**
+**Why the plan changed:** During Task 11 preamble, the controller discovered the public spec lives at `docs/api/openapi.public.{json,yaml}` and is emitted by `backend/internal/tools/apispec/partition.go` from swag-generated v2 specs. Each operation must have exactly one of `public` or `internal`. Inventory Save was already flipped in Task 5. The remaining 10 writes (5 asset, 5 location) need the same treatment.
 
-Read: `docs/api/openapi.public.yaml`
-Note the existing paths (GET endpoints), the `securitySchemes`, the shape of `components/schemas` (asset, location, errors), and the style conventions used for `@Security APIKey[scope]`.
+- [ ] **Step 11.1: Inspect current @Tags state**
 
-- [ ] **Step 11.2: Add asset write paths**
+Run: `grep -n '^// @Tags' backend/internal/handlers/assets/assets.go backend/internal/handlers/locations/locations.go backend/internal/handlers/inventory/save.go`
 
-Append under `paths:` (or merge into the existing `/api/v1/assets` path node if already present for GET):
+Expected output (at time of writing):
+- `assets.go:69` Create — `assets,internal` (flip)
+- `assets.go:133` UpdateAsset — `assets,internal` (flip)
+- `assets.go:205` GetAssetByID — `assets,internal` (**keep** — internal surrogate-ID path)
+- `assets.go:251` DeleteAsset — `assets,internal` (flip)
+- `assets.go:300` ListAssets — `assets,public` (keep)
+- `assets.go:384` GetAssetByIdentifier — `assets,public` (keep)
+- `assets.go:430` AddIdentifier — `assets,internal` (flip)
+- `assets.go:499` RemoveIdentifier — `assets,internal` (flip)
+- `locations.go:64` Create — `locations,internal` (flip)
+- `locations.go:125` Update — `locations,internal` (flip)
+- `locations.go:195` Delete — `locations,internal` (flip)
+- `locations.go:241` ListLocations — `locations,public` (keep)
+- `locations.go:315` GetLocationByIdentifier — `locations,public` (keep)
+- `locations.go:359` GetLocationByID — `locations,internal` (**keep** — internal surrogate)
+- `locations.go:400,435,470` hierarchy reads (ancestors/descendants/children) — `locations,internal` (**keep** — session-only per Task 7)
+- `locations.go:506` AddIdentifier — `locations,internal` (flip)
+- `locations.go:575` RemoveIdentifier — `locations,internal` (flip)
+- `inventory/save.go:47` Save — `inventory,public` (keep — Task 5 already flipped)
+
+If line numbers have drifted, map by handler function name instead of line number.
+
+- [ ] **Step 11.2: Flip 10 `@Tags` annotations from `internal` to `public`**
+
+For each of the 10 write handlers listed in Step 11.1, change the `@Tags` value from `<resource>,internal` to `<resource>,public`. The discriminator is stripped from the output spec, so the resource tag alone becomes the group name in Redoc.
+
+**Assets (5 flips):**
+- `assets.Create` — `@Tags assets,internal` → `@Tags assets,public`
+- `assets.UpdateAsset` — `@Tags assets,internal` → `@Tags assets,public`
+- `assets.DeleteAsset` — `@Tags assets,internal` → `@Tags assets,public`
+- `assets.AddIdentifier` — `@Tags assets,internal` → `@Tags assets,public`
+- `assets.RemoveIdentifier` — `@Tags assets,internal` → `@Tags assets,public`
+
+**Locations (5 flips):**
+- `locations.Create` — `@Tags locations,internal` → `@Tags locations,public`
+- `locations.Update` — `@Tags locations,internal` → `@Tags locations,public`
+- `locations.Delete` — `@Tags locations,internal` → `@Tags locations,public`
+- `locations.AddIdentifier` — `@Tags locations,internal` → `@Tags locations,public`
+- `locations.RemoveIdentifier` — `@Tags locations,internal` → `@Tags locations,public`
+
+These edits are literal — just replace the word `internal` with `public` on those 10 `@Tags` lines. Preserve surrounding whitespace.
+
+**DO NOT FLIP** — these stay internal per Task 7 scope:
+- `assets.GetAssetByID` (surrogate-ID path for frontend)
+- `locations.GetLocationByID` (surrogate-ID path)
+- `locations.GetAncestors`, `GetDescendants`, `GetChildren` (hierarchy reads — still session-only)
+- `assets.UploadCSV`, `GetJobStatus` (bulk CSV — session-only per Task 7)
+
+- [ ] **Step 11.3: Verify the existing `@Security` annotations are correct**
+
+For the 10 flipped handlers, confirm the `@Security` line reads `APIKey[<resource>:<verb>]` — NOT `BearerAuth`. The full expected list:
+
+- `assets.Create` → `@Security APIKey[assets:write]` ✓ (set in original code)
+- `assets.UpdateAsset` → `@Security APIKey[assets:write]` ✓
+- `assets.DeleteAsset` → `@Security APIKey[assets:write]` ✓
+- `assets.AddIdentifier` → `@Security APIKey[assets:write]` ✓
+- `assets.RemoveIdentifier` → `@Security APIKey[assets:write]` ✓
+- `locations.Create` → `@Security APIKey[locations:write]` ✓
+- `locations.Update` → `@Security APIKey[locations:write]` ✓
+- `locations.Delete` → `@Security APIKey[locations:write]` (Task 3 already fixed from `BearerAuth`)
+- `locations.AddIdentifier` → `@Security APIKey[locations:write]` ✓
+- `locations.RemoveIdentifier` → `@Security APIKey[locations:write]` ✓
+
+If any still read `@Security BearerAuth`, update them — grep: `grep -n '@Security' backend/internal/handlers/assets/assets.go backend/internal/handlers/locations/locations.go`.
+
+- [ ] **Step 11.4: Regenerate OpenAPI specs**
+
+Run: `just backend api-spec`
+
+Expected: both `docs/api/openapi.public.{json,yaml}` and `docs/api/openapi.internal.{json,yaml}` are rewritten. Verify the 10 write paths now appear in the public spec:
+
+```bash
+grep -c "/api/v1/assets:" docs/api/openapi.public.yaml   # expect 1 (POST + GET on same path)
+grep -c "/api/v1/locations:" docs/api/openapi.public.yaml # expect 1
+grep -c "/api/v1/inventory/save" docs/api/openapi.public.yaml # expect 1
+grep -c "/api/v1/assets/{id}" docs/api/openapi.public.yaml  # expect at least 1
+grep -c "/api/v1/assets/{id}/identifiers" docs/api/openapi.public.yaml # expect at least 1
+```
+
+- [ ] **Step 11.5: Validate the spec with redocly**
+
+Run: `pnpm dlx @redocly/cli lint docs/api/openapi.public.yaml`
+Expected: 0 errors.
+
+If the Redocly "identical-paths" rule complains about `/api/v1/assets/{id}` vs `/api/v1/assets/{identifier}`, check `redocly.yaml` — TRA-396 already suppressed that rule. No action needed.
+
+- [ ] **Step 11.6: Commit**
+
+Commit message (plan's original message still applies — this is spec publication):
+
+```bash
+git add backend/internal/handlers/assets/assets.go \
+        backend/internal/handlers/locations/locations.go \
+        docs/api/openapi.public.json docs/api/openapi.public.yaml \
+        docs/api/openapi.internal.json docs/api/openapi.internal.yaml
+git commit -m "docs(tra-397): publish write endpoints to public OpenAPI spec"
+```
+
+---
+
+<!-- OBSOLETE: the below YAML snippets represent the pre-rewrite plan where Task 11 hand-authored paths. They're preserved for archeological reference but MUST NOT be used. The spec is machine-generated; Steps 11.1-11.6 above are authoritative. -->
+
+<details>
+<summary>Obsolete: hand-authored YAML path snippets (do not use)</summary>
 
 ```yaml
   /api/v1/assets:
@@ -1960,17 +2064,8 @@ Use the `Location`, `LocationCreateRequest`, `LocationUpdateRequest` component s
         '500': { $ref: '#/components/responses/InternalError' }
 ```
 
-- [ ] **Step 11.5: Validate the spec with redocly**
-
-Run: `pnpm dlx @redocly/cli lint docs/api/openapi.public.yaml`
-Expected: 0 errors. Warnings about the Redocly "identical-paths" rule are OK — TRA-396 already skips that rule per its commit history.
-
-- [ ] **Step 11.6: Commit**
-
-```bash
-git add docs/api/openapi.public.yaml
-git commit -m "docs(tra-397): document public write endpoints in OpenAPI spec"
-```
+Close the `<details>` block above before the next task heading.
+</details>
 
 ---
 
