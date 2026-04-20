@@ -6,14 +6,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateAssetCSV, generateAssetExcel, generateAssetPDF } from './assetExport';
 import type { Asset } from '@/types/assets';
 
-// Mock the location store
+// Mock the location store — export now uses byIdentifier (natural key)
 vi.mock('@/stores/locations/locationStore', () => ({
   useLocationStore: {
     getState: () => ({
       cache: {
-        byId: new Map([
-          [1, { id: 1, name: 'Warehouse A', identifier: 'WH-A' }],
-          [2, { id: 2, name: 'Office B', identifier: 'OFF-B' }],
+        byIdentifier: new Map([
+          ['WH-A', { id: 1, name: 'Warehouse A', identifier: 'WH-A' }],
+          ['OFF-B', { id: 2, name: 'Office B', identifier: 'OFF-B' }],
         ]),
       },
     }),
@@ -29,19 +29,18 @@ vi.mock('@/utils/shareUtils', () => ({
 const mockAssets: Asset[] = [
   {
     id: 1,
-    org_id: 1,
+    surrogate_id: 1,
     identifier: 'ASSET-001',
     name: 'Laptop Dell XPS',
     type: 'device',
     description: 'Development laptop',
-    current_location_id: 1,
+    current_location: 'WH-A',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     metadata: {},
     is_active: true,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    deleted_at: null,
     identifiers: [
       { id: 1, type: 'rfid', value: 'E280001234567890', is_active: true },
       { id: 2, type: 'rfid', value: 'E280001234567891', is_active: true },
@@ -49,36 +48,34 @@ const mockAssets: Asset[] = [
   },
   {
     id: 2,
-    org_id: 1,
+    surrogate_id: 2,
     identifier: 'ASSET-002',
     name: 'Office Chair',
     type: 'asset',
     description: 'Ergonomic chair',
-    current_location_id: 2,
+    current_location: 'OFF-B',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     metadata: {},
     is_active: false,
     created_at: '2024-01-15T00:00:00Z',
     updated_at: '2024-01-15T00:00:00Z',
-    deleted_at: null,
     identifiers: [],
   },
   {
     id: 3,
-    org_id: 1,
+    surrogate_id: 3,
     identifier: 'ASSET-003',
     name: 'Asset without location',
     type: 'inventory',
     description: '',
-    current_location_id: null,
+    current_location: null,
     valid_from: '2024-02-01T00:00:00Z',
     valid_to: null,
     metadata: {},
     is_active: true,
     created_at: '2024-02-01T00:00:00Z',
     updated_at: '2024-02-01T00:00:00Z',
-    deleted_at: null,
     identifiers: [{ id: 3, type: 'rfid', value: 'E280009999999999', is_active: true }],
   },
 ];

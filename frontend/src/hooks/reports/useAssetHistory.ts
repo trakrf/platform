@@ -23,10 +23,9 @@ export function useAssetHistory(assetId: number | null, options: UseAssetHistory
   });
 
   return {
-    asset: query.data?.asset ?? null,
     data: query.data?.data ?? [],
     totalCount: query.data?.total_count ?? 0,
-    count: query.data?.count ?? 0,
+    count: query.data?.limit ?? 0,
     offset: query.data?.offset ?? 0,
     isLoading: query.isLoading,
     isRefetching: query.isRefetching,

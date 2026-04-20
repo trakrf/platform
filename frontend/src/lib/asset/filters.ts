@@ -5,6 +5,7 @@ import type {
   SortState,
   PaginationState,
 } from '@/types/assets';
+import { useLocationStore } from '@/stores/locations/locationStore';
 
 /**
  * Filters assets by type and active status
@@ -41,12 +42,14 @@ export function filterAssets(
     if (filters.location_id !== undefined && filters.location_id !== 'all') {
       if (filters.location_id === null) {
         // Filter for unassigned assets (no location)
-        if (asset.current_location_id !== null) {
+        if (asset.current_location !== null && asset.current_location !== undefined) {
           return false;
         }
       } else {
-        // Filter for specific location
-        if (asset.current_location_id !== filters.location_id) {
+        // Filter for specific location — look up identifier from store by surrogate ID
+        const locById = useLocationStore.getState().cache.byId.get(filters.location_id as number);
+        const filterIdentifier = locById?.identifier;
+        if (asset.current_location !== filterIdentifier) {
           return false;
         }
       }

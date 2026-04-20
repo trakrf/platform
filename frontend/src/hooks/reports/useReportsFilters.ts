@@ -50,9 +50,13 @@ export function useReportsFilters({
 
   // 3. Fetch current locations with server-side location filter
   const debouncedSearch = useDebounce(search, 300);
+  // Resolve surrogate location ID to natural key identifier for the API
+  const selectedLocationIdentifier = selectedLocationId
+    ? locations.find((l) => l.id === selectedLocationId)?.identifier
+    : undefined;
   const { data, totalCount, isLoading, error } = useCurrentLocations({
-    search: debouncedSearch || undefined,
-    location_id: selectedLocationId || undefined,
+    q: debouncedSearch || undefined,
+    location: selectedLocationIdentifier,
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
   });

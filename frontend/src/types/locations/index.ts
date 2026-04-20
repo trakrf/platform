@@ -9,16 +9,17 @@
 import type { TagIdentifier } from '@/types/shared';
 
 /**
- * Core Location entity - matches backend LocationView struct
- * Reference: backend/internal/models/location/location.go
+ * Core Location entity - matches backend PublicLocationView struct
+ * Reference: backend/internal/models/location/public.go
  */
 export interface Location {
-  id: number;
-  org_id: number;
+  id: number; // Internal surrogate ID (populated from surrogate_id at fetch boundary)
+  surrogate_id: number; // Public API field name
   identifier: string;
   name: string;
   description: string;
-  parent_location_id: number | null;
+  parent_location_id: number | null; // Internal — kept for tree navigation (populated at fetch boundary)
+  parent: string | null; // Natural key of parent location (public API field)
   path: string;
   depth: number;
   valid_from: string;
@@ -82,7 +83,7 @@ export interface LocationResponse {
  */
 export interface ListLocationsResponse {
   data: Location[];
-  count: number;
+  limit: number; // was `count`
   offset: number;
   total_count: number;
 }

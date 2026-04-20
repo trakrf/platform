@@ -44,11 +44,11 @@ export const assetsApi = {
   },
 
   /**
-   * Get single asset by ID
-   * GET /api/v1/assets/:id
+   * Get single asset by surrogate ID
+   * GET /api/v1/assets/by-id/:id
    */
   get: (id: number, options?: { signal?: AbortSignal }) =>
-    apiClient.get<AssetResponse>(`/assets/${id}`, { signal: options?.signal }),
+    apiClient.get<AssetResponse>(`/assets/by-id/${id}`, { signal: options?.signal }),
 
   /**
    * Create new asset

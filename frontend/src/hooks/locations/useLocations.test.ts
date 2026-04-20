@@ -17,14 +17,14 @@ vi.mock('@/stores/orgStore', () => ({
   }),
 }));
 
-const mockLocations: Location[] = [
+// Raw API shapes returned by the backend (public API response shape)
+const apiLocations = [
   {
-    id: 1,
-    org_id: 100,
+    surrogate_id: 1,
     identifier: 'usa',
     name: 'United States',
     description: '',
-    parent_location_id: null,
+    parent: null,
     path: 'usa',
     depth: 1,
     valid_from: '2024-01-01',
@@ -35,12 +35,11 @@ const mockLocations: Location[] = [
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: 2,
-    org_id: 100,
+    surrogate_id: 2,
     identifier: 'california',
     name: 'California',
     description: '',
-    parent_location_id: 1,
+    parent: 'usa',
     path: 'usa.california',
     depth: 2,
     valid_from: '2024-01-01',
@@ -50,6 +49,12 @@ const mockLocations: Location[] = [
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   },
+];
+
+// Normalized shape (what the hook stores/returns after normalization)
+const mockLocations: Location[] = [
+  { ...apiLocations[0], id: 1, parent_location_id: null } as Location,
+  { ...apiLocations[1], id: 2, parent_location_id: 1 } as Location,
 ];
 
 const createWrapper = () => {
@@ -69,7 +74,7 @@ describe('useLocations', () => {
 
   it('should fetch and return locations', async () => {
     vi.mocked(locationsApi.list).mockResolvedValue({
-      data: { data: mockLocations, total_count: 2 },
+      data: { data: apiLocations, total_count: 2, limit: 100, offset: 0 },
     } as any);
 
     const { result } = renderHook(() => useLocations(), {
@@ -87,7 +92,7 @@ describe('useLocations', () => {
 
   it('should update store cache on fetch', async () => {
     vi.mocked(locationsApi.list).mockResolvedValue({
-      data: { data: mockLocations, total_count: 2 },
+      data: { data: apiLocations, total_count: 2, limit: 100, offset: 0 },
     } as any);
 
     const { result } = renderHook(() => useLocations(), {
@@ -104,7 +109,7 @@ describe('useLocations', () => {
 
   it('should respect enabled option', async () => {
     vi.mocked(locationsApi.list).mockResolvedValue({
-      data: { data: mockLocations, total_count: 2 },
+      data: { data: apiLocations, total_count: 2, limit: 100, offset: 0 },
     } as any);
 
     const { result } = renderHook(() => useLocations({ enabled: false }), {
@@ -134,7 +139,7 @@ describe('useLocations', () => {
 
   it('should support refetch', async () => {
     vi.mocked(locationsApi.list).mockResolvedValue({
-      data: { data: mockLocations, total_count: 2 },
+      data: { data: apiLocations, total_count: 2, limit: 100, offset: 0 },
     } as any);
 
     const { result } = renderHook(() => useLocations(), {

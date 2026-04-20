@@ -3,6 +3,12 @@ import { useAssetStore } from '@/stores/assets/assetStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { useTagStore } from '@/stores/tagStore';
 import { assetsApi } from '@/lib/api/assets';
+import type { Asset } from '@/types/assets';
+
+/** Normalize raw public API asset shape to internal shape (surrogate_id → id). */
+function normalizeAsset(raw: Asset): Asset {
+  return { ...raw, id: raw.surrogate_id };
+}
 
 export interface UseAssetsOptions {
   enabled?: boolean;
@@ -35,10 +41,11 @@ export function useAssets(options: UseAssetsOptions = {}) {
         return response.data;
       }
 
-      useAssetStore.getState().addAssets(response.data.data);
+      const normalized = response.data.data.map(normalizeAsset);
+      useAssetStore.getState().addAssets(normalized);
       // Re-enrich tags with newly loaded assets
       useTagStore.getState().refreshAssetEnrichment();
-      return response.data;
+      return { ...response.data, data: normalized };
     },
     enabled,
     refetchOnMount,

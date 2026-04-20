@@ -11,13 +11,13 @@ import type { Location, CreateLocationRequest } from '@/types/locations';
 vi.mock('@/lib/api/locations');
 vi.mock('@/lib/auth/orgContext');
 
-const mockLocation: Location = {
-  id: 1,
-  org_id: 100,
+// Raw API shape (public API response)
+const apiLocation = {
+  surrogate_id: 1,
   identifier: 'usa',
   name: 'United States',
   description: '',
-  parent_location_id: null,
+  parent: null,
   path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
@@ -27,6 +27,9 @@ const mockLocation: Location = {
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
+
+// Normalized shape (what is stored and returned)
+const mockLocation: Location = { ...apiLocation, id: 1, parent_location_id: null } as Location;
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -46,7 +49,7 @@ describe('useLocationMutations', () => {
 
   it('should create location', async () => {
     vi.mocked(locationsApi.create).mockResolvedValue({
-      data: { data: mockLocation },
+      data: { data: apiLocation },
     } as any);
 
     const { result } = renderHook(() => useLocationMutations(), {
@@ -67,7 +70,7 @@ describe('useLocationMutations', () => {
   });
 
   it('should update location', async () => {
-    const updated = { ...mockLocation, name: 'Updated Name' };
+    const updated = { ...apiLocation, name: 'Updated Name' };
     vi.mocked(locationsApi.update).mockResolvedValue({
       data: { data: updated },
     } as any);
@@ -104,7 +107,18 @@ describe('useLocationMutations', () => {
   });
 
   it('should move location', async () => {
-    const moved = { ...mockLocation, parent_location_id: 2, path: 'parent.usa' };
+    // Pre-populate parent location so normalizeLocation can resolve parent_location_id
+    const parentLocation: Location = {
+      ...apiLocation,
+      surrogate_id: 2,
+      id: 2,
+      identifier: 'parent-loc',
+      parent: null,
+      parent_location_id: null,
+    } as Location;
+    useLocationStore.getState().addLocation(parentLocation);
+
+    const moved = { ...apiLocation, parent: 'parent-loc', path: 'parent-loc.usa' };
     vi.mocked(locationsApi.move).mockResolvedValue({
       data: { data: moved },
     } as any);

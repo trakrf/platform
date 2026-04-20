@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/shared';
 import { AssetHistoryTable } from '@/components/reports/AssetHistoryTable';
 import { AssetHistoryCard } from '@/components/reports/AssetHistoryCard';
 import { useAssetHistory } from '@/hooks/reports';
+import { useAssetStore } from '@/stores/assets/assetStore';
 
 export default function ReportsHistoryScreen() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -22,10 +23,13 @@ export default function ReportsHistoryScreen() {
     return id ? parseInt(id, 10) : null;
   }, []);
 
-  const { asset, data, totalCount, isLoading, error } = useAssetHistory(assetId, {
+  const { data, totalCount, isLoading, error } = useAssetHistory(assetId, {
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
   });
+  // Look up asset from store (loaded via useAssets elsewhere in the app)
+  const getAssetById = useAssetStore((state) => state.getAssetById);
+  const asset = assetId ? getAssetById(assetId) : null;
 
   // Show error toast
   useEffect(() => {

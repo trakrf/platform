@@ -14,12 +14,13 @@ import { getDateString, getTimestamp } from '@/utils/shareUtils';
 import { useLocationStore } from '@/stores/locations/locationStore';
 
 /**
- * Resolve location name from cache
+ * Resolve location display name from natural key (identifier) via cache.
+ * Falls back to the identifier string itself if the location isn't cached.
  */
-function getLocationName(locationId: number | null): string {
-  if (!locationId) return '';
-  const location = useLocationStore.getState().cache.byId.get(locationId);
-  return location?.name || '';
+function getLocationName(locationIdentifier: string | null | undefined): string {
+  if (!locationIdentifier) return '';
+  const location = useLocationStore.getState().cache.byIdentifier.get(locationIdentifier);
+  return location?.name || locationIdentifier;
 }
 
 /**
@@ -47,7 +48,7 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
     asset.name || '',
     asset.type,
     asset.identifiers?.map((t) => t.value).join(', ') || '',
-    getLocationName(asset.current_location_id),
+    getLocationName(asset.current_location),
     asset.is_active ? 'Active' : 'Inactive',
     asset.description || '',
   ]);
@@ -111,7 +112,7 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
     Name: asset.name || '',
     Type: asset.type,
     'Tag ID(s)': asset.identifiers?.map((t) => t.value).join(', ') || '',
-    Location: getLocationName(asset.current_location_id),
+    Location: getLocationName(asset.current_location),
     Status: asset.is_active ? 'Active' : 'Inactive',
     Description: asset.description || '',
     Created: asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
@@ -184,7 +185,7 @@ export function generateAssetCSV(assets: Asset[]): ExportResult {
       `"${(asset.description || '').replace(/"/g, '""')}"`,
       asset.is_active ? 'Active' : 'Inactive',
       asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
-      `"${getLocationName(asset.current_location_id).replace(/"/g, '""')}"`,
+      `"${getLocationName(asset.current_location).replace(/"/g, '""')}"`,
     ];
 
     // Tag columns - one per column, pad with empty if fewer tags

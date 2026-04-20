@@ -3,9 +3,19 @@ import { useLocationStore } from '@/stores/locations/locationStore';
 import { locationsApi } from '@/lib/api/locations';
 import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type {
+  Location,
   CreateLocationRequest,
   UpdateLocationRequest,
 } from '@/types/locations';
+
+/** Normalize raw public API location to internal shape. Resolves parent_location_id from store cache. */
+function normalizeLocation(raw: Location): Location {
+  const byIdentifier = useLocationStore.getState().cache?.byIdentifier;
+  const parentId = raw.parent
+    ? (byIdentifier?.get(raw.parent)?.id ?? null)
+    : null;
+  return { ...raw, id: raw.surrogate_id, parent_location_id: parentId };
+}
 
 export function useLocationMutations() {
   const queryClient = useQueryClient();
@@ -14,7 +24,7 @@ export function useLocationMutations() {
     mutationFn: async (data: CreateLocationRequest) => {
       await ensureOrgContext();
       const response = await locationsApi.create(data);
-      return response.data.data;
+      return normalizeLocation(response.data.data);
     },
     onSuccess: (location) => {
       useLocationStore.getState().addLocation(location);
@@ -32,7 +42,7 @@ export function useLocationMutations() {
     }) => {
       await ensureOrgContext();
       const response = await locationsApi.update(id, updates);
-      return response.data.data;
+      return normalizeLocation(response.data.data);
     },
     onSuccess: (location) => {
       useLocationStore.getState().updateLocation(location.id, location);
@@ -64,7 +74,7 @@ export function useLocationMutations() {
     }) => {
       await ensureOrgContext();
       const response = await locationsApi.move(id, { new_parent_id: newParentId });
-      return response.data.data;
+      return normalizeLocation(response.data.data);
     },
     onSuccess: (location) => {
       useLocationStore.getState().updateLocation(location.id, location);

@@ -15,16 +15,14 @@ vi.mock('@/stores/orgStore', () => ({
 }));
 
 const mockResponse = {
-  asset: { id: 1, name: 'Projector A1', identifier: 'AST-001' },
   data: [
     {
       timestamp: '2025-01-27T10:30:00Z',
-      location_id: 1,
-      location_name: 'Room 101',
+      location: 'room-101',
       duration_seconds: null,
     },
   ],
-  count: 1,
+  limit: 1,
   offset: 0,
   total_count: 1,
 };
@@ -56,7 +54,6 @@ describe('useAssetHistory', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(result.current.asset).toEqual(mockResponse.asset);
     expect(result.current.data).toEqual(mockResponse.data);
   });
 
@@ -67,7 +64,6 @@ describe('useAssetHistory', () => {
 
     await new Promise((r) => setTimeout(r, 100));
     expect(reportsApi.getAssetHistory).not.toHaveBeenCalled();
-    expect(result.current.asset).toBeNull();
   });
 
   it('should handle 404 errors', async () => {
@@ -90,8 +86,8 @@ describe('useAssetHistory', () => {
     renderHook(
       () =>
         useAssetHistory(1, {
-          start_date: '2025-01-01T00:00:00Z',
-          end_date: '2025-01-27T23:59:59Z',
+          from: '2025-01-01T00:00:00Z',
+          to: '2025-01-27T23:59:59Z',
         }),
       {
         wrapper: createWrapper(),
@@ -100,8 +96,8 @@ describe('useAssetHistory', () => {
 
     await waitFor(() => {
       expect(reportsApi.getAssetHistory).toHaveBeenCalledWith(1, {
-        start_date: '2025-01-01T00:00:00Z',
-        end_date: '2025-01-27T23:59:59Z',
+        from: '2025-01-01T00:00:00Z',
+        to: '2025-01-27T23:59:59Z',
       });
     });
   });

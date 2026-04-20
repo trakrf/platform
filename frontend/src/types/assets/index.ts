@@ -15,24 +15,23 @@ import type { TagIdentifier } from '@/types/shared';
 export type AssetType = 'person' | 'device' | 'asset' | 'inventory' | 'other';
 
 /**
- * Core Asset entity - matches backend Asset struct
- * Reference: backend/internal/models/asset/asset.go lines 10-25
+ * Core Asset entity - matches backend PublicAssetView struct
+ * Reference: backend/internal/models/asset/public.go
  */
 export interface Asset {
-  id: number; // Go: int
-  org_id: number; // Go: int
+  id: number; // Internal surrogate ID (populated from surrogate_id at fetch boundary)
+  surrogate_id: number; // Go: int — public API field name
   identifier: string; // Go: string - Customer identifier (e.g., "LAP-001")
   name: string; // Go: string
   type: AssetType; // Go: string with validation
   description: string; // Go: string
-  current_location_id: number | null; // Go: *int → Location foreign key
+  current_location: string | null; // Natural key of current location (was current_location_id int)
   valid_from: string; // Go: time.Time → ISO 8601 string
   valid_to: string | null; // Go: *time.Time → ISO 8601 string or null
   metadata: Record<string, any>; // Go: any → JSON object
   is_active: boolean; // Go: bool
   created_at: string; // Go: time.Time → ISO 8601 string
   updated_at: string; // Go: time.Time → ISO 8601 string
-  deleted_at: string | null; // Go: *time.Time → ISO 8601 string or null
   identifiers: TagIdentifier[]; // Tag identifiers (RFID) linked to this asset
 }
 
@@ -47,7 +46,7 @@ export interface CreateAssetRequest {
   name: string; // required, max 255
   type: AssetType; // required, oneof
   description?: string; // optional, max 1024
-  current_location_id?: number | null; // optional location foreign key
+  current_location_id?: number | null; // optional location FK (write path, unchanged)
   valid_from: string; // ISO 8601 date
   valid_to: string; // ISO 8601 date
   is_active: boolean;
@@ -63,7 +62,7 @@ export interface UpdateAssetRequest {
   name?: string;
   type?: AssetType;
   description?: string;
-  current_location_id?: number | null;
+  current_location_id?: number | null; // write path, unchanged
   valid_from?: string;
   valid_to?: string;
   is_active?: boolean;
@@ -85,7 +84,7 @@ export interface TagIdentifierInput {
  */
 export interface ListAssetsResponse {
   data: Asset[];
-  count: number; // Number of items in current response
+  limit: number; // Number of items in current response (was `count`)
   offset: number; // Current offset for pagination
   total_count: number; // Total items in database
 }

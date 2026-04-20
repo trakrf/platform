@@ -28,7 +28,6 @@ export type {
   CurrentLocationItem,
   CurrentLocationsResponse,
   CurrentLocationsParams,
-  AssetInfo,
   AssetHistoryItem,
   AssetHistoryResponse,
   AssetHistoryParams,

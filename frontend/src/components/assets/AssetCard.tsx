@@ -35,9 +35,9 @@ export function AssetCard({
   className = '',
 }: AssetCardProps) {
   const TypeIcon = TYPE_ICONS[asset.type] || HelpCircle;
-  const getLocationById = useLocationStore((state) => state.getLocationById);
-  const locationData = asset.current_location_id ? getLocationById(asset.current_location_id) : null;
-  const locationName = locationData?.name;
+  const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
+  const locationData = asset.current_location ? getLocationByIdentifier(asset.current_location) : null;
+  const locationName = locationData?.name ?? asset.current_location ?? undefined;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>(asset.identifiers || []);

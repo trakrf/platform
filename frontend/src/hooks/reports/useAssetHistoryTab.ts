@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useCurrentLocations } from './useCurrentLocations';
 import { useAssetHistory } from './useAssetHistory';
 import { formatDuration } from '@/lib/reports/utils';
+import { useAssetStore } from '@/stores/assets/assetStore';
 import type { AssetHistoryItem } from '@/types/reports';
 
 const PAGE_SIZE = 20;
@@ -70,20 +71,21 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
   );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Fetch asset list for dropdown
+  // Fetch asset list for dropdown via current-locations (natural keys only)
   const { data: assetsData, isLoading: isLoadingAssets } = useCurrentLocations({
     limit: 1000,
   });
+  const getAssetByIdentifier = useAssetStore((s) => s.getAssetByIdentifier);
 
-  // Transform to AssetOption[]
+  // Transform to AssetOption[] — look up surrogate ID from asset store by identifier
   const assetOptions = useMemo<AssetOption[]>(
     () =>
-      assetsData.map((a) => ({
-        id: a.asset_id,
-        name: a.asset_name,
-        identifier: a.asset_identifier,
-      })),
-    [assetsData]
+      assetsData.flatMap((a) => {
+        const asset = getAssetByIdentifier(a.asset);
+        if (!asset) return [];
+        return [{ id: asset.id, name: asset.name, identifier: asset.identifier }];
+      }),
+    [assetsData, getAssetByIdentifier]
   );
 
   // Memoize history params to prevent infinite refetching
@@ -91,8 +93,8 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
     () => ({
       limit: PAGE_SIZE,
       offset,
-      start_date: new Date(fromDate).toISOString(),
-      end_date: new Date(toDate + 'T23:59:59').toISOString(),
+      from: new Date(fromDate).toISOString(),
+      to: new Date(toDate + 'T23:59:59').toISOString(),
     }),
     [fromDate, toDate, offset]
   );
@@ -129,7 +131,7 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
     if (accumulatedData.length === 0) return null;
 
     const uniqueLocations = new Set(
-      accumulatedData.filter((d) => d.location_id).map((d) => d.location_id)
+      accumulatedData.filter((d) => d.location).map((d) => d.location)
     );
 
     const totalSeconds = accumulatedData.reduce(
@@ -140,7 +142,7 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
     return {
       locationsVisited: uniqueLocations.size,
       timeTracked: formatDuration(totalSeconds),
-      currentLocation: accumulatedData[0]?.location_name || null,
+      currentLocation: accumulatedData[0]?.location || null,
     };
   }, [accumulatedData]);
 

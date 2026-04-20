@@ -3,7 +3,11 @@ import { useAssetStore } from '@/stores/assets/assetStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { assetsApi } from '@/lib/api/assets';
 import { ensureOrgContext } from '@/lib/auth/orgContext';
-import type { CreateAssetRequest, UpdateAssetRequest } from '@/types/assets';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest } from '@/types/assets';
+
+function normalizeAsset(raw: Asset): Asset {
+  return { ...raw, id: raw.surrogate_id };
+}
 
 export function useAssetMutations() {
   const queryClient = useQueryClient();
@@ -13,7 +17,7 @@ export function useAssetMutations() {
     mutationFn: async (data: CreateAssetRequest) => {
       await ensureOrgContext();
       const response = await assetsApi.create(data);
-      return response.data.data;
+      return normalizeAsset(response.data.data);
     },
     onSuccess: (asset) => {
       useAssetStore.getState().addAsset(asset);
@@ -31,7 +35,7 @@ export function useAssetMutations() {
     }) => {
       await ensureOrgContext();
       const response = await assetsApi.update(id, updates);
-      return response.data.data;
+      return normalizeAsset(response.data.data);
     },
     onSuccess: (asset) => {
       useAssetStore.getState().updateCachedAsset(asset.id, asset);

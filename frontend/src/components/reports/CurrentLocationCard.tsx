@@ -17,10 +17,10 @@ export function CurrentLocationCard({ item, onClick }: CurrentLocationCardProps)
       <div className="flex justify-between items-start mb-2">
         <div>
           <h3 className="font-medium text-gray-900 dark:text-gray-100">
-            {item.asset_name}
+            {item.asset}
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {item.asset_identifier}
+            {item.asset}
           </p>
         </div>
         <FreshnessBadge lastSeen={item.last_seen} />
@@ -29,7 +29,7 @@ export function CurrentLocationCard({ item, onClick }: CurrentLocationCardProps)
       <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-2">
         <div className="flex items-center gap-1">
           <MapPin className="w-4 h-4" />
-          <span>{item.location_name || 'Unknown'}</span>
+          <span>{item.location || 'Unknown'}</span>
         </div>
       </div>
       <div className="flex items-center gap-1 text-sm">
