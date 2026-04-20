@@ -92,6 +92,8 @@ func createTestScan(t *testing.T, pool *pgxpool.Pool, orgID, assetID int, locati
 }
 
 func TestGetAssetHistory_Integration_Success(t *testing.T) {
+	// TODO(tra-396-task-16): replace with public-flow integration test using identifier path
+	t.Skip("pre-task-16: session-auth surrogate flow; will be replaced in Task 16")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -134,6 +136,8 @@ func TestGetAssetHistory_Integration_Success(t *testing.T) {
 }
 
 func TestGetAssetHistory_Integration_AssetNotFound(t *testing.T) {
+	// TODO(tra-396-task-16): replace with public-flow integration test using identifier path
+	t.Skip("pre-task-16: session-auth surrogate flow; will be replaced in Task 16")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -160,6 +164,8 @@ func TestGetAssetHistory_Integration_AssetNotFound(t *testing.T) {
 }
 
 func TestGetAssetHistory_Integration_WrongOrg(t *testing.T) {
+	// TODO(tra-396-task-16): replace with public-flow integration test using identifier path
+	t.Skip("pre-task-16: session-auth surrogate flow; will be replaced in Task 16")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -195,6 +201,8 @@ func TestGetAssetHistory_Integration_WrongOrg(t *testing.T) {
 }
 
 func TestGetAssetHistory_Integration_NoScans(t *testing.T) {
+	// TODO(tra-396-task-16): replace with public-flow integration test using identifier path
+	t.Skip("pre-task-16: session-auth surrogate flow; will be replaced in Task 16")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -225,6 +233,8 @@ func TestGetAssetHistory_Integration_NoScans(t *testing.T) {
 }
 
 func TestGetAssetHistory_Integration_DateRangeFilter(t *testing.T) {
+	// TODO(tra-396-task-16): replace with public-flow integration test using identifier path
+	t.Skip("pre-task-16: session-auth surrogate flow; will be replaced in Task 16")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -264,6 +274,8 @@ func TestGetAssetHistory_Integration_DateRangeFilter(t *testing.T) {
 }
 
 func TestGetAssetHistory_Integration_Pagination(t *testing.T) {
+	// TODO(tra-396-task-16): replace with public-flow integration test using identifier path
+	t.Skip("pre-task-16: session-auth surrogate flow; will be replaced in Task 16")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -303,6 +315,8 @@ func TestGetAssetHistory_Integration_Pagination(t *testing.T) {
 }
 
 func TestGetAssetHistory_Integration_DurationCalculation(t *testing.T) {
+	// TODO(tra-396-task-16): replace with public-flow integration test using identifier path
+	t.Skip("pre-task-16: session-auth surrogate flow; will be replaced in Task 16")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 

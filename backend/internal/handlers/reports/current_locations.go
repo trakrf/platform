@@ -2,7 +2,6 @@ package reports
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trakrf/platform/backend/internal/apierrors"
@@ -28,91 +27,62 @@ func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{storage: storage}
 }
 
-// ListCurrentLocations handles GET /api/v1/reports/current-locations
-// @Summary List current asset locations
-// @Description Get paginated list of assets with their most recent location
-// @Tags reports
-// @Accept json
-// @Produce json
-// @Param limit query int false "Results per page (default 50, max 100)" minimum(1) maximum(100) default(50)
-// @Param offset query int false "Pagination offset (default 0)" minimum(0) default(0)
-// @Param location_id query int false "Filter by location ID"
-// @Param search query string false "Search asset name or identifier"
-// @Success 200 {object} report.CurrentLocationsResponse
-// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
-// @Router /api/v1/reports/current-locations [get]
+// ListCurrentLocations handles GET /api/v1/locations/current
 func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
-	requestID := middleware.GetRequestID(r.Context())
+	reqID := middleware.GetRequestID(r.Context())
 
-	// 1. Get org from claims
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.ReportCurrentLocationsFailed, "missing organization context", requestID)
+			apierrors.ReportCurrentLocationsFailed, "missing organization context", reqID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
-	// 2. Parse query parameters
+	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
+		Filters: []string{"location", "q"},
+		Sorts:   []string{"last_seen", "asset", "location"},
+	})
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			"Invalid list parameters", err.Error(), reqID)
+		return
+	}
+
 	filter := report.CurrentLocationFilter{
-		Limit:  defaultLimit,
-		Offset: 0,
+		LocationIdentifiers: params.Filters["location"],
+		Limit:               params.Limit,
+		Offset:              params.Offset,
+	}
+	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
+		filter.Q = &vs[0]
 	}
 
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
-			filter.Limit = parsed
-			if filter.Limit > maxLimit {
-				filter.Limit = maxLimit
-			}
-		}
-	}
-
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
-			filter.Offset = parsed
-		}
-	}
-
-	// TODO(tra-396-task-14): full natural-key param handling; minimal rename to keep build green
-	if location := r.URL.Query().Get("location"); location != "" {
-		filter.LocationIdentifiers = []string{location}
-	}
-
-	if q := r.URL.Query().Get("q"); q != "" {
-		filter.Q = &q
-	}
-
-	// 3. Fetch data
 	items, err := h.storage.ListCurrentLocations(r.Context(), orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportCurrentLocationsFailed, err.Error(), requestID)
+			apierrors.ReportCurrentLocationsFailed, err.Error(), reqID)
 		return
 	}
-
-	totalCount, err := h.storage.CountCurrentLocations(r.Context(), orgID, filter)
+	total, err := h.storage.CountCurrentLocations(r.Context(), orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportCurrentLocationsCount, err.Error(), requestID)
+			apierrors.ReportCurrentLocationsCount, err.Error(), reqID)
 		return
 	}
 
-	// 4. Return response
-	response := report.CurrentLocationsResponse{
-		Data:       items,
-		Count:      len(items),
-		Offset:     filter.Offset,
-		TotalCount: totalCount,
+	out := make([]report.PublicCurrentLocationItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, report.ToPublicCurrentLocationItem(it))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, response)
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"data":        out,
+		"limit":       params.Limit,
+		"offset":      params.Offset,
+		"total_count": total,
+	})
 }
 
-// RegisterRoutes registers report handler routes
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/reports/current-locations", h.ListCurrentLocations)
-	r.Get("/api/v1/reports/assets/{id}/history", h.GetAssetHistory)
-}
+// RegisterRoutes is intentionally empty — reports routes are registered in
+// internal/cmd/serve/router.go across the public and session-only groups.
+func (h *Handler) RegisterRoutes(r chi.Router) {}

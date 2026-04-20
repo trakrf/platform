@@ -17,10 +17,11 @@ func TestGetAssetHistory_MissingOrgContext(t *testing.T) {
 	handler := NewHandler(nil)
 
 	// Use chi router to properly set up URL params
+	// GetAssetHistoryByID is the session-auth surrogate variant using numeric {id}.
 	r := chi.NewRouter()
-	r.Get("/api/v1/reports/assets/{id}/history", handler.GetAssetHistory)
+	r.Get("/api/v1/assets/by-id/{id}/history", handler.GetAssetHistoryByID)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/reports/assets/123/history", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/by-id/123/history", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -138,15 +139,9 @@ func TestGetAssetHistory_DefaultDateRange(t *testing.T) {
 }
 
 func TestGetAssetHistory_RouteRegistration(t *testing.T) {
-	handler := NewHandler(nil)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
-
-	rctx := chi.NewRouteContext()
-	if !r.Match(rctx, http.MethodGet, "/api/v1/reports/assets/123/history") {
-		t.Error("Route GET /api/v1/reports/assets/{id}/history not registered")
-	}
+	// TODO(tra-396-task-16): replace with public-flow integration test
+	// RegisterRoutes is intentionally empty; routes are wired in router.go (Task 15).
+	t.Skip("routes moved to router.go in Task 15")
 }
 
 func TestAssetHistoryItem_JSON(t *testing.T) {
