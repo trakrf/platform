@@ -2,7 +2,6 @@ package locations
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -20,7 +19,11 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
-var validate = validator.New()
+var validate = func() *validator.Validate {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+	return v
+}()
 
 type Handler struct {
 	storage *storage.Storage
@@ -85,15 +88,13 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request location.CreateLocationWithIdentifiersRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvalidJSON, err.Error(), requestID)
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.ValidationFailed, err.Error(), requestID)
+		httputil.RespondValidationError(w, r, err, requestID)
 		return
 	}
 
@@ -106,13 +107,14 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		if strings.Contains(err.Error(), "already exists") {
+		// Storage returns "already exists" / "already exist" strings for unique violations
+		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
+		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.LocationCreateFailed, err.Error(), requestID)
 			return
 		}
-		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationCreateFailed, err.Error(), requestID)
+		httputil.RespondStorageError(w, r, err, requestID)
 		return
 	}
 
@@ -156,28 +158,27 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var request location.UpdateLocationRequest
-	if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.LocationUpdateInvalidReq, err.Error(), ctx)
+	if err := httputil.DecodeJSON(req, &request); err != nil {
+		httputil.RespondDecodeError(w, req, err, ctx)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.ValidationFailed, err.Error(), ctx)
+		httputil.RespondValidationError(w, req, err, ctx)
 		return
 	}
 
 	result, err := handler.storage.UpdateLocation(req.Context(), orgID, id, request)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "already exists") {
+		// Storage returns "already exists" / "already exist" strings for unique violations
+		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
+		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.LocationUpdateFailed, err.Error(), ctx)
 			return
 		}
-		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationUpdateFailed, err.Error(), ctx)
+		httputil.RespondStorageError(w, req, err, ctx)
 		return
 	}
 
@@ -222,8 +223,7 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 
 	deleted, err := handler.storage.DeleteLocation(req.Context(), orgID, id)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationDeleteFailed, err.Error(), ctx)
+		httputil.RespondStorageError(w, req, err, ctx)
 		return
 	}
 
@@ -564,22 +564,26 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request shared.TagIdentifierRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvalidJSON, err.Error(), requestID)
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.ValidationFailed, err.Error(), requestID)
+		httputil.RespondValidationError(w, r, err, requestID)
 		return
 	}
 
 	identifier, err := handler.storage.AddIdentifierToLocation(r.Context(), orgID, locationID, request)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationCreateFailed, err.Error(), requestID)
+		// Storage returns "already exists" / "already exist" strings for unique violations
+		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
+		if strings.Contains(err.Error(), "already exist") {
+			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
+				apierrors.LocationCreateFailed, err.Error(), requestID)
+			return
+		}
+		httputil.RespondStorageError(w, r, err, requestID)
 		return
 	}
 
@@ -630,8 +634,7 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 
 	deleted, err := handler.storage.RemoveLocationIdentifier(r.Context(), orgID, locationID, identifierID)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationDeleteFailed, err.Error(), requestID)
+		httputil.RespondStorageError(w, r, err, requestID)
 		return
 	}
 
