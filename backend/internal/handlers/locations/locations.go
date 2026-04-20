@@ -346,7 +346,7 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 	}
 
 	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			"Invalid location ID", err.Error(), reqID)

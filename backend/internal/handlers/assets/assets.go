@@ -209,7 +209,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 	}
 
 	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), reqID)

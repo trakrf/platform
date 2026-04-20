@@ -27,7 +27,9 @@ import (
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/storage"
+	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
 func setupRouter(
@@ -116,6 +118,13 @@ func setupRouter(
 	if os.Getenv("APP_ENV") != "production" {
 		testHandler.RegisterRoutes(r)
 	}
+
+	// JSON 404 for unknown /api/* paths so clients don't blow up mid-deserialize
+	// on the SPA's index.html fallback. Must be registered before the /* wildcard.
+	r.HandleFunc("/api/*", func(w http.ResponseWriter, req *http.Request) {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, errors.ErrNotFound,
+			"Unknown API route: "+req.URL.Path, "", middleware.GetRequestID(req.Context()))
+	})
 
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
 		frontendHandler.ServeSPA(w, r, "frontend/dist/index.html")
