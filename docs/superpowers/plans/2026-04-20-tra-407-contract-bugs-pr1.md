@@ -1607,3 +1607,87 @@ The six users/orgs handlers above leak the **same patterns** as auth/assets/loca
 **Option A (in-scope):** Extend Tasks 11–12 to include users and orgs handlers. This would consolidate all leak fixes in a single PR.
 
 **Option B (out-of-scope, deferred):** Document these as tech debt for a follow-up PR (TRA-407 PR #2 or a separate follow-up). Current plan scope (Tasks 10–12) focuses on public-contract bugs only; these internal handlers are not customer-facing API contracts.
+
+### Scope Decision (2026-04-20)
+
+**Decision:** Option A-narrow.
+
+- **Added to PR #1:** `inventory/save.go` Save — it's tagged `@Tags inventory,public` and is a genuine customer-contract surface missed by the original spec. See Task 12B below.
+- **Deferred to follow-up:** users/orgs handlers. They're internal-surface (`/api/v1/internal/*`) and not customer-facing contract bugs. Same leak pattern, different PR. Follow-up ticket to be filed separately once PR #1 lands.
+
+### Task 12B: Migrate `inventory/save.go` Save handler
+
+**Files:**
+- Modify: `backend/internal/handlers/inventory/save.go` — Save handler
+- Modify: `backend/internal/handlers/inventory/save_test.go` (or equivalent)
+
+**Scope notes:** Save is a JSON-body POST that calls `validate.Struct` and hits storage. Apply the same three-swap pattern as Task 11 `Create` (decode + validate + storage error). Register `httputil.JSONTagNameFunc` on the package-level `validate` as in Task 10/11.
+
+- [ ] **Step 1: Write failing tests for the contract behaviors**
+
+In the inventory handler's `_test.go`, add tests asserting:
+- Malformed body → 400 with detail = `"Request body is not valid JSON"`, no `encoding/json` internals leaked.
+- Body missing required fields → 400 with `type=validation_error` and populated `fields[]` using snake_case names.
+- (If Save can trip a unique violation in practice) duplicate → 409. If the write path can't produce 23505, skip this case.
+
+Follow the existing `save_test.go` harness used by the other inventory tests.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run:
+```bash
+cd backend && go test ./internal/handlers/inventory/... -v
+```
+Expected: new tests FAIL.
+
+- [ ] **Step 3: Register JSON tag function on `validate`**
+
+In `backend/internal/handlers/inventory/save.go`, replace the package-level `var validate = validator.New()` with the wrapper pattern from Task 10 Step 3:
+
+```go
+var validate = func() *validator.Validate {
+    v := validator.New()
+    v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+    return v
+}()
+```
+
+- [ ] **Step 4: Apply the three-swap pattern to Save**
+
+At the JSON decode (line ~72), validate (line ~78), and any storage-error branch, apply:
+
+```go
+if err := httputil.DecodeJSON(r, &request); err != nil {
+    httputil.RespondDecodeError(w, r, err, middleware.GetRequestID(r.Context()))
+    return
+}
+
+if err := validate.Struct(request); err != nil {
+    httputil.RespondValidationError(w, r, err, middleware.GetRequestID(r.Context()))
+    return
+}
+
+// ... business logic ...
+
+if err != nil {
+    httputil.RespondStorageError(w, r, err, middleware.GetRequestID(r.Context()))
+    return
+}
+```
+
+Remove any `strings.Contains(err.Error(), "already exists")` branching — `RespondStorageError` handles it by SQLSTATE now.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run:
+```bash
+cd backend && go test ./internal/handlers/inventory/... -v
+```
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend/internal/handlers/inventory/save.go backend/internal/handlers/inventory/save_test.go
+git commit -m "feat(tra-407): migrate inventory.Save handler to new httputil helpers"
+```
