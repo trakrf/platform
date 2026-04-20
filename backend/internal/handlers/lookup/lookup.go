@@ -24,7 +24,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 
 // @Summary Lookup entity by tag
 // @Description Find an asset or location by tag identifier value
-// @Tags lookup
+// @Tags lookup,internal
 // @Accept json
 // @Produce json
 // @Param type query string true "Tag type (rfid, ble, barcode)"
@@ -85,7 +85,7 @@ type BatchLookupRequest struct {
 
 // @Summary Batch lookup entities by tags
 // @Description Find assets or locations by multiple tag identifier values
-// @Tags lookup
+// @Tags lookup,internal
 // @Accept json
 // @Produce json
 // @Param request body BatchLookupRequest true "Batch lookup request"

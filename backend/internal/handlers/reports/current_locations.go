@@ -27,7 +27,19 @@ func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{storage: storage}
 }
 
-// ListCurrentLocations handles GET /api/v1/locations/current
+// @Summary List current asset locations
+// @Description Snapshot of each asset's most recent location, filterable by natural key.
+// @Tags reports,public
+// @Param limit query int false "max 200"
+// @Param offset query int false "pagination offset"
+// @Param location query string false "filter by location identifier (may repeat)"
+// @Param q query string false "fuzzy search on asset name / identifier"
+// @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/locations/current [get]
 func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 

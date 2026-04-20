@@ -58,16 +58,24 @@ test-coverage:
 vendor:
     go mod vendor
 
-# Build backend binary with version injection
-build:
+# Build backend binary with version injection (regenerates internal spec first)
+build: api-spec
     go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
 
-# Generate Swagger API documentation
-swagger:
-    @echo "📚 Generating Swagger documentation..."
-    swag init -g main.go --parseDependency --parseInternal
-    @echo "✅ Swagger docs generated at docs/"
-    @echo "📖 View at: http://localhost:8080/swagger/index.html"
+# Generate OpenAPI 3.0 specs (public → docs/api/, internal → embedded into binary)
+api-spec:
+    @echo "📚 Generating OpenAPI 3.0 specs..."
+    swag init -g main.go --parseDependency --parseInternal -o docs
+    @mkdir -p internal/handlers/swaggerspec ../docs/api
+    go run ./internal/tools/apispec \
+        --in docs/swagger.json \
+        --public-out ../docs/api/openapi.public \
+        --internal-out internal/handlers/swaggerspec/openapi.internal
+    @echo "✅ Public spec:   docs/api/openapi.public.{json,yaml}  (committed)"
+    @echo "✅ Internal spec: backend/internal/handlers/swaggerspec/openapi.internal.{json,yaml}  (gitignored, embedded)"
+
+# Legacy alias retained for muscle memory
+swagger: api-spec
 
 # Smoke test - verifies binary starts without panic (uses PG_URL_LOCAL for host → docker)
 smoke-test:
@@ -90,8 +98,16 @@ smoke-test:
     exit 1
     fi
 
+# Lint the public OpenAPI spec with Redocly CLI (uses pnpm)
+api-lint:
+    pnpm --package=@redocly/cli dlx redocly lint ../docs/api/openapi.public.yaml --extends=recommended
+
 # Run all backend validation checks
-validate: lint test build smoke-test
+# Note: api-spec is NOT in this chain — swag's output depends on the local Go/swag
+# build cache in ways that differ between dev machines and CI. The committed spec
+# is whatever CI produces; local regeneration may legitimately diverge without
+# indicating stale annotations. The drift check runs only in CI (api-spec.yml).
+validate: api-lint lint test build smoke-test
 
 # Shell access
 shell:

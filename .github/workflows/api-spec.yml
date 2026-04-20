@@ -1,0 +1,80 @@
+name: API Spec
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'docs/api/**'
+      - '.github/workflows/api-spec.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: api-spec-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  api-spec:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Install swag CLI
+        run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
+
+      - name: Stub backend/frontend/dist (satisfies go:embed in main.go during swag parse)
+        run: |
+          mkdir -p backend/frontend/dist
+          echo "stub for CI" > backend/frontend/dist/index.html
+
+      - name: Regenerate public + internal specs
+        run: just backend api-spec
+
+      - name: Drift check — committed public spec must match regeneration
+        # Only the OpenAPI JSON/YAML are checked for drift. The Postman collection
+        # is not committed to this repo — openapi-to-postmanv2 regenerates UUIDs
+        # on every run, so the collection is always "drifted" by design. It is
+        # generated fresh in .github/workflows/publish-api-docs.yml and shipped
+        # to trakrf/docs on main-merge.
+        run: |
+          if ! git diff --exit-code docs/api/openapi.public.json docs/api/openapi.public.yaml; then
+            echo "::error::docs/api/openapi.public.{json,yaml} is stale. Run 'just backend api-spec' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Redocly lint
+        run: pnpm --package=@redocly/cli dlx redocly lint docs/api/openapi.public.yaml --extends=recommended
+
+      - name: Upload specs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-specs
+          path: |
+            docs/api/openapi.public.json
+            docs/api/openapi.public.yaml
+          retention-days: 7

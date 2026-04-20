@@ -1,0 +1,84 @@
+# Publishes the OpenAPI spec + Postman collection from platform main to
+# trakrf/docs via a cross-repo PR. Requires repo secret TRAKRF_DOCS_PAT —
+# a fine-grained PAT scoped to trakrf/docs with Contents (read/write) and
+# Pull requests (read/write) permissions.
+name: Publish API Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/api/**'
+      - '.github/workflows/publish-api-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout platform
+        uses: actions/checkout@v4
+        with:
+          path: platform
+
+      - name: Get short SHA
+        id: sha
+        run: echo "sha=$(git -C platform rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trakrf-docs
+        uses: actions/checkout@v4
+        with:
+          repository: trakrf/docs
+          token: ${{ secrets.TRAKRF_DOCS_PAT }}
+          path: docs-repo
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: platform/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Postman collection from published spec
+        run: |
+          pnpm dlx openapi-to-postmanv2 \
+            -s platform/docs/api/openapi.public.json \
+            -o platform/docs/api/trakrf-api.postman_collection.json \
+            -p -O folderStrategy=Paths
+
+      - name: Copy spec + collection into docs-repo/static/api/ (rename to short customer-facing names)
+        run: |
+          mkdir -p docs-repo/static/api
+          cp platform/docs/api/openapi.public.json docs-repo/static/api/openapi.json
+          cp platform/docs/api/openapi.public.yaml docs-repo/static/api/openapi.yaml
+          cp platform/docs/api/trakrf-api.postman_collection.json docs-repo/static/api/
+
+      - name: Open PR against trakrf-docs
+        working-directory: docs-repo
+        env:
+          GH_TOKEN: ${{ secrets.TRAKRF_DOCS_PAT }}
+          PLATFORM_SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          BRANCH="sync/platform-${PLATFORM_SHA}"
+          git config user.name "trakrf-bot"
+          git config user.email "bot@trakrf.id"
+          git checkout -B "$BRANCH"
+          git add static/api/
+          if git diff --cached --quiet; then
+            echo "No spec changes to publish — exiting cleanly."
+            exit 0
+          fi
+          git commit -m "chore(api): sync spec from platform@${PLATFORM_SHA}"
+          git push -u origin "$BRANCH" --force
+          gh pr create \
+            --title "chore(api): sync spec from platform@${PLATFORM_SHA}" \
+            --body "Automated spec sync from trakrf/platform main (commit ${PLATFORM_SHA}).
+
+          Preview this PR to review the rendered Redoc before merging." \
+            --assignee miks2u || echo "PR may already exist; that's ok."

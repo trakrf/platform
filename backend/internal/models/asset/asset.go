@@ -13,7 +13,7 @@ type Asset struct {
 	Org               *org.Org   `json:"org"`
 	Identifier        string     `json:"identifier"`
 	Name              string     `json:"name"`
-	Type              string     `json:"type" `
+	Type              string     `json:"type" example:"asset" enums:"asset" extensions:"x-extensible-enum=true"`
 	Description       string     `json:"description"`
 	CurrentLocationID *int       `json:"current_location_id"`
 	ValidFrom         time.Time  `json:"valid_from"`

@@ -20,7 +20,20 @@ const (
 	defaultDateRangeDays     = 30
 )
 
-// GetAssetHistory serves /api/v1/assets/{identifier}/history.
+// @Summary Asset movement history
+// @Description Location history for an asset identified by its natural key.
+// @Tags reports,public
+// @Param identifier path string true "Asset identifier (natural key)"
+// @Param limit query int false "max 200"
+// @Param offset query int false "pagination offset"
+// @Param from query string false "RFC 3339 start timestamp"
+// @Param to query string false "RFC 3339 end timestamp"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/assets/{identifier}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 
@@ -100,7 +113,16 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetAssetHistoryByID serves /api/v1/assets/by-id/{id}/history.
+// @Summary Asset movement history by surrogate ID (internal)
+// @Tags reports,internal
+// @Param id path int true "Asset surrogate ID"
+// @Param limit query int false "max 200"
+// @Param offset query int false "pagination offset"
+// @Param from query string false "RFC 3339 start timestamp"
+// @Param to query string false "RFC 3339 end timestamp"
+// @Success 200 {object} map[string]any
+// @Security BearerAuth
+// @Router /api/v1/assets/by-id/{id}/history [get]
 func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 

@@ -35,7 +35,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 
 // @Summary List users
 // @Description Get paginated list of users
-// @Tags users
+// @Tags users,internal
 // @Accept json
 // @Produce json
 // @Param page query int false "Page number" default(1)
@@ -79,7 +79,7 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Get user
 // @Description Get user by ID
-// @Tags users
+// @Tags users,internal
 // @Accept json
 // @Produce json
 // @Param id path int true "User ID"
@@ -116,7 +116,7 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Create user
 // @Description Create a new user
-// @Tags users
+// @Tags users,internal
 // @Accept json
 // @Produce json
 // @Param request body user.CreateUserRequest true "User data"
@@ -159,7 +159,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Update user
 // @Description Update an existing user
-// @Tags users
+// @Tags users,internal
 // @Accept json
 // @Produce json
 // @Param id path int true "User ID"
@@ -216,7 +216,7 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Delete user
 // @Description Soft delete a user
-// @Tags users
+// @Tags users,internal
 // @Accept json
 // @Produce json
 // @Param id path int true "User ID"

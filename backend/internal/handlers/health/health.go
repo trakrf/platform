@@ -69,7 +69,7 @@ func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Health check
 // @Description Get API health status
-// @Tags health
+// @Tags health,internal
 // @Produce json
 // @Success 200 {object} health.Response
 // @Router /health [get]

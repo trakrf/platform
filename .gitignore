@@ -135,6 +135,9 @@ backend/backend
 # Swagger generated docs
 backend/docs/
 
+# Generated internal API spec (embedded into binary via go:embed; regenerated per-build)
+backend/internal/handlers/swaggerspec/openapi.internal.*
+
 # Go build cache
 go.work
 go.work.sum
