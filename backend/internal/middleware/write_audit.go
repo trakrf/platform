@@ -34,6 +34,8 @@ func WriteAudit(next http.Handler) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w}
 
 		defer func() {
+			recovered := recover()
+
 			principal := "anonymous"
 			orgID := 0
 
@@ -47,8 +49,18 @@ func WriteAudit(next http.Handler) http.Handler {
 				}
 			}
 
+			// Determine the status to log:
+			// - If the handler panicked, the response was aborted before any
+			//   WriteHeader ran. Report 500 so the audit line doesn't falsely
+			//   claim the write succeeded. The upstream Recovery middleware is
+			//   responsible for turning the panic into an HTTP response; we
+			//   re-panic below so it can do so.
+			// - Otherwise if nothing called WriteHeader, Go's net/http defaults
+			//   the real response to 200 — mirror that.
 			status := rec.status
-			if status == 0 {
+			if recovered != nil {
+				status = http.StatusInternalServerError
+			} else if status == 0 {
 				status = http.StatusOK
 			}
 
@@ -61,6 +73,10 @@ func WriteAudit(next http.Handler) http.Handler {
 				Int("status", status).
 				Str("request_id", GetRequestID(r.Context())).
 				Msg(fmt.Sprintf("%s %s", r.Method, r.URL.Path))
+
+			if recovered != nil {
+				panic(recovered)
+			}
 		}()
 
 		next.ServeHTTP(rec, r)

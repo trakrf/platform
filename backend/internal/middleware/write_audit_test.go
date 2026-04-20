@@ -112,13 +112,21 @@ func TestWriteAudit_LogsEvenWhenHandlerPanics(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", nil)
 	w := httptest.NewRecorder()
 
+	// WriteAudit must re-panic so the outer Recovery middleware can produce a
+	// 500 response. Capture the recovered value here to confirm it was
+	// actually re-thrown rather than swallowed.
+	var recovered any
 	func() {
-		defer func() { _ = recover() }()
+		defer func() { recovered = recover() }()
 		handler.ServeHTTP(w, req)
 	}()
+	require.Equal(t, "boom", recovered, "WriteAudit must re-panic so Recovery upstream can run")
 
 	var line map[string]any
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &line), "audit middleware must emit a log line even on panic")
 	assert.Equal(t, "api.write", line["event"])
 	assert.Equal(t, http.MethodPost, line["method"])
+	// Prior behavior: status defaulted to 200 on panic (falsely "OK").
+	// Fixed behavior: status is 500 when the handler panics.
+	assert.EqualValues(t, 500, line["status"], "panic must log status=500, not 200")
 }
