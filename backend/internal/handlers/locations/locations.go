@@ -77,13 +77,12 @@ func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, or
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			apierrors.LocationCreateFailed, "missing organization context", requestID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
 	var request location.CreateLocationWithIdentifiersRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -99,7 +98,6 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var result *location.LocationView
-	var err error
 
 	if len(request.Identifiers) > 0 {
 		result, err = handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
@@ -532,13 +530,12 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			apierrors.LocationCreateFailed, "missing organization context", requestID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
 	idParam := chi.URLParam(r, "id")
 	locationID, err := strconv.Atoi(idParam)

@@ -56,7 +56,7 @@ func TestCreateAsset(t *testing.T) {
 	requestBody := testutil.NewAssetFactory(accountID).
 		WithIdentifier("TEST-001").
 		WithName("Test Asset").
-		WithType("equipment").
+		WithType("asset").
 		WithDescription("Test description").
 		Build()
 
@@ -65,6 +65,7 @@ func TestCreateAsset(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -83,11 +84,16 @@ func TestCreateAsset_InvalidJSON(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
+	pool := store.Pool().(*pgxpool.Pool)
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -392,6 +398,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req = req.WithContext(ctx)
+		req = withOrgContext(req, accountID)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)

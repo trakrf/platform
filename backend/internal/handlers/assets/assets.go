@@ -82,13 +82,12 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			apierrors.AssetCreateFailed, "missing organization context", requestID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
 	var request asset.CreateAssetWithIdentifiersRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -106,7 +105,6 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	request.OrgID = orgID
 
 	var result *asset.AssetView
-	var err error
 
 	if len(request.Identifiers) > 0 {
 		result, err = handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
@@ -456,13 +454,12 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			apierrors.AssetCreateFailed, "missing organization context", requestID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
 	idParam := chi.URLParam(r, "id")
 	assetID, err := strconv.Atoi(idParam)

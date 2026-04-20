@@ -44,7 +44,7 @@ type SaveRequest struct {
 // Save handles POST /api/v1/inventory/save
 // @Summary Save inventory scans
 // @Description Persist scanned RFID assets to the asset_scans hypertable
-// @Tags inventory,internal
+// @Tags inventory,public
 // @Accept json
 // @Produce json
 // @Param request body SaveRequest true "Save request with location and asset IDs"
@@ -53,19 +53,17 @@ type SaveRequest struct {
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "Location or assets not owned by org"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security APIKey[scans:write]
 // @Router /api/v1/inventory/save [post]
 func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	// 1. Get org from claims
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			apierrors.InventorySaveFailed, "missing organization context", requestID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
 	// 2. Decode and validate request
 	var request SaveRequest
