@@ -28,7 +28,7 @@ func NewAssetFactory(orgID int) *AssetFactory {
 		OrgID:       orgID,
 		Identifier:  fmt.Sprintf("TEST-%d", time.Now().UnixNano()%1000000),
 		Name:        "Test Asset",
-		Type:        "device",
+		Type:        "asset",
 		Description: "Test description",
 		ValidFrom:   now,
 		ValidTo:     &validTo,
@@ -144,7 +144,7 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier str
 		INSERT INTO trakrf.assets (org_id, identifier, name, type, description, valid_from, valid_to, is_active)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
-	`, orgID, identifier, "Test Asset", "device", "Test description", now, now.Add(24*time.Hour), true).Scan(&id)
+	`, orgID, identifier, "Test Asset", "asset", "Test description", now, now.Add(24*time.Hour), true).Scan(&id)
 
 	if err != nil {
 		t.Fatalf("Failed to create test asset: %v", err)
@@ -156,7 +156,7 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier str
 		OrgID:       orgID,
 		Identifier:  identifier,
 		Name:        "Test Asset",
-		Type:        "device",
+		Type:        "asset",
 		Description: "Test description",
 		ValidFrom:   now,
 		ValidTo:     &validTo,

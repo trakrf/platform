@@ -23,12 +23,18 @@ interface AssetFormProps {
 }
 
 export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
+  // Resolve current_location_id from natural key for write path (POST/PUT unchanged)
+  const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
+  const resolvedLocationId = asset?.current_location
+    ? (getLocationByIdentifier(asset.current_location)?.id ?? null)
+    : null;
+
   const [formData, setFormData] = useState({
     identifier: asset?.identifier || initialIdentifier || '',
     name: asset?.name || '',
     type: asset?.type || ('asset' as AssetType),
     description: asset?.description || '',
-    current_location_id: asset?.current_location_id ?? null as number | null,
+    current_location_id: resolvedLocationId as number | null,
     valid_from: asset?.valid_from?.split('T')[0] || new Date().toISOString().split('T')[0],
     valid_to: asset?.valid_to?.split('T')[0] || '',
     is_active: asset?.is_active ?? true,
@@ -84,7 +90,9 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         name: asset.name,
         type: asset.type,
         description: asset.description,
-        current_location_id: asset.current_location_id ?? null,
+        current_location_id: asset.current_location
+          ? (getLocationByIdentifier(asset.current_location)?.id ?? null)
+          : null,
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,

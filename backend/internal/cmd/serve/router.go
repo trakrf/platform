@@ -27,7 +27,9 @@ import (
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/storage"
+	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
 func setupRouter(
@@ -86,12 +88,47 @@ func setupRouter(
 		))
 	})
 
-	// Public API — API-key auth (TRA-393 canary; TRA-396 adds the rest)
+	// Public API — API-key auth (TRA-393 canary)
 	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
+
+	// TRA-396 public read surface — accepts API-key OR session auth via EitherAuth.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.EitherAuth(store))
+		r.Use(middleware.SentryContext)
+
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}", assetsHandler.GetAssetByIdentifier)
+
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", locationsHandler.GetLocationByIdentifier)
+
+		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
+		// require scans:read per TRA-392 — they moved under /locations/ and /assets/ for URL
+		// aesthetics but are scan data, not asset/location CRUD data.
+		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
+		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/assets/{identifier}/history", reportsHandler.GetAssetHistory)
+	})
+
+	// TRA-396 internal-only surrogate paths — session auth only, for frontend convenience.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth)
+		r.Use(middleware.SentryContext)
+
+		r.Get("/api/v1/assets/by-id/{id}", assetsHandler.GetAssetByID)
+		r.Get("/api/v1/assets/by-id/{id}/history", reportsHandler.GetAssetHistoryByID)
+		r.Get("/api/v1/locations/by-id/{id}", locationsHandler.GetLocationByID)
+	})
 
 	if os.Getenv("APP_ENV") != "production" {
 		testHandler.RegisterRoutes(r)
 	}
+
+	// JSON 404 for unknown /api/* paths so clients don't blow up mid-deserialize
+	// on the SPA's index.html fallback. Must be registered before the /* wildcard.
+	r.HandleFunc("/api/*", func(w http.ResponseWriter, req *http.Request) {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, errors.ErrNotFound,
+			"Unknown API route: "+req.URL.Path, "", middleware.GetRequestID(req.Context()))
+	})
 
 	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
 		frontendHandler.ServeSPA(w, r, "frontend/dist/index.html")

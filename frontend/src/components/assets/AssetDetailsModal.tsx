@@ -13,9 +13,9 @@ interface AssetDetailsModalProps {
 }
 
 export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetailsModalProps) {
-  const getLocationById = useLocationStore((state) => state.getLocationById);
+  const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
-  const location = asset?.current_location_id ? getLocationById(asset.current_location_id) : null;
+  const location = asset?.current_location ? getLocationByIdentifier(asset.current_location) : null;
 
   const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>([]);
 
@@ -155,10 +155,10 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <InfoField label="Created" value={formatDateTime(asset.created_at)} />
                   <InfoField label="Last Updated" value={formatDateTime(asset.updated_at)} />
-                  {asset.deleted_at && (
+                  {(asset as { deleted_at?: string | null }).deleted_at && (
                     <InfoField
                       label="Deleted"
-                      value={formatDateTime(asset.deleted_at)}
+                      value={formatDateTime((asset as { deleted_at?: string | null }).deleted_at!)}
                       className="md:col-span-2"
                     />
                   )}

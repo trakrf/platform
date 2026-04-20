@@ -2,6 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useAssetStore } from '@/stores/assets/assetStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { assetsApi } from '@/lib/api/assets';
+import type { Asset } from '@/types/assets';
+
+function normalizeAsset(raw: Asset): Asset {
+  return { ...raw, id: raw.surrogate_id };
+}
 
 export interface UseAssetOptions {
   enabled?: boolean;
@@ -24,7 +29,7 @@ export function useAsset(id: number | null, options: UseAssetOptions = {}) {
       const orgIdAtFetch = currentOrg?.id;
 
       const response = await assetsApi.get(id, { signal });
-      const fetchedAsset = response.data.data;
+      const fetchedAsset = normalizeAsset(response.data.data);
 
       // Validate org hasn't changed before updating store
       const currentOrgId = useOrgStore.getState().currentOrg?.id;

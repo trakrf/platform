@@ -17,13 +17,13 @@ vi.mock('@/stores/orgStore', () => ({
   }),
 }));
 
-const mockLocation: Location = {
-  id: 1,
-  org_id: 100,
+// Raw API shape
+const apiLocation = {
+  surrogate_id: 1,
   identifier: 'usa',
   name: 'United States',
   description: 'Main country location',
-  parent_location_id: null,
+  parent: null,
   path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
@@ -33,6 +33,9 @@ const mockLocation: Location = {
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
+
+// Normalized shape (id = surrogate_id, parent_location_id resolved)
+const mockLocation: Location = { ...apiLocation, id: 1, parent_location_id: null } as Location;
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -51,7 +54,7 @@ describe('useLocation', () => {
 
   it('should fetch and return location', async () => {
     vi.mocked(locationsApi.get).mockResolvedValue({
-      data: { data: mockLocation },
+      data: { data: apiLocation },
     } as any);
 
     const { result } = renderHook(() => useLocation(1), {
@@ -92,7 +95,7 @@ describe('useLocation', () => {
 
   it('should respect enabled option', async () => {
     vi.mocked(locationsApi.get).mockResolvedValue({
-      data: { data: mockLocation },
+      data: { data: apiLocation },
     } as any);
 
     const { result } = renderHook(() => useLocation(1, { enabled: false }), {
@@ -121,7 +124,7 @@ describe('useLocation', () => {
 
   it('should support refetch', async () => {
     vi.mocked(locationsApi.get).mockResolvedValue({
-      data: { data: mockLocation },
+      data: { data: apiLocation },
     } as any);
 
     const { result } = renderHook(() => useLocation(1), {

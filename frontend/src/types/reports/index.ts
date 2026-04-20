@@ -8,25 +8,22 @@
 // ============ Locations History (TRA-217) ============
 
 /**
- * Single asset's current location
- * Backend: report.CurrentLocationItem
+ * Single asset's current location — public shape
+ * Backend: report.PublicCurrentLocationItem
  */
 export interface CurrentLocationItem {
-  asset_id: number;
-  asset_name: string;
-  asset_identifier: string;
-  location_id: number | null;
-  location_name: string | null;
+  asset: string; // asset natural key (identifier)
+  location: string; // location natural key (identifier), empty string if unknown
   last_seen: string; // ISO 8601
 }
 
 /**
  * Paginated response for current locations
- * Backend: report.CurrentLocationsResponse
+ * Backend: ListCurrentLocations response envelope
  */
 export interface CurrentLocationsResponse {
   data: CurrentLocationItem[];
-  count: number;
+  limit: number; // was `count`
   offset: number;
   total_count: number;
 }
@@ -37,41 +34,29 @@ export interface CurrentLocationsResponse {
 export interface CurrentLocationsParams {
   limit?: number;
   offset?: number;
-  location_id?: number;
-  search?: string;
+  location?: string; // location natural key filter (was location_id: number)
+  q?: string; // search query (was search: string)
 }
 
 // ============ Asset History (TRA-218) ============
 
 /**
- * Asset summary in history response
- * Backend: report.AssetInfo
- */
-export interface AssetInfo {
-  id: number;
-  name: string;
-  identifier: string;
-}
-
-/**
- * Single history entry for an asset
- * Backend: report.AssetHistoryItem
+ * Single history entry for an asset — public shape
+ * Backend: report.PublicAssetHistoryItem
  */
 export interface AssetHistoryItem {
   timestamp: string; // ISO 8601
-  location_id: number | null;
-  location_name: string | null;
+  location: string; // location natural key (was location_id + location_name)
   duration_seconds: number | null;
 }
 
 /**
  * Paginated response for asset history
- * Backend: report.AssetHistoryResponse
+ * Backend: GetAssetHistoryByID response envelope
  */
 export interface AssetHistoryResponse {
-  asset: AssetInfo;
   data: AssetHistoryItem[];
-  count: number;
+  limit: number; // was `count`
   offset: number;
   total_count: number;
 }
@@ -82,8 +67,8 @@ export interface AssetHistoryResponse {
 export interface AssetHistoryParams {
   limit?: number;
   offset?: number;
-  start_date?: string; // ISO datetime
-  end_date?: string; // ISO datetime
+  from?: string; // ISO datetime (was start_date)
+  to?: string; // ISO datetime (was end_date)
 }
 
 // ============ UI Types ============

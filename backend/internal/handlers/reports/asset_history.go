@@ -3,7 +3,6 @@ package reports
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,147 +19,186 @@ const (
 	defaultDateRangeDays     = 30
 )
 
-// GetAssetHistory handles GET /api/v1/reports/assets/{id}/history
-// @Summary      Get asset location history
-// @Description  Return a paginated timeline of where an asset has been scanned, with duration-at-location calculations.
-// @Description  Defaults to the last 30 days when no date range is supplied. Dates must be RFC 3339 (e.g. 2026-01-15T00:00:00Z).
-// @Tags         reports,public
-// @Accept       json
-// @Produce      json
-// @Param        id          path   int     true   "Asset ID"
-// @Param        limit       query  int     false  "Max results (default 50, max 100)"        minimum(1)  maximum(100)  default(50)
-// @Param        offset      query  int     false  "Pagination offset (default 0)"             minimum(0)  default(0)
-// @Param        start_date  query  string  false  "Include scans on or after this time (RFC 3339)"
-// @Param        end_date    query  string  false  "Include scans on or before this time (RFC 3339)"
-// @Success      200  {object}  report.AssetHistoryResponse
-// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
-// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
-// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
-// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
-// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
-// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[scans:read]
-// @Router       /api/v1/reports/assets/{id}/history [get]
+// @Summary Asset movement history
+// @Description Location history for an asset identified by its natural key.
+// @Tags reports,public
+// @Param identifier path string true "Asset identifier (natural key)"
+// @Param limit query int false "max 200"
+// @Param offset query int false "pagination offset"
+// @Param from query string false "RFC 3339 start timestamp"
+// @Param to query string false "RFC 3339 end timestamp"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/assets/{identifier}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
-	requestID := middleware.GetRequestID(r.Context())
+	reqID := middleware.GetRequestID(r.Context())
 
-	// 1. Get org from claims
-	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.ReportAssetHistoryFailed, "missing organization context", requestID)
+			apierrors.ReportAssetHistoryFailed, "missing organization context", reqID)
 		return
 	}
-	orgID := *claims.CurrentOrgID
 
-	// 2. Parse path param: id (asset ID)
-	idParam := chi.URLParam(r, "id")
-	assetID, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(r, "identifier")
+	assetRow, err := h.storage.GetAssetByIdentifier(r.Context(), orgID, identifier)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.ReportAssetHistoryFailed, err.Error(), reqID)
+		return
+	}
+	if assetRow == nil {
+		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.ReportAssetNotFound, "asset not found", reqID)
+		return
+	}
+
+	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
+		Filters: []string{"from", "to"},
+		Sorts:   []string{"timestamp"},
+	})
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.ReportInvalidAssetID, idParam), err.Error(), requestID)
+			"Invalid list parameters", err.Error(), reqID)
 		return
 	}
 
-	// 3. Validate asset exists and belongs to org
-	asset, err := h.storage.GetAssetByID(r.Context(), &assetID)
+	filter := report.AssetHistoryFilter{Limit: params.Limit, Offset: params.Offset}
+	if vs, ok := params.Filters["from"]; ok && len(vs) > 0 {
+		t, err := time.Parse(time.RFC3339, vs[0])
+		if err != nil {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				"Invalid 'from' timestamp; RFC3339 required", err.Error(), reqID)
+			return
+		}
+		filter.From = &t
+	}
+	if vs, ok := params.Filters["to"]; ok && len(vs) > 0 {
+		t, err := time.Parse(time.RFC3339, vs[0])
+		if err != nil {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				"Invalid 'to' timestamp; RFC3339 required", err.Error(), reqID)
+			return
+		}
+		filter.To = &t
+	}
+
+	items, err := h.storage.ListAssetHistory(r.Context(), assetRow.ID, orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportAssetHistoryFailed, err.Error(), requestID)
+			apierrors.ReportAssetHistoryFailed, err.Error(), reqID)
 		return
 	}
-	if asset == nil || asset.OrgID != orgID {
+	total, err := h.storage.CountAssetHistory(r.Context(), assetRow.ID, orgID, filter)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.ReportAssetHistoryCount, err.Error(), reqID)
+		return
+	}
+
+	out := make([]report.PublicAssetHistoryItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, report.ToPublicAssetHistoryItem(it))
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"data":        out,
+		"limit":       params.Limit,
+		"offset":      params.Offset,
+		"total_count": total,
+	})
+}
+
+// @Summary Asset movement history by surrogate ID (internal)
+// @Tags reports,internal
+// @Param id path int true "Asset surrogate ID"
+// @Param limit query int false "max 200"
+// @Param offset query int false "pagination offset"
+// @Param from query string false "RFC 3339 start timestamp"
+// @Param to query string false "RFC 3339 end timestamp"
+// @Success 200 {object} map[string]any
+// @Security BearerAuth
+// @Router /api/v1/assets/by-id/{id}/history [get]
+func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
+	reqID := middleware.GetRequestID(r.Context())
+
+	orgID, err := middleware.GetRequestOrgID(r)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.ReportAssetHistoryFailed, "missing organization context", reqID)
+		return
+	}
+
+	idParam := chi.URLParam(r, "id")
+	id, err := httputil.ParseSurrogateID(idParam)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			fmt.Sprintf(apierrors.ReportInvalidAssetID, idParam), err.Error(), reqID)
+		return
+	}
+
+	assetRow, err := h.storage.GetAssetByID(r.Context(), &id)
+	if err != nil || assetRow == nil || assetRow.OrgID != orgID {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.ReportAssetNotFound, "asset not found or not accessible", requestID)
+			apierrors.ReportAssetNotFound, "asset not found or not accessible", reqID)
 		return
 	}
 
-	// 4. Parse query parameters
-	filter := report.AssetHistoryFilter{
-		Limit:  assetHistoryDefaultLimit,
-		Offset: 0,
+	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
+		Filters: []string{"from", "to"},
+		Sorts:   []string{"timestamp"},
+	})
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			"Invalid list parameters", err.Error(), reqID)
+		return
 	}
 
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
-			filter.Limit = parsed
-			if filter.Limit > assetHistoryMaxLimit {
-				filter.Limit = assetHistoryMaxLimit
-			}
-		}
-	}
-
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
-			filter.Offset = parsed
-		}
-	}
-
-	// Default date range: last 30 days
-	now := time.Now()
-	defaultStart := now.AddDate(0, 0, -defaultDateRangeDays)
-	filter.StartDate = &defaultStart
-	filter.EndDate = &now
-
-	if startDateStr := r.URL.Query().Get("start_date"); startDateStr != "" {
-		parsed, err := time.Parse(time.RFC3339, startDateStr)
+	filter := report.AssetHistoryFilter{Limit: params.Limit, Offset: params.Offset}
+	if vs, ok := params.Filters["from"]; ok && len(vs) > 0 {
+		t, err := time.Parse(time.RFC3339, vs[0])
 		if err != nil {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.ReportInvalidDateFormat, "invalid start_date format, use RFC3339", requestID)
+				"Invalid 'from' timestamp; RFC3339 required", err.Error(), reqID)
 			return
 		}
-		filter.StartDate = &parsed
+		filter.From = &t
 	}
-
-	if endDateStr := r.URL.Query().Get("end_date"); endDateStr != "" {
-		parsed, err := time.Parse(time.RFC3339, endDateStr)
+	if vs, ok := params.Filters["to"]; ok && len(vs) > 0 {
+		t, err := time.Parse(time.RFC3339, vs[0])
 		if err != nil {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.ReportInvalidDateFormat, "invalid end_date format, use RFC3339", requestID)
+				"Invalid 'to' timestamp; RFC3339 required", err.Error(), reqID)
 			return
 		}
-		filter.EndDate = &parsed
+		filter.To = &t
 	}
 
-	// 5. Get active identifier for asset
-	identifier := ""
-	identifiers, err := h.storage.GetIdentifiersByAssetID(r.Context(), assetID)
-	if err == nil {
-		for _, id := range identifiers {
-			if id.IsActive {
-				identifier = id.Value
-				break
-			}
-		}
-	}
-
-	// 6. Fetch history data
-	items, err := h.storage.ListAssetHistory(r.Context(), assetID, orgID, filter)
+	items, err := h.storage.ListAssetHistory(r.Context(), assetRow.ID, orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportAssetHistoryFailed, err.Error(), requestID)
+			apierrors.ReportAssetHistoryFailed, err.Error(), reqID)
+		return
+	}
+	total, err := h.storage.CountAssetHistory(r.Context(), assetRow.ID, orgID, filter)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.ReportAssetHistoryCount, err.Error(), reqID)
 		return
 	}
 
-	totalCount, err := h.storage.CountAssetHistory(r.Context(), assetID, orgID, filter)
-	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportAssetHistoryCount, err.Error(), requestID)
-		return
+	out := make([]report.PublicAssetHistoryItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, report.ToPublicAssetHistoryItem(it))
 	}
 
-	// 7. Return response
-	response := report.AssetHistoryResponse{
-		Asset: report.AssetInfo{
-			ID:         asset.ID,
-			Name:       asset.Name,
-			Identifier: identifier,
-		},
-		Data:       items,
-		Count:      len(items),
-		Offset:     filter.Offset,
-		TotalCount: totalCount,
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, response)
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"data":        out,
+		"limit":       params.Limit,
+		"offset":      params.Offset,
+		"total_count": total,
+	})
 }

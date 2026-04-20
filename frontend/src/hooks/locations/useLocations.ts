@@ -12,6 +12,28 @@ export interface UseLocationsOptions {
 const PAGE_SIZE = 100;
 
 /**
+ * Normalize a raw Location from the public API to the internal shape.
+ * Maps surrogate_id → id. parent_location_id is resolved in a second pass
+ * after all locations are fetched (we need the full list to resolve parent
+ * natural key → surrogate ID).
+ */
+function normalizeLocation(raw: Location): Location {
+  return { ...raw, id: raw.surrogate_id };
+}
+
+/**
+ * Resolve parent_location_id for each location after the full list is known.
+ * Builds a natural-key → surrogate-id index then patches each item.
+ */
+function resolveParentIds(locations: Location[]): Location[] {
+  const byIdentifier = new Map(locations.map((l) => [l.identifier, l.id]));
+  return locations.map((l) => ({
+    ...l,
+    parent_location_id: l.parent ? (byIdentifier.get(l.parent) ?? null) : null,
+  }));
+}
+
+/**
  * Fetch all locations by paginating through results.
  * Required for building complete byTagEpc cache for location tag detection.
  */
@@ -22,7 +44,7 @@ async function fetchAllLocations(): Promise<{ data: Location[]; total_count: num
 
   // Fetch first page to get total count
   const firstPage = await locationsApi.list({ limit: PAGE_SIZE, offset: 0 });
-  allLocations.push(...firstPage.data.data);
+  allLocations.push(...firstPage.data.data.map(normalizeLocation));
   totalCount = firstPage.data.total_count;
 
   // Fetch remaining pages if needed
@@ -30,7 +52,7 @@ async function fetchAllLocations(): Promise<{ data: Location[]; total_count: num
     offset += PAGE_SIZE;
     const page = await locationsApi.list({ limit: PAGE_SIZE, offset });
     if (page.data.data.length === 0) break; // Safety: no more data
-    allLocations.push(...page.data.data);
+    allLocations.push(...page.data.data.map(normalizeLocation));
   }
 
   // Sanity check: warn if we somehow have fewer than expected
@@ -41,7 +63,10 @@ async function fetchAllLocations(): Promise<{ data: Location[]; total_count: num
     );
   }
 
-  return { data: allLocations, total_count: totalCount };
+  // Resolve parent_location_id using natural key → surrogate ID lookup
+  const resolved = resolveParentIds(allLocations);
+
+  return { data: resolved, total_count: totalCount };
 }
 
 export function useLocations(options: UseLocationsOptions = {}) {

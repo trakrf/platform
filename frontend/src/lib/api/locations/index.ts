@@ -50,14 +50,14 @@ export const locationsApi = {
   },
 
   /**
-   * Get a single location by ID
-   * GET /api/v1/locations/:id
+   * Get a single location by surrogate ID
+   * GET /api/v1/locations/by-id/:id
    *
-   * @param id - Location ID
+   * @param id - Location surrogate ID
    * @returns Promise<LocationResponse> with single location
    */
   get: (id: number) =>
-    apiClient.get<LocationResponse>(`/locations/${id}`),
+    apiClient.get<LocationResponse>(`/locations/by-id/${id}`),
 
   /**
    * Create a new location

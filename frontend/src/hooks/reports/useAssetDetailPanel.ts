@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAssetHistory } from './useAssetHistory';
 import { getDateRangeStart, type DateRange } from '@/lib/reports/utils';
+import { useAssetStore } from '@/stores/assets/assetStore';
 import type { CurrentLocationItem, AssetHistoryItem } from '@/types/reports';
 
 const PAGE_SIZE = 20;
@@ -41,12 +42,16 @@ export function useAssetDetailPanel({
   const [accumulatedData, setAccumulatedData] = useState<AssetHistoryItem[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  // Look up surrogate ID from asset store using natural key from CurrentLocationItem
+  const getAssetByIdentifier = useAssetStore((s) => s.getAssetByIdentifier);
+  const assetSurrogateId = asset ? (getAssetByIdentifier(asset.asset)?.id ?? null) : null;
+
   // Memoize params to prevent infinite refetching
   const historyParams = useMemo(
     () => ({
       limit: PAGE_SIZE,
       offset,
-      start_date: getDateRangeStart(dateRange).toISOString(),
+      from: getDateRangeStart(dateRange).toISOString(),
     }),
     [dateRange, offset]
   );
@@ -56,7 +61,7 @@ export function useAssetDetailPanel({
     totalCount,
     isLoading,
     error,
-  } = useAssetHistory(asset?.asset_id ?? null, historyParams);
+  } = useAssetHistory(assetSurrogateId, historyParams);
 
   // Accumulate data when new data arrives
   useEffect(() => {
@@ -74,7 +79,7 @@ export function useAssetDetailPanel({
   useEffect(() => {
     setOffset(0);
     setAccumulatedData([]);
-  }, [dateRange, asset?.asset_id]);
+  }, [dateRange, assetSurrogateId]);
 
   // Animate in when asset changes
   useEffect(() => {

@@ -17,7 +17,7 @@ interface CurrentLocationsTableProps {
   onRowClick: (item: CurrentLocationItem) => void;
 }
 
-type TableItem = CurrentLocationItem & { id: number };
+type TableItem = CurrentLocationItem & { id: string };
 
 const columns: Column<TableItem>[] = [
   { key: 'asset', label: 'Asset', sortable: true },
@@ -37,13 +37,13 @@ export function CurrentLocationsTable({
   onRowClick,
 }: CurrentLocationsTableProps) {
   const tableData: TableItem[] = useMemo(
-    () => data.map((item) => ({ ...item, id: item.asset_id })),
+    () => data.map((item) => ({ ...item, id: item.asset })),
     [data]
   );
 
   const originalItems = useMemo(() => {
-    const map = new Map<number, CurrentLocationItem>();
-    data.forEach((item) => map.set(item.asset_id, item));
+    const map = new Map<string, CurrentLocationItem>();
+    data.forEach((item) => map.set(item.asset, item));
     return map;
   }, [data]);
 
@@ -66,29 +66,26 @@ export function CurrentLocationsTable({
           key={item.id}
           className={`${props.className} cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors`}
           onClick={() => {
-            const original = originalItems.get(item.asset_id);
+            const original = originalItems.get(item.asset);
             if (original) onRowClick(original);
           }}
         >
           <td className="px-4 py-3">
             <div className="flex items-center gap-3">
               <div
-                className={`w-10 h-10 rounded-lg ${getAvatarColor(item.asset_name)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
+                className={`w-10 h-10 rounded-lg ${getAvatarColor(item.asset)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
               >
-                {getInitials(item.asset_name)}
+                {getInitials(item.asset)}
               </div>
               <div className="min-w-0">
                 <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                  {item.asset_name}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                  {item.asset_identifier || '—'}
+                  {item.asset}
                 </div>
               </div>
             </div>
           </td>
           <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-            {item.location_name || (
+            {item.location || (
               <span className="text-gray-400 dark:text-gray-500">Unknown</span>
             )}
           </td>

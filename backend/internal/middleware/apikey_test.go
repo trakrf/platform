@@ -187,4 +187,39 @@ func TestRequireScope(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w2.Code)
 }
 
+func echoAnyPrincipalHandler(w http.ResponseWriter, r *http.Request) {
+	if p := middleware.GetAPIKeyPrincipal(r); p != nil {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`api-key`))
+		return
+	}
+	if c := middleware.GetUserClaims(r); c != nil {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`session`))
+		return
+	}
+	http.Error(w, "no principal", http.StatusInternalServerError)
+}
+
+func TestRequireScope_SessionPassthrough(t *testing.T) {
+	t.Setenv("JWT_SECRET", "rs-pass")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	_ = store
+
+	orgID := 1
+	sessionToken, err := jwt.Generate(1, "u@e.com", &orgID)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+
+	chain := middleware.Auth(middleware.RequireScope("assets:read")(http.HandlerFunc(echoAnyPrincipalHandler)))
+	chain.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "session", w.Body.String())
+}
+
 func intPtr(i int) *int { return &i }

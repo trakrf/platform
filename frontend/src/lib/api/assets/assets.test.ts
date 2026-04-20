@@ -110,7 +110,7 @@ describe('assetsApi', () => {
   });
 
   describe('get()', () => {
-    it('should call GET /assets/:id', async () => {
+    it('should call GET /assets/by-id/:id', async () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
@@ -131,7 +131,7 @@ describe('assetsApi', () => {
 
       await assetsApi.get(1);
 
-      expect(apiClient.get).toHaveBeenCalledWith('/assets/1', { signal: undefined });
+      expect(apiClient.get).toHaveBeenCalledWith('/assets/by-id/1', { signal: undefined });
     });
 
     it('should handle 404 errors', async () => {

@@ -1,0 +1,12 @@
+extends:
+  - recommended
+
+rules:
+  # The public API intentionally documents two path items at the same URL
+  # pattern with different path-parameter names and different HTTP methods:
+  #   - GET /api/v1/{resource}/{identifier} — public, natural-key lookup
+  #   - PUT/DELETE /api/v1/{resource}/{id}  — session-auth, surrogate lookup
+  # These are genuinely separate operations with semantically different
+  # path-parameter types. Merging them into one path item would force a
+  # single ambiguous parameter description, which would mislead consumers.
+  no-identical-paths: off

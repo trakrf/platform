@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -521,6 +522,174 @@ func parseLocationWithIdentifiersError(err error, identifier string) error {
 	}
 
 	return fmt.Errorf("failed to create location with identifiers: %w", err)
+}
+
+// GetLocationByIdentifier returns the live location with the given natural key
+// for the given org, plus the parent location's natural key. Returns (nil, nil)
+// if no match.
+func (s *Storage) GetLocationByIdentifier(
+	ctx context.Context, orgID int, identifier string,
+) (*location.LocationWithParent, error) {
+	query := `
+		SELECT
+			l.id, l.org_id, l.name, l.identifier, l.parent_location_id,
+			l.path, l.depth, l.description, l.valid_from, l.valid_to,
+			l.is_active, l.created_at, l.updated_at, l.deleted_at,
+			p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.org_id = $1 AND l.identifier = $2 AND l.deleted_at IS NULL
+		LIMIT 1
+	`
+	var (
+		loc    location.Location
+		parIdt *string
+	)
+	err := s.pool.QueryRow(ctx, query, orgID, identifier).Scan(
+		&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+		&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+		&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+		&parIdt,
+	)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get location by identifier: %w", err)
+	}
+
+	identifiers, err := s.GetIdentifiersByLocationID(ctx, loc.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &location.LocationWithParent{
+		LocationView: location.LocationView{
+			Location:    loc,
+			Identifiers: identifiers,
+		},
+		ParentIdentifier: parIdt,
+	}, nil
+}
+
+// ListLocationsFiltered returns locations matching the filter with parent's
+// natural key resolved via self-join.
+func (s *Storage) ListLocationsFiltered(
+	ctx context.Context, orgID int, f location.ListFilter,
+) ([]location.LocationWithParent, error) {
+	where, args := buildLocationsWhere(orgID, f)
+	orderBy := buildLocationsOrderBy(f.Sorts)
+
+	query := fmt.Sprintf(`
+		SELECT
+			l.id, l.org_id, l.name, l.identifier,
+			l.parent_location_id, l.path, l.depth, l.description,
+			l.valid_from, l.valid_to, l.is_active,
+			l.created_at, l.updated_at, l.deleted_at,
+			p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE %s
+		ORDER BY %s
+		LIMIT $%d OFFSET $%d
+	`, where, orderBy, len(args)+1, len(args)+2)
+
+	args = append(args, clampLocListLimit(f.Limit), f.Offset)
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list locations filtered: %w", err)
+	}
+	defer rows.Close()
+
+	out := []location.LocationWithParent{}
+	for rows.Next() {
+		var (
+			loc    location.Location
+			parIdt *string
+		)
+		if err := rows.Scan(
+			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
+			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
+			&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+			&parIdt,
+		); err != nil {
+			return nil, fmt.Errorf("scan location: %w", err)
+		}
+		out = append(out, location.LocationWithParent{
+			LocationView:     location.LocationView{Location: loc},
+			ParentIdentifier: parIdt,
+		})
+	}
+	return out, rows.Err()
+}
+
+// CountLocationsFiltered returns total count matching the filter.
+func (s *Storage) CountLocationsFiltered(
+	ctx context.Context, orgID int, f location.ListFilter,
+) (int, error) {
+	where, args := buildLocationsWhere(orgID, f)
+	query := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE %s
+	`, where)
+
+	var n int
+	if err := s.pool.QueryRow(ctx, query, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count locations filtered: %w", err)
+	}
+	return n, nil
+}
+
+func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
+	clauses := []string{"l.org_id = $1", "l.deleted_at IS NULL"}
+	args := []any{orgID}
+
+	if len(f.ParentIdentifiers) > 0 {
+		args = append(args, f.ParentIdentifiers)
+		clauses = append(clauses, fmt.Sprintf("p.identifier = ANY($%d::text[])", len(args)))
+	}
+	if f.IsActive != nil {
+		args = append(args, *f.IsActive)
+		clauses = append(clauses, fmt.Sprintf("l.is_active = $%d", len(args)))
+	}
+	if f.Q != nil {
+		args = append(args, "%"+*f.Q+"%")
+		idx := len(args)
+		clauses = append(clauses, fmt.Sprintf(
+			"(l.name ILIKE $%d OR l.identifier ILIKE $%d OR l.description ILIKE $%d)", idx, idx, idx))
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func buildLocationsOrderBy(sorts []location.ListSort) string {
+	if len(sorts) == 0 {
+		return "l.path ASC"
+	}
+	out := make([]string, 0, len(sorts))
+	for _, s := range sorts {
+		dir := "ASC"
+		if s.Desc {
+			dir = "DESC"
+		}
+		out = append(out, "l."+s.Field+" "+dir)
+	}
+	return strings.Join(out, ", ")
+}
+
+func clampLocListLimit(n int) int {
+	if n <= 0 {
+		return 50
+	}
+	if n > 200 {
+		return 200
+	}
+	return n
 }
 
 func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any, error) {

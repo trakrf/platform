@@ -16,38 +16,37 @@ import type {
 export const reportsApi = {
   /**
    * Get current locations for all assets
-   * GET /api/v1/reports/current-locations
+   * GET /api/v1/locations/current
    */
   getCurrentLocations: (options: CurrentLocationsParams = {}) => {
     const params = new URLSearchParams();
     if (options.limit !== undefined) params.append('limit', String(options.limit));
     if (options.offset !== undefined) params.append('offset', String(options.offset));
-    if (options.location_id !== undefined)
-      params.append('location_id', String(options.location_id));
-    if (options.search) params.append('search', options.search);
+    if (options.location) params.append('location', options.location);
+    if (options.q) params.append('q', options.q);
 
     const queryString = params.toString();
     const url = queryString
-      ? `/reports/current-locations?${queryString}`
-      : '/reports/current-locations';
+      ? `/locations/current?${queryString}`
+      : '/locations/current';
     return apiClient.get<CurrentLocationsResponse>(url);
   },
 
   /**
-   * Get movement history for a specific asset
-   * GET /api/v1/reports/assets/:id/history
+   * Get movement history for a specific asset by surrogate ID
+   * GET /api/v1/assets/by-id/:id/history
    */
   getAssetHistory: (assetId: number, options: AssetHistoryParams = {}) => {
     const params = new URLSearchParams();
     if (options.limit !== undefined) params.append('limit', String(options.limit));
     if (options.offset !== undefined) params.append('offset', String(options.offset));
-    if (options.start_date) params.append('start_date', options.start_date);
-    if (options.end_date) params.append('end_date', options.end_date);
+    if (options.from) params.append('from', options.from);
+    if (options.to) params.append('to', options.to);
 
     const queryString = params.toString();
     const url = queryString
-      ? `/reports/assets/${assetId}/history?${queryString}`
-      : `/reports/assets/${assetId}/history`;
+      ? `/assets/by-id/${assetId}/history?${queryString}`
+      : `/assets/by-id/${assetId}/history`;
     return apiClient.get<AssetHistoryResponse>(url);
   },
 };

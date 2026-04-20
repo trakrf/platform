@@ -22,6 +22,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/asset"
 	"github.com/trakrf/platform/backend/internal/testutil"
+	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
 func setupTestRouter(handler *Handler) *chi.Mux {
@@ -29,6 +30,14 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	r.Use(middleware.RequestID)
 	handler.RegisterRoutes(r)
 	return r
+}
+
+// withOrgContext injects a UserClaims with the given orgID into the request context,
+// satisfying middleware.GetRequestOrgID for handlers that require org context.
+func withOrgContext(req *http.Request, orgID int) *http.Request {
+	claims := &jwt.Claims{UserID: 1, Email: "test@test.com", CurrentOrgID: &orgID}
+	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
+	return req.WithContext(ctx)
 }
 
 func TestCreateAsset(t *testing.T) {
@@ -86,7 +95,7 @@ func TestCreateAsset_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestGetAsset(t *testing.T) {
+func TestGetAssetByID(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -108,62 +117,73 @@ func TestGetAsset(t *testing.T) {
 	require.NotNil(t, created)
 
 	idStr := strconv.Itoa(created.ID)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+idStr, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/by-id/"+idStr, nil)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 		URLParams: chi.RouteParams{
 			Keys:   []string{"id"},
 			Values: []string{idStr},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
-	handler.GetAsset(w, req)
+	handler.GetAssetByID(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 
-	var response map[string]*asset.Asset
+	var response map[string]*asset.PublicAssetView
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "Test Asset Get", response["data"].Name)
 	assert.Equal(t, "TEST-002", response["data"].Identifier)
 }
 
-func TestGetAsset_NotFound(t *testing.T) {
+func TestGetAssetByID_NotFound(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
+	pool := store.Pool().(*pgxpool.Pool)
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
 	handler := NewHandler(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/999999", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/by-id/999999", nil)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 		URLParams: chi.RouteParams{
 			Keys:   []string{"id"},
 			Values: []string{"999999"},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
-	handler.GetAsset(w, req)
+	handler.GetAssetByID(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestGetAsset_InvalidID(t *testing.T) {
+func TestGetAssetByID_InvalidID(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
+	pool := store.Pool().(*pgxpool.Pool)
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
 	handler := NewHandler(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/invalid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/by-id/invalid", nil)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 		URLParams: chi.RouteParams{
 			Keys:   []string{"id"},
 			Values: []string{"invalid"},
 		},
 	}))
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
-	handler.GetAsset(w, req)
+	handler.GetAssetByID(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
@@ -314,19 +334,26 @@ func TestListAssets(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	router := setupTestRouter(handler)
+	// GET routes are no longer registered via RegisterRoutes; wire them directly.
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	handler.RegisterRoutes(r)
+	r.Get("/api/v1/assets", handler.ListAssets)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
+	req = withOrgContext(req, accountID)
 	w := httptest.NewRecorder()
 
-	router.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 
-	var response map[string][]asset.Asset
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(response["data"]), 3)
+	data, ok := response["data"].([]any)
+	require.True(t, ok)
+	assert.GreaterOrEqual(t, len(data), 3)
 }
 
 func TestFullCRUDWorkflow(t *testing.T) {
@@ -373,20 +400,21 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 	t.Run("Read", func(t *testing.T) {
 		idStr := strconv.Itoa(createdID)
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+idStr, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/by-id/"+idStr, nil)
 		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, &chi.Context{
 			URLParams: chi.RouteParams{
 				Keys:   []string{"id"},
 				Values: []string{idStr},
 			},
 		}))
+		req = withOrgContext(req, accountID)
 		w := httptest.NewRecorder()
 
-		handler.GetAsset(w, req)
+		handler.GetAssetByID(w, req)
 
-		assert.Equal(t, http.StatusAccepted, w.Code)
+		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response map[string]*asset.Asset
+		var response map[string]*asset.PublicAssetView
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 		assert.Equal(t, "Workflow Test Asset", response["data"].Name)

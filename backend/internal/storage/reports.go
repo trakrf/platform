@@ -36,7 +36,17 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 		query = buildCurrentLocationsQueryDistinctOn()
 	}
 
-	rows, err := s.pool.Query(ctx, query, orgID, filter.LocationID, filter.Search, filter.Limit, filter.Offset)
+	var locIdentsArg any
+	if len(filter.LocationIdentifiers) > 0 {
+		locIdentsArg = filter.LocationIdentifiers
+	}
+	var qArg any
+	if filter.Q != nil {
+		q := "%" + *filter.Q + "%"
+		qArg = q
+	}
+
+	rows, err := s.pool.Query(ctx, query, orgID, locIdentsArg, qArg, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list current locations: %w", err)
 	}
@@ -51,6 +61,7 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 			&item.AssetIdentifier,
 			&item.LocationID,
 			&item.LocationName,
+			&item.LocationIdentifier,
 			&item.LastSeen,
 		)
 		if err != nil {
@@ -72,10 +83,39 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 
 // CountCurrentLocations returns total count for pagination
 func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter report.CurrentLocationFilter) (int, error) {
-	query := buildCurrentLocationsCountQuery()
+	query := `
+		WITH latest_scans AS (
+			SELECT DISTINCT ON (s.asset_id)
+				s.asset_id,
+				s.location_id
+			FROM trakrf.asset_scans s
+			WHERE s.org_id = $1
+			ORDER BY s.asset_id, s.timestamp DESC
+		)
+		SELECT COUNT(*)
+		FROM latest_scans ls
+		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
+		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
+		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
+			   OR EXISTS (
+				   SELECT 1 FROM trakrf.identifiers ai
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
+			   ))
+	`
+
+	var locIdentsArg any
+	if len(filter.LocationIdentifiers) > 0 {
+		locIdentsArg = filter.LocationIdentifiers
+	}
+	var qArg any
+	if filter.Q != nil {
+		q := "%" + *filter.Q + "%"
+		qArg = q
+	}
 
 	var count int
-	err := s.pool.QueryRow(ctx, query, orgID, filter.LocationID, filter.Search).Scan(&count)
+	err := s.pool.QueryRow(ctx, query, orgID, locIdentsArg, qArg).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count current locations: %w", err)
 	}
@@ -97,22 +137,19 @@ func buildCurrentLocationsQueryDistinctOn() string {
 		SELECT
 			ls.asset_id,
 			a.name AS asset_name,
-			COALESCE(
-				(SELECT i.value FROM trakrf.identifiers i
-				 WHERE i.asset_id = a.id AND i.is_active = true LIMIT 1),
-				''
-			) AS asset_identifier,
+			a.identifier AS asset_identifier,
 			ls.location_id,
 			l.name AS location_name,
+			l.identifier AS location_identifier,
 			ls.last_seen
 		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id
-		WHERE ($2::int IS NULL OR ls.location_id = $2)
-		  AND ($3::text IS NULL OR a.name ILIKE '%' || $3 || '%'
+		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
+		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
+		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE '%' || $3 || '%'
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
 			   ))
 		ORDER BY a.name
 		LIMIT $4 OFFSET $5
@@ -133,47 +170,22 @@ func buildCurrentLocationsQueryTimescale() string {
 		SELECT
 			ls.asset_id,
 			a.name AS asset_name,
-			COALESCE(
-				(SELECT i.value FROM trakrf.identifiers i
-				 WHERE i.asset_id = a.id AND i.is_active = true LIMIT 1),
-				''
-			) AS asset_identifier,
+			a.identifier AS asset_identifier,
 			ls.location_id,
 			l.name AS location_name,
+			l.identifier AS location_identifier,
 			ls.last_seen
 		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id
-		WHERE ($2::int IS NULL OR ls.location_id = $2)
-		  AND ($3::text IS NULL OR a.name ILIKE '%' || $3 || '%'
+		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
+		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
+		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE '%' || $3 || '%'
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
 			   ))
 		ORDER BY a.name
 		LIMIT $4 OFFSET $5
-	`
-}
-
-func buildCurrentLocationsCountQuery() string {
-	return `
-		WITH latest_scans AS (
-			SELECT DISTINCT ON (s.asset_id)
-				s.asset_id,
-				s.location_id
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1
-			ORDER BY s.asset_id, s.timestamp DESC
-		)
-		SELECT COUNT(*)
-		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id
-		WHERE ($2::int IS NULL OR ls.location_id = $2)
-		  AND ($3::text IS NULL OR a.name ILIKE '%' || $3 || '%'
-			   OR EXISTS (
-				   SELECT 1 FROM trakrf.identifiers ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE '%' || $3 || '%'
-			   ))
 	`
 }
 
@@ -185,9 +197,10 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 				s.timestamp,
 				s.location_id,
 				l.name AS location_name,
+				l.identifier AS location_identifier,
 				LEAD(s.timestamp) OVER (ORDER BY s.timestamp) AS next_timestamp
 			FROM trakrf.asset_scans s
-			LEFT JOIN trakrf.locations l ON l.id = s.location_id
+			LEFT JOIN trakrf.locations l ON l.id = s.location_id AND l.org_id = $2 AND l.deleted_at IS NULL
 			WHERE s.asset_id = $1
 			  AND s.org_id = $2
 			  AND ($3::timestamptz IS NULL OR s.timestamp >= $3)
@@ -197,13 +210,14 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			timestamp,
 			location_id,
 			location_name,
+			location_identifier,
 			EXTRACT(EPOCH FROM (next_timestamp - timestamp))::INT AS duration_seconds
 		FROM scans
 		ORDER BY timestamp DESC
 		LIMIT $5 OFFSET $6
 	`
 
-	rows, err := s.pool.Query(ctx, query, assetID, orgID, filter.StartDate, filter.EndDate, filter.Limit, filter.Offset)
+	rows, err := s.pool.Query(ctx, query, assetID, orgID, filter.From, filter.To, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list asset history: %w", err)
 	}
@@ -216,6 +230,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			&item.Timestamp,
 			&item.LocationID,
 			&item.LocationName,
+			&item.LocationIdentifier,
 			&item.DurationSeconds,
 		)
 		if err != nil {
@@ -247,7 +262,7 @@ func (s *Storage) CountAssetHistory(ctx context.Context, assetID, orgID int, fil
 	`
 
 	var count int
-	err := s.pool.QueryRow(ctx, query, assetID, orgID, filter.StartDate, filter.EndDate).Scan(&count)
+	err := s.pool.QueryRow(ctx, query, assetID, orgID, filter.From, filter.To).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count asset history: %w", err)
 	}

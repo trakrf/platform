@@ -34,8 +34,19 @@ lint:
     go vet ./...
 
 # Run backend tests with verbose output
-test:
-    go test -v ./...
+test *args:
+    #!/usr/bin/env bash
+    if [ -z "{{args}}" ]; then
+        go test -v ./...
+    else
+        go test -v {{args}}
+    fi
+
+# Run tests with the integration build tag (needs live Postgres)
+# -p 1 serializes packages: they share the trakrf_test DB name, so running
+# concurrently causes migration / schema collisions.
+test-integration *args:
+    go test -tags=integration -p 1 -v {{args}}
 
 # Run tests with race detection
 test-race:
