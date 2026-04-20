@@ -54,7 +54,114 @@ func partition(doc *openapi3.T) (public, internal *openapi3.T, err error) {
 	if len(violations) > 0 {
 		return nil, nil, fmt.Errorf("tag validation failed:\n  %s", strings.Join(violations, "\n  "))
 	}
+
+	prunePublicSchemas(public)
 	return public, internal, nil
+}
+
+const schemaRefPrefix = "#/components/schemas/"
+
+// prunePublicSchemas drops schemas from public.Components.Schemas that are
+// not reachable from any public operation. swaggo emits a single Components
+// map covering every handler in the binary; after operation partitioning,
+// internal-only types remain in the public spec as orphans and leak in the
+// published docs. We walk the public paths, collect every schema ref
+// transitively, and replace Schemas with the reachable subset. A fresh
+// Components struct is allocated so the internal spec keeps its full map.
+func prunePublicSchemas(public *openapi3.T) {
+	if public.Components == nil || public.Components.Schemas == nil {
+		return
+	}
+	schemas := public.Components.Schemas
+	reachable := make(map[string]bool, len(schemas))
+
+	var visit func(ref *openapi3.SchemaRef)
+	visit = func(ref *openapi3.SchemaRef) {
+		if ref == nil {
+			return
+		}
+		if name, ok := strings.CutPrefix(ref.Ref, schemaRefPrefix); ok {
+			if reachable[name] {
+				return
+			}
+			reachable[name] = true
+			if target, found := schemas[name]; found {
+				visit(target)
+			}
+		}
+		s := ref.Value
+		if s == nil {
+			return
+		}
+		for _, r := range s.OneOf {
+			visit(r)
+		}
+		for _, r := range s.AnyOf {
+			visit(r)
+		}
+		for _, r := range s.AllOf {
+			visit(r)
+		}
+		visit(s.Not)
+		visit(s.Items)
+		for _, r := range s.Properties {
+			visit(r)
+		}
+		if s.AdditionalProperties.Schema != nil {
+			visit(s.AdditionalProperties.Schema)
+		}
+	}
+
+	for _, item := range public.Paths.Map() {
+		for _, op := range item.Operations() {
+			for _, p := range op.Parameters {
+				if p == nil || p.Value == nil {
+					continue
+				}
+				visit(p.Value.Schema)
+				for _, mt := range p.Value.Content {
+					if mt != nil {
+						visit(mt.Schema)
+					}
+				}
+			}
+			if op.RequestBody != nil && op.RequestBody.Value != nil {
+				for _, mt := range op.RequestBody.Value.Content {
+					if mt != nil {
+						visit(mt.Schema)
+					}
+				}
+			}
+			if op.Responses == nil {
+				continue
+			}
+			for _, resp := range op.Responses.Map() {
+				if resp == nil || resp.Value == nil {
+					continue
+				}
+				for _, h := range resp.Value.Headers {
+					if h != nil && h.Value != nil {
+						visit(h.Value.Schema)
+					}
+				}
+				for _, mt := range resp.Value.Content {
+					if mt != nil {
+						visit(mt.Schema)
+					}
+				}
+			}
+		}
+	}
+
+	pruned := make(openapi3.Schemas, len(reachable))
+	for name, ref := range schemas {
+		if reachable[name] {
+			pruned[name] = ref
+		}
+	}
+	comps := *public.Components
+	comps.Schemas = pruned
+	public.Components = &comps
 }
 
 // cloneDocShell returns a copy of doc with an empty Paths map and an

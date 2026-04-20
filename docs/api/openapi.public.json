@@ -172,158 +172,6 @@
         },
         "type": "object"
       },
-      "auth.ForgotPasswordRequest": {
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "reset_url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "reset_url"
-        ],
-        "type": "object"
-      },
-      "auth.LoginRequest": {
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "password": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "password"
-        ],
-        "type": "object"
-      },
-      "auth.MessageResponse": {
-        "properties": {
-          "message": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "auth.ResetPasswordRequest": {
-        "properties": {
-          "password": {
-            "minLength": 8,
-            "type": "string"
-          },
-          "token": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "password",
-          "token"
-        ],
-        "type": "object"
-      },
-      "auth.SignupRequest": {
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "invitation_token": {
-            "type": "string"
-          },
-          "org_name": {
-            "maxLength": 100,
-            "minLength": 2,
-            "type": "string"
-          },
-          "password": {
-            "minLength": 8,
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "password"
-        ],
-        "type": "object"
-      },
-      "bulkimport.ErrorDetail": {
-        "properties": {
-          "error": {
-            "type": "string"
-          },
-          "field": {
-            "type": "string"
-          },
-          "row": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "bulkimport.JobStatusResponse": {
-        "properties": {
-          "completed_at": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string"
-          },
-          "errors": {
-            "items": {
-              "$ref": "#/components/schemas/bulkimport.ErrorDetail"
-            },
-            "type": "array"
-          },
-          "failed_rows": {
-            "type": "integer"
-          },
-          "job_id": {
-            "type": "string"
-          },
-          "processed_rows": {
-            "type": "integer"
-          },
-          "status": {
-            "type": "string"
-          },
-          "successful_rows": {
-            "description": "Calculated: processed - failed",
-            "type": "integer"
-          },
-          "tags_created": {
-            "type": "integer"
-          },
-          "total_rows": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "bulkimport.UploadResponse": {
-        "properties": {
-          "job_id": {
-            "description": "UUID string",
-            "type": "string"
-          },
-          "message": {
-            "description": "User-friendly message",
-            "type": "string"
-          },
-          "status": {
-            "description": "\"accepted\"",
-            "type": "string"
-          },
-          "status_url": {
-            "description": "\"/api/v1/assets/bulk/{jobId}\"",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "errors.ErrorResponse": {
         "properties": {
           "error": {
@@ -362,81 +210,6 @@
             "type": "object"
           }
         },
-        "type": "object"
-      },
-      "github_com_trakrf_platform_backend_internal_models_user.User": {
-        "properties": {
-          "created_at": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          },
-          "id": {
-            "type": "integer"
-          },
-          "is_superadmin": {
-            "description": "RBAC fields",
-            "type": "boolean"
-          },
-          "last_login_at": {
-            "type": "string"
-          },
-          "last_org_id": {
-            "type": "integer"
-          },
-          "metadata": {
-            "description": "JSONB"
-          },
-          "name": {
-            "type": "string"
-          },
-          "settings": {
-            "description": "JSONB"
-          },
-          "updated_at": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "health.Response": {
-        "properties": {
-          "database": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "timestamp": {
-            "type": "string"
-          },
-          "uptime": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "inventory.SaveRequest": {
-        "properties": {
-          "asset_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "minItems": 1,
-            "type": "array"
-          },
-          "location_id": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "asset_ids",
-          "location_id"
-        ],
         "type": "object"
       },
       "location.CreateLocationWithIdentifiersRequest": {
@@ -696,22 +469,6 @@
         },
         "type": "object"
       },
-      "lookup.BatchLookupRequest": {
-        "properties": {
-          "type": {
-            "description": "e.g., \"rfid\"",
-            "type": "string"
-          },
-          "values": {
-            "description": "EPCs to lookup",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
       "org.Org": {
         "properties": {
           "billing_email": {
@@ -754,17 +511,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "organization.AcceptInvitationRequest": {
-        "properties": {
-          "token": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "token"
-        ],
         "type": "object"
       },
       "report.AssetHistoryItem": {
@@ -866,20 +612,6 @@
         },
         "type": "object"
       },
-      "shared.Pagination": {
-        "properties": {
-          "page": {
-            "type": "integer"
-          },
-          "per_page": {
-            "type": "integer"
-          },
-          "total": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
       "shared.TagIdentifier": {
         "properties": {
           "id": {
@@ -931,56 +663,6 @@
         "required": [
           "value"
         ],
-        "type": "object"
-      },
-      "user.CreateUserRequest": {
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          },
-          "password_hash": {
-            "description": "Temporary, Phase 5 will hash",
-            "minLength": 8,
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "name",
-          "password_hash"
-        ],
-        "type": "object"
-      },
-      "user.UpdateUserRequest": {
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "users.ListResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/github_com_trakrf_platform_backend_internal_models_user.User"
-            },
-            "type": "array"
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/shared.Pagination"
-          }
-        },
         "type": "object"
       }
     },
