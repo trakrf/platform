@@ -27,7 +27,7 @@ func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, assetID int) ([]s
 	}
 	defer rows.Close()
 
-	var identifiers []shared.TagIdentifier
+	identifiers := []shared.TagIdentifier{}
 	for rows.Next() {
 		var id shared.TagIdentifier
 		if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
@@ -38,10 +38,6 @@ func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, assetID int) ([]s
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating identifiers: %w", err)
-	}
-
-	if identifiers == nil {
-		identifiers = []shared.TagIdentifier{}
 	}
 
 	return identifiers, nil
@@ -61,7 +57,7 @@ func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, locationID int
 	}
 	defer rows.Close()
 
-	var identifiers []shared.TagIdentifier
+	identifiers := []shared.TagIdentifier{}
 	for rows.Next() {
 		var id shared.TagIdentifier
 		if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
@@ -72,10 +68,6 @@ func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, locationID int
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating identifiers: %w", err)
-	}
-
-	if identifiers == nil {
-		identifiers = []shared.TagIdentifier{}
 	}
 
 	return identifiers, nil

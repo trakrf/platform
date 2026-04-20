@@ -51,7 +51,7 @@ func (s *Storage) ListActiveAPIKeys(ctx context.Context, orgID int) ([]apikey.AP
 	}
 	defer rows.Close()
 
-	var out []apikey.APIKey
+	out := []apikey.APIKey{}
 	for rows.Next() {
 		var k apikey.APIKey
 		if err := rows.Scan(
