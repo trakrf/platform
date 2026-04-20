@@ -86,8 +86,32 @@ func setupRouter(
 		))
 	})
 
-	// Public API — API-key auth (TRA-393 canary; TRA-396 adds the rest)
+	// Public API — API-key auth (TRA-393 canary)
 	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
+
+	// TRA-396 public read surface — accepts API-key OR session auth via EitherAuth.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.EitherAuth(store))
+		r.Use(middleware.SentryContext)
+
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}", assetsHandler.GetAssetByIdentifier)
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}/history", reportsHandler.GetAssetHistory)
+
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", locationsHandler.GetLocationByIdentifier)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
+	})
+
+	// TRA-396 internal-only surrogate paths — session auth only, for frontend convenience.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth)
+		r.Use(middleware.SentryContext)
+
+		r.Get("/api/v1/assets/by-id/{id}", assetsHandler.GetAssetByID)
+		r.Get("/api/v1/assets/by-id/{id}/history", reportsHandler.GetAssetHistoryByID)
+		r.Get("/api/v1/locations/by-id/{id}", locationsHandler.GetLocationByID)
+	})
 
 	if os.Getenv("APP_ENV") != "production" {
 		testHandler.RegisterRoutes(r)
