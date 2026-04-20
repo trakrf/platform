@@ -116,6 +116,31 @@ func setupRouter(
 		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/assets/{identifier}/history", reportsHandler.GetAssetHistory)
 	})
 
+	// TRA-397 public write surface — accepts API-key OR session auth via EitherAuth.
+	// Every route is audited via WriteAudit and gated by a per-resource write scope.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.EitherAuth(store))
+		r.Use(middleware.WriteAudit)
+		r.Use(middleware.SentryContext)
+
+		// Assets
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
+		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{id}", assetsHandler.UpdateAsset)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}", assetsHandler.DeleteAsset)
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{id}/identifiers", assetsHandler.AddIdentifier)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}/identifiers/{identifierId}", assetsHandler.RemoveIdentifier)
+
+		// Locations
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
+		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{id}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}", locationsHandler.Delete)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{id}/identifiers", locationsHandler.AddIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}/identifiers/{identifierId}", locationsHandler.RemoveIdentifier)
+
+		// Inventory (scan writes)
+		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)
+	})
+
 	// TRA-396 internal-only surrogate paths — session auth only, for frontend convenience.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)

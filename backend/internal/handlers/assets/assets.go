@@ -556,16 +556,11 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
 }
 
-// RegisterRoutes keeps write + identifier sub-routes that stay on session auth
-// with surrogate path params (TRA-397 will revisit). Read routes (list, detail,
-// by-id) are registered directly in internal/cmd/serve/router.go to split them
-// across the API-key and session-only groups.
+// RegisterRoutes keeps only session-only surface (bulk CSV). Public write and
+// identifier routes are registered directly in internal/cmd/serve/router.go
+// under the EitherAuth + WriteAudit + RequireScope group. Public reads are
+// also registered there (per TRA-396).
 func (handler *Handler) RegisterRoutes(r chi.Router) {
-	r.Post("/api/v1/assets", handler.Create)
-	r.Put("/api/v1/assets/{id}", handler.UpdateAsset)
-	r.Delete("/api/v1/assets/{id}", handler.DeleteAsset)
-	r.Post("/api/v1/assets/{id}/identifiers", handler.AddIdentifier)
-	r.Delete("/api/v1/assets/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	r.Post("/api/v1/assets/bulk", handler.UploadCSV)
 	r.Get("/api/v1/assets/bulk/{jobId}", handler.GetJobStatus)
 }

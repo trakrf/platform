@@ -632,12 +632,10 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
 }
 
+// RegisterRoutes keeps only session-only surface (hierarchy by-id). Public write
+// routes are registered in internal/cmd/serve/router.go under EitherAuth +
+// WriteAudit + RequireScope. Public reads likewise (per TRA-396).
 func (handler *Handler) RegisterRoutes(r chi.Router) {
-	r.Post("/api/v1/locations", handler.Create)
-	r.Put("/api/v1/locations/{id}", handler.Update)
-	r.Delete("/api/v1/locations/{id}", handler.Delete)
-	r.Post("/api/v1/locations/{id}/identifiers", handler.AddIdentifier)
-	r.Delete("/api/v1/locations/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	r.Get("/api/v1/locations/{id}/ancestors", handler.GetAncestors)
 	r.Get("/api/v1/locations/{id}/descendants", handler.GetDescendants)
 	r.Get("/api/v1/locations/{id}/children", handler.GetChildren)

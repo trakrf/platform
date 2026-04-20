@@ -109,7 +109,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
 }
 
-// RegisterRoutes registers inventory handler routes
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Post("/api/v1/inventory/save", h.Save)
-}
+// RegisterRoutes is intentionally empty — POST /api/v1/inventory/save is
+// registered in internal/cmd/serve/router.go under the public write group
+// (EitherAuth + WriteAudit + RequireScope("scans:write")).
+func (h *Handler) RegisterRoutes(r chi.Router) {}
