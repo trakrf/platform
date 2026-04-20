@@ -1572,3 +1572,38 @@ Expected: a clean, atomic series of commits that tells the review story in order
 - Storage-layer refactor (typed sentinel errors, pgx passthrough).
 - Internal `/api/v1/internal/*` handlers beyond Task 1 scouting.
 - DB migrations — none.
+
+---
+
+## Scouting Findings
+
+This section documents internal handlers that exhibit the same leak patterns as auth/assets/locations.
+
+### Internal handlers with JSON/Validator decode leaks (same pattern as public API)
+
+These handlers pass `err.Error()` directly to `httputil.WriteJSONError` detail field for both JSON decode and validator errors:
+
+| Handler File | Function | JSON Decode Leak | Validator Leak | "Already Exists" Branch |
+|---|---|---|---|---|
+| `users/users.go` | Create (line 134, 140) | yes | yes | no (uses errors.Is) |
+| `users/users.go` | Update (line 186, 192) | yes | yes | no (uses errors.Is) |
+| `orgs/orgs.go` | Create (line 61, 67) | yes | yes | yes (fragile string match: line 73) |
+| `orgs/orgs.go` | Update (line 124, 130) | yes | yes | no |
+| `orgs/orgs.go` | Delete (line 162) | yes | no | no |
+| `orgs/members.go` | UpdateMemberRole (line 55, 61) | yes | yes | no |
+| `orgs/invitations.go` | CreateInvitation (line 55, 61) | yes | yes | no |
+| `orgs/api_keys.go` | CreateAPIKey (line 38, 43) | yes | yes | no |
+| `orgs/me.go` | SetCurrentOrg (line 49, 55) | yes | yes | no |
+
+### Other handlers (outside scope of TRA-407 PR #1)
+
+- **lookup/lookup.go** `LookupByTags` (line 111): Has JSON decode but passes hardcoded "invalid request body" (safe). No validator pattern.
+- **inventory/save.go** `Save` (line 72, 78): Already marked `@Tags inventory,public` in swagger; included in scope (Tasks 1–14 apply to public handlers including this one by virtue of its swagger annotation).
+
+### Recommendation
+
+The six users/orgs handlers above leak the **same patterns** as auth/assets/locations. To avoid repeating the same fix across codebases:
+
+**Option A (in-scope):** Extend Tasks 11–12 to include users and orgs handlers. This would consolidate all leak fixes in a single PR.
+
+**Option B (out-of-scope, deferred):** Document these as tech debt for a follow-up PR (TRA-407 PR #2 or a separate follow-up). Current plan scope (Tasks 10–12) focuses on public-contract bugs only; these internal handlers are not customer-facing API contracts.
