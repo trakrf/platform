@@ -28,9 +28,14 @@ const (
 // @Param from query string false "RFC 3339 start timestamp"
 // @Param to query string false "RFC 3339 end timestamp"
 // @Success 200 {object} map[string]any
+// @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
+// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security BearerAuth
 // @Router /api/v1/assets/{identifier}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {

@@ -28,6 +28,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/ratelimit"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
@@ -88,12 +89,18 @@ func setupRouter(
 		))
 	})
 
+	// Per-key rate limiter for API-key-authenticated requests (TRA-395).
+	// /orgs/me is intentionally excluded as a health-check exemption.
+	// Limiter lives for the process lifetime; its sweeper runs in a goroutine.
+	rl := ratelimit.NewLimiter(ratelimit.DefaultConfig())
+
 	// Public API — API-key auth (TRA-393 canary)
 	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
 
 	// TRA-396 public read surface — accepts API-key OR session auth via EitherAuth.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.EitherAuth(store))
+		r.Use(middleware.RateLimit(rl))
 		r.Use(middleware.SentryContext)
 
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)

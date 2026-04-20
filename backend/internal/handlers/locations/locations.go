@@ -235,6 +235,11 @@ type ListLocationsResponse struct {
 // @Param q        query string false "fuzzy search on name, identifier, description"
 // @Param sort     query string false "comma-separated, prefix '-' for DESC"
 // @Success 200 {object} map[string]any
+// @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
+// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
+// @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security BearerAuth
 // @Router /api/v1/locations [get]
 func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) {
@@ -304,10 +309,15 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Tags locations,public
 // @Param identifier path string true "Location identifier (natural key)"
 // @Success 200 {object} map[string]any
+// @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
+// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security BearerAuth
 // @Router /api/v1/locations/{identifier} [get]
 func (handler *Handler) GetLocationByIdentifier(w http.ResponseWriter, req *http.Request) {

@@ -101,6 +101,19 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: envelope with data / limit / offset / total_count
+                    headers:
+                        X-RateLimit-Limit:
+                            description: Steady-state requests/min for this API key
+                            schema:
+                                type: integer
+                        X-RateLimit-Remaining:
+                            description: Tokens left in bucket at response time
+                            schema:
+                                type: integer
+                        X-RateLimit-Reset:
+                            description: Unix timestamp when bucket fully refills
+                            schema:
+                                type: integer
                 "400":
                     content:
                         application/json:
@@ -119,6 +132,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
                 "500":
                     content:
                         application/json:
@@ -147,6 +171,19 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            description: Steady-state requests/min for this API key
+                            schema:
+                                type: integer
+                        X-RateLimit-Remaining:
+                            description: Tokens left in bucket at response time
+                            schema:
+                                type: integer
+                        X-RateLimit-Reset:
+                            description: Unix timestamp when bucket fully refills
+                            schema:
+                                type: integer
                 "400":
                     content:
                         application/json:
@@ -171,6 +208,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Not Found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: Get asset by natural identifier
@@ -214,6 +262,19 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            description: Steady-state requests/min for this API key
+                            schema:
+                                type: integer
+                        X-RateLimit-Remaining:
+                            description: Tokens left in bucket at response time
+                            schema:
+                                type: integer
+                        X-RateLimit-Reset:
+                            description: Unix timestamp when bucket fully refills
+                            schema:
+                                type: integer
                 "400":
                     content:
                         application/json:
@@ -232,6 +293,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Not Found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: Asset movement history
@@ -278,6 +350,30 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            description: Steady-state requests/min for this API key
+                            schema:
+                                type: integer
+                        X-RateLimit-Remaining:
+                            description: Tokens left in bucket at response time
+                            schema:
+                                type: integer
+                        X-RateLimit-Reset:
+                            description: Unix timestamp when bucket fully refills
+                            schema:
+                                type: integer
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: List locations
@@ -300,6 +396,19 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            description: Steady-state requests/min for this API key
+                            schema:
+                                type: integer
+                        X-RateLimit-Remaining:
+                            description: Tokens left in bucket at response time
+                            schema:
+                                type: integer
+                        X-RateLimit-Reset:
+                            description: Unix timestamp when bucket fully refills
+                            schema:
+                                type: integer
                 "400":
                     content:
                         application/json:
@@ -324,6 +433,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Not Found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: Get location by natural identifier
@@ -366,6 +486,19 @@ paths:
                                 additionalProperties: true
                                 type: object
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            description: Steady-state requests/min for this API key
+                            schema:
+                                type: integer
+                        X-RateLimit-Remaining:
+                            description: Tokens left in bucket at response time
+                            schema:
+                                type: integer
+                        X-RateLimit-Reset:
+                            description: Unix timestamp when bucket fully refills
+                            schema:
+                                type: integer
                 "400":
                     content:
                         application/json:
@@ -378,6 +511,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
             security:
                 - BearerAuth: []
             summary: List current asset locations
