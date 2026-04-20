@@ -28,10 +28,10 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout platform at preview SHA
+      - name: Checkout platform preview branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: preview
           path: platform
 
       - name: Get short SHA
