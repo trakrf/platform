@@ -70,3 +70,11 @@ type AssetViewListResponse struct {
 	Data       []AssetView       `json:"data"`
 	Pagination shared.Pagination `json:"pagination"`
 }
+
+// AssetWithLocation is AssetView plus the resolved parent-location natural key.
+// Populated by GetAssetByIdentifier / list-with-join storage methods; returned
+// to HTTP handlers which then project it to PublicAssetView.
+type AssetWithLocation struct {
+	AssetView
+	CurrentLocationIdentifier *string `json:"current_location_identifier,omitempty"`
+}
