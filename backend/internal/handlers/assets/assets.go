@@ -297,6 +297,7 @@ type ListAssetsResponse struct {
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
 // @Router /api/v1/assets [get]
@@ -377,6 +378,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Security BearerAuth
 // @Router /api/v1/assets/{identifier} [get]
 func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Request) {

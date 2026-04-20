@@ -34,6 +34,7 @@ const (
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Security BearerAuth
 // @Router /api/v1/assets/{identifier}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
