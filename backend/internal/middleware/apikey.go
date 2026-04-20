@@ -101,12 +101,20 @@ func APIKeyAuth(store *storage.Storage) func(http.Handler) http.Handler {
 	}
 }
 
-// RequireScope rejects any request whose principal lacks the given scope.
-// Must be chained after APIKeyAuth.
+// RequireScope rejects API-key requests whose principal lacks the given scope.
+// Session-auth requests (UserClaims present) pass through; their access is
+// governed elsewhere. Must be chained after EitherAuth or APIKeyAuth.
 func RequireScope(required string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqID := GetRequestID(r.Context())
+
+			// Session principal → pass through.
+			if GetUserClaims(r) != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			p := GetAPIKeyPrincipal(r)
 			if p == nil {
 				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
