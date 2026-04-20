@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -68,6 +69,7 @@ func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, or
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
@@ -106,6 +108,11 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
+				apierrors.LocationCreateFailed, err.Error(), requestID)
+			return
+		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationCreateFailed, err.Error(), requestID)
 		return
@@ -160,6 +167,11 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	result, err := handler.storage.UpdateLocation(req.Context(), id, request)
 
 	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
+				apierrors.LocationUpdateFailed, err.Error(), ctx)
+			return
+		}
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationUpdateFailed, err.Error(), ctx)
 		return
