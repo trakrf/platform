@@ -34,8 +34,13 @@ lint:
     go vet ./...
 
 # Run backend tests with verbose output
-test:
-    go test -v ./...
+test *args:
+    #!/usr/bin/env bash
+    if [ -z "{{args}}" ]; then
+        go test -v ./...
+    else
+        go test -v {{args}}
+    fi
 
 # Run tests with the integration build tag (needs live Postgres)
 test-integration *args:
