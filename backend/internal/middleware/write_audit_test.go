@@ -98,3 +98,27 @@ func TestWriteAudit_LogsUnauthenticatedWithZeroOrg(t *testing.T) {
 	assert.EqualValues(t, 0, line["org_id"])
 	assert.EqualValues(t, 401, line["status"])
 }
+
+func TestWriteAudit_LogsEvenWhenHandlerPanics(t *testing.T) {
+	var buf bytes.Buffer
+	prev := logger.Get()
+	logger.SetForTest(zerolog.New(&buf))
+	defer logger.SetForTest(*prev)
+
+	handler := middleware.WriteAudit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("boom")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", nil)
+	w := httptest.NewRecorder()
+
+	func() {
+		defer func() { _ = recover() }()
+		handler.ServeHTTP(w, req)
+	}()
+
+	var line map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &line), "audit middleware must emit a log line even on panic")
+	assert.Equal(t, "api.write", line["event"])
+	assert.Equal(t, http.MethodPost, line["method"])
+}

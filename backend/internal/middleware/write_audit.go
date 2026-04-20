@@ -32,34 +32,37 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 func WriteAudit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := &statusRecorder{ResponseWriter: w}
-		next.ServeHTTP(rec, r)
 
-		principal := "anonymous"
-		orgID := 0
+		defer func() {
+			principal := "anonymous"
+			orgID := 0
 
-		if p := GetAPIKeyPrincipal(r); p != nil {
-			principal = "api_key:" + p.JTI
-			orgID = p.OrgID
-		} else if c := GetUserClaims(r); c != nil {
-			principal = "user:" + strconv.Itoa(c.UserID)
-			if c.CurrentOrgID != nil {
-				orgID = *c.CurrentOrgID
+			if p := GetAPIKeyPrincipal(r); p != nil {
+				principal = "api_key:" + p.JTI
+				orgID = p.OrgID
+			} else if c := GetUserClaims(r); c != nil {
+				principal = "user:" + strconv.Itoa(c.UserID)
+				if c.CurrentOrgID != nil {
+					orgID = *c.CurrentOrgID
+				}
 			}
-		}
 
-		status := rec.status
-		if status == 0 {
-			status = http.StatusOK
-		}
+			status := rec.status
+			if status == 0 {
+				status = http.StatusOK
+			}
 
-		logger.Get().Info().
-			Str("event", "api.write").
-			Str("principal", principal).
-			Int("org_id", orgID).
-			Str("method", r.Method).
-			Str("path", r.URL.Path).
-			Int("status", status).
-			Str("request_id", GetRequestID(r.Context())).
-			Msg(fmt.Sprintf("%s %s", r.Method, r.URL.Path))
+			logger.Get().Info().
+				Str("event", "api.write").
+				Str("principal", principal).
+				Int("org_id", orgID).
+				Str("method", r.Method).
+				Str("path", r.URL.Path).
+				Int("status", status).
+				Str("request_id", GetRequestID(r.Context())).
+				Msg(fmt.Sprintf("%s %s", r.Method, r.URL.Path))
+		}()
+
+		next.ServeHTTP(rec, r)
 	})
 }
