@@ -28,6 +28,9 @@ const (
 // @Param from query string false "RFC 3339 start timestamp"
 // @Param to query string false "RFC 3339 end timestamp"
 // @Success 200 {object} map[string]any
+// @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
+// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse

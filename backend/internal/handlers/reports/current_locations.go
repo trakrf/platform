@@ -36,6 +36,9 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Param q query string false "fuzzy search on asset name / identifier"
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
 // @Success 200 {object} map[string]any
+// @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
+// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Security BearerAuth

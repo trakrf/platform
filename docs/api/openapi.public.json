@@ -145,7 +145,27 @@
                 }
               }
             },
-            "description": "envelope with data / limit / offset / total_count"
+            "description": "envelope with data / limit / offset / total_count",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "description": "Steady-state requests/min for this API key",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Tokens left in bucket at response time",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Unix timestamp when bucket fully refills",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -222,7 +242,27 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "description": "Steady-state requests/min for this API key",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Tokens left in bucket at response time",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Unix timestamp when bucket fully refills",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -332,7 +372,27 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "description": "Steady-state requests/min for this API key",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Tokens left in bucket at response time",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Unix timestamp when bucket fully refills",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -438,7 +498,27 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "description": "Steady-state requests/min for this API key",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Tokens left in bucket at response time",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Unix timestamp when bucket fully refills",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -507,7 +587,27 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "description": "Steady-state requests/min for this API key",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Tokens left in bucket at response time",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Unix timestamp when bucket fully refills",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -564,7 +664,27 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "description": "Steady-state requests/min for this API key",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Tokens left in bucket at response time",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Unix timestamp when bucket fully refills",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           },
           "400": {
             "content": {
