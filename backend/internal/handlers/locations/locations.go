@@ -257,7 +257,7 @@ type ListLocationsResponse struct {
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
-// @Security BearerAuth
+// @Security APIKey[locations:read]
 // @Router /api/v1/locations [get]
 func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -335,7 +335,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
-// @Security BearerAuth
+// @Security APIKey[locations:read]
 // @Router /api/v1/locations/{identifier} [get]
 func (handler *Handler) GetLocationByIdentifier(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())

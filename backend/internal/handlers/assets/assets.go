@@ -323,7 +323,7 @@ type ListAssetsResponse struct {
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security APIKey[assets:read]
 // @Router /api/v1/assets [get]
 func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -404,7 +404,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
-// @Security BearerAuth
+// @Security APIKey[assets:read]
 // @Router /api/v1/assets/{identifier} [get]
 func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
