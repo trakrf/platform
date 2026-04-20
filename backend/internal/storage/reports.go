@@ -97,7 +97,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		JOIN trakrf.assets    a ON a.id = ls.asset_id
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.deleted_at IS NULL
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
-		  AND ($3::text IS NULL OR a.name ILIKE $3
+		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
@@ -137,11 +137,7 @@ func buildCurrentLocationsQueryDistinctOn() string {
 		SELECT
 			ls.asset_id,
 			a.name AS asset_name,
-			COALESCE(
-				(SELECT i.value FROM trakrf.identifiers i
-				 WHERE i.asset_id = a.id AND i.is_active = true LIMIT 1),
-				''
-			) AS asset_identifier,
+			a.identifier AS asset_identifier,
 			ls.location_id,
 			l.name AS location_name,
 			l.identifier AS location_identifier,
@@ -150,7 +146,7 @@ func buildCurrentLocationsQueryDistinctOn() string {
 		JOIN trakrf.assets a ON a.id = ls.asset_id
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.deleted_at IS NULL
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
-		  AND ($3::text IS NULL OR a.name ILIKE $3
+		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
@@ -174,11 +170,7 @@ func buildCurrentLocationsQueryTimescale() string {
 		SELECT
 			ls.asset_id,
 			a.name AS asset_name,
-			COALESCE(
-				(SELECT i.value FROM trakrf.identifiers i
-				 WHERE i.asset_id = a.id AND i.is_active = true LIMIT 1),
-				''
-			) AS asset_identifier,
+			a.identifier AS asset_identifier,
 			ls.location_id,
 			l.name AS location_name,
 			l.identifier AS location_identifier,
@@ -187,7 +179,7 @@ func buildCurrentLocationsQueryTimescale() string {
 		JOIN trakrf.assets a ON a.id = ls.asset_id
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.deleted_at IS NULL
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
-		  AND ($3::text IS NULL OR a.name ILIKE $3
+		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3

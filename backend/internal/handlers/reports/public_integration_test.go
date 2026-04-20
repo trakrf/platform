@@ -136,8 +136,8 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 	data := body["data"].([]any)
 	require.Len(t, data, 1)
 	row := data[0].(map[string]any)
-	// "asset" is the tag-identifier value from trakrf.identifiers (RFID/BLE/etc.)
-	assert.Equal(t, "CURR-TAG-001", row["asset"])
+	// "asset" is the asset's natural-key identifier per the public API contract.
+	assert.Equal(t, "curr-asset-1", row["asset"])
 	assert.Equal(t, "curr-loc-1", row["location"])
 	assert.Contains(t, row, "last_seen")
 }
