@@ -94,10 +94,11 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Default date range: last 30 days
+	// TODO(tra-396-task-14): expose `from`/`to` query params; old start_date/end_date kept for compat
 	now := time.Now()
 	defaultStart := now.AddDate(0, 0, -defaultDateRangeDays)
-	filter.StartDate = &defaultStart
-	filter.EndDate = &now
+	filter.From = &defaultStart
+	filter.To = &now
 
 	if startDateStr := r.URL.Query().Get("start_date"); startDateStr != "" {
 		parsed, err := time.Parse(time.RFC3339, startDateStr)
@@ -106,7 +107,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 				apierrors.ReportInvalidDateFormat, "invalid start_date format, use RFC3339", requestID)
 			return
 		}
-		filter.StartDate = &parsed
+		filter.From = &parsed
 	}
 
 	if endDateStr := r.URL.Query().Get("end_date"); endDateStr != "" {
@@ -116,7 +117,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 				apierrors.ReportInvalidDateFormat, "invalid end_date format, use RFC3339", requestID)
 			return
 		}
-		filter.EndDate = &parsed
+		filter.To = &parsed
 	}
 
 	// 5. Get active identifier for asset

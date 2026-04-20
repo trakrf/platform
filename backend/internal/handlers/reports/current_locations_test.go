@@ -96,18 +96,18 @@ func TestListCurrentLocations_RouteRegistration(t *testing.T) {
 }
 
 func TestCurrentLocationFilter_Struct(t *testing.T) {
-	locationID := 123
-	search := "laptop"
+	// TODO(tra-396-task-14): rewrite for natural-key filter
+	q := "laptop"
 
 	filter := report.CurrentLocationFilter{
-		LocationID: &locationID,
-		Search:     &search,
-		Limit:      50,
-		Offset:     100,
+		LocationIdentifiers: []string{"LOC-123"},
+		Q:                   &q,
+		Limit:               50,
+		Offset:              100,
 	}
 
-	assert.Equal(t, 123, *filter.LocationID)
-	assert.Equal(t, "laptop", *filter.Search)
+	assert.Equal(t, []string{"LOC-123"}, filter.LocationIdentifiers)
+	assert.Equal(t, "laptop", *filter.Q)
 	assert.Equal(t, 50, filter.Limit)
 	assert.Equal(t, 100, filter.Offset)
 }

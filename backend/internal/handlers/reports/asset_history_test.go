@@ -297,18 +297,19 @@ func TestAssetInfo_JSON(t *testing.T) {
 }
 
 func TestAssetHistoryFilter_Struct(t *testing.T) {
+	// TODO(tra-396-task-14): rewrite for natural-key filter
 	now := time.Now()
 	start := now.AddDate(0, 0, -30)
 
 	filter := report.AssetHistoryFilter{
-		StartDate: &start,
-		EndDate:   &now,
-		Limit:     50,
-		Offset:    100,
+		From:   &start,
+		To:     &now,
+		Limit:  50,
+		Offset: 100,
 	}
 
-	assert.Equal(t, start, *filter.StartDate)
-	assert.Equal(t, now, *filter.EndDate)
+	assert.Equal(t, start, *filter.From)
+	assert.Equal(t, now, *filter.To)
 	assert.Equal(t, 50, filter.Limit)
 	assert.Equal(t, 100, filter.Offset)
 }

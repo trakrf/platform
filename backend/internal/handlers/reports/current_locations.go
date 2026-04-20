@@ -76,14 +76,13 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if locationIDStr := r.URL.Query().Get("location_id"); locationIDStr != "" {
-		if parsed, err := strconv.Atoi(locationIDStr); err == nil {
-			filter.LocationID = &parsed
-		}
+	// TODO(tra-396-task-14): full natural-key param handling; minimal rename to keep build green
+	if location := r.URL.Query().Get("location"); location != "" {
+		filter.LocationIdentifiers = []string{location}
 	}
 
-	if search := r.URL.Query().Get("search"); search != "" {
-		filter.Search = &search
+	if q := r.URL.Query().Get("q"); q != "" {
+		filter.Q = &q
 	}
 
 	// 3. Fetch data

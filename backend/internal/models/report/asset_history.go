@@ -11,10 +11,11 @@ type AssetInfo struct {
 
 // AssetHistoryItem represents a single scan in the asset's history
 type AssetHistoryItem struct {
-	Timestamp       time.Time `json:"timestamp"`
-	LocationID      *int      `json:"location_id"`
-	LocationName    *string   `json:"location_name"`
-	DurationSeconds *int      `json:"duration_seconds"`
+	Timestamp          time.Time `json:"timestamp"`
+	LocationID         *int      `json:"location_id"`
+	LocationName       *string   `json:"location_name"`
+	LocationIdentifier *string   `json:"location_identifier"` // natural key
+	DurationSeconds    *int      `json:"duration_seconds"`
 }
 
 // AssetHistoryResponse is the paginated response for asset history
@@ -28,8 +29,8 @@ type AssetHistoryResponse struct {
 
 // AssetHistoryFilter contains query parameters for filtering
 type AssetHistoryFilter struct {
-	StartDate *time.Time
-	EndDate   *time.Time
-	Limit     int
-	Offset    int
+	From   *time.Time // renamed from StartDate
+	To     *time.Time // renamed from EndDate
+	Limit  int
+	Offset int
 }
