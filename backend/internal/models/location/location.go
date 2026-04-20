@@ -82,3 +82,18 @@ type LocationWithParent struct {
 	LocationView
 	ParentIdentifier *string `json:"parent_identifier,omitempty"`
 }
+
+// ListFilter carries the optional filters the locations list endpoint supports.
+type ListFilter struct {
+	ParentIdentifiers []string
+	IsActive          *bool
+	Q                 *string
+	Sorts             []ListSort
+	Limit             int
+	Offset            int
+}
+
+type ListSort struct {
+	Field string
+	Desc  bool
+}

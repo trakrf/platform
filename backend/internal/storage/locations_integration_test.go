@@ -54,3 +54,36 @@ func TestGetLocationByIdentifier_NotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, view)
 }
+
+func TestListLocationsFiltered_Parent(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	root, _ := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "root", Name: "R", Path: "root",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	_, _ = store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "root.a", Name: "A", ParentLocationID: &root.ID,
+		Path: "root.a", ValidFrom: time.Now(), IsActive: true,
+	})
+	_, _ = store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "root.b", Name: "B", ParentLocationID: &root.ID,
+		Path: "root.b", ValidFrom: time.Now(), IsActive: true,
+	})
+
+	items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
+		ParentIdentifiers: []string{"root"},
+		Sorts:             []location.ListSort{{Field: "identifier"}},
+		Limit:             50,
+	})
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	assert.Equal(t, "root.a", items[0].Identifier)
+	assert.Equal(t, "root.b", items[1].Identifier)
+	require.NotNil(t, items[0].ParentIdentifier)
+	assert.Equal(t, "root", *items[0].ParentIdentifier)
+}
