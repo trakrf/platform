@@ -89,3 +89,37 @@ func TestLimiter_RefillsOverTime(t *testing.T) {
 	require.True(t, lim.Allow("key-a").Allowed)
 	require.False(t, lim.Allow("key-a").Allowed, "third in the same instant is denied")
 }
+
+func TestLimiter_ResetAtReflectsTimeToFullRefill(t *testing.T) {
+	start := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	clock := NewFakeClock(start)
+	lim := newTestLimiter(clock)
+	defer lim.Close()
+
+	// Drain the full burst (120 tokens).
+	for i := 0; i < 120; i++ {
+		lim.Allow("key-a")
+	}
+
+	d := lim.Allow("key-a") // denied; bucket at 0
+	// At 60/min = 1/sec, refilling 120 tokens takes 120s.
+	expected := start.Add(120 * time.Second)
+	require.WithinDuration(t, expected, d.ResetAt, 100*time.Millisecond)
+}
+
+func TestLimiter_KeysAreIndependent(t *testing.T) {
+	clock := NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	lim := newTestLimiter(clock)
+	defer lim.Close()
+
+	// Exhaust key-a.
+	for i := 0; i < 120; i++ {
+		lim.Allow("key-a")
+	}
+	require.False(t, lim.Allow("key-a").Allowed)
+
+	// key-b untouched — should still have full burst.
+	d := lim.Allow("key-b")
+	require.True(t, d.Allowed)
+	require.Equal(t, 119, d.Remaining)
+}
