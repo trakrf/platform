@@ -311,7 +311,8 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - assets:read
             summary: List assets
             tags:
                 - assets
@@ -708,7 +709,8 @@ paths:
                             schema:
                                 type: integer
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - assets:read
             summary: Get asset by natural identifier
             tags:
                 - assets
@@ -793,7 +795,8 @@ paths:
                             schema:
                                 type: integer
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - scans:read
             summary: Asset movement history
             tags:
                 - reports
@@ -912,7 +915,8 @@ paths:
                             schema:
                                 type: integer
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - locations:read
             summary: List locations
             tags:
                 - locations
@@ -1297,7 +1301,8 @@ paths:
                             schema:
                                 type: integer
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - locations:read
             summary: Get location by natural identifier
             tags:
                 - locations
@@ -1375,7 +1380,8 @@ paths:
                             schema:
                                 type: integer
             security:
-                - BearerAuth: []
+                - APIKey:
+                    - scans:read
             summary: List current asset locations
             tags:
                 - reports

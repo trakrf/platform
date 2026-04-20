@@ -446,9 +446,17 @@
           }
         },
         "security": [
+
           {
-            "BearerAuth": []
+
+            "APIKey": [
+
+              "assets:read"
+
+            ]
+
           }
+
         ],
         "summary": "List assets",
         "tags": [
@@ -660,9 +668,17 @@
           }
         },
         "security": [
+
           {
-            "BearerAuth": []
+
+            "APIKey": [
+
+              "assets:read"
+
+            ]
+
           }
+
         ],
         "summary": "Get asset by natural identifier",
         "tags": [
@@ -798,9 +814,17 @@
           }
         },
         "security": [
+
           {
-            "BearerAuth": []
+
+            "APIKey": [
+
+              "scans:read"
+
+            ]
+
           }
+
         ],
         "summary": "Asset movement history",
         "tags": [
@@ -1428,9 +1452,17 @@
           }
         },
         "security": [
+
           {
-            "BearerAuth": []
+
+            "APIKey": [
+
+              "locations:read"
+
+            ]
+
           }
+
         ],
         "summary": "List locations",
         "tags": [
@@ -1654,9 +1686,17 @@
           }
         },
         "security": [
+
           {
-            "BearerAuth": []
+
+            "APIKey": [
+
+              "scans:read"
+
+            ]
+
           }
+
         ],
         "summary": "List current asset locations",
         "tags": [
@@ -1769,9 +1809,17 @@
           }
         },
         "security": [
+
           {
-            "BearerAuth": []
+
+            "APIKey": [
+
+              "locations:read"
+
+            ]
+
           }
+
         ],
         "summary": "Get location by natural identifier",
         "tags": [
