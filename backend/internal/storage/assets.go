@@ -178,7 +178,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, ids []int) ([]*asset.Asset
 	}
 	defer rows.Close()
 
-	var assets []*asset.Asset
+	assets := []*asset.Asset{}
 	for rows.Next() {
 		var a asset.Asset
 		err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
@@ -213,7 +213,7 @@ func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offse
 	}
 	defer rows.Close()
 
-	var assets []asset.Asset
+	assets := []asset.Asset{}
 	for rows.Next() {
 		var a asset.Asset
 		err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,

@@ -27,7 +27,7 @@ func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User
 	}
 	defer rows.Close()
 
-	var users []user.User
+	users := []user.User{}
 	for rows.Next() {
 		var usr user.User
 		err := rows.Scan(&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,

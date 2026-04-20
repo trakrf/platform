@@ -52,7 +52,7 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 	}
 	defer rows.Close()
 
-	var items []report.CurrentLocationItem
+	items := []report.CurrentLocationItem{}
 	for rows.Next() {
 		var item report.CurrentLocationItem
 		err := rows.Scan(
@@ -223,7 +223,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 	}
 	defer rows.Close()
 
-	var items []report.AssetHistoryItem
+	items := []report.AssetHistoryItem{}
 	for rows.Next() {
 		var item report.AssetHistoryItem
 		err := rows.Scan(

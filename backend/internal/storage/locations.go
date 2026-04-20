@@ -137,7 +137,7 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, ids []int) ([]*location
 	}
 	defer rows.Close()
 
-	var locations []*location.Location
+	locations := []*location.Location{}
 	for rows.Next() {
 		var loc location.Location
 		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name,
@@ -197,8 +197,8 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, id int) (*locati
 	defer rows.Close()
 
 	var target *location.Location
-	var ancestors []location.Location
-	var children []location.Location
+	ancestors := []location.Location{}
+	children := []location.Location{}
 
 	for rows.Next() {
 		var loc location.Location
@@ -253,7 +253,7 @@ func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, of
 	}
 	defer rows.Close()
 
-	var locations []location.Location
+	locations := []location.Location{}
 	for rows.Next() {
 		var loc location.Location
 		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
@@ -318,7 +318,7 @@ func (s *Storage) GetAncestors(ctx context.Context, id int) ([]location.Location
 	}
 	defer rows.Close()
 
-	var locations []location.Location
+	locations := []location.Location{}
 	for rows.Next() {
 		var loc location.Location
 		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
@@ -357,7 +357,7 @@ func (s *Storage) GetDescendants(ctx context.Context, id int) ([]location.Locati
 	}
 	defer rows.Close()
 
-	var locations []location.Location
+	locations := []location.Location{}
 	for rows.Next() {
 		var loc location.Location
 		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
@@ -393,7 +393,7 @@ func (s *Storage) GetChildren(ctx context.Context, id int) ([]location.Location,
 	}
 	defer rows.Close()
 
-	var locations []location.Location
+	locations := []location.Location{}
 	for rows.Next() {
 		var loc location.Location
 		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
