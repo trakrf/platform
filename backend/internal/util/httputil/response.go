@@ -10,12 +10,13 @@ import (
 
 type ErrorResponse struct {
 	Error struct {
-		Type      string `json:"type"`
-		Title     string `json:"title"`
-		Status    int    `json:"status"`
-		Detail    string `json:"detail"`
-		Instance  string `json:"instance"`
-		RequestID string `json:"request_id"`
+		Type      string               `json:"type"`
+		Title     string               `json:"title"`
+		Status    int                  `json:"status"`
+		Detail    string               `json:"detail"`
+		Instance  string               `json:"instance"`
+		RequestID string               `json:"request_id"`
+		Fields    []errors.FieldError  `json:"fields,omitempty"`
 	} `json:"error"`
 }
 
