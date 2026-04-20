@@ -81,6 +81,13 @@ func (s *Storage) UpdateLocation(ctx context.Context, id int, request location.U
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			identifier := "unknown"
+			if request.Identifier != nil {
+				identifier = *request.Identifier
+			}
+			return nil, fmt.Errorf("location with identifier %s already exists", identifier)
+		}
 		if strings.Contains(err.Error(), "parent_location_id_fkey") {
 			return nil, fmt.Errorf("invalid parent_location_id: parent location does not exist")
 		}
