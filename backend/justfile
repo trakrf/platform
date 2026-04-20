@@ -37,6 +37,10 @@ lint:
 test:
     go test -v ./...
 
+# Run tests with the integration build tag (needs live Postgres)
+test-integration *args:
+    go test -tags=integration -v {{args}}
+
 # Run tests with race detection
 test-race:
     go test -race ./...
