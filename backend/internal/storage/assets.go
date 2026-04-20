@@ -372,9 +372,9 @@ func (s *Storage) CheckDuplicateIdentifiers(ctx context.Context, orgID int, iden
 func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	fields := make(map[string]any)
 
-	if req.OrgID != nil {
-		fields["org_id"] = *req.OrgID
-	}
+	// Note: OrgID is intentionally NOT writable via UpdateAssetRequest.
+	// The owning org is fixed at creation; ownership transfers must use
+	// dedicated tooling, never a public PUT body.
 	if req.Identifier != nil {
 		fields["identifier"] = *req.Identifier
 	}
