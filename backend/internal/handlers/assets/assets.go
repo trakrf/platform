@@ -321,11 +321,18 @@ func (handler *Handler) doDeleteAsset(w http.ResponseWriter, req *http.Request, 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListAssetsResponse is the typed envelope returned by GET /api/v1/assets.
+// Shape mirrors the runtime map literal at the bottom of ListAssets.
 type ListAssetsResponse struct {
-	Data       []asset.AssetView `json:"data"`
-	Count      int               `json:"count" example:"10"`
-	Offset     int               `json:"offset" example:"0"`
-	TotalCount int               `json:"total_count" example:"100"`
+	Data       []asset.PublicAssetView `json:"data"`
+	Limit      int                     `json:"limit"       example:"50"`
+	Offset     int                     `json:"offset"      example:"0"`
+	TotalCount int                     `json:"total_count" example:"100"`
+}
+
+// GetAssetResponse is the typed envelope returned by GET /api/v1/assets/{identifier}.
+type GetAssetResponse struct {
+	Data asset.PublicAssetView `json:"data"`
 }
 
 // @Summary List assets
@@ -341,7 +348,7 @@ type ListAssetsResponse struct {
 // @Param type     query string false "filter by type"
 // @Param q        query string false "fuzzy search on name / identifier / description"
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"
-// @Success 200 {object} map[string]any "envelope with data / limit / offset / total_count"
+// @Success 200 {object} assets.ListAssetsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
@@ -424,7 +431,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Tags assets,public
 // @ID assets.get
 // @Param identifier path string true "Asset identifier (natural key)"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} assets.GetAssetResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
