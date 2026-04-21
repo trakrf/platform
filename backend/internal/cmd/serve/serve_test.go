@@ -92,6 +92,8 @@ func TestRouterRegistration(t *testing.T) {
 		{"GET", "/assets/index.js"},
 		{"GET", "/favicon.ico"},
 		{"GET", "/"},
+		{"GET", "/api/v1/openapi.json"},
+		{"GET", "/api/v1/openapi.yaml"},
 	}
 
 	for _, tt := range tests {
@@ -102,6 +104,24 @@ func TestRouterRegistration(t *testing.T) {
 				t.Errorf("Route not found: %s %s", tt.method, tt.path)
 			}
 		})
+	}
+}
+
+func TestPublicOpenAPISpec_ServedAt_V1Path(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.json", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/openapi.json = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	if !strings.Contains(rec.Body.String(), `"openapi"`) {
+		t.Fatalf("body does not contain \"openapi\" key: %s", rec.Body.String()[:min(200, len(rec.Body.String()))])
 	}
 }
 

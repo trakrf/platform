@@ -65,6 +65,12 @@ func setupRouter(
 
 	r.Handle("/metrics", promhttp.Handler())
 
+	// Public OpenAPI spec — served unauthenticated so codegen tools and
+	// integrators can fetch it directly from the API host. Root-path aliases
+	// (/openapi.{json,yaml}) are added below.
+	r.Get("/api/v1/openapi.json", swaggerspec.ServePublicJSON)
+	r.Get("/api/v1/openapi.yaml", swaggerspec.ServePublicYAML)
+
 	healthHandler.RegisterRoutes(r)
 
 	authHandler.RegisterRoutes(r, middleware.Auth)
