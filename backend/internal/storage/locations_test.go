@@ -499,6 +499,7 @@ func TestGetAncestors(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	now := time.Now()
+	orgID := 1
 	locationID := 3 // usa.california.warehouse_1
 
 	parent1 := 1
@@ -511,10 +512,10 @@ func TestGetAncestors(t *testing.T) {
 		AddRow(2, 1, "California", "california", &parent1, "usa.california", 2, "California State", now, nil, true, now, &now, nil)
 
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
-		WithArgs(locationID).
+		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
 
-	results, err := storage.GetAncestors(context.Background(), locationID)
+	results, err := storage.GetAncestors(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -531,6 +532,7 @@ func TestGetAncestors_RootLocation(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	locationID := 1 // Root location - no ancestors
 
 	rows := pgxmock.NewRows([]string{
@@ -540,10 +542,10 @@ func TestGetAncestors_RootLocation(t *testing.T) {
 	})
 
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
-		WithArgs(locationID).
+		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
 
-	results, err := storage.GetAncestors(context.Background(), locationID)
+	results, err := storage.GetAncestors(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	assert.Empty(t, results)
@@ -558,6 +560,7 @@ func TestGetDescendants(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	now := time.Now()
+	orgID := 1
 	locationID := 1 // usa
 
 	parent1 := 1
@@ -573,10 +576,10 @@ func TestGetDescendants(t *testing.T) {
 		AddRow(4, 1, "Zone A", "zone_a", &parent3, "usa.california.warehouse_1.zone_a", 4, "Storage Zone A", now, nil, true, now, &now, nil)
 
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
-		WithArgs(locationID).
+		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
 
-	results, err := storage.GetDescendants(context.Background(), locationID)
+	results, err := storage.GetDescendants(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -594,6 +597,7 @@ func TestGetDescendants_LeafLocation(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	locationID := 10 // Leaf location - no descendants
 
 	rows := pgxmock.NewRows([]string{
@@ -603,10 +607,10 @@ func TestGetDescendants_LeafLocation(t *testing.T) {
 	})
 
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
-		WithArgs(locationID).
+		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
 
-	results, err := storage.GetDescendants(context.Background(), locationID)
+	results, err := storage.GetDescendants(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	assert.Empty(t, results)
@@ -621,6 +625,7 @@ func TestGetChildren(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	now := time.Now()
+	orgID := 1
 	parentID := 2 // usa.california
 
 	rows := pgxmock.NewRows([]string{
@@ -632,10 +637,10 @@ func TestGetChildren(t *testing.T) {
 		AddRow(4, 1, "Warehouse 2", "warehouse_2", &parentID, "usa.california.warehouse_2", 3, "Secondary Warehouse", now, nil, true, now, &now, nil)
 
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
-		WithArgs(parentID).
+		WithArgs(orgID, parentID).
 		WillReturnRows(rows)
 
-	results, err := storage.GetChildren(context.Background(), parentID)
+	results, err := storage.GetChildren(context.Background(), orgID, parentID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -654,6 +659,7 @@ func TestGetChildren_NoChildren(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	parentID := 10 // Location with no children
 
 	rows := pgxmock.NewRows([]string{
@@ -663,10 +669,10 @@ func TestGetChildren_NoChildren(t *testing.T) {
 	})
 
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
-		WithArgs(parentID).
+		WithArgs(orgID, parentID).
 		WillReturnRows(rows)
 
-	results, err := storage.GetChildren(context.Background(), parentID)
+	results, err := storage.GetChildren(context.Background(), orgID, parentID)
 
 	assert.NoError(t, err)
 	assert.Empty(t, results)

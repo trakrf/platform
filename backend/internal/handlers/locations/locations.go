@@ -451,7 +451,7 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  map[string]any                "data: []location.Location"
+// @Success      200  {object}  map[string]any                "data: []location.PublicLocationView"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -483,14 +483,14 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	}
 	id := loc.ID
 
-	results, err := handler.storage.GetAncestors(req.Context(), id)
+	results, err := handler.storage.GetAncestors(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string][]location.Location{"data": results})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
 }
 
 // @Summary      List location descendants
@@ -500,7 +500,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  map[string]any                "data: []location.Location"
+// @Success      200  {object}  map[string]any                "data: []location.PublicLocationView"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -532,14 +532,14 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 	}
 	id := loc.ID
 
-	results, err := handler.storage.GetDescendants(req.Context(), id)
+	results, err := handler.storage.GetDescendants(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string][]location.Location{"data": results})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
 }
 
 // @Summary      List location children
@@ -549,7 +549,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  map[string]any                "data: []location.Location"
+// @Success      200  {object}  map[string]any                "data: []location.PublicLocationView"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -581,14 +581,26 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	}
 	id := loc.ID
 
-	results, err := handler.storage.GetChildren(req.Context(), id)
+	results, err := handler.storage.GetChildren(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string][]location.Location{"data": results})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
+}
+
+// toPublicLocationViews is the hierarchy-endpoint response adapter: it strips internal
+// fields (id, org_id, parent_location_id) and matches the shape returned by the
+// non-hierarchy GET /locations/{identifier}. Parent and Identifiers stay empty because
+// the hierarchy queries don't fetch them.
+func toPublicLocationViews(locs []location.Location) []location.PublicLocationView {
+	views := make([]location.PublicLocationView, len(locs))
+	for i, l := range locs {
+		views[i] = location.ToPublicLocationViewFromLocation(l)
+	}
+	return views
 }
 
 // @Summary      Add an identifier to a location

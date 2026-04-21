@@ -529,7 +529,7 @@ func TestLocationsGetAncestors_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].([]any)
@@ -580,7 +580,7 @@ func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].([]any)
@@ -638,7 +638,7 @@ func TestLocationsGetDescendants_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].([]any)
@@ -660,4 +660,129 @@ func TestLocationsGetDescendants_UnknownIdentifier_Returns404(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+// seedTra428HierarchyPair seeds two orgs with the SAME whs-01 → dock-01 identifiers.
+// OrgB additionally has dock-01 → leak-b (a descendant that MUST NOT surface to orgA).
+// Returns (orgA id, orgA token, orgB id) so callers can assert scoping from orgA's side.
+func seedTra428HierarchyPair(t *testing.T, pool *pgxpool.Pool, store *storage.Storage, prefix string) (int, string, int) {
+	t.Helper()
+
+	orgA, tokenA := seedLocOrgAndKey(t, pool, store, prefix+"-orgA", []string{"locations:read"})
+	orgB, _ := seedLocOrgAndKey(t, pool, store, prefix+"-orgB", []string{"locations:read"})
+
+	now := time.Now()
+	whsA, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgA, Identifier: "whs-01", Name: "OrgA Warehouse",
+		ValidFrom: now, IsActive: true,
+	})
+	require.NoError(t, err)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgA, Identifier: "dock-01", Name: "OrgA Dock",
+		ParentLocationID: &whsA.ID,
+		ValidFrom:        now, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	whsB, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgB, Identifier: "whs-01", Name: "OrgB Warehouse",
+		ValidFrom: now, IsActive: true,
+	})
+	require.NoError(t, err)
+	dockB, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgB, Identifier: "dock-01", Name: "OrgB Dock",
+		ParentLocationID: &whsB.ID,
+		ValidFrom:        now, IsActive: true,
+	})
+	require.NoError(t, err)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgB, Identifier: "leak-b", Name: "OrgB Only",
+		ParentLocationID: &dockB.ID,
+		ValidFrom:        now, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	return orgA, tokenA, orgB
+}
+
+func assertNoInternalLocationFields(t *testing.T, item map[string]any) {
+	t.Helper()
+	assert.NotContains(t, item, "id", "internal surrogate id must not leak")
+	assert.NotContains(t, item, "org_id", "org_id must not leak")
+	assert.NotContains(t, item, "parent_location_id", "parent_location_id must not leak")
+}
+
+func TestLocationsGetAncestors_CrossOrg_NoLeak(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra428-loc-ancestors-cross-org")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, tokenA, _ := seedTra428HierarchyPair(t, pool, store, "tra428-anc")
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/dock-01/ancestors", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenA)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].([]any)
+	require.Len(t, data, 1, "ancestors must not include records from other organizations")
+	got := data[0].(map[string]any)
+	assert.Equal(t, "whs-01", got["identifier"])
+	assert.Equal(t, "OrgA Warehouse", got["name"])
+	assertNoInternalLocationFields(t, got)
+}
+
+func TestLocationsGetChildren_CrossOrg_NoLeak(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra428-loc-children-cross-org")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, tokenA, _ := seedTra428HierarchyPair(t, pool, store, "tra428-chd")
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/whs-01/children", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenA)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].([]any)
+	require.Len(t, data, 1, "children must not include records from other organizations")
+	got := data[0].(map[string]any)
+	assert.Equal(t, "dock-01", got["identifier"])
+	assert.Equal(t, "OrgA Dock", got["name"])
+	assertNoInternalLocationFields(t, got)
+}
+
+func TestLocationsGetDescendants_CrossOrg_NoLeak(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra428-loc-descendants-cross-org")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, tokenA, _ := seedTra428HierarchyPair(t, pool, store, "tra428-dsc")
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/whs-01/descendants", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenA)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].([]any)
+	require.Len(t, data, 1, "descendants must not include records from other organizations")
+	got := data[0].(map[string]any)
+	assert.Equal(t, "dock-01", got["identifier"])
+	assert.Equal(t, "OrgA Dock", got["name"])
+	assertNoInternalLocationFields(t, got)
 }
