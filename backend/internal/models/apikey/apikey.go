@@ -46,6 +46,7 @@ type APIKeyCreateResponse struct {
 // APIKeyListItem is what GET returns — never includes the JWT.
 type APIKeyListItem struct {
 	ID         int        `json:"id"`
+	JTI        string     `json:"jti"`
 	Name       string     `json:"name"`
 	Scopes     []string   `json:"scopes"`
 	CreatedAt  time.Time  `json:"created_at"`

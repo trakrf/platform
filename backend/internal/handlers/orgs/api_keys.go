@@ -112,6 +112,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		items = append(items, apikey.APIKeyListItem{
 			ID:         k.ID,
+			JTI:        k.JTI,
 			Name:       k.Name,
 			Scopes:     k.Scopes,
 			CreatedAt:  k.CreatedAt,
