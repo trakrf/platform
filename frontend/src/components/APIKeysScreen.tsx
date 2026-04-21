@@ -125,7 +125,14 @@ export default function APIKeysScreen() {
                 .filter((x): x is string => !!x);
               return (
                 <tr key={k.id} className="border-b">
-                  <td className="py-2 font-medium">{k.name}</td>
+                  <td className="py-2 font-medium">
+                    <div className="flex items-baseline gap-2">
+                      <span>{k.name}</span>
+                      <span className="font-mono text-xs text-gray-500 dark:text-gray-400" title={`Key ID: ${k.jti}`}>
+                        {k.jti.slice(0, 8)}
+                      </span>
+                    </div>
+                  </td>
                   <td className="space-x-1">
                     {chips.map((c) => (
                       <span
