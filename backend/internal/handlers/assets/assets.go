@@ -364,8 +364,9 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters: []string{"location", "is_active", "type", "q"},
-		Sorts:   []string{"identifier", "name", "created_at", "updated_at"},
+		Filters:     []string{"location", "is_active", "type", "q"},
+		BoolFilters: []string{"is_active"},
+		Sorts:       []string{"identifier", "name", "created_at", "updated_at"},
 	})
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,

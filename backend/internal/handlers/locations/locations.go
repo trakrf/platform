@@ -302,8 +302,9 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters: []string{"parent", "is_active", "q"},
-		Sorts:   []string{"path", "identifier", "name", "created_at"},
+		Filters:     []string{"parent", "is_active", "q"},
+		BoolFilters: []string{"is_active"},
+		Sorts:       []string{"path", "identifier", "name", "created_at"},
 	})
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
