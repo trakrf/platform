@@ -156,13 +156,20 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	a, err := handler.storage.GetAssetByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetUpdateInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), ctx)
 		return
 	}
+	if a == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", ctx)
+		return
+	}
+	id := a.ID
 
 	var request asset.UpdateAssetRequest
 
@@ -269,13 +276,20 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	a, err := handler.storage.GetAssetByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetDeleteInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), ctx)
 		return
 	}
+	if a == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", ctx)
+		return
+	}
+	id := a.ID
 
 	deleted, err := handler.storage.DeleteAsset(req.Context(), orgID, id)
 	if err != nil {
@@ -465,15 +479,9 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	assetID, err := strconv.Atoi(idParam)
-	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
-		return
-	}
+	identifier := chi.URLParam(r, "identifier")
 
-	existingAsset, err := handler.storage.GetAssetByID(r.Context(), &assetID)
+	existingAsset, err := handler.storage.GetAssetByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetGetFailed, err.Error(), requestID)
@@ -484,6 +492,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 			apierrors.AssetNotFound, "", requestID)
 		return
 	}
+	assetID := existingAsset.ID
 
 	var request shared.TagIdentifierRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
@@ -496,7 +505,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identifier, err := handler.storage.AddIdentifierToAsset(r.Context(), orgID, assetID, request)
+	tagIdent, err := handler.storage.AddIdentifierToAsset(r.Context(), orgID, assetID, request)
 	if err != nil {
 		// Storage returns "identifier X:Y already exists" for unique violations (SQLSTATE 23505
 		// is unwrapped to a plain string by the storage layer).
@@ -509,7 +518,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": identifier})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tagIdent})
 }
 
 // @Summary      Remove an identifier from an asset
@@ -538,13 +547,20 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	assetID, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(r, "identifier")
+
+	existingAsset, err := handler.storage.GetAssetByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), requestID)
 		return
 	}
+	if existingAsset == nil {
+		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", requestID)
+		return
+	}
+	assetID := existingAsset.ID
 
 	identifierIDParam := chi.URLParam(r, "identifierId")
 	identifierID, err := strconv.Atoi(identifierIDParam)
