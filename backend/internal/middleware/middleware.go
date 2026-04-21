@@ -3,13 +3,16 @@ package middleware
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/oklog/ulid/v2"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -126,8 +129,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("Missing authorization header")
-			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
-				"Missing authorization header", "", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, "Authorization header is required", GetRequestID(r.Context()))
 			return
 		}
 
@@ -137,8 +139,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("Invalid authorization header format")
-			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
-				"Invalid authorization header format", "", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, "Authorization header must be Bearer <token>", GetRequestID(r.Context()))
 			return
 		}
 		token := parts[1]
@@ -150,8 +151,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("JWT validation failed")
-			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
-				"Invalid or expired token", "", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, "Bearer token is invalid or expired", GetRequestID(r.Context()))
 			return
 		}
 
@@ -160,8 +160,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("Validate returned nil claims without error")
-			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
-				"Invalid or expired token", "", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, "Bearer token is invalid or expired", GetRequestID(r.Context()))
 			return
 		}
 
@@ -210,8 +209,13 @@ func SentryContext(next http.Handler) http.Handler {
 	})
 }
 
+var (
+	ulidMu      sync.Mutex
+	ulidEntropy io.Reader = ulid.Monotonic(rand.Reader, 0)
+)
+
 func generateRequestID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	ulidMu.Lock()
+	defer ulidMu.Unlock()
+	return ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy).String()
 }

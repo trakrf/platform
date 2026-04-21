@@ -16,15 +16,24 @@ const (
 	ErrRateLimited  ErrorType = "rate_limited"
 )
 
-// ErrorResponse implements RFC 7807 Problem Details
+// FieldError describes a single field-level validation failure.
+type FieldError struct {
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// ErrorResponse implements RFC 7807 Problem Details, extended with an
+// optional per-field validation list.
 type ErrorResponse struct {
 	Error struct {
-		Type      string `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error" extensions:"x-extensible-enum=true"`
-		Title     string `json:"title"`
-		Status    int    `json:"status"`
-		Detail    string `json:"detail"`
-		Instance  string `json:"instance"`
-		RequestID string `json:"request_id"`
+		Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error" extensions:"x-extensible-enum=true"`
+		Title     string       `json:"title"`
+		Status    int          `json:"status"`
+		Detail    string       `json:"detail"`
+		Instance  string       `json:"instance"`
+		RequestID string       `json:"request_id"`
+		Fields    []FieldError `json:"fields,omitempty"`
 	} `json:"error"`
 }
 

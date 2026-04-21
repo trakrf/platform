@@ -36,22 +36,19 @@ func APIKeyAuth(store *storage.Storage) func(http.Handler) http.Handler {
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Missing authorization header", "", reqID)
+				httputil.Respond401(w, r, "Authorization header is required", reqID)
 				return
 			}
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid authorization header format", "", reqID)
+				httputil.Respond401(w, r, "Authorization header must be Bearer <token>", reqID)
 				return
 			}
 
 			claims, err := jwt.ValidateAPIKey(parts[1])
 			if err != nil {
 				logger.Get().Warn().Err(err).Str("request_id", reqID).Msg("api key jwt validation failed")
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid or expired token", "", reqID)
+				httputil.Respond401(w, r, "Bearer token is invalid or expired", reqID)
 				return
 			}
 
@@ -59,22 +56,19 @@ func APIKeyAuth(store *storage.Storage) func(http.Handler) http.Handler {
 			if err != nil {
 				logger.Get().Warn().Err(err).Str("jti", claims.Subject).Str("request_id", reqID).
 					Msg("api key lookup failed")
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid or expired token", "", reqID)
+				httputil.Respond401(w, r, "Bearer token is invalid or expired", reqID)
 				return
 			}
 			if key.RevokedAt != nil {
 				logger.Get().Warn().Str("jti", key.JTI).Str("reason", "revoked").Str("request_id", reqID).
 					Msg("api key rejected")
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid or expired token", "", reqID)
+				httputil.Respond401(w, r, "API key has been revoked", reqID)
 				return
 			}
 			if key.ExpiresAt != nil && key.ExpiresAt.Before(time.Now()) {
 				logger.Get().Warn().Str("jti", key.JTI).Str("reason", "expired").Str("request_id", reqID).
 					Msg("api key rejected")
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid or expired token", "", reqID)
+				httputil.Respond401(w, r, "API key has expired", reqID)
 				return
 			}
 
@@ -117,8 +111,7 @@ func RequireScope(required string) func(http.Handler) http.Handler {
 
 			p := GetAPIKeyPrincipal(r)
 			if p == nil {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Authentication required", "", reqID)
+				httputil.Respond401(w, r, "Authorization header is required", reqID)
 				return
 			}
 			for _, s := range p.Scopes {

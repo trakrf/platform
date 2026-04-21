@@ -34,14 +34,9 @@ const (
 )
 
 const (
-	AuthSignupInvalidJSON        = "Invalid JSON"
-	AuthSignupValidationFailed   = "Validation failed"
 	AuthSignupEmailExists        = "Email already exists"
 	AuthSignupOrgIdentifierTaken = "Organization identifier already taken"
 	AuthSignupFailed             = "Failed to signup"
-	AuthLoginInvalidJSON         = "Invalid JSON"
-	AuthLoginValidationFailed    = "Validation failed"
-	AuthLoginInvalidCredentials  = "Invalid email or password"
 	AuthLoginFailed              = "Failed to login"
 )
 

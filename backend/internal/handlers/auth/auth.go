@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,10 +20,28 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/password"
 )
 
-var validate = validator.New()
+var validate = func() *validator.Validate {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+	return v
+}()
+
+// authServicer is the subset of authservice.Service used by Handler.
+// Defined as an interface to allow test stubs.
+type authServicer interface {
+	Signup(ctx context.Context, request auth.SignupRequest, hashPassword func(string) (string, error), generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error)
+	Login(ctx context.Context, request auth.LoginRequest, comparePassword func(string, string) error, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error)
+	ForgotPassword(ctx context.Context, emailAddr, resetURL string) error
+	ResetPassword(ctx context.Context, token, newPassword string, hashPassword func(string) (string, error)) error
+	AcceptInvitation(ctx context.Context, token string, userID int) (*organization.AcceptInvitationResponse, error)
+	GetInvitationInfo(ctx context.Context, token string) (*auth.InvitationInfoResponse, error)
+}
+
+// Ensure *authservice.Service satisfies authServicer at compile time.
+var _ authServicer = (*authservice.Service)(nil)
 
 type Handler struct {
-	service *authservice.Service
+	service authServicer
 }
 
 func NewHandler(service *authservice.Service) *Handler {
@@ -42,15 +61,13 @@ func NewHandler(service *authservice.Service) *Handler {
 // @Router /api/v1/auth/signup [post]
 func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	var request auth.SignupRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			apierrors.AuthSignupInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
-			apierrors.AuthSignupValidationFailed, err.Error(), middleware.GetRequestID(r.Context()))
+		httputil.RespondValidationError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -113,23 +130,20 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/auth/login [post]
 func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var request auth.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			apierrors.AuthLoginInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
-			apierrors.AuthLoginValidationFailed, err.Error(), middleware.GetRequestID(r.Context()))
+		httputil.RespondValidationError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	response, err := handler.service.Login(r.Context(), request, password.Compare, jwt.Generate)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid email or password") {
-			httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
-				apierrors.AuthLoginInvalidCredentials, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond401(w, r, "Invalid email or password", middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
