@@ -78,7 +78,7 @@ export async function deleteLocationViaAPI(page: Page, id: number): Promise<void
   const baseUrl = getApiBaseUrl();
   const token = await getAuthToken(page);
 
-  const response = await page.request.delete(`${baseUrl}/locations/${id}`, {
+  const response = await page.request.delete(`${baseUrl}/locations/by-id/${id}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },

@@ -227,7 +227,7 @@ describe('assetsApi', () => {
 
       await assetsApi.update(1, updateData);
 
-      expect(apiClient.put).toHaveBeenCalledWith('/assets/1', updateData);
+      expect(apiClient.put).toHaveBeenCalledWith('/assets/by-id/1', updateData);
     });
 
     it('should handle 409 duplicate identifier errors', async () => {
@@ -247,12 +247,12 @@ describe('assetsApi', () => {
   });
 
   describe('delete()', () => {
-    it('should call DELETE /assets/:id', async () => {
+    it('should call DELETE /assets/by-id/:id', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
 
       await assetsApi.delete(1);
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/assets/1');
+      expect(apiClient.delete).toHaveBeenCalledWith('/assets/by-id/1');
     });
 
     it('should return deletion status', async () => {
@@ -347,7 +347,7 @@ describe('assetsApi', () => {
   });
 
   describe('addIdentifier()', () => {
-    it('should call POST /assets/:assetId/identifiers with identifier data', async () => {
+    it('should call POST /assets/by-id/:assetId/identifiers with identifier data', async () => {
       const mockResponse = {
         data: { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
       };
@@ -356,7 +356,7 @@ describe('assetsApi', () => {
 
       await assetsApi.addIdentifier(1, { type: 'rfid', value: 'TAG-001' });
 
-      expect(apiClient.post).toHaveBeenCalledWith('/assets/1/identifiers', {
+      expect(apiClient.post).toHaveBeenCalledWith('/assets/by-id/1/identifiers', {
         type: 'rfid',
         value: 'TAG-001',
       });
@@ -411,12 +411,12 @@ describe('assetsApi', () => {
   });
 
   describe('removeIdentifier()', () => {
-    it('should call DELETE /assets/:assetId/identifiers/:identifierId', async () => {
+    it('should call DELETE /assets/by-id/:assetId/identifiers/:identifierId', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
 
       await assetsApi.removeIdentifier(1, 42);
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/assets/1/identifiers/42');
+      expect(apiClient.delete).toHaveBeenCalledWith('/assets/by-id/1/identifiers/42');
     });
 
     it('should return deletion status', async () => {

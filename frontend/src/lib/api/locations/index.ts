@@ -71,24 +71,24 @@ export const locationsApi = {
 
   /**
    * Update an existing location by ID
-   * PUT /api/v1/locations/:id
+   * PUT /api/v1/locations/by-id/:id
    *
    * @param id - Location ID to update
    * @param data - Partial location update payload
    * @returns Promise<LocationResponse> with updated location
    */
   update: (id: number, data: UpdateLocationRequest) =>
-    apiClient.put<LocationResponse>(`/locations/${id}`, data),
+    apiClient.put<LocationResponse>(`/locations/by-id/${id}`, data),
 
   /**
    * Soft delete a location by ID
-   * DELETE /api/v1/locations/:id
+   * DELETE /api/v1/locations/by-id/:id
    *
    * @param id - Location ID to delete
    * @returns Promise<DeleteResponse> with deleted status
    */
   delete: (id: number) =>
-    apiClient.delete<DeleteResponse>(`/locations/${id}`),
+    apiClient.delete<DeleteResponse>(`/locations/by-id/${id}`),
 
   /**
    * Get all ancestor locations from root to parent
@@ -135,7 +135,7 @@ export const locationsApi = {
 
   /**
    * Add a tag identifier to a location
-   * POST /api/v1/locations/:locationId/identifiers
+   * POST /api/v1/locations/by-id/:locationId/identifiers
    *
    * @param locationId - Location ID to add identifier to
    * @param identifier - Tag identifier data (type and value)
@@ -143,18 +143,18 @@ export const locationsApi = {
    */
   addIdentifier: (locationId: number, identifier: { type: string; value: string }) =>
     apiClient.post<{ data: { id: number; type: string; value: string; is_active: boolean } }>(
-      `/locations/${locationId}/identifiers`,
+      `/locations/by-id/${locationId}/identifiers`,
       identifier
     ),
 
   /**
    * Remove a tag identifier from a location
-   * DELETE /api/v1/locations/:locationId/identifiers/:identifierId
+   * DELETE /api/v1/locations/by-id/:locationId/identifiers/:identifierId
    *
    * @param locationId - Location ID
    * @param identifierId - Identifier ID to remove
    * @returns Promise<DeleteResponse> with deleted status
    */
   removeIdentifier: (locationId: number, identifierId: number) =>
-    apiClient.delete<DeleteResponse>(`/locations/${locationId}/identifiers/${identifierId}`),
+    apiClient.delete<DeleteResponse>(`/locations/by-id/${locationId}/identifiers/${identifierId}`),
 };
