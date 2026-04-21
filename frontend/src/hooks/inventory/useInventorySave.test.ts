@@ -11,6 +11,15 @@ vi.mock('@/lib/api/inventory');
 vi.mock('@/lib/auth/orgContext');
 vi.mock('react-hot-toast');
 
+// Central invalidation is the DRY sink for org-context drift (TRA-318).
+// The hook delegates to it on storage-path 403 rather than clearing tags
+// itself.
+const mockInvalidateAllOrgScopedData = vi.fn().mockResolvedValue(undefined);
+vi.mock('@/lib/cache/orgScopedCache', () => ({
+  invalidateAllOrgScopedData: (...args: unknown[]) =>
+    mockInvalidateAllOrgScopedData(...args),
+}));
+
 const mockResponse = {
   count: 5,
   location_id: 10,
@@ -152,6 +161,44 @@ describe('useInventorySave', () => {
     await waitFor(() => {
       expect(result.current.isSaving).toBe(false);
     });
+  });
+
+  it('on 403 access-denied: calls central invalidation, then retries (TRA-426)', async () => {
+    const access403 = Object.assign(new Error('Request failed with status code 403'), {
+      response: {
+        status: 403,
+        data: { error: { detail: 'assets not found or access denied (org_id=7, valid=2/3)' } },
+      },
+    });
+    vi.mocked(inventoryApi.save)
+      .mockRejectedValueOnce(access403)
+      .mockResolvedValueOnce({ data: { data: mockResponse } } as any);
+    vi.mocked(refreshOrgToken).mockResolvedValue(true);
+
+    const { result } = renderHook(() => useInventorySave(), { wrapper: createWrapper() });
+    await result.current.save(mockRequest);
+
+    expect(mockInvalidateAllOrgScopedData).toHaveBeenCalledOnce();
+    expect(inventoryApi.save).toHaveBeenCalledTimes(2);
+    expect(toast.success).toHaveBeenCalledWith('5 assets saved to Warehouse A');
+  });
+
+  it('surfaces backend detail in toast when 403 retry still fails (TRA-426)', async () => {
+    const access403 = Object.assign(new Error('Request failed with status code 403'), {
+      response: {
+        status: 403,
+        data: { error: { detail: 'assets not found or access denied (org_id=7, valid=2/3)' } },
+      },
+    });
+    vi.mocked(inventoryApi.save).mockRejectedValue(access403);
+    vi.mocked(refreshOrgToken).mockResolvedValue(true);
+
+    const { result } = renderHook(() => useInventorySave(), { wrapper: createWrapper() });
+    await expect(result.current.save(mockRequest)).rejects.toThrow(access403);
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'Some scans no longer match your current organization. Please clear and rescan.',
+    );
   });
 
   it('shows specific message on org context error', async () => {
