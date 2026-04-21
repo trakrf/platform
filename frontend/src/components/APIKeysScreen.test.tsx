@@ -45,6 +45,7 @@ describe('APIKeysScreen', () => {
       data: [
         {
           id: 1,
+          jti: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
           name: 'TeamCentral',
           scopes: ['assets:read', 'assets:write', 'locations:read'],
           created_at: '2026-04-01T00:00:00Z',
@@ -56,6 +57,7 @@ describe('APIKeysScreen', () => {
     wrap(<APIKeysScreen />);
     await waitFor(() => expect(screen.getByText('TeamCentral')).toBeInTheDocument());
     expect(screen.getByText(/Assets R\/W/)).toBeInTheDocument();
+    expect(screen.getByText('a1b2c3d4')).toBeInTheDocument();
   });
 
   it('non-admin sees a forbidden state', () => {

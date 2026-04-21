@@ -159,6 +159,8 @@ func TestListAPIKeys_ExcludesRevoked(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
 	require.Len(t, out.Data, 1)
 	assert.Equal(t, active.ID, out.Data[0].ID)
+	assert.NotEmpty(t, out.Data[0].JTI, "list response must include jti for disambiguation")
+	assert.Equal(t, active.JTI, out.Data[0].JTI, "jti in response should match the stored row")
 	assert.NotContains(t, w.Body.String(), "eyJ")
 }
 

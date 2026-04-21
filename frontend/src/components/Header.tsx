@@ -77,7 +77,13 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     help: { title: "Help", subtitle: "Quick answers to get you started" },
     assets: { title: "Assets", subtitle: "Manage your organization's assets" },
     locations: { title: "Locations", subtitle: "Manage your organization's locations" },
-    reports: { title: "Reports", subtitle: "View asset locations and movement history" }
+    reports: { title: "Reports", subtitle: "View asset locations and movement history" },
+    'reports-history': { title: "Report History", subtitle: "Previously generated reports" },
+    'api-keys': { title: "API Keys", subtitle: "Manage programmatic access tokens" },
+    'org-members': { title: "Members", subtitle: "Manage organization members" },
+    'org-settings': { title: "Organization Settings", subtitle: "Configure your organization" },
+    'create-org': { title: "Create Organization", subtitle: "Set up a new organization" },
+    'accept-invite': { title: "Accept Invite", subtitle: "Join an organization" }
   };
 
   const [isBrowserSupported, setIsBrowserSupported] = useState(true);
@@ -155,7 +161,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     }
   }, [readerState, isBrowserSupported]);
 
-  const currentPage = pageTitles[activeTab as keyof typeof pageTitles] || pageTitles.inventory;
+  const currentPage = pageTitles[activeTab as keyof typeof pageTitles] || { title: "", subtitle: "" };
 
   const shouldShowConnectButton = activeTab !== 'home' && activeTab !== 'help';
 

@@ -64,7 +64,7 @@ vendor:
 build: api-spec
     go build -ldflags "-X main.version=0.1.0-dev" -o bin/trakrf .
 
-# Generate OpenAPI 3.0 specs (public → docs/api/, internal → embedded into binary)
+# Generate OpenAPI 3.0 specs (public → docs/api/ + embedded; internal → embedded only)
 api-spec:
     @echo "📚 Generating OpenAPI 3.0 specs..."
     swag init -g main.go --parseDependency --parseInternal -o docs
@@ -73,7 +73,9 @@ api-spec:
         --in docs/swagger.json \
         --public-out ../docs/api/openapi.public \
         --internal-out internal/handlers/swaggerspec/openapi.internal
-    @echo "✅ Public spec:   docs/api/openapi.public.{json,yaml}  (committed)"
+    @cp ../docs/api/openapi.public.json internal/handlers/swaggerspec/openapi.public.json
+    @cp ../docs/api/openapi.public.yaml internal/handlers/swaggerspec/openapi.public.yaml
+    @echo "✅ Public spec:   docs/api/openapi.public.{json,yaml}  (committed) + swaggerspec/ (gitignored, embedded)"
     @echo "✅ Internal spec: backend/internal/handlers/swaggerspec/openapi.internal.{json,yaml}  (gitignored, embedded)"
 
 # Legacy alias retained for muscle memory

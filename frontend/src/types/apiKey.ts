@@ -7,6 +7,7 @@ export type Scope =
 
 export interface APIKey {
   id: number;
+  jti: string;
   name: string;
   scopes: Scope[];
   created_at: string;
