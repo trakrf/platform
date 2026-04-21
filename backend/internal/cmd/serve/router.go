@@ -159,13 +159,24 @@ func setupRouter(
 	})
 
 	// TRA-396 internal-only surrogate paths — session auth only, for frontend convenience.
+	// TRA-425 added PUT/DELETE/POST variants so the frontend can continue writing by
+	// surrogate id after TRA-407 flipped the public write surface to {identifier}.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 		r.Use(middleware.SentryContext)
 
 		r.Get("/api/v1/assets/by-id/{id}", assetsHandler.GetAssetByID)
 		r.Get("/api/v1/assets/by-id/{id}/history", reportsHandler.GetAssetHistoryByID)
+		r.Put("/api/v1/assets/by-id/{id}", assetsHandler.UpdateAssetByID)
+		r.Delete("/api/v1/assets/by-id/{id}", assetsHandler.DeleteAssetByID)
+		r.Post("/api/v1/assets/by-id/{id}/identifiers", assetsHandler.AddIdentifierByID)
+		r.Delete("/api/v1/assets/by-id/{id}/identifiers/{identifierId}", assetsHandler.RemoveIdentifierByID)
+
 		r.Get("/api/v1/locations/by-id/{id}", locationsHandler.GetLocationByID)
+		r.Put("/api/v1/locations/by-id/{id}", locationsHandler.UpdateByID)
+		r.Delete("/api/v1/locations/by-id/{id}", locationsHandler.DeleteByID)
+		r.Post("/api/v1/locations/by-id/{id}/identifiers", locationsHandler.AddIdentifierByID)
+		r.Delete("/api/v1/locations/by-id/{id}/identifiers/{identifierId}", locationsHandler.RemoveIdentifierByID)
 	})
 
 	if os.Getenv("APP_ENV") != "production" {

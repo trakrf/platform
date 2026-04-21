@@ -171,37 +171,42 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 			apierrors.AssetNotFound, "", ctx)
 		return
 	}
-	id := a.ID
+
+	handler.doUpdateAsset(w, req, orgID, a.ID)
+}
+
+// doUpdateAsset contains the body-decode + validate + storage update logic
+// shared between UpdateAsset (public, identifier-keyed) and UpdateAssetByID
+// (internal, surrogate-keyed). Caller must have already verified that
+// (orgID, id) names a real asset.
+func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, orgID, id int) {
+	reqID := middleware.GetRequestID(req.Context())
 
 	var request asset.UpdateAssetRequest
-
 	if err := httputil.DecodeJSON(req, &request); err != nil {
-		httputil.RespondDecodeError(w, req, err, ctx)
+		httputil.RespondDecodeError(w, req, err, reqID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, ctx)
+		httputil.RespondValidationError(w, req, err, reqID)
 		return
 	}
 
 	result, err := handler.storage.UpdateAsset(req.Context(), orgID, id, request)
-
 	if err != nil {
-		// Storage returns "already exists" strings for unique violations (SQLSTATE 23505
-		// is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.AssetUpdateFailed, err.Error(), ctx)
+				apierrors.AssetUpdateFailed, err.Error(), reqID)
 			return
 		}
-		httputil.RespondStorageError(w, req, err, ctx)
+		httputil.RespondStorageError(w, req, err, reqID)
 		return
 	}
 
 	if result == nil {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", ctx)
+			apierrors.AssetNotFound, "", reqID)
 		return
 	}
 
@@ -292,17 +297,24 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 			apierrors.AssetNotFound, "", ctx)
 		return
 	}
-	id := a.ID
+
+	handler.doDeleteAsset(w, req, orgID, a.ID)
+}
+
+// doDeleteAsset performs the soft-delete against storage. Caller must have
+// already verified that (orgID, id) names a real asset.
+func (handler *Handler) doDeleteAsset(w http.ResponseWriter, req *http.Request, orgID, id int) {
+	reqID := middleware.GetRequestID(req.Context())
 
 	deleted, err := handler.storage.DeleteAsset(req.Context(), orgID, id)
 	if err != nil {
-		httputil.RespondStorageError(w, req, err, ctx)
+		httputil.RespondStorageError(w, req, err, reqID)
 		return
 	}
 
 	if !deleted {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", ctx)
+			apierrors.AssetNotFound, "", reqID)
 		return
 	}
 
@@ -498,7 +510,17 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 			apierrors.AssetNotFound, "", requestID)
 		return
 	}
-	assetID := existingAsset.ID
+
+	handler.doAddAssetIdentifier(w, r, orgID, existingAsset.ID)
+}
+
+// doAddAssetIdentifier decodes the identifier body, validates it, and inserts
+// via storage. Caller must have already verified that (orgID, assetID) names
+// a real asset — storage.AddIdentifierToAsset does NOT cross-check ownership
+// before INSERT, so skipping the pre-check would allow cross-org identifier
+// attachment.
+func (handler *Handler) doAddAssetIdentifier(w http.ResponseWriter, r *http.Request, orgID, assetID int) {
+	requestID := middleware.GetRequestID(r.Context())
 
 	var request shared.TagIdentifierRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
@@ -513,8 +535,6 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 
 	tagIdent, err := handler.storage.AddIdentifierToAsset(r.Context(), orgID, assetID, request)
 	if err != nil {
-		// Storage returns "identifier X:Y already exists" for unique violations (SQLSTATE 23505
-		// is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.AssetCreateFailed, err.Error(), requestID)
@@ -567,7 +587,16 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 			apierrors.AssetNotFound, "", requestID)
 		return
 	}
-	assetID := existingAsset.ID
+
+	handler.doRemoveAssetIdentifier(w, r, orgID, existingAsset.ID)
+}
+
+// doRemoveAssetIdentifier parses {identifierId} and soft-deletes via storage.
+// Storage guards cross-asset / cross-org misuse itself (EXISTS subquery on
+// asset_id + org_id), so a missing match surfaces as deleted=false rather
+// than an error.
+func (handler *Handler) doRemoveAssetIdentifier(w http.ResponseWriter, r *http.Request, orgID, assetID int) {
+	requestID := middleware.GetRequestID(r.Context())
 
 	identifierIDParam := chi.URLParam(r, "identifierId")
 	identifierID, err := strconv.Atoi(identifierIDParam)
@@ -584,6 +613,123 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// @Summary Update asset by surrogate ID (internal)
+// @Description Session-auth-only variant for the frontend. Public consumers must use {identifier}.
+// @Tags assets,internal
+// @Param id path int true "Asset surrogate ID"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/assets/by-id/{id} [put]
+func (handler *Handler) UpdateAssetByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetUpdateFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyAssetID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doUpdateAsset(w, req, orgID, id)
+}
+
+// @Summary Delete asset by surrogate ID (internal)
+// @Tags assets,internal
+// @Router /api/v1/assets/by-id/{id} [delete]
+func (handler *Handler) DeleteAssetByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetDeleteFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyAssetID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doDeleteAsset(w, req, orgID, id)
+}
+
+// @Summary Add identifier to asset by surrogate ID (internal)
+// @Tags assets,internal
+// @Router /api/v1/assets/by-id/{id}/identifiers [post]
+func (handler *Handler) AddIdentifierByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetCreateFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyAssetID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doAddAssetIdentifier(w, req, orgID, id)
+}
+
+// @Summary Remove identifier from asset by surrogate ID (internal)
+// @Tags assets,internal
+// @Router /api/v1/assets/by-id/{id}/identifiers/{identifierId} [delete]
+func (handler *Handler) RemoveIdentifierByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.AssetDeleteFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyAssetID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doRemoveAssetIdentifier(w, req, orgID, id)
+}
+
+// parseAndVerifyAssetID extracts {id}, parses it as a surrogate int, and
+// verifies the asset exists and belongs to the caller's org. Writes an
+// appropriate 400 / 404 / 500 response and returns ok=false on any failure.
+func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.Request, orgID int, reqID string) (int, bool) {
+	idParam := chi.URLParam(req, "id")
+	id, err := httputil.ParseSurrogateID(idParam)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), reqID)
+		return 0, false
+	}
+
+	a, err := handler.storage.GetAssetByID(req.Context(), &id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), reqID)
+		return 0, false
+	}
+	if a == nil || a.OrgID != orgID {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", reqID)
+		return 0, false
+	}
+
+	return a.ID, true
 }
 
 // RegisterRoutes keeps only session-only surface (bulk CSV). Public write and
