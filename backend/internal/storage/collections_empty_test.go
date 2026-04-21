@@ -89,16 +89,17 @@ func TestListAllAssets_EmptyReturnsNonNil(t *testing.T) {
 func TestGetAssetsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	orgID := 1
 	ids := []int{99}
-	mock.ExpectQuery(`FROM trakrf.assets`).
-		WithArgs(ids).
+	mock.ExpectQuery(`FROM trakrf.assets[\s\S]*WHERE org_id = \$1 AND id = ANY\(\$2\)`).
+		WithArgs(orgID, ids).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "identifier", "name", "type", "description",
 			"current_location_id", "valid_from", "valid_to", "metadata",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
 
-	assets, err := storage.GetAssetsByIDs(context.Background(), ids)
+	assets, err := storage.GetAssetsByIDs(context.Background(), orgID, ids)
 	assert.NoError(t, err)
 	assert.NotNil(t, assets)
 	assertEmptyJSONArray(t, assets)
@@ -124,16 +125,17 @@ func TestListAllLocations_EmptyReturnsNonNil(t *testing.T) {
 func TestGetLocationsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	orgID := 1
 	ids := []int{99}
-	mock.ExpectQuery(`FROM trakrf.locations`).
-		WithArgs(ids).
+	mock.ExpectQuery(`FROM trakrf.locations[\s\S]*WHERE org_id = \$1 AND id = ANY\(\$2\)`).
+		WithArgs(orgID, ids).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
 
-	locations, err := storage.GetLocationsByIDs(context.Background(), ids)
+	locations, err := storage.GetLocationsByIDs(context.Background(), orgID, ids)
 	assert.NoError(t, err)
 	assert.NotNil(t, locations)
 	assertEmptyJSONArray(t, locations)

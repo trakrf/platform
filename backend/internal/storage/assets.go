@@ -159,8 +159,11 @@ func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, erro
 	return &asset, nil
 }
 
-// GetAssetsByIDs fetches multiple assets by their IDs (batch fetch)
-func (s *Storage) GetAssetsByIDs(ctx context.Context, ids []int) ([]*asset.Asset, error) {
+// GetAssetsByIDs fetches multiple assets by their IDs (batch fetch), scoped
+// to the caller's organization. The org_id fence is required because
+// identifiers.asset_id is a plain FK that does not enforce same-org — see
+// TRA-431 for the cross-tenant leak this prevents.
+func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*asset.Asset, error) {
 	if len(ids) == 0 {
 		return []*asset.Asset{}, nil
 	}
@@ -169,10 +172,10 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, ids []int) ([]*asset.Asset
 	SELECT id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.assets
-	WHERE id = ANY($1) AND deleted_at IS NULL
+	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
 	`
 
-	rows, err := s.pool.Query(ctx, query, ids)
+	rows, err := s.pool.Query(ctx, query, orgID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch fetch assets: %w", err)
 	}

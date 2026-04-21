@@ -373,7 +373,7 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 	// Batch fetch assets
 	assetMap := make(map[int]*asset.Asset)
 	if len(assetIDs) > 0 {
-		assets, err := s.GetAssetsByIDs(ctx, assetIDs)
+		assets, err := s.GetAssetsByIDs(ctx, orgID, assetIDs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to batch fetch assets: %w", err)
 		}
@@ -385,7 +385,7 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 	// Batch fetch locations
 	locationMap := make(map[int]*location.Location)
 	if len(locationIDs) > 0 {
-		locations, err := s.GetLocationsByIDs(ctx, locationIDs)
+		locations, err := s.GetLocationsByIDs(ctx, orgID, locationIDs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to batch fetch locations: %w", err)
 		}

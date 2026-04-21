@@ -118,8 +118,11 @@ func (s *Storage) GetLocationByID(ctx context.Context, id int) (*location.Locati
 	return &loc, nil
 }
 
-// GetLocationsByIDs fetches multiple locations by their IDs (batch fetch)
-func (s *Storage) GetLocationsByIDs(ctx context.Context, ids []int) ([]*location.Location, error) {
+// GetLocationsByIDs fetches multiple locations by their IDs (batch fetch),
+// scoped to the caller's organization. The org_id fence is required because
+// identifiers.location_id is a plain FK that does not enforce same-org — see
+// TRA-431 for the cross-tenant leak this prevents.
+func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) ([]*location.Location, error) {
 	if len(ids) == 0 {
 		return []*location.Location{}, nil
 	}
@@ -128,10 +131,10 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, ids []int) ([]*location
 	SELECT id, org_id, name, identifier, parent_location_id, path, depth,
 	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.locations
-	WHERE id = ANY($1) AND deleted_at IS NULL
+	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
 	`
 
-	rows, err := s.pool.Query(ctx, query, ids)
+	rows, err := s.pool.Query(ctx, query, orgID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch fetch locations: %w", err)
 	}
