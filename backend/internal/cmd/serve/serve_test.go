@@ -175,3 +175,15 @@ func TestOpenAPISpec_RootRedirect_YAML(t *testing.T) {
 		t.Fatalf("Location = %q, want /api/v1/openapi.yaml", loc)
 	}
 }
+
+func TestHeadRequestMatches_OpenAPISpec(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodHead, "/api/v1/openapi.json", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("HEAD /api/v1/openapi.json = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+}

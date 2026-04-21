@@ -10,6 +10,7 @@ import (
 
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -55,6 +56,7 @@ func setupRouter(
 	r.Use(middleware.Recovery)
 	r.Use(middleware.CORS)
 	r.Use(middleware.ContentType)
+	r.Use(chimiddleware.GetHead)
 
 	r.Handle("/assets/*", http.HandlerFunc(frontendHandler.ServeFrontend))
 	r.Handle("/favicon.ico", http.HandlerFunc(frontendHandler.ServeFrontend))
@@ -172,12 +174,14 @@ func setupRouter(
 
 	// JSON 404 for unknown /api/* paths so clients don't blow up mid-deserialize
 	// on the SPA's index.html fallback. Must be registered before the /* wildcard.
-	r.HandleFunc("/api/*", func(w http.ResponseWriter, req *http.Request) {
+	// Registered as GET (not HandleFunc) so the chimiddleware.GetHead rewrite works
+	// for HEAD requests to known GET routes above this catch-all.
+	r.Get("/api/*", func(w http.ResponseWriter, req *http.Request) {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, errors.ErrNotFound,
 			"Unknown API route: "+req.URL.Path, "", middleware.GetRequestID(req.Context()))
 	})
 
-	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		frontendHandler.ServeSPA(w, r, "frontend/dist/index.html")
 	})
 
