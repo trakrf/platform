@@ -71,6 +71,15 @@ func setupRouter(
 	r.Get("/api/v1/openapi.json", swaggerspec.ServePublicJSON)
 	r.Get("/api/v1/openapi.yaml", swaggerspec.ServePublicYAML)
 
+	// Root-path aliases for codegen tools that probe /openapi.{json,yaml}.
+	// Registered before any SPA catchall so the redirect wins.
+	r.Get("/openapi.json", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/api/v1/openapi.json", http.StatusFound)
+	})
+	r.Get("/openapi.yaml", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/api/v1/openapi.yaml", http.StatusFound)
+	})
+
 	healthHandler.RegisterRoutes(r)
 
 	authHandler.RegisterRoutes(r, middleware.Auth)

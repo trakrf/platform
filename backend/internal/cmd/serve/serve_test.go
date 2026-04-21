@@ -145,3 +145,33 @@ func TestMetricsEndpoint(t *testing.T) {
 		t.Errorf("GET /metrics: response missing default Go runtime metric 'go_goroutines'")
 	}
 }
+
+func TestOpenAPISpec_RootRedirect_JSON(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("GET /openapi.json = %d, want 302; body: %s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/api/v1/openapi.json" {
+		t.Fatalf("Location = %q, want /api/v1/openapi.json", loc)
+	}
+}
+
+func TestOpenAPISpec_RootRedirect_YAML(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/openapi.yaml", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("GET /openapi.yaml = %d, want 302; body: %s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/api/v1/openapi.yaml" {
+		t.Fatalf("Location = %q, want /api/v1/openapi.yaml", loc)
+	}
+}
