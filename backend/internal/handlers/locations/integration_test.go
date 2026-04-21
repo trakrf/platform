@@ -247,20 +247,20 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:     orgID,
+		OrgID:      orgID,
 		Identifier: "tra407-ident-host",
-		Name:      "Host",
-		ValidFrom: validFrom,
-		IsActive:  true,
+		Name:       "Host",
+		ValidFrom:  validFrom,
+		IsActive:   true,
 	})
 	require.NoError(t, err)
 
 	loc2, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:     orgID,
+		OrgID:      orgID,
 		Identifier: "tra407-ident-host2",
-		Name:      "Host2",
-		ValidFrom: validFrom,
-		IsActive:  true,
+		Name:       "Host2",
+		ValidFrom:  validFrom,
+		IsActive:   true,
 	})
 	require.NoError(t, err)
 

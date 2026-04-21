@@ -12,7 +12,8 @@ import (
 // and writes an appropriate RFC 7807 envelope.
 //
 // Currently handled:
-//   23505 unique_violation -> 409 conflict
+//
+//	23505 unique_violation -> 409 conflict
 //
 // All other codes (including wrapped non-pgx errors) fall through to
 // 500 internal_error. 23503 (foreign_key_violation) is intentionally
