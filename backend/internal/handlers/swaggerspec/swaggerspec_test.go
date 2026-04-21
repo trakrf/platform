@@ -22,3 +22,15 @@ func TestServePublicJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &spec), "body must be valid JSON")
 	require.Contains(t, spec, "openapi", "spec must contain top-level openapi field")
 }
+
+func TestServePublicYAML(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.yaml", nil)
+	rec := httptest.NewRecorder()
+
+	ServePublicYAML(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "application/yaml", rec.Header().Get("Content-Type"))
+	require.NotEmpty(t, rec.Body.Bytes(), "body must be non-empty")
+	require.Contains(t, rec.Body.String(), "openapi:", "body should contain YAML key 'openapi:'")
+}
