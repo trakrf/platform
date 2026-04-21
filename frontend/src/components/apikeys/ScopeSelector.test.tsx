@@ -31,4 +31,11 @@ describe('ScopeSelector', () => {
     render(<ScopeSelector value={['assets:read', 'assets:write']} onChange={() => {}} />);
     expect(screen.getByLabelText(/assets/i)).toHaveValue('readwrite');
   });
+
+  it('emits scans:read + scans:write for "Read + Write" on Scans', () => {
+    const onChange = vi.fn();
+    render(<ScopeSelector value={[]} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText(/scans/i), { target: { value: 'readwrite' } });
+    expect(onChange).toHaveBeenCalledWith(['scans:read', 'scans:write']);
+  });
 });
