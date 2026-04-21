@@ -97,6 +97,12 @@
               "detail": {
                 "type": "string"
               },
+              "fields": {
+                "items": {
+                  "$ref": "#/components/schemas/errors.FieldError"
+                },
+                "type": "array"
+              },
               "instance": {
                 "type": "string"
               },
@@ -126,6 +132,20 @@
               }
             },
             "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "errors.FieldError": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
           }
         },
         "type": "object"
