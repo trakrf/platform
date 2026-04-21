@@ -229,6 +229,7 @@ paths:
     /api/v1/assets:
         get:
             description: Paginated assets list with natural-key filters, sort, and fuzzy search
+            operationId: assets.list
             parameters:
                 - description: max 200
                   in: query
@@ -333,6 +334,7 @@ paths:
             description: |-
                 Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
                 Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
+            operationId: assets.create
             requestBody:
                 content:
                     application/json:
@@ -391,25 +393,20 @@ paths:
             summary: Create an asset
             tags:
                 - assets
-    /api/v1/assets/{id}:
+    /api/v1/assets/{identifier}:
         delete:
-            description: Soft-delete an asset by its numeric ID. The asset is marked inactive and removed from future list results.
+            description: Soft-delete an asset by its natural identifier. The asset is marked inactive and removed from future list results.
+            operationId: assets.delete
             parameters:
-                - description: Asset ID
+                - description: Asset identifier
                   in: path
-                  name: id
+                  name: identifier
                   required: true
                   schema:
-                    type: integer
+                    type: string
             responses:
-                "202":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties:
-                                    type: boolean
-                                type: object
-                    description: 'deleted: true/false'
+                "204":
+                    description: deleted
                 "401":
                     content:
                         application/json:
@@ -446,218 +443,8 @@ paths:
             summary: Delete an asset
             tags:
                 - assets
-        put:
-            description: Update mutable fields on an existing asset. Only fields included in the request body are changed.
-            parameters:
-                - description: Asset ID
-                  in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: integer
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/asset.UpdateAssetRequest'
-                description: Fields to update
-                required: true
-                x-originalParamName: request
-            responses:
-                "202":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: asset.Asset'
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: conflict
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
-            security:
-                - APIKey:
-                    - assets:write
-            summary: Update an asset
-            tags:
-                - assets
-    /api/v1/assets/{id}/identifiers:
-        post:
-            description: |-
-                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
-                The identifier must be unique within the organization.
-            parameters:
-                - description: Asset ID
-                  in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: integer
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/shared.TagIdentifierRequest'
-                description: Tag identifier to attach
-                required: true
-                x-originalParamName: request
-            responses:
-                "201":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: shared.TagIdentifier'
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
-            security:
-                - APIKey:
-                    - assets:write
-            summary: Add an identifier to an asset
-            tags:
-                - assets
-    /api/v1/assets/{id}/identifiers/{identifierId}:
-        delete:
-            description: Detach a tag identifier from an asset by its identifier record ID.
-            parameters:
-                - description: Asset ID
-                  in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: integer
-                - description: Identifier ID
-                  in: path
-                  name: identifierId
-                  required: true
-                  schema:
-                    type: integer
-            responses:
-                "202":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties:
-                                    type: boolean
-                                type: object
-                    description: 'deleted: true/false'
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
-            security:
-                - APIKey:
-                    - assets:write
-            summary: Remove an identifier from an asset
-            tags:
-                - assets
-    /api/v1/assets/{identifier}:
         get:
+            operationId: assets.get
             parameters:
                 - description: Asset identifier (natural key)
                   in: path
@@ -727,9 +514,84 @@ paths:
             summary: Get asset by natural identifier
             tags:
                 - assets
+        put:
+            description: Update mutable fields on an existing asset. Only fields included in the request body are changed.
+            operationId: assets.update
+            parameters:
+                - description: Asset identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/asset.UpdateAssetRequest'
+                description: Fields to update
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: true
+                                type: object
+                    description: 'data: asset.Asset'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: conflict
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - assets:write
+            summary: Update an asset
+            tags:
+                - assets
     /api/v1/assets/{identifier}/history:
         get:
             description: Location history for an asset identified by its natural key.
+            operationId: assets.history
             parameters:
                 - description: Asset identifier (natural key)
                   in: path
@@ -813,6 +675,139 @@ paths:
             summary: Asset movement history
             tags:
                 - reports
+    /api/v1/assets/{identifier}/identifiers:
+        post:
+            description: |-
+                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
+                The identifier must be unique within the organization.
+            operationId: assets.identifiers.add
+            parameters:
+                - description: Asset identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                description: Tag identifier to attach
+                required: true
+                x-originalParamName: request
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: true
+                                type: object
+                    description: 'data: shared.TagIdentifier'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - assets:write
+            summary: Add an identifier to an asset
+            tags:
+                - assets
+    /api/v1/assets/{identifier}/identifiers/{identifierId}:
+        delete:
+            description: Detach a tag identifier from an asset by its identifier record ID.
+            operationId: assets.identifiers.remove
+            parameters:
+                - description: Asset identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+                - description: Identifier ID
+                  in: path
+                  name: identifierId
+                  required: true
+                  schema:
+                    type: integer
+            responses:
+                "204":
+                    description: deleted
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - assets:write
+            summary: Remove an identifier from an asset
+            tags:
+                - assets
     /api/v1/inventory/save:
         post:
             description: Persist scanned RFID assets to the asset_scans hypertable
@@ -864,6 +859,7 @@ paths:
                 - inventory
     /api/v1/locations:
         get:
+            operationId: locations.list
             parameters:
                 - description: max 200
                   in: query
@@ -937,6 +933,7 @@ paths:
             description: |-
                 Create a new location in the hierarchy, optionally with one or more tag identifiers.
                 Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
+            operationId: locations.create
             requestBody:
                 content:
                     application/json:
@@ -995,261 +992,64 @@ paths:
             summary: Create a location
             tags:
                 - locations
-    /api/v1/locations/{id}:
+    /api/v1/locations/{identifier}:
         delete:
-            description: Soft delete a location by ID
+            description: Soft-delete a location by its natural identifier. The location is marked inactive and removed from future list results.
+            operationId: locations.delete
             parameters:
-                - description: Location ID
+                - description: Location identifier
                   in: path
-                  name: id
+                  name: identifier
                   required: true
                   schema:
-                    type: integer
+                    type: string
             responses:
-                "202":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties:
-                                    type: boolean
-                                type: object
-                    description: 'deleted: true/false'
+                "204":
+                    description: deleted
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Invalid location ID
+                    description: bad_request
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Internal server error
+                    description: internal_error
             security:
                 - APIKey:
                     - locations:write
             summary: Delete location
             tags:
                 - locations
-        put:
-            description: Update mutable fields on an existing location. Only fields included in the request body are changed.
-            parameters:
-                - description: Location ID
-                  in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: integer
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/location.UpdateLocationRequest'
-                description: Fields to update
-                required: true
-                x-originalParamName: request
-            responses:
-                "202":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: location.Location'
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: conflict
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
-            security:
-                - APIKey:
-                    - locations:write
-            summary: Update a location
-            tags:
-                - locations
-    /api/v1/locations/{id}/identifiers:
-        post:
-            description: |-
-                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
-                The identifier must be unique within the organization.
-            parameters:
-                - description: Location ID
-                  in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: integer
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/shared.TagIdentifierRequest'
-                description: Tag identifier to attach
-                required: true
-                x-originalParamName: request
-            responses:
-                "201":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: shared.TagIdentifier'
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
-            security:
-                - APIKey:
-                    - locations:write
-            summary: Add an identifier to a location
-            tags:
-                - locations
-    /api/v1/locations/{id}/identifiers/{identifierId}:
-        delete:
-            description: Detach a tag identifier from a location by its identifier record ID.
-            parameters:
-                - description: Location ID
-                  in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: integer
-                - description: Identifier ID
-                  in: path
-                  name: identifierId
-                  required: true
-                  schema:
-                    type: integer
-            responses:
-                "202":
-                    content:
-                        application/json:
-                            schema:
-                                additionalProperties:
-                                    type: boolean
-                                type: object
-                    description: 'deleted: true/false'
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
-            security:
-                - APIKey:
-                    - locations:write
-            summary: Remove an identifier from a location
-            tags:
-                - locations
-    /api/v1/locations/{identifier}:
         get:
+            operationId: locations.get
             parameters:
                 - description: Location identifier (natural key)
                   in: path
@@ -1317,6 +1117,378 @@ paths:
                 - APIKey:
                     - locations:read
             summary: Get location by natural identifier
+            tags:
+                - locations
+        put:
+            description: Update mutable fields on an existing location. Only fields included in the request body are changed.
+            operationId: locations.update
+            parameters:
+                - description: Location identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/location.UpdateLocationRequest'
+                description: Fields to update
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: true
+                                type: object
+                    description: 'data: location.Location'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: conflict
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - locations:write
+            summary: Update a location
+            tags:
+                - locations
+    /api/v1/locations/{identifier}/ancestors:
+        get:
+            description: Return all ancestor locations from the root of the hierarchy down to the immediate parent of the specified location.
+            operationId: locations.ancestors
+            parameters:
+                - description: Location identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: true
+                                type: object
+                    description: 'data: []location.Location'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - locations:read
+            summary: List location ancestors
+            tags:
+                - locations
+    /api/v1/locations/{identifier}/children:
+        get:
+            description: Return the immediate child locations of the specified location (one level deep only).
+            operationId: locations.children
+            parameters:
+                - description: Location identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: true
+                                type: object
+                    description: 'data: []location.Location'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - locations:read
+            summary: List location children
+            tags:
+                - locations
+    /api/v1/locations/{identifier}/descendants:
+        get:
+            description: Return all descendant locations (children, grandchildren, etc.) beneath the specified location in the hierarchy.
+            operationId: locations.descendants
+            parameters:
+                - description: Location identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: true
+                                type: object
+                    description: 'data: []location.Location'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - locations:read
+            summary: List location descendants
+            tags:
+                - locations
+    /api/v1/locations/{identifier}/identifiers:
+        post:
+            description: |-
+                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
+                The identifier must be unique within the organization.
+            operationId: locations.identifiers.add
+            parameters:
+                - description: Location identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                description: Tag identifier to attach
+                required: true
+                x-originalParamName: request
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: true
+                                type: object
+                    description: 'data: shared.TagIdentifier'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - locations:write
+            summary: Add an identifier to a location
+            tags:
+                - locations
+    /api/v1/locations/{identifier}/identifiers/{identifierId}:
+        delete:
+            description: Detach a tag identifier from a location by its identifier record ID.
+            operationId: locations.identifiers.remove
+            parameters:
+                - description: Location identifier
+                  in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+                - description: Identifier ID
+                  in: path
+                  name: identifierId
+                  required: true
+                  schema:
+                    type: integer
+            responses:
+                "204":
+                    description: deleted
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - locations:write
+            summary: Remove an identifier from a location
             tags:
                 - locations
     /api/v1/locations/current:
