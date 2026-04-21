@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -35,10 +34,10 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	// under the public-write group (TRA-397). Wire them here directly so these
 	// handler-level tests continue to exercise the same handler paths.
 	r.Post("/api/v1/locations", handler.Create)
-	r.Put("/api/v1/locations/{id}", handler.Update)
-	r.Delete("/api/v1/locations/{id}", handler.Delete)
-	r.Post("/api/v1/locations/{id}/identifiers", handler.AddIdentifier)
-	r.Delete("/api/v1/locations/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
+	r.Put("/api/v1/locations/{identifier}", handler.Update)
+	r.Delete("/api/v1/locations/{identifier}", handler.Delete)
+	r.Post("/api/v1/locations/{identifier}/identifiers", handler.AddIdentifier)
+	r.Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	handler.RegisterRoutes(r)
 	return r
 }
@@ -154,7 +153,7 @@ func TestUpdateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	second, err := store.CreateLocation(context.Background(), locmodel.Location{
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
 		OrgID:      orgID,
 		Identifier: "loc-b",
 		Name:       "B",
@@ -170,7 +169,7 @@ func TestUpdateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 	body, err := json.Marshal(locmodel.UpdateLocationRequest{Identifier: &collide})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/"+strconv.Itoa(second.ID), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/loc-b", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, orgID)
 	w := httptest.NewRecorder()
@@ -290,7 +289,7 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	router := setupTestRouter(handler)
 
 	body := `{"type":"rfid","value":"TRA-407-LOC-IDENT-DUP"}`
-	url := "/api/v1/locations/" + strconv.Itoa(loc.ID) + "/identifiers"
+	url := "/api/v1/locations/tra407-ident-host/identifiers"
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, orgID)

@@ -34,10 +34,23 @@ func buildLocationsPublicWriteRouter(store *storage.Storage) *chi.Mux {
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.WriteAudit)
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", handler.Create)
-		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{id}", handler.Update)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}", handler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{id}/identifiers", handler.AddIdentifier)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{identifier}", handler.Update)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}", handler.Delete)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/identifiers", handler.AddIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
+	})
+	return r
+}
+
+func buildLocationsHierarchyRouter(store *storage.Storage) *chi.Mux {
+	handler := locations.NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.EitherAuth(store))
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
 	})
 	return r
 }
@@ -105,7 +118,7 @@ func TestUpdateLocation_CrossOrg_Returns404(t *testing.T) {
 	r := buildLocationsPublicWriteRouter(store)
 
 	body := `{"name":"hijacked"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/"+strconv.Itoa(loc.ID), bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/orgA-loc", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+tokenB)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -138,13 +151,12 @@ func TestDeleteLocation_CrossOrg_Returns404(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/"+strconv.Itoa(loc.ID), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/orgA-loc-delete", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenB)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Storage returns deleted=false for cross-org; handler must map that to 404,
-	// NOT 202 {"deleted":false}.
+	// orgB's token sees orgA's location as not found (different org).
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Confirm the location survives.
@@ -162,7 +174,7 @@ func TestDeleteLocation_APIKey_HappyPath(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
-	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
 		OrgID: orgID, Identifier: "to-delete", Name: "Bye", Path: "to-delete",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -170,7 +182,7 @@ func TestDeleteLocation_APIKey_HappyPath(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/"+strconv.Itoa(loc.ID), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/to-delete", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -190,7 +202,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
-	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
 		OrgID: orgID, Identifier: "ident-host-loc", Name: "WH", Path: "ident-host-loc",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -200,7 +212,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	// TagIdentifierRequest.Type accepts only rfid/ble/barcode; use rfid.
 	body := `{"type":"rfid","value":"EPC-LOC-ABC-123"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/"+strconv.Itoa(loc.ID)+"/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ident-host-loc/identifiers",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -238,7 +250,7 @@ func TestRemoveLocationIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	url := "/api/v1/locations/" + strconv.Itoa(loc.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/locations/ident-host/identifiers/" + strconv.Itoa(ident.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -269,7 +281,7 @@ func TestRemoveLocationIdentifier_WrongLocationID_ReturnsDeletedFalse(t *testing
 	})
 	require.NoError(t, err)
 
-	otherLoc, err := store.CreateLocation(context.Background(), locmodel.Location{
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
 		OrgID: orgID, Identifier: "other-loc", Name: "Other", Path: "other-loc",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -283,8 +295,8 @@ func TestRemoveLocationIdentifier_WrongLocationID_ReturnsDeletedFalse(t *testing
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	// DELETE via otherLoc's {id} targeting ident (which belongs to owningLoc).
-	url := "/api/v1/locations/" + strconv.Itoa(otherLoc.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	// DELETE via otherLoc's identifier targeting ident (which belongs to owningLoc).
+	url := "/api/v1/locations/other-loc/identifiers/" + strconv.Itoa(ident.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -294,10 +306,358 @@ func TestRemoveLocationIdentifier_WrongLocationID_ReturnsDeletedFalse(t *testing
 
 	var resp map[string]bool
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.False(t, resp["deleted"], "mismatched {id} must not delete the identifier")
+	assert.False(t, resp["deleted"], "mismatched identifier must not delete the identifier")
 
 	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
 	require.NoError(t, err)
-	require.NotNil(t, fetched, "identifier must still exist since the path ID didn't match its owner")
+	require.NotNil(t, fetched, "identifier must still exist since the path identifier didn't match its owner")
 	assert.Equal(t, "EPC-LOC-WRONG-1", fetched.Value)
+}
+
+// TRA-407 Task 2: locations write/child/hierarchy routes accept {identifier}
+
+func TestLocationsUpdate_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-update-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "update-target", Name: "Old Name", Path: "update-target",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	body := `{"name":"New Name"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/update-target", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "New Name", data["name"])
+}
+
+func TestLocationsUpdate_UnknownIdentifier_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-update-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+
+	r := buildLocationsPublicWriteRouter(store)
+	body := `{"name":"Ghost"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/does-not-exist", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestLocationsDelete_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-delete-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "delete-target", Name: "Bye", Path: "delete-target",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/delete-target", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp["deleted"])
+}
+
+func TestLocationsDelete_UnknownIdentifier_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-delete-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+
+	r := buildLocationsPublicWriteRouter(store)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/ghost-loc", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestLocationsAddIdentifier_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-addident-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "addident-target", Name: "Host", Path: "addident-target",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	body := `{"type":"rfid","value":"EPC-TRA407-ADD-1"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/addident-target/identifiers",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "EPC-TRA407-ADD-1", data["value"])
+}
+
+func TestLocationsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-addident-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+
+	r := buildLocationsPublicWriteRouter(store)
+	body := `{"type":"rfid","value":"EPC-GHOST"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ghost-parent/identifiers",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestLocationsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-removeident-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "removeident-target", Name: "Host", Path: "removeident-target",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	ident, err := store.AddIdentifierToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
+		Type: "rfid", Value: "EPC-TRA407-REMOVE-1",
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	url := "/api/v1/locations/removeident-target/identifiers/" + strconv.Itoa(ident.ID)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp["deleted"])
+}
+
+func TestLocationsRemoveIdentifier_UnknownParent_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-removeident-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+
+	r := buildLocationsPublicWriteRouter(store)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/ghost-loc/identifiers/999", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestLocationsGetAncestors_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-ancestors-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "anc-parent", Name: "Parent", Path: "anc-parent",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "anc-child", Name: "Child", Path: "anc-parent.anc-child",
+		ParentLocationID: &parent.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/anc-child/ancestors", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].([]any)
+	require.Len(t, data, 1)
+	assert.Equal(t, "anc-parent", data[0].(map[string]any)["identifier"])
+}
+
+func TestLocationsGetAncestors_UnknownIdentifier_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-ancestors-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/no-such-loc/ancestors", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-children-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "children-parent", Name: "Parent", Path: "children-parent",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "children-child", Name: "Child", Path: "children-parent.children-child",
+		ParentLocationID: &parent.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/children-parent/children", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].([]any)
+	require.Len(t, data, 1)
+	assert.Equal(t, "children-child", data[0].(map[string]any)["identifier"])
+}
+
+func TestLocationsGetChildren_UnknownIdentifier_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-children-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/no-such-parent/children", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestLocationsGetDescendants_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-descendants-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	root, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "desc-root", Name: "Root", Path: "desc-root",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	child, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "desc-child", Name: "Child", Path: "desc-root.desc-child",
+		ParentLocationID: &root.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "desc-grandchild", Name: "GrandChild", Path: "desc-root.desc-child.desc-grandchild",
+		ParentLocationID: &child.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/desc-root/descendants", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].([]any)
+	require.Len(t, data, 2)
+}
+
+func TestLocationsGetDescendants_UnknownIdentifier_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra407-loc-descendants-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+
+	r := buildLocationsHierarchyRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/no-such-root/descendants", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 }

@@ -132,10 +132,10 @@ func setupRouter(
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
-		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{id}", locationsHandler.Update)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}", locationsHandler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{id}/identifiers", locationsHandler.AddIdentifier)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}/identifiers/{identifierId}", locationsHandler.RemoveIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{identifier}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}", locationsHandler.Delete)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/identifiers", locationsHandler.AddIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", locationsHandler.RemoveIdentifier)
 
 		// Inventory (scan writes)
 		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)

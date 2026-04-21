@@ -2,7 +2,6 @@ package locations
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -149,13 +148,20 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationUpdateInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	var request location.UpdateLocationRequest
 	if err := httputil.DecodeJSON(req, &request); err != nil {
@@ -213,13 +219,20 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationDeleteInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	deleted, err := handler.storage.DeleteLocation(req.Context(), orgID, id)
 	if err != nil {
@@ -426,15 +439,28 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 // @Security     APIKey[locations:read]
 // @Router       /api/v1/locations/{id}/ancestors [get]
 func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
+	identifier := chi.URLParam(req, "identifier")
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationGetFailed, "missing organization context", ctx)
 		return
 	}
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	results, err := handler.storage.GetAncestors(req.Context(), id)
 	if err != nil {
@@ -461,15 +487,28 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Security     APIKey[locations:read]
 // @Router       /api/v1/locations/{id}/descendants [get]
 func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
+	identifier := chi.URLParam(req, "identifier")
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationGetFailed, "missing organization context", ctx)
 		return
 	}
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	results, err := handler.storage.GetDescendants(req.Context(), id)
 	if err != nil {
@@ -496,15 +535,28 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Security     APIKey[locations:read]
 // @Router       /api/v1/locations/{id}/children [get]
 func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
+	identifier := chi.URLParam(req, "identifier")
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationGetFailed, "missing organization context", ctx)
 		return
 	}
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	results, err := handler.storage.GetChildren(req.Context(), id)
 	if err != nil {
@@ -543,25 +595,20 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	locationID, err := strconv.Atoi(idParam)
-	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), requestID)
-		return
-	}
+	identifier := chi.URLParam(r, "identifier")
 
-	existingLoc, err := handler.storage.GetLocationByID(r.Context(), locationID)
+	loc, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), requestID)
 		return
 	}
-	if existingLoc == nil {
+	if loc == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
 			apierrors.LocationNotFound, "", requestID)
 		return
 	}
+	locationID := loc.ID
 
 	var request shared.TagIdentifierRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
@@ -574,7 +621,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identifier, err := handler.storage.AddIdentifierToLocation(r.Context(), orgID, locationID, request)
+	tagIdent, err := handler.storage.AddIdentifierToLocation(r.Context(), orgID, locationID, request)
 	if err != nil {
 		// Storage returns "already exists" / "already exist" strings for unique violations
 		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
@@ -587,7 +634,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": identifier})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tagIdent})
 }
 
 // @Summary      Remove an identifier from a location
@@ -616,13 +663,20 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	locationID, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(r, "identifier")
+
+	loc, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), requestID)
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), requestID)
 		return
 	}
+	if loc == nil {
+		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", requestID)
+		return
+	}
+	locationID := loc.ID
 
 	identifierIDParam := chi.URLParam(r, "identifierId")
 	identifierID, err := strconv.Atoi(identifierIDParam)
@@ -641,11 +695,11 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
 }
 
-// RegisterRoutes keeps only session-only surface (hierarchy by-id). Public write
+// RegisterRoutes keeps only session-only surface (hierarchy by-identifier). Public write
 // routes are registered in internal/cmd/serve/router.go under EitherAuth +
 // WriteAudit + RequireScope. Public reads likewise (per TRA-396).
 func (handler *Handler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/locations/{id}/ancestors", handler.GetAncestors)
-	r.Get("/api/v1/locations/{id}/descendants", handler.GetDescendants)
-	r.Get("/api/v1/locations/{id}/children", handler.GetChildren)
+	r.Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
+	r.Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
+	r.Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
 }
