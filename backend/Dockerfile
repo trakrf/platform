@@ -20,7 +20,7 @@ RUN swag init -g main.go --parseDependency --parseInternal && \
     mkdir -p internal/handlers/swaggerspec && \
     go run ./internal/tools/apispec \
         --in docs/swagger.json \
-        --public-out /tmp/openapi.public \
+        --public-out internal/handlers/swaggerspec/openapi.public \
         --internal-out internal/handlers/swaggerspec/openapi.internal
 
 # Pre-build the application to populate build cache and verify all dependencies
@@ -48,7 +48,7 @@ RUN swag init -g main.go --parseDependency --parseInternal && \
     mkdir -p internal/handlers/swaggerspec && \
     go run ./internal/tools/apispec \
         --in docs/swagger.json \
-        --public-out /tmp/openapi.public \
+        --public-out internal/handlers/swaggerspec/openapi.public \
         --internal-out internal/handlers/swaggerspec/openapi.internal
 
 RUN go build -ldflags "-X main.version=0.1.0-dev" -o server .
