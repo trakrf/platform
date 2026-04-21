@@ -3,12 +3,7 @@ import { useAssetStore } from '@/stores/assets/assetStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { useTagStore } from '@/stores/tagStore';
 import { assetsApi } from '@/lib/api/assets';
-import type { Asset } from '@/types/assets';
-
-/** Normalize raw public API asset shape to internal shape (surrogate_id → id). */
-function normalizeAsset(raw: Asset): Asset {
-  return { ...raw, id: raw.surrogate_id };
-}
+import { normalizeAsset } from '@/lib/asset/normalize';
 
 export interface UseAssetsOptions {
   enabled?: boolean;

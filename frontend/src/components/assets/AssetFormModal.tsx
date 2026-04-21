@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagIdentifierInput } from '@/types/assets';
 import { AssetForm } from './AssetForm';
 import { assetsApi } from '@/lib/api/assets';
+import { normalizeAsset } from '@/lib/asset/normalize';
 import { useAssetStore } from '@/stores';
 
 interface AssetFormModalProps {
@@ -27,7 +28,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
       assetsApi.get(asset.id)
         .then((response) => {
           if (response.data?.data) {
-            setFreshAsset(response.data.data);
+            setFreshAsset(normalizeAsset(response.data.data));
           } else {
             setFreshAsset(asset);
           }
@@ -79,16 +80,19 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
           }
         }
 
-        // Fetch fresh asset data with all identifiers if any were added
+        // Fetch fresh asset data with all identifiers if any were added.
+        // Normalize before caching: the GET /by-id response uses `surrogate_id`,
+        // the POST /assets response uses `id` — addAsset needs `id` populated
+        // either way, otherwise the cache stores a null-keyed phantom (TRA-427).
         if (validIdentifiers.length > 0) {
           const freshResponse = await assetsApi.get(newAssetId);
           if (freshResponse.data?.data) {
-            addAsset(freshResponse.data.data);
+            addAsset(normalizeAsset(freshResponse.data.data));
           } else {
-            addAsset(response.data.data);
+            addAsset(normalizeAsset(response.data.data));
           }
         } else {
-          addAsset(response.data.data);
+          addAsset(normalizeAsset(response.data.data));
         }
 
         toast.success(`Asset "${response.data.data.identifier}" created successfully`);
@@ -124,10 +128,10 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         // Fetch fresh asset data with all identifiers
         const freshResponse = await assetsApi.get(asset.id);
         if (freshResponse.data?.data) {
-          updateCachedAsset(asset.id, freshResponse.data.data);
+          updateCachedAsset(asset.id, normalizeAsset(freshResponse.data.data));
         } else {
           // Fall back to the update response if get fails
-          updateCachedAsset(asset.id, response.data.data);
+          updateCachedAsset(asset.id, normalizeAsset(response.data.data));
         }
 
         toast.success(`Asset "${response.data.data.identifier}" updated successfully`);
