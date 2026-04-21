@@ -135,17 +135,30 @@ export function deserializeCache(data: string): AssetCache | null {
       return null;
     }
 
+    // Drop phantom entries with a non-numeric key. These can be written by
+    // code paths that forgot to normalize a public-API response before
+    // caching (TRA-427). A one-time self-heal on hydrate keeps existing
+    // users from carrying phantoms forward indefinitely.
+    const byIdEntries = (parsed.byId as [unknown, unknown][]).filter(
+      ([key]) => typeof key === 'number'
+    );
+    const validIds = new Set<number>(byIdEntries.map(([key]) => key as number));
+
     return {
-      byId: new Map(parsed.byId),
+      byId: new Map(byIdEntries as [number, import('@/types/assets').Asset][]),
       byIdentifier: new Map(parsed.byIdentifier),
       byType: new Map(
         Object.entries(parsed.byType).map(([type, ids]) => [
           type as import('@/types/assets').AssetType,
-          new Set(ids as number[]),
+          new Set((ids as number[]).filter((id) => validIds.has(id))),
         ])
       ),
-      activeIds: new Set(parsed.activeIds),
-      allIds: parsed.allIds,
+      activeIds: new Set(
+        (parsed.activeIds as number[]).filter((id) => validIds.has(id))
+      ),
+      allIds: (parsed.allIds as unknown[]).filter(
+        (id): id is number => typeof id === 'number'
+      ),
       lastFetched: parsed.lastFetched,
       ttl: parsed.ttl,
     };
