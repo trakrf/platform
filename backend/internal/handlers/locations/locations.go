@@ -2,7 +2,6 @@ package locations
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -65,6 +64,7 @@ func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, or
 // @Description  Create a new location in the hierarchy, optionally with one or more tag identifiers.
 // @Description  Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
 // @Tags         locations,public
+// @ID           locations.create
 // @Accept       json
 // @Produce      json
 // @Param        request  body  location.CreateLocationWithIdentifiersRequest  true  "Location to create with optional identifiers"
@@ -125,11 +125,12 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Summary      Update a location
 // @Description  Update mutable fields on an existing location. Only fields included in the request body are changed.
 // @Tags         locations,public
+// @ID           locations.update
 // @Accept       json
 // @Produce      json
-// @Param        id       path  int                              true  "Location ID"
-// @Param        request  body  location.UpdateLocationRequest   true  "Fields to update"
-// @Success      202  {object}  map[string]any                "data: location.Location"
+// @Param        identifier  path  string                           true  "Location identifier"
+// @Param        request     body  location.UpdateLocationRequest   true  "Fields to update"
+// @Success      200  {object}  map[string]any                "data: location.Location"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -138,7 +139,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
-// @Router       /api/v1/locations/{id} [put]
+// @Router       /api/v1/locations/{identifier} [put]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
@@ -149,13 +150,20 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationUpdateInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	var request location.UpdateLocationRequest
 	if err := httputil.DecodeJSON(req, &request); err != nil {
@@ -188,21 +196,25 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string]*location.Location{"data": result})
+	httputil.WriteJSON(w, http.StatusOK, map[string]*location.Location{"data": result})
 }
 
 // @Summary Delete location
-// @Description Soft delete a location by ID
+// @Description Soft-delete a location by its natural identifier. The location is marked inactive and removed from future list results.
 // @Tags locations,public
+// @ID locations.delete
 // @Accept json
 // @Produce json
-// @Param id path int true "Location ID"
-// @Success 202 {object} map[string]bool "deleted: true/false"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid location ID"
+// @Param identifier path string true "Location identifier"
+// @Success 204 "deleted"
+// @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
+// @Failure 404 {object} modelerrors.ErrorResponse "not_found"
+// @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:write]
-// @Router /api/v1/locations/{id} [delete]
+// @Router /api/v1/locations/{identifier} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
@@ -213,13 +225,20 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationDeleteInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	deleted, err := handler.storage.DeleteLocation(req.Context(), orgID, id)
 	if err != nil {
@@ -233,7 +252,7 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type ListLocationsResponse struct {
@@ -245,6 +264,7 @@ type ListLocationsResponse struct {
 
 // @Summary List locations
 // @Tags locations,public
+// @ID locations.list
 // @Param limit    query int    false "max 200"
 // @Param offset   query int    false "pagination offset"
 // @Param parent   query string false "filter by parent identifier (may repeat)"
@@ -324,6 +344,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 
 // @Summary Get location by natural identifier
 // @Tags locations,public
+// @ID locations.get
 // @Param identifier path string true "Location identifier (natural key)"
 // @Success 200 {object} map[string]any
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
@@ -413,28 +434,42 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 
 // @Summary      List location ancestors
 // @Description  Return all ancestor locations from the root of the hierarchy down to the immediate parent of the specified location.
-// @Tags         locations,internal
+// @Tags         locations,public
+// @ID           locations.ancestors
 // @Accept       json
 // @Produce      json
-// @Param        id  path  int  true  "Location ID"
-// @Success      202  {object}  map[string]any                "data: []location.Location"
+// @Param        identifier  path  string  true  "Location identifier"
+// @Success      200  {object}  map[string]any                "data: []location.Location"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:read]
-// @Router       /api/v1/locations/{id}/ancestors [get]
+// @Router       /api/v1/locations/{identifier}/ancestors [get]
 func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
+	identifier := chi.URLParam(req, "identifier")
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationGetFailed, "missing organization context", ctx)
 		return
 	}
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	results, err := handler.storage.GetAncestors(req.Context(), id)
 	if err != nil {
@@ -443,33 +478,47 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string][]location.Location{"data": results})
+	httputil.WriteJSON(w, http.StatusOK, map[string][]location.Location{"data": results})
 }
 
 // @Summary      List location descendants
 // @Description  Return all descendant locations (children, grandchildren, etc.) beneath the specified location in the hierarchy.
-// @Tags         locations,internal
+// @Tags         locations,public
+// @ID           locations.descendants
 // @Accept       json
 // @Produce      json
-// @Param        id  path  int  true  "Location ID"
-// @Success      202  {object}  map[string]any                "data: []location.Location"
+// @Param        identifier  path  string  true  "Location identifier"
+// @Success      200  {object}  map[string]any                "data: []location.Location"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:read]
-// @Router       /api/v1/locations/{id}/descendants [get]
+// @Router       /api/v1/locations/{identifier}/descendants [get]
 func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
+	identifier := chi.URLParam(req, "identifier")
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationGetFailed, "missing organization context", ctx)
 		return
 	}
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	results, err := handler.storage.GetDescendants(req.Context(), id)
 	if err != nil {
@@ -478,33 +527,47 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string][]location.Location{"data": results})
+	httputil.WriteJSON(w, http.StatusOK, map[string][]location.Location{"data": results})
 }
 
 // @Summary      List location children
 // @Description  Return the immediate child locations of the specified location (one level deep only).
-// @Tags         locations,internal
+// @Tags         locations,public
+// @ID           locations.children
 // @Accept       json
 // @Produce      json
-// @Param        id  path  int  true  "Location ID"
-// @Success      202  {object}  map[string]any                "data: []location.Location"
+// @Param        identifier  path  string  true  "Location identifier"
+// @Success      200  {object}  map[string]any                "data: []location.Location"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:read]
-// @Router       /api/v1/locations/{id}/children [get]
+// @Router       /api/v1/locations/{identifier}/children [get]
 func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
-	idParam := chi.URLParam(req, "id")
 	ctx := middleware.GetRequestID(req.Context())
+	identifier := chi.URLParam(req, "identifier")
 
-	id, err := strconv.Atoi(idParam)
+	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationGetFailed, "missing organization context", ctx)
 		return
 	}
+
+	loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, identifier)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+	if loc == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", ctx)
+		return
+	}
+	id := loc.ID
 
 	results, err := handler.storage.GetChildren(req.Context(), id)
 	if err != nil {
@@ -513,17 +576,18 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string][]location.Location{"data": results})
+	httputil.WriteJSON(w, http.StatusOK, map[string][]location.Location{"data": results})
 }
 
 // @Summary      Add an identifier to a location
 // @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
 // @Description  The identifier must be unique within the organization.
 // @Tags         locations,public
+// @ID           locations.identifiers.add
 // @Accept       json
 // @Produce      json
-// @Param        id       path  int                            true  "Location ID"
-// @Param        request  body  shared.TagIdentifierRequest    true  "Tag identifier to attach"
+// @Param        identifier  path  string                         true  "Location identifier"
+// @Param        request     body  shared.TagIdentifierRequest    true  "Tag identifier to attach"
 // @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -532,7 +596,7 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
-// @Router       /api/v1/locations/{id}/identifiers [post]
+// @Router       /api/v1/locations/{identifier}/identifiers [post]
 func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -543,25 +607,20 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	locationID, err := strconv.Atoi(idParam)
-	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), requestID)
-		return
-	}
+	identifier := chi.URLParam(r, "identifier")
 
-	existingLoc, err := handler.storage.GetLocationByID(r.Context(), locationID)
+	loc, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), requestID)
 		return
 	}
-	if existingLoc == nil {
+	if loc == nil {
 		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
 			apierrors.LocationNotFound, "", requestID)
 		return
 	}
+	locationID := loc.ID
 
 	var request shared.TagIdentifierRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
@@ -574,7 +633,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identifier, err := handler.storage.AddIdentifierToLocation(r.Context(), orgID, locationID, request)
+	tagIdent, err := handler.storage.AddIdentifierToLocation(r.Context(), orgID, locationID, request)
 	if err != nil {
 		// Storage returns "already exists" / "already exist" strings for unique violations
 		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
@@ -587,17 +646,18 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": identifier})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tagIdent})
 }
 
 // @Summary      Remove an identifier from a location
 // @Description  Detach a tag identifier from a location by its identifier record ID.
 // @Tags         locations,public
+// @ID           locations.identifiers.remove
 // @Accept       json
 // @Produce      json
-// @Param        id            path  int  true  "Location ID"
-// @Param        identifierId  path  int  true  "Identifier ID"
-// @Success      202  {object}  map[string]bool               "deleted: true/false"
+// @Param        identifier    path  string  true  "Location identifier"
+// @Param        identifierId  path  int     true  "Identifier ID"
+// @Success      204  "deleted"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -605,7 +665,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
-// @Router       /api/v1/locations/{id}/identifiers/{identifierId} [delete]
+// @Router       /api/v1/locations/{identifier}/identifiers/{identifierId} [delete]
 func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -616,13 +676,20 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	locationID, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(r, "identifier")
+
+	loc, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), requestID)
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), requestID)
 		return
 	}
+	if loc == nil {
+		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", requestID)
+		return
+	}
+	locationID := loc.ID
 
 	identifierIDParam := chi.URLParam(r, "identifierId")
 	identifierID, err := strconv.Atoi(identifierIDParam)
@@ -632,20 +699,20 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	deleted, err := handler.storage.RemoveLocationIdentifier(r.Context(), orgID, locationID, identifierID)
+	_, err = handler.storage.RemoveLocationIdentifier(r.Context(), orgID, locationID, identifierID)
 	if err != nil {
 		httputil.RespondStorageError(w, r, err, requestID)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
+	w.WriteHeader(http.StatusNoContent)
 }
 
-// RegisterRoutes keeps only session-only surface (hierarchy by-id). Public write
+// RegisterRoutes keeps only session-only surface (hierarchy by-identifier). Public write
 // routes are registered in internal/cmd/serve/router.go under EitherAuth +
 // WriteAudit + RequireScope. Public reads likewise (per TRA-396).
 func (handler *Handler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/locations/{id}/ancestors", handler.GetAncestors)
-	r.Get("/api/v1/locations/{id}/descendants", handler.GetDescendants)
-	r.Get("/api/v1/locations/{id}/children", handler.GetChildren)
+	r.Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
+	r.Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
+	r.Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
 }

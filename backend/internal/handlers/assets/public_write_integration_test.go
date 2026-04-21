@@ -35,10 +35,10 @@ func buildAssetsPublicWriteRouter(store *storage.Storage) *chi.Mux {
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.WriteAudit)
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", handler.Create)
-		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{id}", handler.UpdateAsset)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}", handler.DeleteAsset)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{id}/identifiers", handler.AddIdentifier)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
+		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{identifier}", handler.UpdateAsset)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}", handler.DeleteAsset)
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/identifiers", handler.AddIdentifier)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	})
 	return r
 }
@@ -97,7 +97,7 @@ func TestUpdateAsset_CrossOrg_Returns404(t *testing.T) {
 	orgA, _ := seedOrgAndKey(t, pool, store, "orgA-assets-write", []string{"assets:write"})
 	_, tokenB := seedOrgAndKey(t, pool, store, "orgB-assets-write", []string{"assets:write"})
 
-	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgA, Identifier: "orgA-asset", Name: "A", Type: "asset",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -106,7 +106,7 @@ func TestUpdateAsset_CrossOrg_Returns404(t *testing.T) {
 	r := buildAssetsPublicWriteRouter(store)
 
 	body := `{"name":"hijacked"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/"+strconv.Itoa(asset.ID), bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/orgA-asset", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+tokenB)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -115,7 +115,7 @@ func TestUpdateAsset_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Confirm asset untouched
-	fetched, err := store.GetAssetByID(context.Background(), &asset.ID)
+	fetched, err := store.GetAssetByID(context.Background(), &seededAsset.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
 	assert.Equal(t, "A", fetched.Name)
@@ -131,7 +131,7 @@ func TestDeleteAsset_CrossOrg_Returns404(t *testing.T) {
 	orgA, _ := seedOrgAndKey(t, pool, store, "orgA-assets-write-delete", []string{"assets:write"})
 	_, tokenB := seedOrgAndKey(t, pool, store, "orgB-assets-write-delete", []string{"assets:write"})
 
-	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgA, Identifier: "orgA-delete-target", Name: "Survivor", Type: "asset",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -139,17 +139,17 @@ func TestDeleteAsset_CrossOrg_Returns404(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/"+strconv.Itoa(asset.ID), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/orgA-delete-target", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenB)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Storage returns deleted=false for cross-org; handler must map that to 404,
-	// NOT 202 {"deleted":false}.
+	// Cross-org: GetAssetByIdentifier returns nil for orgB (identifier belongs to orgA),
+	// so handler returns 404 before reaching storage delete.
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Confirm the asset survives.
-	fetched, err := store.GetAssetByID(context.Background(), &asset.ID)
+	fetched, err := store.GetAssetByID(context.Background(), &seededAsset.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "asset must survive cross-org DELETE attempt")
 	assert.Equal(t, "Survivor", fetched.Name)
@@ -163,7 +163,7 @@ func TestDeleteAsset_APIKey_HappyPath(t *testing.T) {
 
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
-	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgID, Identifier: "to-delete", Name: "Bye", Type: "asset",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -171,7 +171,7 @@ func TestDeleteAsset_APIKey_HappyPath(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/"+strconv.Itoa(asset.ID), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/to-delete", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -198,7 +198,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	_ = loc
 
-	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+	_, err = store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgID, Identifier: "ident-host", Name: "A", Type: "asset",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -208,7 +208,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	// TagIdentifierRequest.Type accepts only rfid/ble/barcode; use rfid.
 	body := `{"type":"rfid","value":"EPC-ABC-123"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/"+strconv.Itoa(asset.ID)+"/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/ident-host/identifiers",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -232,13 +232,13 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
-	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgID, Identifier: "ident-host", Name: "A", Type: "asset",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, asset.ID, shared.TagIdentifierRequest{
+	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
 		Type:  "rfid",
 		Value: "EPC-HAPPY-1",
 	})
@@ -246,7 +246,7 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	url := "/api/v1/assets/" + strconv.Itoa(asset.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/assets/ident-host/identifiers/" + strconv.Itoa(ident.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -263,7 +263,7 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
 }
 
-func TestRemoveAssetIdentifier_WrongAssetID_ReturnsDeletedFalse(t *testing.T) {
+func TestRemoveAssetIdentifier_WrongAssetIdentifier_ReturnsDeletedFalse(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-assets-write-remove-ident-wrong-owner")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -277,7 +277,7 @@ func TestRemoveAssetIdentifier_WrongAssetID_ReturnsDeletedFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	otherAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+	_, err = store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgID, Identifier: "other-asset", Name: "Other", Type: "asset",
 		ValidFrom: time.Now(), IsActive: true,
 	})
@@ -291,8 +291,9 @@ func TestRemoveAssetIdentifier_WrongAssetID_ReturnsDeletedFalse(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	// DELETE via otherAsset's {id} targeting ident (which belongs to owningAsset).
-	url := "/api/v1/assets/" + strconv.Itoa(otherAsset.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	// DELETE via other-asset's {identifier} targeting ident (which belongs to owning-asset).
+	// Storage cross-asset check: identifierID's asset_id won't match other-asset's ID → deleted=false.
+	url := "/api/v1/assets/other-asset/identifiers/" + strconv.Itoa(ident.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -302,10 +303,234 @@ func TestRemoveAssetIdentifier_WrongAssetID_ReturnsDeletedFalse(t *testing.T) {
 
 	var resp map[string]bool
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.False(t, resp["deleted"], "mismatched {id} must not delete the identifier")
+	assert.False(t, resp["deleted"], "mismatched {identifier} must not delete the identifier")
 
 	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
 	require.NoError(t, err)
-	require.NotNil(t, fetched, "identifier must still exist since the path ID didn't match its owner")
+	require.NotNil(t, fetched, "identifier must still exist since the path identifier didn't match its owner")
 	assert.Equal(t, "EPC-WRONG-1", fetched.Value)
+}
+
+func TestAssetsUpdate_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-update-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+
+	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "TRA-407B-UPDATE-1", Name: "Original", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"name":"Updated"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/TRA-407B-UPDATE-1", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "Updated", data["name"])
+}
+
+func TestAssetsUpdate_UnknownIdentifier_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-update-unknown-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"name":"ghost"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/DOES-NOT-EXIST", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	errObj := resp["error"].(map[string]any)
+	assert.Equal(t, "not_found", errObj["type"])
+}
+
+func TestAssetsDelete_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-delete-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+
+	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "TRA-407B-DELETE-1", Name: "ToDelete", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/TRA-407B-DELETE-1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp["deleted"])
+}
+
+func TestAssetsDelete_UnknownIdentifier_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-delete-unknown-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/DOES-NOT-EXIST", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	errObj := resp["error"].(map[string]any)
+	assert.Equal(t, "not_found", errObj["type"])
+}
+
+func TestAssetsAddIdentifier_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-addident-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+
+	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "TRA-407B-ADDIDENT-1", Name: "Host", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"type":"rfid","value":"EPC-407B-NEW"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/TRA-407B-ADDIDENT-1/identifiers",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "EPC-407B-NEW", data["value"])
+}
+
+func TestAssetsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-addident-unknown-parent")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"type":"rfid","value":"EPC-GHOST"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/DOES-NOT-EXIST/identifiers",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	errObj := resp["error"].(map[string]any)
+	assert.Equal(t, "not_found", errObj["type"])
+}
+
+func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-removeident-by-ident")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+
+	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "TRA-407B-REMOVEIDENT-1", Name: "Host", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
+		Type:  "rfid",
+		Value: "EPC-407B-REMOVE",
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+
+	url := "/api/v1/assets/TRA-407B-REMOVEIDENT-1/identifiers/" + strconv.Itoa(ident.ID)
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+	var resp map[string]bool
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp["deleted"])
+
+	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	require.NoError(t, err)
+	assert.Nil(t, fetched, "identifier must be soft-deleted")
+}
+
+func TestAssetsRemoveIdentifier_UnknownParent_Returns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-removeident-unknown-parent")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/DOES-NOT-EXIST/identifiers/999", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	errObj := resp["error"].(map[string]any)
+	assert.Equal(t, "not_found", errObj["type"])
 }

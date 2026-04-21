@@ -33,10 +33,10 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	// under the public-write group (TRA-397). Wire them here directly so these
 	// handler-level tests continue to exercise the same handler paths.
 	r.Post("/api/v1/assets", handler.Create)
-	r.Put("/api/v1/assets/{id}", handler.UpdateAsset)
-	r.Delete("/api/v1/assets/{id}", handler.DeleteAsset)
-	r.Post("/api/v1/assets/{id}/identifiers", handler.AddIdentifier)
-	r.Delete("/api/v1/assets/{id}/identifiers/{identifierId}", handler.RemoveIdentifier)
+	r.Put("/api/v1/assets/{identifier}", handler.UpdateAsset)
+	r.Delete("/api/v1/assets/{identifier}", handler.DeleteAsset)
+	r.Post("/api/v1/assets/{identifier}/identifiers", handler.AddIdentifier)
+	r.Delete("/api/v1/assets/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
 	handler.RegisterRoutes(r)
 	return r
 }
@@ -235,13 +235,12 @@ func TestUpdateAsset(t *testing.T) {
 	body, err := json.Marshal(updateRequest)
 	require.NoError(t, err)
 
-	idStr := strconv.Itoa(created.ID)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/"+idStr, bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/TEST-003", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 		URLParams: chi.RouteParams{
-			Keys:   []string{"id"},
-			Values: []string{idStr},
+			Keys:   []string{"identifier"},
+			Values: []string{"TEST-003"},
 		},
 	}))
 	req = withOrgContext(req, accountID)
@@ -279,12 +278,11 @@ func TestDeleteAsset(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, created)
 
-	idStr := strconv.Itoa(created.ID)
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/"+idStr, nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/TEST-004", nil)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 		URLParams: chi.RouteParams{
-			Keys:   []string{"id"},
-			Values: []string{idStr},
+			Keys:   []string{"identifier"},
+			Values: []string{"TEST-004"},
 		},
 	}))
 	req = withOrgContext(req, accountID)
@@ -314,11 +312,11 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 
 	handler := NewHandler(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/999999", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/DOES-NOT-EXIST", nil)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 		URLParams: chi.RouteParams{
-			Keys:   []string{"id"},
-			Values: []string{"999999"},
+			Keys:   []string{"identifier"},
+			Values: []string{"DOES-NOT-EXIST"},
 		},
 	}))
 	req = withOrgContext(req, accountID)
@@ -326,8 +324,7 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 
 	handler.DeleteAsset(w, req)
 
-	// Nonexistent asset now returns 404 (not 202 deleted=false) so clients can
-	// distinguish "already gone / never existed" from "successfully deleted".
+	// Nonexistent asset returns 404 since GetAssetByIdentifier returns nil.
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
@@ -478,7 +475,7 @@ func TestAssetsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	// DEFAULT CURRENT_TIMESTAMP (not fixedFrom), so no collision fires here → 201.
 	// This verifies the happy-path is intact and the value can be re-assigned at a new time.
 	body := `{"type":"rfid","value":"TRA-407-IDENT-DUP"}`
-	url := "/api/v1/assets/" + strconv.Itoa(assetA.ID) + "/identifiers"
+	url := "/api/v1/assets/SN-A-dup-host/identifiers"
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, accountID)
@@ -597,13 +594,12 @@ func TestFullCRUDWorkflow(t *testing.T) {
 		body, err := json.Marshal(updateRequest)
 		require.NoError(t, err)
 
-		idStr := strconv.Itoa(createdID)
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/"+idStr, bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/WF-001", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, &chi.Context{
 			URLParams: chi.RouteParams{
-				Keys:   []string{"id"},
-				Values: []string{idStr},
+				Keys:   []string{"identifier"},
+				Values: []string{"WF-001"},
 			},
 		}))
 		req = withOrgContext(req, accountID)
@@ -620,12 +616,11 @@ func TestFullCRUDWorkflow(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		idStr := strconv.Itoa(createdID)
-		req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/"+idStr, nil)
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/WF-001", nil)
 		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, &chi.Context{
 			URLParams: chi.RouteParams{
-				Keys:   []string{"id"},
-				Values: []string{idStr},
+				Keys:   []string{"identifier"},
+				Values: []string{"WF-001"},
 			},
 		}))
 		req = withOrgContext(req, accountID)

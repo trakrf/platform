@@ -70,6 +70,7 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 // @Description  Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
 // @Description  Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
 // @Tags         assets,public
+// @ID           assets.create
 // @Accept       json
 // @Produce      json
 // @Param        request  body  asset.CreateAssetWithIdentifiersRequest  true  "Asset to create with optional identifiers"
@@ -132,11 +133,12 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Summary      Update an asset
 // @Description  Update mutable fields on an existing asset. Only fields included in the request body are changed.
 // @Tags         assets,public
+// @ID           assets.update
 // @Accept       json
 // @Produce      json
-// @Param        id       path  int                         true  "Asset ID"
-// @Param        request  body  asset.UpdateAssetRequest    true  "Fields to update"
-// @Success      202  {object}  map[string]any                "data: asset.Asset"
+// @Param        identifier  path  string                      true  "Asset identifier"
+// @Param        request     body  asset.UpdateAssetRequest    true  "Fields to update"
+// @Success      200  {object}  map[string]any                "data: asset.Asset"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -145,7 +147,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{id} [put]
+// @Router       /api/v1/assets/{identifier} [put]
 func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
@@ -156,13 +158,20 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	a, err := handler.storage.GetAssetByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetUpdateInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), ctx)
 		return
 	}
+	if a == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", ctx)
+		return
+	}
+	id := a.ID
 
 	var request asset.UpdateAssetRequest
 
@@ -196,7 +205,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string]*asset.Asset{"data": result})
+	httputil.WriteJSON(w, http.StatusOK, map[string]*asset.Asset{"data": result})
 }
 
 // @Summary Get asset by surrogate ID (internal)
@@ -246,19 +255,20 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary      Delete an asset
-// @Description  Soft-delete an asset by its numeric ID. The asset is marked inactive and removed from future list results.
+// @Description  Soft-delete an asset by its natural identifier. The asset is marked inactive and removed from future list results.
 // @Tags         assets,public
+// @ID           assets.delete
 // @Accept       json
 // @Produce      json
-// @Param        id  path  int  true  "Asset ID"
-// @Success      202  {object}  map[string]bool               "deleted: true/false"
+// @Param        identifier  path  string  true  "Asset identifier"
+// @Success      204  "deleted"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{id} [delete]
+// @Router       /api/v1/assets/{identifier} [delete]
 func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 
@@ -269,13 +279,20 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
-	id, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(req, "identifier")
+
+	a, err := handler.storage.GetAssetByIdentifier(req.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetDeleteInvalidID, idParam), err.Error(), ctx)
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), ctx)
 		return
 	}
+	if a == nil {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", ctx)
+		return
+	}
+	id := a.ID
 
 	deleted, err := handler.storage.DeleteAsset(req.Context(), orgID, id)
 	if err != nil {
@@ -289,7 +306,7 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type ListAssetsResponse struct {
@@ -302,6 +319,7 @@ type ListAssetsResponse struct {
 // @Summary List assets
 // @Description Paginated assets list with natural-key filters, sort, and fuzzy search
 // @Tags assets,public
+// @ID assets.list
 // @Accept json
 // @Produce json
 // @Param limit    query int    false "max 200"   default(50)
@@ -391,6 +409,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Get asset by natural identifier
 // @Tags assets,public
+// @ID assets.get
 // @Param identifier path string true "Asset identifier (natural key)"
 // @Success 200 {object} map[string]any
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
@@ -442,10 +461,11 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 // @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
 // @Description  The identifier must be unique within the organization.
 // @Tags         assets,public
+// @ID           assets.identifiers.add
 // @Accept       json
 // @Produce      json
-// @Param        id       path  int                            true  "Asset ID"
-// @Param        request  body  shared.TagIdentifierRequest    true  "Tag identifier to attach"
+// @Param        identifier  path  string                         true  "Asset identifier"
+// @Param        request     body  shared.TagIdentifierRequest    true  "Tag identifier to attach"
 // @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -454,7 +474,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{id}/identifiers [post]
+// @Router       /api/v1/assets/{identifier}/identifiers [post]
 func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -465,15 +485,9 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	assetID, err := strconv.Atoi(idParam)
-	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
-		return
-	}
+	identifier := chi.URLParam(r, "identifier")
 
-	existingAsset, err := handler.storage.GetAssetByID(r.Context(), &assetID)
+	existingAsset, err := handler.storage.GetAssetByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetGetFailed, err.Error(), requestID)
@@ -484,6 +498,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 			apierrors.AssetNotFound, "", requestID)
 		return
 	}
+	assetID := existingAsset.ID
 
 	var request shared.TagIdentifierRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
@@ -496,7 +511,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identifier, err := handler.storage.AddIdentifierToAsset(r.Context(), orgID, assetID, request)
+	tagIdent, err := handler.storage.AddIdentifierToAsset(r.Context(), orgID, assetID, request)
 	if err != nil {
 		// Storage returns "identifier X:Y already exists" for unique violations (SQLSTATE 23505
 		// is unwrapped to a plain string by the storage layer).
@@ -509,17 +524,18 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": identifier})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tagIdent})
 }
 
 // @Summary      Remove an identifier from an asset
 // @Description  Detach a tag identifier from an asset by its identifier record ID.
 // @Tags         assets,public
+// @ID           assets.identifiers.remove
 // @Accept       json
 // @Produce      json
-// @Param        id            path  int  true  "Asset ID"
-// @Param        identifierId  path  int  true  "Identifier ID"
-// @Success      202  {object}  map[string]bool               "deleted: true/false"
+// @Param        identifier    path  string  true  "Asset identifier"
+// @Param        identifierId  path  int     true  "Identifier ID"
+// @Success      204  "deleted"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -527,7 +543,7 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{id}/identifiers/{identifierId} [delete]
+// @Router       /api/v1/assets/{identifier}/identifiers/{identifierId} [delete]
 func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -538,13 +554,20 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
-	assetID, err := strconv.Atoi(idParam)
+	identifier := chi.URLParam(r, "identifier")
+
+	existingAsset, err := handler.storage.GetAssetByIdentifier(r.Context(), orgID, identifier)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.AssetGetFailed, err.Error(), requestID)
 		return
 	}
+	if existingAsset == nil {
+		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.AssetNotFound, "", requestID)
+		return
+	}
+	assetID := existingAsset.ID
 
 	identifierIDParam := chi.URLParam(r, "identifierId")
 	identifierID, err := strconv.Atoi(identifierIDParam)
@@ -554,13 +577,13 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	deleted, err := handler.storage.RemoveAssetIdentifier(r.Context(), orgID, assetID, identifierID)
+	_, err = handler.storage.RemoveAssetIdentifier(r.Context(), orgID, assetID, identifierID)
 	if err != nil {
 		httputil.RespondStorageError(w, r, err, requestID)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusAccepted, map[string]bool{"deleted": deleted})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // RegisterRoutes keeps only session-only surface (bulk CSV). Public write and

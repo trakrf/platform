@@ -125,17 +125,17 @@ func setupRouter(
 
 		// Assets
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
-		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{id}", assetsHandler.UpdateAsset)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}", assetsHandler.DeleteAsset)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{id}/identifiers", assetsHandler.AddIdentifier)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}/identifiers/{identifierId}", assetsHandler.RemoveIdentifier)
+		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{identifier}", assetsHandler.UpdateAsset)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}", assetsHandler.DeleteAsset)
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/identifiers", assetsHandler.AddIdentifier)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/identifiers/{identifierId}", assetsHandler.RemoveIdentifier)
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
-		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{id}", locationsHandler.Update)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}", locationsHandler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{id}/identifiers", locationsHandler.AddIdentifier)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}/identifiers/{identifierId}", locationsHandler.RemoveIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{identifier}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}", locationsHandler.Delete)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/identifiers", locationsHandler.AddIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", locationsHandler.RemoveIdentifier)
 
 		// Inventory (scan writes)
 		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)

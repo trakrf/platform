@@ -12,9 +12,9 @@ import (
 
 func main() {
 	var (
-		inPath       = flag.String("in", "", "Path to swagger 2.0 JSON (required)")
-		publicOut    = flag.String("public-out", "", "Output path prefix for public spec (required, writes .json and .yaml)")
-		internalOut  = flag.String("internal-out", "", "Output path prefix for internal spec (required, writes .json and .yaml)")
+		inPath      = flag.String("in", "", "Path to swagger 2.0 JSON (required)")
+		publicOut   = flag.String("public-out", "", "Output path prefix for public spec (required, writes .json and .yaml)")
+		internalOut = flag.String("internal-out", "", "Output path prefix for internal spec (required, writes .json and .yaml)")
 	)
 	flag.Parse()
 

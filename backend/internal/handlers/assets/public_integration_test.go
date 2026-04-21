@@ -81,12 +81,12 @@ func TestListAssets_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:read"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:     orgID,
+		OrgID:      orgID,
 		Identifier: "wh-1",
-		Name:      "Warehouse 1",
-		Path:      "wh-1",
-		ValidFrom: time.Now(),
-		IsActive:  true,
+		Name:       "Warehouse 1",
+		Path:       "wh-1",
+		ValidFrom:  time.Now(),
+		IsActive:   true,
 	})
 	require.NoError(t, err)
 
