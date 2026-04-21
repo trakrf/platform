@@ -139,6 +139,49 @@ func TestInventorySave_WrongScope_Returns403(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 }
 
+// TRA-426: session-auth regression coverage for POST /inventory/save.
+// TRA-397 moved this route under EitherAuth but the session-auth path
+// (session JWT, not API key) was never exercised at the HTTP boundary.
+// Keep this as a permanent regression guard.
+func TestInventorySave_SessionAuth_HappyPath(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-inv-session")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "sess-inv-wh", Name: "WH", Path: "sess-inv-wh",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "sess-inv-asset", Name: "A", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	sessToken, err := jwt.Generate(1, "sess-inv@t.com", &orgID)
+	require.NoError(t, err)
+
+	r := buildInventoryPublicWriteRouter(store)
+
+	body := fmt.Sprintf(`{"location_id":%d,"asset_ids":[%d]}`, loc.ID, asset.ID)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+sessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.NotNil(t, resp["data"])
+}
+
 func TestInventorySave_CrossOrg_Returns403(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-inv-cross-org")
 	store, cleanup := testutil.SetupTestDB(t)
