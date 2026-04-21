@@ -2,6 +2,7 @@ package locations
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -163,36 +164,40 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 			apierrors.LocationNotFound, "", ctx)
 		return
 	}
-	id := loc.ID
+
+	handler.doUpdate(w, req, orgID, loc.ID)
+}
+
+// doUpdate decodes, validates, and stores the location update. Caller must
+// have already verified that (orgID, id) names a real location.
+func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
+	reqID := middleware.GetRequestID(req.Context())
 
 	var request location.UpdateLocationRequest
 	if err := httputil.DecodeJSON(req, &request); err != nil {
-		httputil.RespondDecodeError(w, req, err, ctx)
+		httputil.RespondDecodeError(w, req, err, reqID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, ctx)
+		httputil.RespondValidationError(w, req, err, reqID)
 		return
 	}
 
 	result, err := handler.storage.UpdateLocation(req.Context(), orgID, id, request)
-
 	if err != nil {
-		// Storage returns "already exists" / "already exist" strings for unique violations
-		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.LocationUpdateFailed, err.Error(), ctx)
+				apierrors.LocationUpdateFailed, err.Error(), reqID)
 			return
 		}
-		httputil.RespondStorageError(w, req, err, ctx)
+		httputil.RespondStorageError(w, req, err, reqID)
 		return
 	}
 
 	if result == nil {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", ctx)
+			apierrors.LocationNotFound, "", reqID)
 		return
 	}
 
@@ -238,17 +243,24 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 			apierrors.LocationNotFound, "", ctx)
 		return
 	}
-	id := loc.ID
+
+	handler.doDelete(w, req, orgID, loc.ID)
+}
+
+// doDelete soft-deletes the location via storage. Caller must have already
+// verified that (orgID, id) names a real location.
+func (handler *Handler) doDelete(w http.ResponseWriter, req *http.Request, orgID, id int) {
+	reqID := middleware.GetRequestID(req.Context())
 
 	deleted, err := handler.storage.DeleteLocation(req.Context(), orgID, id)
 	if err != nil {
-		httputil.RespondStorageError(w, req, err, ctx)
+		httputil.RespondStorageError(w, req, err, reqID)
 		return
 	}
 
 	if !deleted {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", ctx)
+			apierrors.LocationNotFound, "", reqID)
 		return
 	}
 
@@ -620,7 +632,17 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 			apierrors.LocationNotFound, "", requestID)
 		return
 	}
-	locationID := loc.ID
+
+	handler.doAddLocationIdentifier(w, r, orgID, loc.ID)
+}
+
+// doAddLocationIdentifier decodes + validates the identifier body and inserts
+// via storage. Caller must have already verified that (orgID, locationID)
+// names a real location — storage.AddIdentifierToLocation does NOT cross-check
+// ownership before INSERT, so skipping the pre-check would allow cross-org
+// identifier attachment.
+func (handler *Handler) doAddLocationIdentifier(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
+	requestID := middleware.GetRequestID(r.Context())
 
 	var request shared.TagIdentifierRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
@@ -635,8 +657,6 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 
 	tagIdent, err := handler.storage.AddIdentifierToLocation(r.Context(), orgID, locationID, request)
 	if err != nil {
-		// Storage returns "already exists" / "already exist" strings for unique violations
-		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.LocationCreateFailed, err.Error(), requestID)
@@ -689,7 +709,16 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 			apierrors.LocationNotFound, "", requestID)
 		return
 	}
-	locationID := loc.ID
+
+	handler.doRemoveLocationIdentifier(w, r, orgID, loc.ID)
+}
+
+// doRemoveLocationIdentifier parses {identifierId} and soft-deletes via
+// storage. Storage guards cross-location / cross-org misuse itself (EXISTS
+// subquery on location_id + org_id), so a missing match surfaces as
+// deleted=false rather than an error.
+func (handler *Handler) doRemoveLocationIdentifier(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
+	requestID := middleware.GetRequestID(r.Context())
 
 	identifierIDParam := chi.URLParam(r, "identifierId")
 	identifierID, err := strconv.Atoi(identifierIDParam)
@@ -706,6 +735,123 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// @Summary Update location by surrogate ID (internal)
+// @Description Session-auth-only variant for the frontend. Public consumers must use {identifier}.
+// @Tags locations,internal
+// @Param id path int true "Location surrogate ID"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/locations/by-id/{id} [put]
+func (handler *Handler) UpdateByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationUpdateFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyLocationID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doUpdate(w, req, orgID, id)
+}
+
+// @Summary Delete location by surrogate ID (internal)
+// @Tags locations,internal
+// @Router /api/v1/locations/by-id/{id} [delete]
+func (handler *Handler) DeleteByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationDeleteFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyLocationID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doDelete(w, req, orgID, id)
+}
+
+// @Summary Add identifier to location by surrogate ID (internal)
+// @Tags locations,internal
+// @Router /api/v1/locations/by-id/{id}/identifiers [post]
+func (handler *Handler) AddIdentifierByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationCreateFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyLocationID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doAddLocationIdentifier(w, req, orgID, id)
+}
+
+// @Summary Remove identifier from location by surrogate ID (internal)
+// @Tags locations,internal
+// @Router /api/v1/locations/by-id/{id}/identifiers/{identifierId} [delete]
+func (handler *Handler) RemoveIdentifierByID(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+			apierrors.LocationDeleteFailed, "missing organization context", reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyLocationID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	handler.doRemoveLocationIdentifier(w, req, orgID, id)
+}
+
+// parseAndVerifyLocationID extracts {id}, parses it as a surrogate int, and
+// verifies the location exists and belongs to the caller's org. Writes an
+// appropriate 400 / 404 / 500 response and returns ok=false on any failure.
+func (handler *Handler) parseAndVerifyLocationID(w http.ResponseWriter, req *http.Request, orgID int, reqID string) (int, bool) {
+	idParam := chi.URLParam(req, "id")
+	id, err := httputil.ParseSurrogateID(idParam)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), reqID)
+		return 0, false
+	}
+
+	loc, err := handler.storage.GetLocationByID(req.Context(), id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), reqID)
+		return 0, false
+	}
+	if loc == nil || loc.OrgID != orgID {
+		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
+			apierrors.LocationNotFound, "", reqID)
+		return 0, false
+	}
+
+	return loc.ID, true
 }
 
 // RegisterRoutes keeps only session-only surface (hierarchy by-identifier). Public write

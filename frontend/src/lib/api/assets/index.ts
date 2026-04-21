@@ -59,16 +59,16 @@ export const assetsApi = {
 
   /**
    * Update existing asset
-   * PUT /api/v1/assets/:id
+   * PUT /api/v1/assets/by-id/:id
    */
   update: (id: number, data: UpdateAssetRequest) =>
-    apiClient.put<AssetResponse>(`/assets/${id}`, data),
+    apiClient.put<AssetResponse>(`/assets/by-id/${id}`, data),
 
   /**
    * Soft delete asset
-   * DELETE /api/v1/assets/:id
+   * DELETE /api/v1/assets/by-id/:id
    */
-  delete: (id: number) => apiClient.delete<DeleteResponse>(`/assets/${id}`),
+  delete: (id: number) => apiClient.delete<DeleteResponse>(`/assets/by-id/${id}`),
 
   /**
    * Upload CSV for bulk asset creation
@@ -97,18 +97,18 @@ export const assetsApi = {
 
   /**
    * Remove a tag identifier from an asset
-   * DELETE /api/v1/assets/:assetId/identifiers/:identifierId
+   * DELETE /api/v1/assets/by-id/:assetId/identifiers/:identifierId
    */
   removeIdentifier: (assetId: number, identifierId: number) =>
-    apiClient.delete<DeleteResponse>(`/assets/${assetId}/identifiers/${identifierId}`),
+    apiClient.delete<DeleteResponse>(`/assets/by-id/${assetId}/identifiers/${identifierId}`),
 
   /**
    * Add a tag identifier to an asset
-   * POST /api/v1/assets/:assetId/identifiers
+   * POST /api/v1/assets/by-id/:assetId/identifiers
    */
   addIdentifier: (assetId: number, identifier: { type: string; value: string }) =>
     apiClient.post<{ data: { id: number; type: string; value: string; is_active: boolean } }>(
-      `/assets/${assetId}/identifiers`,
+      `/assets/by-id/${assetId}/identifiers`,
       identifier
     ),
 };
