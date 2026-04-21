@@ -2037,7 +2037,7 @@
                 }
               }
             },
-            "description": "data: []location.Location"
+            "description": "data: []location.PublicLocationView"
           },
           "400": {
             "content": {
@@ -2128,7 +2128,7 @@
                 }
               }
             },
-            "description": "data: []location.Location"
+            "description": "data: []location.PublicLocationView"
           },
           "400": {
             "content": {
@@ -2219,7 +2219,7 @@
                 }
               }
             },
-            "description": "data: []location.Location"
+            "description": "data: []location.PublicLocationView"
           },
           "400": {
             "content": {

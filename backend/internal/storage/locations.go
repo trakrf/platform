@@ -301,18 +301,21 @@ func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, erro
 }
 
 // GetAncestors returns all ancestor locations of a given location (from root to parent)
-// Uses ltree @> operator: ancestor_path @> child_path
-func (s *Storage) GetAncestors(ctx context.Context, id int) ([]location.Location, error) {
+// Uses ltree @> operator: ancestor_path @> child_path.
+// Both the outer query and the path subselect are scoped to orgID so cross-tenant paths
+// that happen to share an identifier (e.g. two orgs both using "whs-01") stay isolated.
+func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.Location, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at
 		FROM trakrf.locations l
-		WHERE l.path @> (SELECT path FROM trakrf.locations WHERE id = $1 AND deleted_at IS NULL)
-		  AND l.id != $1
+		WHERE l.org_id = $1
+		  AND l.path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND l.id != $2
 		  AND l.deleted_at IS NULL
 		ORDER BY l.depth
 	`
-	rows, err := s.pool.Query(ctx, query, id)
+	rows, err := s.pool.Query(ctx, query, orgID, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ancestors: %w", err)
 	}
@@ -340,18 +343,22 @@ func (s *Storage) GetAncestors(ctx context.Context, id int) ([]location.Location
 }
 
 // GetDescendants returns all descendant locations of a given location (children at all levels)
-// Uses ltree <@ operator: child_path <@ parent_path
-func (s *Storage) GetDescendants(ctx context.Context, id int) ([]location.Location, error) {
+// Uses ltree <@ operator: child_path <@ parent_path.
+// Both the outer query and the path subselect are scoped to orgID: ltree paths are derived
+// from identifier segments alone (see migration 000018), so without this fence two tenants
+// with identical identifier hierarchies would see each other's subtrees.
+func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location.Location, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at
 		FROM trakrf.locations l
-		WHERE l.path <@ (SELECT path FROM trakrf.locations WHERE id = $1 AND deleted_at IS NULL)
-		  AND l.id != $1
+		WHERE l.org_id = $1
+		  AND l.path <@ (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND l.id != $2
 		  AND l.deleted_at IS NULL
 		ORDER BY l.path
 	`
-	rows, err := s.pool.Query(ctx, query, id)
+	rows, err := s.pool.Query(ctx, query, orgID, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get descendants: %w", err)
 	}
@@ -378,16 +385,21 @@ func (s *Storage) GetDescendants(ctx context.Context, id int) ([]location.Locati
 	return locations, nil
 }
 
-// GetChildren returns immediate children of a given location (depth = parent_depth + 1)
-func (s *Storage) GetChildren(ctx context.Context, id int) ([]location.Location, error) {
+// GetChildren returns immediate children of a given location (depth = parent_depth + 1).
+// parent_location_id references a globally unique PK so the query alone is not cross-tenant
+// reachable, but the orgID filter keeps the invariant explicit (defense in depth) and in
+// line with GetAncestors/GetDescendants.
+func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Location, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at
 		FROM trakrf.locations l
-		WHERE l.parent_location_id = $1 AND l.deleted_at IS NULL
+		WHERE l.org_id = $1
+		  AND l.parent_location_id = $2
+		  AND l.deleted_at IS NULL
 		ORDER BY l.name
 	`
-	rows, err := s.pool.Query(ctx, query, id)
+	rows, err := s.pool.Query(ctx, query, orgID, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get children: %w", err)
 	}

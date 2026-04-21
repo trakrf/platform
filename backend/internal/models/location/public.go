@@ -39,3 +39,24 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 		Identifiers: l.Identifiers,
 	}
 }
+
+// ToPublicLocationViewFromLocation adapts a bare Location (as returned by hierarchy
+// queries that don't carry the parent identifier or per-location tag identifiers) into
+// the same public shape used by GET /locations/{identifier}. Parent stays nil and
+// Identifiers is an empty slice so the JSON renders `[]` rather than `null`.
+func ToPublicLocationViewFromLocation(l Location) PublicLocationView {
+	return PublicLocationView{
+		Identifier:  l.Identifier,
+		Name:        l.Name,
+		Description: l.Description,
+		Path:        l.Path,
+		Depth:       l.Depth,
+		IsActive:    l.IsActive,
+		ValidFrom:   l.ValidFrom,
+		ValidTo:     l.ValidTo,
+		CreatedAt:   l.CreatedAt,
+		UpdatedAt:   l.UpdatedAt,
+		SurrogateID: l.ID,
+		Identifiers: []shared.TagIdentifier{},
+	}
+}

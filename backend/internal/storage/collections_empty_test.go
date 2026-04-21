@@ -143,14 +143,14 @@ func TestGetAncestors_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
 	mock.ExpectQuery(`FROM trakrf.locations l`).
-		WithArgs(1).
+		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
 
-	ancestors, err := storage.GetAncestors(context.Background(), 1)
+	ancestors, err := storage.GetAncestors(context.Background(), 1, 1)
 	assert.NoError(t, err)
 	assert.NotNil(t, ancestors)
 	assertEmptyJSONArray(t, ancestors)
@@ -160,14 +160,14 @@ func TestGetDescendants_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
 	mock.ExpectQuery(`FROM trakrf.locations l`).
-		WithArgs(1).
+		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
 
-	descendants, err := storage.GetDescendants(context.Background(), 1)
+	descendants, err := storage.GetDescendants(context.Background(), 1, 1)
 	assert.NoError(t, err)
 	assert.NotNil(t, descendants)
 	assertEmptyJSONArray(t, descendants)
@@ -177,14 +177,14 @@ func TestGetChildren_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
 	mock.ExpectQuery(`FROM trakrf.locations l`).
-		WithArgs(1).
+		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
 
-	children, err := storage.GetChildren(context.Background(), 1)
+	children, err := storage.GetChildren(context.Background(), 1, 1)
 	assert.NoError(t, err)
 	assert.NotNil(t, children)
 	assertEmptyJSONArray(t, children)

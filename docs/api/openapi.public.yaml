@@ -1211,7 +1211,7 @@ paths:
                             schema:
                                 additionalProperties: true
                                 type: object
-                    description: 'data: []location.Location'
+                    description: 'data: []location.PublicLocationView'
                 "400":
                     content:
                         application/json:
@@ -1266,7 +1266,7 @@ paths:
                             schema:
                                 additionalProperties: true
                                 type: object
-                    description: 'data: []location.Location'
+                    description: 'data: []location.PublicLocationView'
                 "400":
                     content:
                         application/json:
@@ -1321,7 +1321,7 @@ paths:
                             schema:
                                 additionalProperties: true
                                 type: object
-                    description: 'data: []location.Location'
+                    description: 'data: []location.PublicLocationView'
                 "400":
                     content:
                         application/json:
