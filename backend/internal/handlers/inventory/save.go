@@ -44,6 +44,11 @@ type SaveRequest struct {
 	AssetIDs   []int `json:"asset_ids" validate:"required,min=1"`
 }
 
+// SaveResponse is the typed envelope returned on success by POST /api/v1/inventory/save.
+type SaveResponse struct {
+	Data storage.SaveInventoryResult `json:"data"`
+}
+
 // Save handles POST /api/v1/inventory/save
 // @Summary Save inventory scans
 // @Description Persist scanned RFID assets to the asset_scans hypertable
@@ -51,7 +56,7 @@ type SaveRequest struct {
 // @Accept json
 // @Produce json
 // @Param request body SaveRequest true "Save request with location and asset IDs"
-// @Success 201 {object} map[string]any "data: SaveInventoryResult"
+// @Success 201 {object} inventory.SaveResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "Location or assets not owned by org"

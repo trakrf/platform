@@ -50,6 +50,51 @@
         ],
         "type": "object"
       },
+      "asset.PublicAssetView": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "current_location": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/shared.TagIdentifier"
+            },
+            "type": "array"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "metadata": {},
+          "name": {
+            "type": "string"
+          },
+          "surrogate_id": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "valid_from": {
+            "type": "string"
+          },
+          "valid_to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "asset.UpdateAssetRequest": {
         "properties": {
           "current_location_id": {
@@ -86,6 +131,37 @@
           "valid_to": {
             "example": "2026-01-01",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "assets.GetAssetResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/asset.PublicAssetView"
+          }
+        },
+        "type": "object"
+      },
+      "assets.ListAssetsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/asset.PublicAssetView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -169,6 +245,14 @@
         ],
         "type": "object"
       },
+      "inventory.SaveResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/storage.SaveInventoryResult"
+          }
+        },
+        "type": "object"
+      },
       "location.CreateLocationWithIdentifiersRequest": {
         "properties": {
           "description": {
@@ -218,6 +302,53 @@
         ],
         "type": "object"
       },
+      "location.PublicLocationView": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/shared.TagIdentifier"
+            },
+            "type": "array"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "surrogate_id": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "valid_from": {
+            "type": "string"
+          },
+          "valid_to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "location.UpdateLocationRequest": {
         "properties": {
           "description": {
@@ -257,6 +388,67 @@
         },
         "type": "object"
       },
+      "locations.GetLocationResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/location.PublicLocationView"
+          }
+        },
+        "type": "object"
+      },
+      "locations.ListLocationsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/location.PublicLocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "shared.TagIdentifier": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "rfid",
+              "ble",
+              "barcode"
+            ],
+            "example": "rfid",
+            "type": "string",
+            "x-extensible-enum": "true"
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "value"
+        ],
+        "type": "object"
+      },
       "shared.TagIdentifierRequest": {
         "properties": {
           "type": {
@@ -279,12 +471,29 @@
           "value"
         ],
         "type": "object"
+      },
+      "storage.SaveInventoryResult": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "location_id": {
+            "type": "integer"
+          },
+          "location_name": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
       "APIKey": {
         "bearerFormat": "JWT",
-        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account (key-management UI is tracked by TRA-393).",
+        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account.",
         "scheme": "bearer",
         "type": "http"
       },
@@ -380,12 +589,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/assets.ListAssetsResponse"
                 }
               }
             },
-            "description": "envelope with data / limit / offset / total_count",
+            "description": "OK",
             "headers": {
               "X-RateLimit-Limit": {
                 "description": "Steady-state requests/min for this API key",
@@ -679,8 +887,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/assets.GetAssetResponse"
                 }
               }
             },
@@ -1275,12 +1482,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/inventory.SaveResponse"
                 }
               }
             },
-            "description": "data: SaveInventoryResult"
+            "description": "Created"
           },
           "400": {
             "content": {
@@ -1394,8 +1600,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/locations.ListLocationsResponse"
                 }
               }
             },
@@ -1792,8 +1997,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/locations.GetLocationResponse"
                 }
               }
             },

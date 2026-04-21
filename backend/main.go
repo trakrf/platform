@@ -11,7 +11,7 @@
 // @securityDefinitions.apikey APIKey
 // @in header
 // @name Authorization
-// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account (key-management UI is tracked by TRA-393).
+// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account.
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization

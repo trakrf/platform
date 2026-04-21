@@ -267,11 +267,17 @@ func (handler *Handler) doDelete(w http.ResponseWriter, req *http.Request, orgID
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListLocationsResponse is the typed envelope returned by GET /api/v1/locations.
 type ListLocationsResponse struct {
-	Data       []location.LocationView `json:"data"`
-	Count      int                     `json:"count" example:"10"`
-	Offset     int                     `json:"offset" example:"0"`
-	TotalCount int                     `json:"total_count" example:"100"`
+	Data       []location.PublicLocationView `json:"data"`
+	Limit      int                           `json:"limit"       example:"50"`
+	Offset     int                           `json:"offset"      example:"0"`
+	TotalCount int                           `json:"total_count" example:"100"`
+}
+
+// GetLocationResponse is the typed envelope returned by GET /api/v1/locations/{identifier}.
+type GetLocationResponse struct {
+	Data location.PublicLocationView `json:"data"`
 }
 
 // @Summary List locations
@@ -283,7 +289,7 @@ type ListLocationsResponse struct {
 // @Param is_active query bool  false "filter by active flag"
 // @Param q        query string false "fuzzy search on name, identifier, description"
 // @Param sort     query string false "comma-separated, prefix '-' for DESC"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} locations.ListLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
@@ -302,8 +308,9 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters: []string{"parent", "is_active", "q"},
-		Sorts:   []string{"path", "identifier", "name", "created_at"},
+		Filters:     []string{"parent", "is_active", "q"},
+		BoolFilters: []string{"is_active"},
+		Sorts:       []string{"path", "identifier", "name", "created_at"},
 	})
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -358,7 +365,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Tags locations,public
 // @ID locations.get
 // @Param identifier path string true "Location identifier (natural key)"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} locations.GetLocationResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"

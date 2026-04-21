@@ -645,7 +645,31 @@ func (s *Storage) ListLocationsFiltered(
 			ParentIdentifier: parIdt,
 		})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Bulk-fetch identifiers for the returned locations, matching the
+	// assets-list pattern so the public list endpoint returns `[]` rather
+	// than `null` for locations without tag identifiers.
+	if len(out) > 0 {
+		ids := make([]int, len(out))
+		for i, l := range out {
+			ids[i] = l.ID
+		}
+		idMap, err := s.getIdentifiersForLocations(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for i := range out {
+			out[i].Identifiers = idMap[out[i].ID]
+			if out[i].Identifiers == nil {
+				out[i].Identifiers = []shared.TagIdentifier{}
+			}
+		}
+	}
+
+	return out, nil
 }
 
 // CountLocationsFiltered returns total count matching the filter.
