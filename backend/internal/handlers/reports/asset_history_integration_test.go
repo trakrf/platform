@@ -28,6 +28,10 @@ func setupIntegrationRouter(handler *Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	handler.RegisterRoutes(r)
+	// RegisterRoutes is intentionally empty (routes live in cmd/serve/router.go).
+	// Wire the public asset-history route here so integration tests can exercise it
+	// without pulling in the full production middleware stack.
+	r.Get("/api/v1/assets/{identifier}/history", handler.GetAssetHistory)
 	return r
 }
 
@@ -53,8 +57,8 @@ func createTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, name string) i
 
 	var assetID int
 	err := pool.QueryRow(ctx, `
-		INSERT INTO trakrf.assets (org_id, identifier, name, type, is_active)
-		VALUES ($1, $2, $3, 'equipment', true)
+		INSERT INTO trakrf.assets (org_id, identifier, name, type, description, is_active)
+		VALUES ($1, $2, $3, 'asset', '', true)
 		RETURNING id
 	`, orgID, "TEST-"+name, name).Scan(&assetID)
 
@@ -363,4 +367,37 @@ func TestGetAssetHistory_Integration_DurationCalculation(t *testing.T) {
 
 func itoa(i int) string {
 	return string(rune('0'+i/10000%10)) + string(rune('0'+i/1000%10)) + string(rune('0'+i/100%10)) + string(rune('0'+i/10%10)) + string(rune('0'+i%10))
+}
+
+func TestGetAssetHistory_Integration_InvalidFromTimestamp_StaticMessage(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	createTestAsset(t, pool, orgID, "A1")
+
+	handler := NewHandler(store)
+	router := setupIntegrationRouter(handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/TEST-A1/history?from=not-a-date", nil)
+	req = withClaims(req, testClaims(orgID))
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var body struct {
+		Error struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, "Invalid 'from' timestamp", body.Error.Title)
+	assert.Equal(t, "Expected RFC 3339 timestamp, e.g. 2026-04-21T00:00:00Z", body.Error.Detail)
+	// Regression guard: Go's time-layout string must never resurface in the detail.
+	assert.NotContains(t, body.Error.Detail, "2006-01-02")
+	assert.NotContains(t, body.Error.Detail, "parsing time")
 }
