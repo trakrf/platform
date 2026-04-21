@@ -80,3 +80,38 @@ func TestParseListParams_LimitAndOffsetExempt(t *testing.T) {
 	assert.Equal(t, 25, p.Limit)
 	assert.Equal(t, 5, p.Offset)
 }
+
+func TestParseListParams_BoolFilter_Accepts(t *testing.T) {
+	for _, v := range []string{"true", "false"} {
+		req := httptest.NewRequest("GET", "/?is_active="+v, nil)
+		p, err := httputil.ParseListParams(req, httputil.ListAllowlist{
+			Filters:     []string{"is_active"},
+			BoolFilters: []string{"is_active"},
+		})
+		require.NoError(t, err, "value=%q", v)
+		assert.Equal(t, []string{v}, p.Filters["is_active"])
+	}
+}
+
+func TestParseListParams_BoolFilter_Rejects(t *testing.T) {
+	for _, v := range []string{"TRUE", "False", "1", "0", "wat", ""} {
+		req := httptest.NewRequest("GET", "/?is_active="+v, nil)
+		_, err := httputil.ParseListParams(req, httputil.ListAllowlist{
+			Filters:     []string{"is_active"},
+			BoolFilters: []string{"is_active"},
+		})
+		require.Error(t, err, "value=%q should be rejected", v)
+		assert.Contains(t, err.Error(), "is_active")
+		assert.Contains(t, err.Error(), "'true' or 'false'")
+	}
+}
+
+func TestParseListParams_BoolFilter_NonBoolFilterUnaffected(t *testing.T) {
+	// Filters not in BoolFilters accept any string.
+	req := httptest.NewRequest("GET", "/?type=whatever", nil)
+	p, err := httputil.ParseListParams(req, httputil.ListAllowlist{
+		Filters: []string{"type"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"whatever"}, p.Filters["type"])
+}

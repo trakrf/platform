@@ -14,9 +14,14 @@ const (
 
 // ListAllowlist declares which filter and sort fields the endpoint accepts.
 // limit, offset, and sort are always allowed.
+//
+// BoolFilters is a subset of Filters; values for declared boolean filters are
+// validated against the literal strings "true" and "false" (case-sensitive).
+// Anything else produces a 400 with detail "<name> must be 'true' or 'false'".
 type ListAllowlist struct {
-	Filters []string
-	Sorts   []string
+	Filters     []string
+	BoolFilters []string
+	Sorts       []string
 }
 
 // SortField represents one entry in a sort list.
@@ -45,6 +50,7 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 
 	q := r.URL.Query()
 	filterAllow := toSet(allow.Filters)
+	boolAllow := toSet(allow.BoolFilters)
 	sortAllow := toSet(allow.Sorts)
 
 	for key, values := range q {
@@ -73,6 +79,13 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 		default:
 			if _, ok := filterAllow[key]; !ok {
 				return out, fmt.Errorf("unknown parameter: %s", key)
+			}
+			if _, isBool := boolAllow[key]; isBool {
+				for _, v := range values {
+					if v != "true" && v != "false" {
+						return out, fmt.Errorf("%s must be 'true' or 'false'", key)
+					}
+				}
 			}
 			out.Filters[key] = values
 		}
