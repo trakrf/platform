@@ -22,6 +22,7 @@ const (
 // @Summary Asset movement history
 // @Description Location history for an asset identified by its natural key.
 // @Tags reports,public
+// @ID assets.history
 // @Param identifier path string true "Asset identifier (natural key)"
 // @Param limit query int false "max 200"
 // @Param offset query int false "pagination offset"
