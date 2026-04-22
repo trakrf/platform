@@ -21,6 +21,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/handlers/assets"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	assetmodel "github.com/trakrf/platform/backend/internal/models/asset"
+	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	locmodel "github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -525,4 +526,215 @@ func TestAssetsRemoveIdentifier_UnknownParent_Returns404(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	errObj := resp["error"].(map[string]any)
 	assert.Equal(t, "not_found", errObj["type"])
+}
+
+func TestCreateAsset_APIKey_DefaultsIsActiveToTrue(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-create-default-active")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write", "assets:read"})
+	r := buildAssetsPublicWriteRouter(store)
+	rRead := buildAssetsPublicRouter(store)
+
+	body := `{"identifier":"tra447-def-active","name":"No flag"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, true, data["is_active"])
+
+	// Appears in default list (which filters is_active=true).
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listW := httptest.NewRecorder()
+	rRead.ServeHTTP(listW, listReq)
+	require.Equal(t, http.StatusOK, listW.Code)
+	var listResp map[string]any
+	require.NoError(t, json.Unmarshal(listW.Body.Bytes(), &listResp))
+	found := false
+	for _, item := range listResp["data"].([]any) {
+		if item.(map[string]any)["identifier"] == "tra447-def-active" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "created asset must appear in default list view")
+}
+
+func TestCreateAsset_APIKey_DefaultsValidFromToNow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-create-default-vf")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	before := time.Now().Add(-2 * time.Second)
+	body := `{"identifier":"tra447-def-vf","name":"No date"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	vf, err := time.Parse(time.RFC3339, data["valid_from"].(string))
+	require.NoError(t, err)
+	after := time.Now().Add(2 * time.Second)
+	assert.Truef(t, vf.After(before) && vf.Before(after),
+		"valid_from %s must fall within [%s, %s]", vf, before, after)
+}
+
+func TestCreateAsset_APIKey_TypeInvalidListsAllowedValues(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-create-type-invalid")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"tra447-bad-type","name":"x","type":"widget"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var resp modelerrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "type", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Contains(t, resp.Error.Fields[0].Message, "asset")
+	assert.Contains(t, resp.Error.Fields[0].Message, "person")
+	assert.Contains(t, resp.Error.Fields[0].Message, "inventory")
+	require.NotNil(t, resp.Error.Fields[0].Params)
+	assert.ElementsMatch(t, []any{"asset", "person", "inventory"},
+		resp.Error.Fields[0].Params["allowed_values"])
+}
+
+func TestCreateAsset_APIKey_TypeOmittedDefaultsToAsset(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-create-type-default")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"tra447-default-type","name":"x"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "asset", data["type"])
+}
+
+func TestCreateAsset_APIKey_TypePerson_Accepted(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-create-type-person")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"tra447-a-person","name":"Jane","type":"person"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "person", resp["data"].(map[string]any)["type"])
+}
+
+func TestCreateAsset_APIKey_UnknownField_Rejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-create-unknown-field")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"x","name":"y","type":"asset","foo":"bar"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var resp modelerrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, string(modelerrors.ErrBadRequest), resp.Error.Type)
+}
+
+func TestUpdateAsset_APIKey_UnknownField_Rejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-update-unknown-field")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "tra447-u-unknown", Name: "x", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildAssetsPublicWriteRouter(store)
+	body := `{"name":"x","foo":"bar"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/tra447-u-unknown", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+}
+
+func TestCreateAsset_APIKey_ExplicitInactive_Respected(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-create-explicit-inactive")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"tra447-inactive","name":"x","is_active":false}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, false, resp["data"].(map[string]any)["is_active"])
 }
