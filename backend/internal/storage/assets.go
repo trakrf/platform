@@ -478,6 +478,54 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetVie
 	}, nil
 }
 
+// getAssetWithLocationByID returns an AssetWithLocation by surrogate id,
+// performing the LEFT JOIN on parent location and fetching identifiers.
+// Used by CreateAssetWithIdentifiers and UpdateAsset to emit the public
+// write-response shape. Returns (nil, nil) if the asset doesn't exist
+// or is soft-deleted.
+func (s *Storage) getAssetWithLocationByID(ctx context.Context, id int) (*asset.AssetWithLocation, error) {
+	query := `
+		SELECT
+			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
+			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
+			a.is_active, a.created_at, a.updated_at, a.deleted_at,
+			l.identifier
+		FROM trakrf.assets a
+		LEFT JOIN trakrf.locations l ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
+		WHERE a.id = $1 AND a.deleted_at IS NULL
+		LIMIT 1
+	`
+	var (
+		a      asset.Asset
+		locIdt *string
+	)
+	err := s.pool.QueryRow(ctx, query, id).Scan(
+		&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+		&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+		&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+		&locIdt,
+	)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get asset with location by id: %w", err)
+	}
+
+	identifiers, err := s.GetIdentifiersByAssetID(ctx, a.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &asset.AssetWithLocation{
+		AssetView: asset.AssetView{
+			Asset:       a,
+			Identifiers: identifiers,
+		},
+		CurrentLocationIdentifier: locIdt,
+	}, nil
+}
+
 func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) ([]asset.AssetView, error) {
 	assets, err := s.ListAllAssets(ctx, orgID, limit, offset)
 	if err != nil {
@@ -727,4 +775,11 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 	}
 
 	return fmt.Errorf("failed to create asset with identifiers: %w", err)
+}
+
+// GetAssetWithLocationByIDForTest exposes getAssetWithLocationByID to integration
+// tests in the same package. Production code must use GetAssetByIdentifier or
+// the CreateAssetWithIdentifiers / UpdateAsset return values.
+func (s *Storage) GetAssetWithLocationByIDForTest(ctx context.Context, id int) (*asset.AssetWithLocation, error) {
+	return s.getAssetWithLocationByID(ctx, id)
 }

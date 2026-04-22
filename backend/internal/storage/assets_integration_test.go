@@ -220,3 +220,50 @@ func TestGetAssetByIdentifier_CrossOrgLocationFenced(t *testing.T) {
 	require.Len(t, items, 1)
 	assert.Nil(t, items[0].CurrentLocationIdentifier)
 }
+
+// TestGetAssetWithLocationByID_ResolvesParent verifies that the private
+// helper returns AssetWithLocation with CurrentLocationIdentifier populated
+// when the asset has a live parent location, and nil when unset.
+// Guards against regression to the bare Asset/AssetView shape on write paths.
+func TestGetAssetWithLocationByID_ResolvesParent(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	// Create parent location inline
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Create asset with parent
+	placed, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-placed", Name: "Placed", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Happy path: parent identifier resolves
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), placed.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.NotNil(t, got.CurrentLocationIdentifier)
+	assert.Equal(t, "wh-1", *got.CurrentLocationIdentifier)
+	assert.Equal(t, "tra429-placed", got.Identifier)
+
+	// Create asset without parent
+	unplaced, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-unplaced", Name: "Unplaced", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Negative: no parent → nil CurrentLocationIdentifier
+	got2, err := store.GetAssetWithLocationByIDForTest(context.Background(), unplaced.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got2)
+	assert.Nil(t, got2.CurrentLocationIdentifier)
+}
