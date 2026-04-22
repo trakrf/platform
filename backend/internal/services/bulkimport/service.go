@@ -221,7 +221,10 @@ func (s *Service) processCSVAsync(
 			}
 		}
 
-		// Build CreateAssetWithIdentifiersRequest
+		// Build CreateAssetWithIdentifiersRequest. The parsed row always has
+		// concrete ValidFrom / IsActive values; wrap them as pointers.
+		validFrom := shared.FlexibleDate{Time: pr.asset.ValidFrom}
+		isActive := pr.asset.IsActive
 		request := asset.CreateAssetWithIdentifiersRequest{
 			CreateAssetRequest: asset.CreateAssetRequest{
 				OrgID:       pr.asset.OrgID,
@@ -229,8 +232,8 @@ func (s *Service) processCSVAsync(
 				Name:        pr.asset.Name,
 				Type:        pr.asset.Type,
 				Description: pr.asset.Description,
-				ValidFrom:   shared.FlexibleDate{Time: pr.asset.ValidFrom},
-				IsActive:    pr.asset.IsActive,
+				ValidFrom:   &validFrom,
+				IsActive:    &isActive,
 			},
 			Identifiers: identifiers,
 		}

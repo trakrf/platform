@@ -419,12 +419,26 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
 	}
 
-	// Convert FlexibleDate to time.Time for database
-	validFrom := request.ValidFrom.ToTime()
+	// Handler normally applies defaults; storage re-applies as a safety net
+	// for direct (non-handler) callers such as bulkimport.
+	var validFrom time.Time
+	if request.ValidFrom != nil && !request.ValidFrom.IsZero() {
+		validFrom = request.ValidFrom.ToTime()
+	} else {
+		validFrom = time.Now().UTC()
+	}
 	var validTo *time.Time
 	if request.ValidTo != nil && !request.ValidTo.IsZero() {
 		t := request.ValidTo.ToTime()
 		validTo = &t
+	}
+	isActive := true
+	if request.IsActive != nil {
+		isActive = *request.IsActive
+	}
+	assetType := request.Type
+	if assetType == "" {
+		assetType = "asset"
 	}
 
 	query := `SELECT * FROM trakrf.create_asset_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
@@ -436,12 +450,12 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		request.OrgID,
 		request.Identifier,
 		request.Name,
-		request.Type,
+		assetType,
 		request.Description,
 		request.CurrentLocationID,
 		validFrom,
 		validTo,
-		request.IsActive,
+		isActive,
 		request.Metadata,
 		identifiersJSON,
 	).Scan(&assetID, &identifierIDs)
