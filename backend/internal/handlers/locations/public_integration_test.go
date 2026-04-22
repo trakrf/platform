@@ -59,7 +59,7 @@ func seedLocOrgAndKey(t *testing.T, pool *pgxpool.Pool, store *storage.Storage, 
 	return orgID, tok
 }
 
-func buildLocationsPublicRouter(store *storage.Storage) *chi.Mux {
+func buildLocationsPublicReadRouter(store *storage.Storage) *chi.Mux {
 	handler := locations.NewHandler(store)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -67,6 +67,9 @@ func buildLocationsPublicRouter(store *storage.Storage) *chi.Mux {
 		r.Use(middleware.EitherAuth(store))
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", handler.ListLocations)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", handler.GetLocationByIdentifier)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
 	})
 	return r
 }
@@ -102,7 +105,7 @@ func TestListLocations_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	r := buildLocationsPublicRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -140,7 +143,7 @@ func TestListLocations_WrongScope(t *testing.T) {
 
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"assets:read"})
 
-	r := buildLocationsPublicRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -171,7 +174,7 @@ func TestGetLocationByIdentifier_CrossOrgReturns404(t *testing.T) {
 	// orgB: create key
 	_, tokenB := seedLocOrgAndKey(t, pool, store, "loc-cross-org-b", []string{"locations:read"})
 
-	r := buildLocationsPublicRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/loc-in-orga", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenB)
