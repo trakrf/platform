@@ -83,6 +83,7 @@ yarn.lock
 test-results/
 playwright-report/
 playwright/.cache/
+.playwright-mcp/
 
 # E2E test logs
 tests/e2e/logs/
@@ -99,8 +100,8 @@ temp/
 dev-mock.log
 .dev-mock.pid
 
-# Claude Code local settings
-.claude/settings.local.json
+# Claude Code workspace (hooks, lock files, per-session scratch)
+.claude/
 
 # macOS resource fork files
 ._*
