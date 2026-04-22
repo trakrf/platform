@@ -11,6 +11,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
@@ -24,6 +25,8 @@ var validate = func() *validator.Validate {
 // InventoryStorage defines the storage operations needed by the inventory handler.
 type InventoryStorage interface {
 	SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error)
+	GetLocationByIdentifier(ctx context.Context, orgID int, identifier string) (*location.Location, error)
+	GetAssetIDsByIdentifiers(ctx context.Context, orgID int, identifiers []string) (map[string]int, error)
 }
 
 // Handler handles inventory-related API requests
@@ -38,10 +41,20 @@ func NewHandler(storage InventoryStorage) *Handler {
 	}
 }
 
-// SaveRequest represents the request body for saving inventory scans
+// SaveRequest is the request body for POST /api/v1/inventory/save.
+//
+// External API consumers should use location_identifier and asset_identifiers.
+// The numeric location_id / asset_ids are accepted for backward compatibility
+// with the UI (which already has surrogate IDs in client state) and are hidden
+// from the public OpenAPI spec via swaggerignore.
+//
+// At least one of (location_id, location_identifier) and one of (asset_ids,
+// asset_identifiers) must be provided. See Save handler for cross-field rules.
 type SaveRequest struct {
-	LocationID int   `json:"location_id" validate:"required"`
-	AssetIDs   []int `json:"asset_ids" validate:"required,min=1"`
+	LocationID         int      `json:"location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
+	LocationIdentifier *string  `json:"location_identifier,omitempty" validate:"omitempty,min=1,max=255" example:"WH-01"`
+	AssetIDs           []int    `json:"asset_ids,omitempty" swaggerignore:"true" validate:"omitempty,min=1,dive,min=1"`
+	AssetIdentifiers   []string `json:"asset_identifiers,omitempty" validate:"omitempty,min=1,dive,min=1,max=255" example:"ASSET-0001"`
 }
 
 // SaveResponse is the typed envelope returned on success by POST /api/v1/inventory/save.

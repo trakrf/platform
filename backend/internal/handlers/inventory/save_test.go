@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -23,10 +24,37 @@ import (
 type mockInventoryStorage struct {
 	saveResult *storage.SaveInventoryResult
 	saveError  error
+
+	// Identifier resolution stubs.
+	locationByIdentifier      map[string]*location.Location
+	locationByIdentifierError error
+
+	assetIDsByIdentifiers      map[string]int
+	assetIDsByIdentifiersError error
 }
 
 func (m *mockInventoryStorage) SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error) {
 	return m.saveResult, m.saveError
+}
+
+func (m *mockInventoryStorage) GetLocationByIdentifier(ctx context.Context, orgID int, identifier string) (*location.Location, error) {
+	if m.locationByIdentifierError != nil {
+		return nil, m.locationByIdentifierError
+	}
+	return m.locationByIdentifier[identifier], nil
+}
+
+func (m *mockInventoryStorage) GetAssetIDsByIdentifiers(ctx context.Context, orgID int, identifiers []string) (map[string]int, error) {
+	if m.assetIDsByIdentifiersError != nil {
+		return nil, m.assetIDsByIdentifiersError
+	}
+	out := make(map[string]int, len(identifiers))
+	for _, id := range identifiers {
+		if v, ok := m.assetIDsByIdentifiers[id]; ok {
+			out[id] = v
+		}
+	}
+	return out, nil
 }
 
 // newTestRequest creates a POST request with JSON body and org claims set.
@@ -223,6 +251,27 @@ func TestSaveRequest_Validation(t *testing.T) {
 			request: SaveRequest{
 				LocationID: 1,
 				AssetIDs:   nil,
+			},
+			wantErr: true,
+		},
+		{
+			name: "identifier-only request validates",
+			request: SaveRequest{
+				LocationIdentifier: ptr("WH-01"),
+				AssetIdentifiers:   []string{"ASSET-0001"},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "all empty fails (legacy required-style still triggers somewhere)",
+			request: SaveRequest{},
+			wantErr: false, // struct-level validator no longer rejects; cross-field check is in handler
+		},
+		{
+			name: "asset_identifiers with empty string element fails",
+			request: SaveRequest{
+				LocationIdentifier: ptr("WH-01"),
+				AssetIdentifiers:   []string{""},
 			},
 			wantErr: true,
 		},
@@ -517,3 +566,5 @@ func TestSave_Success(t *testing.T) {
 	assert.Equal(t, "Warehouse B", response.Data.LocationName)
 	assert.Equal(t, ts, response.Data.Timestamp)
 }
+
+func ptr[T any](v T) *T { return &v }
