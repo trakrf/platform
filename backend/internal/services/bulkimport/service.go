@@ -86,22 +86,22 @@ func (s *Service) processCSVAsync(
 				Error: fmt.Sprintf("Panic during processing: %v", r),
 			}
 			fmt.Printf("PANIC in processCSVAsync for job %d: %v\n", jobID, r)
-			s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, 1, 0, []bulkimport.ErrorDetail{panicErr})
-			s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+			s.storage.UpdateBulkImportJobProgress(ctx, orgID, jobID, 0, 1, 0, []bulkimport.ErrorDetail{panicErr})
+			s.storage.UpdateBulkImportJobStatus(ctx, orgID, jobID, "failed")
 		}
 	}()
 
 	fmt.Printf("Starting processCSVAsync for job %d, orgID %d, records: %d\n", jobID, orgID, len(records))
 
-	if err := s.storage.UpdateBulkImportJobStatus(ctx, jobID, "processing"); err != nil {
+	if err := s.storage.UpdateBulkImportJobStatus(ctx, orgID, jobID, "processing"); err != nil {
 		fmt.Printf("Failed to update job status to processing for job %d: %v\n", jobID, err)
 		panicErr := bulkimport.ErrorDetail{
 			Row:   0,
 			Field: "system",
 			Error: fmt.Sprintf("Failed to update job status: %v", err),
 		}
-		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, 1, 0, []bulkimport.ErrorDetail{panicErr})
-		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+		s.storage.UpdateBulkImportJobProgress(ctx, orgID, jobID, 0, 1, 0, []bulkimport.ErrorDetail{panicErr})
+		s.storage.UpdateBulkImportJobStatus(ctx, orgID, jobID, "failed")
 		return
 	}
 
@@ -198,8 +198,8 @@ func (s *Service) processCSVAsync(
 	if len(allErrors) > 0 {
 		fmt.Printf("Found %d total errors for job %d, marking as failed\n", len(allErrors), jobID)
 		// processed_rows = 0 (no successful inserts), failed_rows = total (all rows failed validation)
-		s.storage.UpdateBulkImportJobProgress(ctx, jobID, 0, totalDataRows, 0, allErrors)
-		s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+		s.storage.UpdateBulkImportJobProgress(ctx, orgID, jobID, 0, totalDataRows, 0, allErrors)
+		s.storage.UpdateBulkImportJobStatus(ctx, orgID, jobID, "failed")
 		return
 	}
 
@@ -259,16 +259,16 @@ func (s *Service) processCSVAsync(
 
 	if len(insertErrors) > 0 {
 		fmt.Printf("Insert completed with errors for job %d: %d success, %d failed\n", jobID, successCount, len(insertErrors))
-		s.storage.UpdateBulkImportJobProgress(ctx, jobID, successCount, len(insertErrors), tagsCreated, insertErrors)
+		s.storage.UpdateBulkImportJobProgress(ctx, orgID, jobID, successCount, len(insertErrors), tagsCreated, insertErrors)
 		if successCount == 0 {
-			s.storage.UpdateBulkImportJobStatus(ctx, jobID, "failed")
+			s.storage.UpdateBulkImportJobStatus(ctx, orgID, jobID, "failed")
 		} else {
-			s.storage.UpdateBulkImportJobStatus(ctx, jobID, "completed")
+			s.storage.UpdateBulkImportJobStatus(ctx, orgID, jobID, "completed")
 		}
 		return
 	}
 
 	fmt.Printf("Successfully completed job %d with %d assets and %d tags\n", jobID, successCount, tagsCreated)
-	s.storage.UpdateBulkImportJobProgress(ctx, jobID, successCount, 0, tagsCreated, nil)
-	s.storage.UpdateBulkImportJobStatus(ctx, jobID, "completed")
+	s.storage.UpdateBulkImportJobProgress(ctx, orgID, jobID, successCount, 0, tagsCreated, nil)
+	s.storage.UpdateBulkImportJobStatus(ctx, orgID, jobID, "completed")
 }
