@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -25,7 +26,7 @@ var validate = func() *validator.Validate {
 // InventoryStorage defines the storage operations needed by the inventory handler.
 type InventoryStorage interface {
 	SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error)
-	GetLocationByIdentifier(ctx context.Context, orgID int, identifier string) (*location.Location, error)
+	GetLocationByIdentifier(ctx context.Context, orgID int, identifier string) (*location.LocationWithParent, error)
 	GetAssetIDsByIdentifiers(ctx context.Context, orgID int, identifiers []string) (map[string]int, error)
 }
 
@@ -86,7 +87,6 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Decode and validate request
 	var request SaveRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
@@ -98,10 +98,84 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Call storage layer
+	// Cross-field: at least one of (location_id, location_identifier).
+	hasLocID := request.LocationID > 0
+	hasLocIdent := request.LocationIdentifier != nil && *request.LocationIdentifier != ""
+	if !hasLocID && !hasLocIdent {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			apierrors.InventorySaveFailed,
+			"location_identifier or location_id is required", requestID)
+		return
+	}
+
+	// Cross-field: at least one of (asset_ids, asset_identifiers).
+	hasAssetIDs := len(request.AssetIDs) > 0
+	hasAssetIdents := len(request.AssetIdentifiers) > 0
+	if !hasAssetIDs && !hasAssetIdents {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			apierrors.InventorySaveFailed,
+			"asset_identifiers or asset_ids is required", requestID)
+		return
+	}
+	if hasAssetIDs && hasAssetIdents {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			apierrors.InventorySaveFailed,
+			"specify either asset_identifiers or asset_ids, not both", requestID)
+		return
+	}
+
+	// Resolve location_identifier → numeric.
+	locationID := request.LocationID
+	if hasLocIdent {
+		loc, err := h.storage.GetLocationByIdentifier(r.Context(), orgID, *request.LocationIdentifier)
+		if err != nil {
+			httputil.RespondStorageError(w, r, err, requestID)
+			return
+		}
+		if loc == nil {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.InventorySaveFailed,
+				fmt.Sprintf("location_identifier %q not found", *request.LocationIdentifier), requestID)
+			return
+		}
+		if hasLocID && request.LocationID != loc.ID {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.InventorySaveFailed,
+				"location_identifier and location_id disagree", requestID)
+			return
+		}
+		locationID = loc.ID
+	}
+
+	// Resolve asset_identifiers → numeric IDs (one query).
+	assetIDs := request.AssetIDs
+	if hasAssetIdents {
+		resolved, err := h.storage.GetAssetIDsByIdentifiers(r.Context(), orgID, request.AssetIdentifiers)
+		if err != nil {
+			httputil.RespondStorageError(w, r, err, requestID)
+			return
+		}
+		ids := make([]int, 0, len(request.AssetIdentifiers))
+		var missing []string
+		for _, ident := range request.AssetIdentifiers {
+			if id, ok := resolved[ident]; ok {
+				ids = append(ids, id)
+			} else {
+				missing = append(missing, ident)
+			}
+		}
+		if len(missing) > 0 {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.InventorySaveFailed,
+				fmt.Sprintf("asset_identifier(s) not found: %s", strings.Join(missing, ", ")), requestID)
+			return
+		}
+		assetIDs = ids
+	}
+
 	result, err := h.storage.SaveInventoryScans(r.Context(), orgID, storage.SaveInventoryRequest{
-		LocationID: request.LocationID,
-		AssetIDs:   request.AssetIDs,
+		LocationID: locationID,
+		AssetIDs:   assetIDs,
 	})
 
 	if err != nil {
@@ -109,8 +183,8 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(errStr, "not found or access denied") {
 			logger.Get().Warn().
 				Int("org_id", orgID).
-				Int("location_id", request.LocationID).
-				Ints("asset_ids", request.AssetIDs).
+				Int("location_id", locationID).
+				Ints("asset_ids", assetIDs).
 				Str("request_id", requestID).
 				Str("error", errStr).
 				Msg("Inventory save denied: org context mismatch")
@@ -123,7 +197,6 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Return success
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
 }
 
