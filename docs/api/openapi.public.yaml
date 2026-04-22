@@ -94,6 +94,11 @@ components:
                     example: "2026-01-01"
                     type: string
             type: object
+        assets.CreateAssetResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/asset.PublicAssetView'
+            type: object
         assets.GetAssetResponse:
             properties:
                 data:
@@ -114,6 +119,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            type: object
+        assets.UpdateAssetResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/asset.PublicAssetView'
             type: object
         errors.ErrorResponse:
             properties:
@@ -273,6 +283,11 @@ components:
                     example: "2026-12-14"
                     type: string
             type: object
+        locations.CreateLocationResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/location.PublicLocationView'
+            type: object
         locations.GetLocationResponse:
             properties:
                 data:
@@ -293,6 +308,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            type: object
+        locations.UpdateLocationResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/location.PublicLocationView'
             type: object
         shared.TagIdentifier:
             properties:
@@ -488,9 +508,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: asset.AssetView'
+                                $ref: '#/components/schemas/assets.CreateAssetResponse'
+                    description: Created
                 "400":
                     content:
                         application/json:
@@ -676,9 +695,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: asset.Asset'
+                                $ref: '#/components/schemas/assets.UpdateAssetResponse'
+                    description: OK
                 "400":
                     content:
                         application/json:
@@ -1084,9 +1102,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: location.LocationView'
+                                $ref: '#/components/schemas/locations.CreateLocationResponse'
+                    description: Created
                 "400":
                     content:
                         application/json:
@@ -1278,9 +1295,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: location.Location'
+                                $ref: '#/components/schemas/locations.UpdateLocationResponse'
+                    description: OK
                 "400":
                     content:
                         application/json:
