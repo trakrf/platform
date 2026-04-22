@@ -44,7 +44,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Accept       json
 // @Produce      json
 // @Param        request  body  asset.CreateAssetWithIdentifiersRequest  true  "Asset to create with optional identifiers"
-// @Success      201  {object}  map[string]any                "data: asset.AssetView"
+// @Success      201  {object}  assets.CreateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -99,7 +99,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        identifier  path  string                      true  "Asset identifier"
 // @Param        request     body  asset.UpdateAssetRequest    true  "Fields to update"
-// @Success      200  {object}  map[string]any                "data: asset.Asset"
+// @Success      200  {object}  assets.UpdateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -293,6 +293,17 @@ type ListAssetsResponse struct {
 
 // GetAssetResponse is the typed envelope returned by GET /api/v1/assets/{identifier}.
 type GetAssetResponse struct {
+	Data asset.PublicAssetView `json:"data"`
+}
+
+// CreateAssetResponse is the typed envelope returned by POST /api/v1/assets.
+type CreateAssetResponse struct {
+	Data asset.PublicAssetView `json:"data"`
+}
+
+// UpdateAssetResponse is the typed envelope returned by PUT /api/v1/assets/{identifier}
+// and PUT /api/v1/assets/by-id/{id}.
+type UpdateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
 
