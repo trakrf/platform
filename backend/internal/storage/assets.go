@@ -483,6 +483,7 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetVie
 // Used by CreateAssetWithIdentifiers and UpdateAsset to emit the public
 // write-response shape. Returns (nil, nil) if the asset doesn't exist
 // or is soft-deleted.
+// Caller MUST have already authorized access to this asset id; this helper does not filter by org_id.
 func (s *Storage) getAssetWithLocationByID(ctx context.Context, id int) (*asset.AssetWithLocation, error) {
 	query := `
 		SELECT

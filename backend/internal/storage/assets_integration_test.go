@@ -267,3 +267,75 @@ func TestGetAssetWithLocationByID_ResolvesParent(t *testing.T) {
 	require.NotNil(t, got2)
 	assert.Nil(t, got2.CurrentLocationIdentifier)
 }
+
+// TestGetAssetWithLocationByID_SoftDeletedAssetReturnsNil verifies the helper
+// honors the `a.deleted_at IS NULL` predicate — a tombstoned asset must surface
+// as (nil, nil), matching GetAssetByIdentifier's semantics.
+func TestGetAssetWithLocationByID_SoftDeletedAssetReturnsNil(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	a, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-doomed", Name: "Doomed", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Soft-delete via the storage method (same path production uses).
+	deleted, err := store.DeleteAsset(context.Background(), orgID, a.ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), a.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got, "soft-deleted asset should surface as nil, not the stale row")
+}
+
+// TestGetAssetWithLocationByID_SoftDeletedLocationYieldsNilIdentifier verifies
+// the LEFT JOIN's `l.deleted_at IS NULL` predicate — a live asset pointing at
+// a tombstoned location should expose nil CurrentLocationIdentifier, never
+// the stale identifier.
+func TestGetAssetWithLocationByID_SoftDeletedLocationYieldsNilIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "tra429-loc-tombstone", Name: "Tombstone",
+		Path: "tra429-loc-tombstone", ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	a, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-stale-ref", Name: "StaleRef", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Soft-delete the parent location, leaving the FK dangling.
+	deleted, err := store.DeleteLocation(context.Background(), orgID, loc.ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), a.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Nil(t, got.CurrentLocationIdentifier,
+		"LEFT JOIN's deleted_at IS NULL predicate must suppress the stale parent identifier")
+}
+
+// TestGetAssetWithLocationByID_UnknownIDReturnsNil verifies the (nil, nil)
+// sentinel on pgx.ErrNoRows for a surrogate id that names no asset.
+func TestGetAssetWithLocationByID_UnknownIDReturnsNil(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), 99999999)
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
