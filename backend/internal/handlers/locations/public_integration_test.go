@@ -187,8 +187,8 @@ func TestGetLocationByIdentifier_CrossOrgReturns404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 }
 
-func TestLocationsHierarchy_MissingScope_Returns403(t *testing.T) {
-	t.Setenv("JWT_SECRET", "tra446-hierarchy-missing-scope")
+func TestLocationsHierarchy_WrongScope_Returns403(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra446-hierarchy-wrong-scope")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -208,14 +208,17 @@ func TestLocationsHierarchy_MissingScope_Returns403(t *testing.T) {
 
 	r := buildLocationsPublicReadRouter(store)
 
-	paths := []string{
-		"/api/v1/locations/scope-test/ancestors",
-		"/api/v1/locations/scope-test/children",
-		"/api/v1/locations/scope-test/descendants",
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"ancestors", "/api/v1/locations/scope-test/ancestors"},
+		{"children", "/api/v1/locations/scope-test/children"},
+		{"descendants", "/api/v1/locations/scope-test/descendants"},
 	}
-	for _, p := range paths {
-		t.Run(p, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, p, nil)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			req.Header.Set("Authorization", "Bearer "+token)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
