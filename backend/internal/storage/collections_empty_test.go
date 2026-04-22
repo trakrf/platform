@@ -273,12 +273,15 @@ func TestListOrgMembers_EmptyReturnsNonNil(t *testing.T) {
 func TestListCurrentLocations_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.asset_scans`).
 		WithArgs(1, nil, nil, 10, 0).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"asset_id", "asset_name", "asset_identifier",
 			"location_id", "location_name", "location_identifier", "last_seen",
 		}))
+	mock.ExpectCommit()
 
 	items, err := storage.ListCurrentLocations(context.Background(), 1, report.CurrentLocationFilter{Limit: 10, Offset: 0})
 	assert.NoError(t, err)
