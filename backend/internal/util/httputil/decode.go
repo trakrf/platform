@@ -30,6 +30,18 @@ func DecodeJSON(r *http.Request, dst any) error {
 	return nil
 }
 
+// DecodeJSONStrict is DecodeJSON with DisallowUnknownFields. Use on
+// public API endpoints where unrecognised body fields should produce a
+// 400 rather than being silently ignored.
+func DecodeJSONStrict(r *http.Request, dst any) error {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return &JSONDecodeError{Cause: err}
+	}
+	return nil
+}
+
 // RespondDecodeError writes a 400 with a stable, human-safe detail string.
 // Use this as the failure branch partner of DecodeJSON.
 func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, requestID string) {

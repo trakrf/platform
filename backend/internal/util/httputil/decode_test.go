@@ -1,6 +1,7 @@
 package httputil_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
@@ -56,5 +57,36 @@ func TestRespondDecodeError_StableDetail(t *testing.T) {
 	}
 	if resp.Error.Type != string(apierrors.ErrBadRequest) {
 		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrBadRequest)
+	}
+}
+
+func TestDecodeJSONStrict_RejectsUnknownField(t *testing.T) {
+	type target struct {
+		Name string `json:"name"`
+	}
+	var got target
+	r := httptest.NewRequest("POST", "/", bytes.NewBufferString(`{"name":"x","extra":1}`))
+	err := httputil.DecodeJSONStrict(r, &got)
+
+	if err == nil {
+		t.Fatalf("expected strict decode to reject unknown field, got nil")
+	}
+	var decErr *httputil.JSONDecodeError
+	if !errors.As(err, &decErr) {
+		t.Fatalf("expected *httputil.JSONDecodeError, got %T", err)
+	}
+}
+
+func TestDecodeJSONStrict_AcceptsKnownFieldsOnly(t *testing.T) {
+	type target struct {
+		Name string `json:"name"`
+	}
+	var got target
+	r := httptest.NewRequest("POST", "/", bytes.NewBufferString(`{"name":"x"}`))
+	if err := httputil.DecodeJSONStrict(r, &got); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Name != "x" {
+		t.Fatalf("Name = %q, want %q", got.Name, "x")
 	}
 }
