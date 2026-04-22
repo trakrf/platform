@@ -299,130 +299,129 @@ func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, erro
 	return result.RowsAffected() > 0, nil
 }
 
-// GetAncestors returns all ancestor locations of a given location (from root to parent)
+// GetAncestors returns all ancestor locations of a given location (from root to parent),
+// projected through LocationWithParent so every non-root carries its parent's natural
+// key and its tag identifiers — same shape as GET /locations/{identifier}.
 // Uses ltree @> operator: ancestor_path @> child_path.
 // Both the outer query and the path subselect are scoped to orgID so cross-tenant paths
 // that happen to share an identifier (e.g. two orgs both using "whs-01") stay isolated.
-func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.Location, error) {
+func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
 		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
 		WHERE l.org_id = $1
 		  AND l.path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
 		  AND l.id != $2
 		  AND l.deleted_at IS NULL
 		ORDER BY l.depth
 	`
-	rows, err := s.pool.Query(ctx, query, orgID, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ancestors: %w", err)
-	}
-	defer rows.Close()
-
-	locations := []location.Location{}
-	for rows.Next() {
-		var loc location.Location
-		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
-			&loc.UpdatedAt, &loc.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan ancestor: %w", err)
-		}
-		locations = append(locations, loc)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating ancestors: %w", err)
-	}
-
-	return locations, nil
+	return s.scanHierarchyRows(ctx, query, "ancestor", orgID, id)
 }
 
-// GetDescendants returns all descendant locations of a given location (children at all levels)
+// GetDescendants returns all descendant locations of a given location (children at all levels),
+// projected through LocationWithParent so every entry carries its parent's natural key
+// and its tag identifiers — same shape as GET /locations/{identifier}.
 // Uses ltree <@ operator: child_path <@ parent_path.
 // Both the outer query and the path subselect are scoped to orgID: ltree paths are derived
 // from identifier segments alone (see migration 000018), so without this fence two tenants
 // with identical identifier hierarchies would see each other's subtrees.
-func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location.Location, error) {
+func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
 		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
 		WHERE l.org_id = $1
 		  AND l.path <@ (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
 		  AND l.id != $2
 		  AND l.deleted_at IS NULL
 		ORDER BY l.path
 	`
-	rows, err := s.pool.Query(ctx, query, orgID, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get descendants: %w", err)
-	}
-	defer rows.Close()
-
-	locations := []location.Location{}
-	for rows.Next() {
-		var loc location.Location
-		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
-			&loc.UpdatedAt, &loc.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan descendant: %w", err)
-		}
-		locations = append(locations, loc)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating descendants: %w", err)
-	}
-
-	return locations, nil
+	return s.scanHierarchyRows(ctx, query, "descendant", orgID, id)
 }
 
-// GetChildren returns immediate children of a given location (depth = parent_depth + 1).
+// GetChildren returns immediate children of a given location (depth = parent_depth + 1),
+// projected through LocationWithParent for parent-identifier and tag-identifier parity
+// with GET /locations/{identifier}.
 // parent_location_id references a globally unique PK so the query alone is not cross-tenant
 // reachable, but the orgID filter keeps the invariant explicit (defense in depth) and in
 // line with GetAncestors/GetDescendants.
-func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Location, error) {
+func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
 		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
 		WHERE l.org_id = $1
 		  AND l.parent_location_id = $2
 		  AND l.deleted_at IS NULL
 		ORDER BY l.name
 	`
-	rows, err := s.pool.Query(ctx, query, orgID, id)
+	return s.scanHierarchyRows(ctx, query, "child", orgID, id)
+}
+
+// scanHierarchyRows runs a hierarchy query whose projection ends in p.identifier
+// (LEFT JOIN parent) and then bulk-fetches tag identifiers for the returned locations.
+// kind ("ancestor"/"descendant"/"child") is interpolated into error messages.
+func (s *Storage) scanHierarchyRows(
+	ctx context.Context, query, kind string, args ...any,
+) ([]location.LocationWithParent, error) {
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get children: %w", err)
+		return nil, fmt.Errorf("failed to get %ss: %w", kind, err)
 	}
 	defer rows.Close()
 
-	locations := []location.Location{}
+	out := []location.LocationWithParent{}
 	for rows.Next() {
-		var loc location.Location
-		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
-			&loc.UpdatedAt, &loc.DeletedAt,
+		var (
+			loc    location.Location
+			parIdt *string
 		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan child: %w", err)
+		if err := rows.Scan(
+			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
+			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
+			&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+			&parIdt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan %s: %w", kind, err)
 		}
-		locations = append(locations, loc)
+		out = append(out, location.LocationWithParent{
+			LocationView:     location.LocationView{Location: loc},
+			ParentIdentifier: parIdt,
+		})
 	}
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating children: %w", err)
+		return nil, fmt.Errorf("error iterating %ss: %w", kind, err)
 	}
 
-	return locations, nil
+	if len(out) > 0 {
+		ids := make([]int, len(out))
+		for i, l := range out {
+			ids[i] = l.ID
+		}
+		idMap, err := s.getIdentifiersForLocations(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for i := range out {
+			out[i].Identifiers = idMap[out[i].ID]
+			if out[i].Identifiers == nil {
+				out[i].Identifiers = []shared.TagIdentifier{}
+			}
+		}
+	}
+
+	return out, nil
 }
 
 // CreateLocationWithIdentifiers creates a location with tag identifiers in a single transaction

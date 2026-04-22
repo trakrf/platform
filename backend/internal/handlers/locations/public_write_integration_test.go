@@ -505,14 +505,21 @@ func TestLocationsGetAncestors_ByIdentifier_Works(t *testing.T) {
 	pool := store.Pool().(*pgxpool.Pool)
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
-	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "anc-parent", Name: "Parent", Path: "anc-parent",
+	root, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "anc-root", Name: "Root", Path: "anc-root",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "anc-parent", Name: "Parent", Path: "anc-root.anc-parent",
+		ParentLocationID: &root.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "anc-child", Name: "Child", Path: "anc-parent.anc-child",
+		OrgID: orgID, Identifier: "anc-child", Name: "Child", Path: "anc-root.anc-parent.anc-child",
 		ParentLocationID: &parent.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
@@ -528,8 +535,16 @@ func TestLocationsGetAncestors_ByIdentifier_Works(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].([]any)
-	require.Len(t, data, 1)
-	assert.Equal(t, "anc-parent", data[0].(map[string]any)["identifier"])
+	require.Len(t, data, 2)
+
+	rootNode := data[0].(map[string]any)
+	assert.Equal(t, "anc-root", rootNode["identifier"])
+	_, rootHasParent := rootNode["parent"]
+	assert.False(t, rootHasParent, "root ancestor must omit parent")
+
+	parentNode := data[1].(map[string]any)
+	assert.Equal(t, "anc-parent", parentNode["identifier"])
+	assert.Equal(t, "anc-root", parentNode["parent"], "non-root ancestor must carry parent identifier")
 }
 
 func TestLocationsGetAncestors_UnknownIdentifier_Returns404(t *testing.T) {
@@ -580,7 +595,9 @@ func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].([]any)
 	require.Len(t, data, 1)
-	assert.Equal(t, "children-child", data[0].(map[string]any)["identifier"])
+	child := data[0].(map[string]any)
+	assert.Equal(t, "children-child", child["identifier"])
+	assert.Equal(t, "children-parent", child["parent"], "child must carry parent identifier")
 }
 
 func TestLocationsGetChildren_UnknownIdentifier_Returns404(t *testing.T) {
@@ -638,6 +655,16 @@ func TestLocationsGetDescendants_ByIdentifier_Works(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].([]any)
 	require.Len(t, data, 2)
+
+	byIdentifier := map[string]map[string]any{}
+	for _, entry := range data {
+		m := entry.(map[string]any)
+		byIdentifier[m["identifier"].(string)] = m
+	}
+	require.Contains(t, byIdentifier, "desc-child")
+	require.Contains(t, byIdentifier, "desc-grandchild")
+	assert.Equal(t, "desc-root", byIdentifier["desc-child"]["parent"], "direct descendant must carry root as parent")
+	assert.Equal(t, "desc-child", byIdentifier["desc-grandchild"]["parent"], "grandchild must carry intermediate parent")
 }
 
 func TestLocationsGetDescendants_UnknownIdentifier_Returns404(t *testing.T) {

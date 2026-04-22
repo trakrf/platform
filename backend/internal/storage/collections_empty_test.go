@@ -150,6 +150,7 @@ func TestGetAncestors_EmptyReturnsNonNil(t *testing.T) {
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
+			"parent_identifier",
 		}))
 
 	ancestors, err := storage.GetAncestors(context.Background(), 1, 1)
@@ -167,6 +168,7 @@ func TestGetDescendants_EmptyReturnsNonNil(t *testing.T) {
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
+			"parent_identifier",
 		}))
 
 	descendants, err := storage.GetDescendants(context.Background(), 1, 1)
@@ -184,6 +186,7 @@ func TestGetChildren_EmptyReturnsNonNil(t *testing.T) {
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
+			"parent_identifier",
 		}))
 
 	children, err := storage.GetChildren(context.Background(), 1, 1)

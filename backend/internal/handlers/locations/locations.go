@@ -572,14 +572,13 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
 }
 
-// toPublicLocationViews is the hierarchy-endpoint response adapter: it strips internal
-// fields (id, org_id, parent_location_id) and matches the shape returned by the
-// non-hierarchy GET /locations/{identifier}. Parent and Identifiers stay empty because
-// the hierarchy queries don't fetch them.
-func toPublicLocationViews(locs []location.Location) []location.PublicLocationView {
+// toPublicLocationViews is the hierarchy-endpoint response adapter. Each input carries
+// the parent's natural key (LEFT JOIN) and its tag identifiers (bulk-fetched) so the
+// output shape is identical to GET /locations/{identifier}.
+func toPublicLocationViews(locs []location.LocationWithParent) []location.PublicLocationView {
 	views := make([]location.PublicLocationView, len(locs))
 	for i, l := range locs {
-		views[i] = location.ToPublicLocationViewFromLocation(l)
+		views[i] = location.ToPublicLocationView(l)
 	}
 	return views
 }
