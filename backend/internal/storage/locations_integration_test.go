@@ -172,7 +172,7 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Happy path: parent identifier resolves
-	got, err := store.GetLocationWithParentByIDForTest(context.Background(), child.ID)
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, child.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.NotNil(t, got.ParentIdentifier)
@@ -187,7 +187,7 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Negative: no parent → nil ParentIdentifier
-	got2, err := store.GetLocationWithParentByIDForTest(context.Background(), root.ID)
+	got2, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, root.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got2)
 	assert.Nil(t, got2.ParentIdentifier)
@@ -214,7 +214,7 @@ func TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, deleted)
 
-	got, err := store.GetLocationWithParentByIDForTest(context.Background(), loc.ID)
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, loc.ID)
 	require.NoError(t, err)
 	assert.Nil(t, got, "soft-deleted location should surface as nil, not the stale row")
 }
@@ -248,7 +248,7 @@ func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testi
 	require.NoError(t, err)
 	require.True(t, deleted)
 
-	got, err := store.GetLocationWithParentByIDForTest(context.Background(), child.ID)
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, child.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Nil(t, got.ParentIdentifier,
@@ -261,7 +261,7 @@ func TestGetLocationWithParentByID_UnknownIDReturnsNil(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
-	got, err := store.GetLocationWithParentByIDForTest(context.Background(), 99999999)
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), 0, 99999999)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }

@@ -49,72 +49,59 @@ func (e *InventoryAccessError) IsAccessDenied() bool {
 
 // SaveInventoryScans persists scanned assets to the asset_scans hypertable.
 // It validates that both the location and all assets belong to the specified org,
-// then batch inserts records within a transaction.
+// then batch inserts records — all within a single WithOrgTx transaction so that
+// RLS is active for the validation reads and the TOCTOU gap is eliminated.
 func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInventoryRequest) (*SaveInventoryResult, error) {
 	if len(req.AssetIDs) == 0 {
 		return nil, fmt.Errorf("no assets to save")
 	}
 
-	// 1. Validate location belongs to org and get its name
 	var locationName string
-	locationQuery := `
-		SELECT name FROM trakrf.locations
-		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-	`
-	err := s.pool.QueryRow(ctx, locationQuery, req.LocationID, orgID).Scan(&locationName)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, &InventoryAccessError{
-				Reason:     "location",
+	timestamp := time.Now()
+
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		// 1. Validate location belongs to org and get its name
+		err := tx.QueryRow(ctx, `SELECT name FROM trakrf.locations WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`, req.LocationID, orgID).Scan(&locationName)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return &InventoryAccessError{
+					Reason:     "location",
+					OrgID:      orgID,
+					LocationID: req.LocationID,
+				}
+			}
+			return fmt.Errorf("failed to validate location: %w", err)
+		}
+
+		// 2. Validate all assets belong to org (batch query)
+		var validAssetCount int
+		err = tx.QueryRow(ctx, `SELECT COUNT(*) FROM trakrf.assets WHERE id = ANY($1) AND org_id = $2 AND deleted_at IS NULL`, req.AssetIDs, orgID).Scan(&validAssetCount)
+		if err != nil {
+			return fmt.Errorf("failed to validate assets: %w", err)
+		}
+		if validAssetCount != len(req.AssetIDs) {
+			return &InventoryAccessError{
+				Reason:     "assets",
 				OrgID:      orgID,
-				LocationID: req.LocationID,
+				AssetIDs:   req.AssetIDs,
+				ValidCount: validAssetCount,
+				TotalCount: len(req.AssetIDs),
 			}
 		}
-		return nil, fmt.Errorf("failed to validate location: %w", err)
-	}
 
-	// 2. Validate all assets belong to org (batch query)
-	assetCountQuery := `
-		SELECT COUNT(*) FROM trakrf.assets
-		WHERE id = ANY($1) AND org_id = $2 AND deleted_at IS NULL
-	`
-	var validAssetCount int
-	err = s.pool.QueryRow(ctx, assetCountQuery, req.AssetIDs, orgID).Scan(&validAssetCount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate assets: %w", err)
-	}
-	if validAssetCount != len(req.AssetIDs) {
-		return nil, &InventoryAccessError{
-			Reason:     "assets",
-			OrgID:      orgID,
-			AssetIDs:   req.AssetIDs,
-			ValidCount: validAssetCount,
-			TotalCount: len(req.AssetIDs),
+		// 3. Batch INSERT into asset_scans
+		insertQuery := `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, identifier_scan_id) VALUES ($1, $2, $3, $4, NULL, NULL)`
+		for _, assetID := range req.AssetIDs {
+			if _, err := tx.Exec(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID); err != nil {
+				return fmt.Errorf("failed to insert asset scan for asset %d: %w", assetID, err)
+			}
 		}
-	}
 
-	// 3. Begin transaction and batch INSERT into asset_scans
-	timestamp := time.Now()
-	tx, err := s.pool.Begin(ctx)
+		return nil
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	insertQuery := `
-		INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, identifier_scan_id)
-		VALUES ($1, $2, $3, $4, NULL, NULL)
-	`
-
-	for _, assetID := range req.AssetIDs {
-		_, err = tx.Exec(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert asset scan for asset %d: %w", assetID, err)
-		}
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, err
 	}
 
 	return &SaveInventoryResult{

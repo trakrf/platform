@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/report"
 )
 
@@ -46,36 +47,37 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 		qArg = q
 	}
 
-	rows, err := s.pool.Query(ctx, query, orgID, locIdentsArg, qArg, filter.Limit, filter.Offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list current locations: %w", err)
-	}
-	defer rows.Close()
-
 	items := []report.CurrentLocationItem{}
-	for rows.Next() {
-		var item report.CurrentLocationItem
-		err := rows.Scan(
-			&item.AssetID,
-			&item.AssetName,
-			&item.AssetIdentifier,
-			&item.LocationID,
-			&item.LocationName,
-			&item.LocationIdentifier,
-			&item.LastSeen,
-		)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, locIdentsArg, qArg, filter.Limit, filter.Offset)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan current location: %w", err)
+			return fmt.Errorf("failed to list current locations: %w", err)
 		}
-		items = append(items, item)
-	}
+		defer rows.Close()
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating current locations: %w", err)
-	}
+		for rows.Next() {
+			var item report.CurrentLocationItem
+			if err := rows.Scan(
+				&item.AssetID,
+				&item.AssetName,
+				&item.AssetIdentifier,
+				&item.LocationID,
+				&item.LocationName,
+				&item.LocationIdentifier,
+				&item.LastSeen,
+			); err != nil {
+				return fmt.Errorf("failed to scan current location: %w", err)
+			}
+			items = append(items, item)
+		}
 
-	if items == nil {
-		items = []report.CurrentLocationItem{}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("error iterating current locations: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return items, nil
@@ -115,7 +117,9 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 	}
 
 	var count int
-	err := s.pool.QueryRow(ctx, query, orgID, locIdentsArg, qArg).Scan(&count)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, locIdentsArg, qArg).Scan(&count)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count current locations: %w", err)
 	}

@@ -13,61 +13,67 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
-func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, assetID int) ([]shared.TagIdentifier, error) {
+func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, orgID, assetID int) ([]shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
 		FROM trakrf.identifiers
-		WHERE asset_id = $1 AND deleted_at IS NULL
+		WHERE asset_id = $1 AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY created_at ASC
 	`
 
-	rows, err := s.pool.Query(ctx, query, assetID)
+	var identifiers []shared.TagIdentifier
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, assetID, orgID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		identifiers = []shared.TagIdentifier{}
+		for rows.Next() {
+			var id shared.TagIdentifier
+			if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
+				return fmt.Errorf("failed to scan identifier: %w", err)
+			}
+			identifiers = append(identifiers, id)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get identifiers for asset: %w", err)
-	}
-	defer rows.Close()
-
-	identifiers := []shared.TagIdentifier{}
-	for rows.Next() {
-		var id shared.TagIdentifier
-		if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-			return nil, fmt.Errorf("failed to scan identifier: %w", err)
-		}
-		identifiers = append(identifiers, id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating identifiers: %w", err)
 	}
 
 	return identifiers, nil
 }
 
-func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, locationID int) ([]shared.TagIdentifier, error) {
+func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, orgID, locationID int) ([]shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
 		FROM trakrf.identifiers
-		WHERE location_id = $1 AND deleted_at IS NULL
+		WHERE location_id = $1 AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY created_at ASC
 	`
 
-	rows, err := s.pool.Query(ctx, query, locationID)
+	var identifiers []shared.TagIdentifier
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, locationID, orgID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		identifiers = []shared.TagIdentifier{}
+		for rows.Next() {
+			var id shared.TagIdentifier
+			if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
+				return fmt.Errorf("failed to scan identifier: %w", err)
+			}
+			identifiers = append(identifiers, id)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get identifiers for location: %w", err)
-	}
-	defer rows.Close()
-
-	identifiers := []shared.TagIdentifier{}
-	for rows.Next() {
-		var id shared.TagIdentifier
-		if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-			return nil, fmt.Errorf("failed to scan identifier: %w", err)
-		}
-		identifiers = append(identifiers, id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating identifiers: %w", err)
 	}
 
 	return identifiers, nil
@@ -134,12 +140,20 @@ func (s *Storage) RemoveAssetIdentifier(ctx context.Context, orgID, assetID, ide
 		  AND EXISTS (SELECT 1 FROM trakrf.assets WHERE id = $2 AND org_id = $3)
 	`
 
-	result, err := s.pool.Exec(ctx, query, identifierID, assetID, orgID)
+	var affected int64
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, query, identifierID, assetID, orgID)
+		if err != nil {
+			return err
+		}
+		affected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to remove asset identifier: %w", err)
 	}
 
-	return result.RowsAffected() > 0, nil
+	return affected > 0, nil
 }
 
 // RemoveLocationIdentifier soft-deletes an identifier that is attached to the
@@ -156,31 +170,49 @@ func (s *Storage) RemoveLocationIdentifier(ctx context.Context, orgID, locationI
 		  AND EXISTS (SELECT 1 FROM trakrf.locations WHERE id = $2 AND org_id = $3)
 	`
 
-	result, err := s.pool.Exec(ctx, query, identifierID, locationID, orgID)
+	var affected int64
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, query, identifierID, locationID, orgID)
+		if err != nil {
+			return err
+		}
+		affected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to remove location identifier: %w", err)
 	}
 
-	return result.RowsAffected() > 0, nil
+	return affected > 0, nil
 }
 
-func (s *Storage) GetIdentifierByID(ctx context.Context, identifierID int) (*shared.TagIdentifier, error) {
+func (s *Storage) GetIdentifierByID(ctx context.Context, orgID, identifierID int) (*shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
 		FROM trakrf.identifiers
-		WHERE id = $1 AND deleted_at IS NULL
+		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	`
 
 	var identifier shared.TagIdentifier
-	err := s.pool.QueryRow(ctx, query, identifierID).Scan(
-		&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
-	)
-
-	if err != nil {
-		if err.Error() == "no rows in result set" {
-			return nil, nil
+	found := false
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, query, identifierID, orgID).Scan(
+			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		)
+		if err != nil {
+			if err.Error() == "no rows in result set" {
+				return nil
+			}
+			return err
 		}
+		found = true
+		return nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to get identifier: %w", err)
+	}
+	if !found {
+		return nil, nil
 	}
 
 	return &identifier, nil
@@ -219,71 +251,77 @@ func identifiersToJSON(identifiers []shared.TagIdentifierRequest) ([]byte, error
 	return json.Marshal(normalized)
 }
 
-func (s *Storage) getIdentifiersForAssets(ctx context.Context, assetIDs []int) (map[int][]shared.TagIdentifier, error) {
+func (s *Storage) getIdentifiersForAssets(ctx context.Context, orgID int, assetIDs []int) (map[int][]shared.TagIdentifier, error) {
 	query := `
 		SELECT asset_id, id, type, value, is_active
 		FROM trakrf.identifiers
-		WHERE asset_id = ANY($1) AND deleted_at IS NULL
+		WHERE asset_id = ANY($1) AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY asset_id, created_at ASC
 	`
 
-	rows, err := s.pool.Query(ctx, query, assetIDs)
+	var result map[int][]shared.TagIdentifier
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, assetIDs, orgID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		result = make(map[int][]shared.TagIdentifier)
+		for _, id := range assetIDs {
+			result[id] = []shared.TagIdentifier{}
+		}
+
+		for rows.Next() {
+			var assetID int
+			var id shared.TagIdentifier
+			if err := rows.Scan(&assetID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
+				return fmt.Errorf("failed to scan identifier: %w", err)
+			}
+			result[assetID] = append(result[assetID], id)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch fetch identifiers: %w", err)
-	}
-	defer rows.Close()
-
-	result := make(map[int][]shared.TagIdentifier)
-	for _, id := range assetIDs {
-		result[id] = []shared.TagIdentifier{}
-	}
-
-	for rows.Next() {
-		var assetID int
-		var id shared.TagIdentifier
-		if err := rows.Scan(&assetID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-			return nil, fmt.Errorf("failed to scan identifier: %w", err)
-		}
-		result[assetID] = append(result[assetID], id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating identifiers: %w", err)
 	}
 
 	return result, nil
 }
 
-func (s *Storage) getIdentifiersForLocations(ctx context.Context, locationIDs []int) (map[int][]shared.TagIdentifier, error) {
+func (s *Storage) getIdentifiersForLocations(ctx context.Context, orgID int, locationIDs []int) (map[int][]shared.TagIdentifier, error) {
 	query := `
 		SELECT location_id, id, type, value, is_active
 		FROM trakrf.identifiers
-		WHERE location_id = ANY($1) AND deleted_at IS NULL
+		WHERE location_id = ANY($1) AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY location_id, created_at ASC
 	`
 
-	rows, err := s.pool.Query(ctx, query, locationIDs)
+	var result map[int][]shared.TagIdentifier
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, locationIDs, orgID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		result = make(map[int][]shared.TagIdentifier)
+		for _, id := range locationIDs {
+			result[id] = []shared.TagIdentifier{}
+		}
+
+		for rows.Next() {
+			var locationID int
+			var id shared.TagIdentifier
+			if err := rows.Scan(&locationID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
+				return fmt.Errorf("failed to scan identifier: %w", err)
+			}
+			result[locationID] = append(result[locationID], id)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch fetch identifiers: %w", err)
-	}
-	defer rows.Close()
-
-	result := make(map[int][]shared.TagIdentifier)
-	for _, id := range locationIDs {
-		result[id] = []shared.TagIdentifier{}
-	}
-
-	for rows.Next() {
-		var locationID int
-		var id shared.TagIdentifier
-		if err := rows.Scan(&locationID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-			return nil, fmt.Errorf("failed to scan identifier: %w", err)
-		}
-		result[locationID] = append(result[locationID], id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating identifiers: %w", err)
 	}
 
 	return result, nil
@@ -330,12 +368,6 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 		WHERE org_id = $1 AND type = $2 AND LTRIM(value, '0') = ANY($3) AND deleted_at IS NULL
 	`
 
-	rows, err := s.pool.Query(ctx, query, orgID, tagType, normalizedValues)
-	if err != nil {
-		return nil, fmt.Errorf("failed to batch lookup tags: %w", err)
-	}
-	defer rows.Close()
-
 	// Collect identifier data with normalized value for mapping
 	type identifierRow struct {
 		value      string // Original value from DB
@@ -345,17 +377,25 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 	}
 	var identifierRows []identifierRow
 
-	for rows.Next() {
-		var row identifierRow
-		if err := rows.Scan(&row.value, &row.assetID, &row.locationID); err != nil {
-			return nil, fmt.Errorf("failed to scan identifier row: %w", err)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, tagType, normalizedValues)
+		if err != nil {
+			return fmt.Errorf("failed to batch lookup tags: %w", err)
 		}
-		row.normalized = normalizeEPC(row.value)
-		identifierRows = append(identifierRows, row)
-	}
+		defer rows.Close()
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating identifier rows: %w", err)
+		for rows.Next() {
+			var row identifierRow
+			if err := rows.Scan(&row.value, &row.assetID, &row.locationID); err != nil {
+				return fmt.Errorf("failed to scan identifier row: %w", err)
+			}
+			row.normalized = normalizeEPC(row.value)
+			identifierRows = append(identifierRows, row)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch lookup tags: %w", err)
 	}
 
 	// Collect unique asset and location IDs for batch fetch
@@ -440,16 +480,27 @@ func (s *Storage) LookupByTagValue(ctx context.Context, orgID int, tagType, valu
 	`
 
 	var assetID, locationID *int
-	err := s.pool.QueryRow(ctx, query, orgID, tagType, normalizedValue).Scan(&assetID, &locationID)
-	if err != nil {
-		if err.Error() == "no rows in result set" {
-			return nil, nil
+	found := false
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, query, orgID, tagType, normalizedValue).Scan(&assetID, &locationID)
+		if err != nil {
+			if err.Error() == "no rows in result set" {
+				return nil
+			}
+			return err
 		}
+		found = true
+		return nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to lookup tag: %w", err)
+	}
+	if !found {
+		return nil, nil
 	}
 
 	if assetID != nil {
-		a, err := s.GetAssetByID(ctx, assetID)
+		a, err := s.GetAssetByID(ctx, orgID, assetID)
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +508,7 @@ func (s *Storage) LookupByTagValue(ctx context.Context, orgID int, tagType, valu
 	}
 
 	if locationID != nil {
-		loc, err := s.GetLocationByID(ctx, *locationID)
+		loc, err := s.GetLocationByID(ctx, orgID, *locationID)
 		if err != nil {
 			return nil, err
 		}

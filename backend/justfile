@@ -29,7 +29,7 @@ dev-no-reload:
 run: dev
 
 # Lint Go code (formatting + static analysis)
-lint:
+lint: check-rls-guard
     go fmt ./...
     go vet ./...
 
@@ -105,6 +105,28 @@ smoke-test:
 # Lint the public OpenAPI spec with Redocly CLI (uses pnpm)
 api-lint:
     pnpm --package=@redocly/cli dlx redocly lint ../docs/api/openapi.public.yaml --extends=recommended
+
+# TRA-455: Fail if pool.Query/Exec/Begin reappears in non-test storage code
+# on RLS-protected tables. Coarse grep-based guard; a proper analyzer is a
+# separate follow-up ticket.
+#
+# Scoped to the five RLS-protected storage files only — apikeys, organizations,
+# users, invitations, etc. legitimately use raw pool (their tables are not
+# RLS-protected). reports.go hits asset_scans (not RLS-protected). transactions.go
+# defines WithOrgTx itself. *_test.go files may use raw pool for fixtures.
+check-rls-guard:
+    #!/usr/bin/env bash
+    set -e
+    RLS_FILES="internal/storage/assets.go internal/storage/locations.go internal/storage/inventory.go internal/storage/identifiers.go internal/storage/bulk_import_jobs.go"
+    RESULT=$(grep -n 's\.pool\.\(Query\|Exec\|Begin\)' $RLS_FILES || true)
+    FILTERED=$(echo "$RESULT" | grep -v '^$' || true)
+    if [ -n "$FILTERED" ]; then
+        echo "ERROR: s.pool.Query/Exec/Begin found in RLS-protected storage code. Wrap in WithOrgTx."
+        echo "See TRA-455. Offenders:"
+        echo "$FILTERED"
+        exit 1
+    fi
+    echo "✓ check-rls-guard: clean"
 
 # Run all backend validation checks
 # Note: api-spec is NOT in this chain — swag's output depends on the local Go/swag

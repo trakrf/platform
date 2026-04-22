@@ -46,6 +46,8 @@ func TestCreateAsset(t *testing.T) {
 		request.Metadata, request.IsActive, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -53,6 +55,7 @@ func TestCreateAsset(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -85,6 +88,8 @@ func TestCreateAsset_DuplicateIdentifier(t *testing.T) {
 		OrgID:       1,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -92,6 +97,7 @@ func TestCreateAsset_DuplicateIdentifier(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: duplicate key value violates unique constraint"))
+	mock.ExpectRollback()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -121,6 +127,8 @@ func TestCreateAsset_EmptyName(t *testing.T) {
 		OrgID:       1,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -128,6 +136,7 @@ func TestCreateAsset_EmptyName(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: null value in column \"name\" violates not-null constraint"))
+	mock.ExpectRollback()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -159,9 +168,12 @@ func TestCreateAsset_EmptyIdentifier_AutoGenerates(t *testing.T) {
 
 	// First, expect the sequence derivation query (returns NULL meaning start at 1)
 	seqRows := pgxmock.NewRows([]string{"max"}).AddRow(nil)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
 		WithArgs(request.OrgID).
 		WillReturnRows(seqRows)
+	mock.ExpectCommit()
 
 	// Then expect insert with auto-generated identifier "ASSET-0001"
 	rows := pgxmock.NewRows([]string{
@@ -174,6 +186,8 @@ func TestCreateAsset_EmptyIdentifier_AutoGenerates(t *testing.T) {
 		request.Metadata, request.IsActive, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, "ASSET-0001", request.Type,
@@ -181,6 +195,7 @@ func TestCreateAsset_EmptyIdentifier_AutoGenerates(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -211,6 +226,8 @@ func TestCreateAsset_InvalidOrgID(t *testing.T) {
 		OrgID:       99999,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 99999`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -218,6 +235,7 @@ func TestCreateAsset_InvalidOrgID(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: insert or update on table \"assets\" violates foreign key constraint"))
+	mock.ExpectRollback()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -257,6 +275,8 @@ func TestCreateAsset_NullMetadata(t *testing.T) {
 		nil, request.IsActive, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -264,6 +284,7 @@ func TestCreateAsset_NullMetadata(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -304,6 +325,8 @@ func TestCreateAsset_EmptyMetadata(t *testing.T) {
 		request.Metadata, request.IsActive, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -311,6 +334,7 @@ func TestCreateAsset_EmptyMetadata(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -345,6 +369,8 @@ func TestCreateAsset_DatabaseConnectionError(t *testing.T) {
 		OrgID:       1,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -352,6 +378,7 @@ func TestCreateAsset_DatabaseConnectionError(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("connection refused"))
+	mock.ExpectRollback()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -407,6 +434,8 @@ func TestCreateAsset_ComplexMetadata(t *testing.T) {
 		request.Metadata, request.IsActive, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`insert into trakrf.assets`).
 		WithArgs(
 			request.Name, request.Identifier, request.Type,
@@ -414,6 +443,7 @@ func TestCreateAsset_ComplexMetadata(t *testing.T) {
 			request.Metadata, request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.CreateAsset(context.Background(), request)
 
@@ -446,14 +476,19 @@ func TestUpdateAsset(t *testing.T) {
 		Description: &newDescription,
 	}
 
-	// UPDATE ... RETURNING id
+	// UPDATE ... RETURNING id (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`update trakrf.assets`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(assetID))
+	mock.ExpectCommit()
 
-	// getAssetWithLocationByID: SELECT asset + joined location identifier
+	// getAssetWithLocationByID: SELECT asset + joined location identifier (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.assets a[\s\S]+LEFT JOIN trakrf.locations`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "identifier", "name", "type", "description",
 			"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
@@ -463,11 +498,15 @@ func TestUpdateAsset(t *testing.T) {
 			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
 			now, now, nil, nil,
 		))
+	mock.ExpectCommit()
 
-	// GetIdentifiersByAssetID: empty identifiers
+	// GetIdentifiersByAssetID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
@@ -509,9 +548,12 @@ func TestUpdateAsset_NotFound(t *testing.T) {
 		Name: &newName,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`update trakrf.assets`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnError(errors.New("no rows in result set"))
+	mock.ExpectRollback()
 
 	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
@@ -536,14 +578,19 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 		IsActive: &isActive,
 	}
 
-	// UPDATE ... RETURNING id
+	// UPDATE ... RETURNING id (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`update trakrf.assets`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(assetID))
+	mock.ExpectCommit()
 
-	// getAssetWithLocationByID: SELECT asset + joined location identifier
+	// getAssetWithLocationByID: SELECT asset + joined location identifier (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.assets a[\s\S]+LEFT JOIN trakrf.locations`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "identifier", "name", "type", "description",
 			"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
@@ -553,11 +600,15 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), false,
 			now, now, nil, nil,
 		))
+	mock.ExpectCommit()
 
-	// GetIdentifiersByAssetID: empty identifiers
+	// GetIdentifiersByAssetID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
@@ -588,11 +639,14 @@ func TestGetAssetByID(t *testing.T) {
 		now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -611,11 +665,14 @@ func TestGetAssetByID_NotFound(t *testing.T) {
 
 	assetID := 99999
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnError(errors.New("no rows in result set"))
+	mock.ExpectRollback()
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -643,11 +700,14 @@ func TestGetAssetByID_WithNullMetadata(t *testing.T) {
 		now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -665,11 +725,14 @@ func TestGetAssetByID_DatabaseError(t *testing.T) {
 
 	assetID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnError(errors.New("connection timeout"))
+	mock.ExpectRollback()
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -704,9 +767,12 @@ func TestListAllAssets(t *testing.T) {
 			nil, now, timePtr(now.Add(24*time.Hour)), nil, false,
 			now, now, nil)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
 		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
@@ -736,9 +802,12 @@ func TestListAllAssets_Empty(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	})
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
 		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
@@ -771,9 +840,12 @@ func TestListAllAssets_WithPagination(t *testing.T) {
 			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{}`), true,
 			now, now, nil)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
 		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
@@ -796,9 +868,12 @@ func TestListAllAssets_DatabaseError(t *testing.T) {
 	limit := 10
 	offset := 0
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
 		WithArgs(orgID, limit, offset).
 		WillReturnError(errors.New("connection lost"))
+	mock.ExpectRollback()
 
 	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
@@ -830,9 +905,12 @@ func TestListAllAssets_ScanError(t *testing.T) {
 		now, now, nil,
 	).RowError(0, errors.New("scan error: invalid type"))
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
 		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
+	mock.ExpectRollback()
 
 	results, err := storage.ListAllAssets(context.Background(), orgID, limit, offset)
 
@@ -852,9 +930,12 @@ func TestDeleteAsset(t *testing.T) {
 	assetID := 1
 	orgID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
 		WithArgs(assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
 
 	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
@@ -873,9 +954,12 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 	assetID := 99999
 	orgID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
 		WithArgs(assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectCommit()
 
 	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
@@ -894,9 +978,12 @@ func TestDeleteAsset_AlreadyDeleted(t *testing.T) {
 	assetID := 1
 	orgID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
 		WithArgs(assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectCommit()
 
 	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
@@ -915,9 +1002,12 @@ func TestDeleteAsset_DatabaseError(t *testing.T) {
 	assetID := 1
 	orgID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`update trakrf.assets set deleted_at = now()`).
 		WithArgs(assetID, orgID).
 		WillReturnError(errors.New("database connection lost"))
+	mock.ExpectRollback()
 
 	result, err := storage.DeleteAsset(context.Background(), orgID, assetID)
 
@@ -981,9 +1071,12 @@ func TestGetNextAssetSequence_Empty(t *testing.T) {
 
 	// No existing ASSET-XXXX identifiers (returns NULL)
 	rows := pgxmock.NewRows([]string{"max"}).AddRow(nil)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
 		WithArgs(orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	seq, err := storage.GetNextAssetSequence(context.Background(), orgID)
 
@@ -1002,9 +1095,12 @@ func TestGetNextAssetSequence_WithExisting(t *testing.T) {
 
 	// Existing ASSET-0042 is the highest
 	rows := pgxmock.NewRows([]string{"max"}).AddRow(int64(42))
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
 		WithArgs(orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	seq, err := storage.GetNextAssetSequence(context.Background(), orgID)
 
@@ -1021,9 +1117,12 @@ func TestGetNextAssetSequence_DatabaseError(t *testing.T) {
 	storage := &Storage{pool: mock}
 	orgID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT MAX\(CAST\(SUBSTRING\(identifier FROM 'ASSET-\(\[0-9\]\+\)'\) AS INT\)\)`).
 		WithArgs(orgID).
 		WillReturnError(errors.New("connection refused"))
+	mock.ExpectRollback()
 
 	seq, err := storage.GetNextAssetSequence(context.Background(), orgID)
 

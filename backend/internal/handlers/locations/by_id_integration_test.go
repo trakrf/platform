@@ -112,7 +112,7 @@ func TestUpdateLocationByID_CrossOrg_Returns404(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
-	fetched, err := store.GetLocationByID(context.Background(), created.ID)
+	fetched, err := store.GetLocationByID(context.Background(), orgA, created.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "OrgA Loc", fetched.Name)
 }
@@ -197,7 +197,7 @@ func TestDeleteLocationByID_HappyPath(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetLocationByID(context.Background(), created.ID)
+	fetched, err := store.GetLocationByID(context.Background(), orgID, created.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "soft-deleted location should be hidden by GetLocationByID")
 }
@@ -227,7 +227,7 @@ func TestDeleteLocationByID_CrossOrg_Returns404(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
-	fetched, err := store.GetLocationByID(context.Background(), created.ID)
+	fetched, err := store.GetLocationByID(context.Background(), orgA, created.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "location must survive cross-org DELETE attempt")
 	assert.Equal(t, "Survivor", fetched.Name)
@@ -353,7 +353,7 @@ func TestRemoveLocationIdentifierByID_HappyPath(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier must be soft-deleted")
 }
@@ -388,7 +388,7 @@ func TestRemoveLocationIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must survive cross-org DELETE attempt")
 }

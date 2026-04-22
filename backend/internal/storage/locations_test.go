@@ -46,6 +46,8 @@ func TestCreateLocation(t *testing.T) {
 		request.IsActive, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.locations`).
 		WithArgs(
 			request.Name, request.Identifier, request.ParentLocationID,
@@ -53,6 +55,7 @@ func TestCreateLocation(t *testing.T) {
 			request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.CreateLocation(context.Background(), request)
 
@@ -92,6 +95,8 @@ func TestCreateLocation_RootLocation(t *testing.T) {
 		request.IsActive, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.locations`).
 		WithArgs(
 			request.Name, request.Identifier, request.ParentLocationID,
@@ -99,6 +104,7 @@ func TestCreateLocation_RootLocation(t *testing.T) {
 			request.IsActive, request.OrgID,
 		).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	result, err := storage.CreateLocation(context.Background(), request)
 
@@ -131,6 +137,8 @@ func TestCreateLocation_DuplicateIdentifier(t *testing.T) {
 		OrgID:            1,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.locations`).
 		WithArgs(
 			request.Name, request.Identifier, request.ParentLocationID,
@@ -138,6 +146,7 @@ func TestCreateLocation_DuplicateIdentifier(t *testing.T) {
 			request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: duplicate key value violates unique constraint"))
+	mock.ExpectRollback()
 
 	result, err := storage.CreateLocation(context.Background(), request)
 
@@ -167,6 +176,8 @@ func TestCreateLocation_InvalidParentID(t *testing.T) {
 		OrgID:            1,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.locations`).
 		WithArgs(
 			request.Name, request.Identifier, request.ParentLocationID,
@@ -174,6 +185,7 @@ func TestCreateLocation_InvalidParentID(t *testing.T) {
 			request.IsActive, request.OrgID,
 		).
 		WillReturnError(errors.New("ERROR: insert or update on table \"locations\" violates foreign key constraint \"locations_parent_location_id_fkey\""))
+	mock.ExpectRollback()
 
 	result, err := storage.CreateLocation(context.Background(), request)
 
@@ -200,14 +212,19 @@ func TestUpdateLocation(t *testing.T) {
 		Description: &newDescription,
 	}
 
-	// UPDATE ... RETURNING id
+	// UPDATE ... RETURNING id (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(locationID))
+	mock.ExpectCommit()
 
-	// getLocationWithParentByID: SELECT location + joined parent identifier
+	// getLocationWithParentByID: SELECT location + joined parent identifier (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 			"description", "valid_from", "valid_to", "is_active",
@@ -216,11 +233,15 @@ func TestUpdateLocation(t *testing.T) {
 			locationID, 1, newName, "warehouse_1", nil, "warehouse_1", 1,
 			newDescription, now, nil, true, now, now, nil, nil,
 		))
+	mock.ExpectCommit()
 
-	// GetIdentifiersByLocationID: empty identifiers
+	// GetIdentifiersByLocationID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
@@ -247,15 +268,20 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 		ParentLocationID: &newParentID,
 	}
 
-	// UPDATE ... RETURNING id
+	// UPDATE ... RETURNING id (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(locationID))
+	mock.ExpectCommit()
 
-	// getLocationWithParentByID: SELECT location + joined parent identifier
+	// getLocationWithParentByID: SELECT location + joined parent identifier (wrapped in WithOrgTx)
 	parentIdentifier := "california"
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 			"description", "valid_from", "valid_to", "is_active",
@@ -265,11 +291,15 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 			"usa.california.zone_a", 3, "Test zone", now, nil, true,
 			now, now, nil, &parentIdentifier,
 		))
+	mock.ExpectCommit()
 
-	// GetIdentifiersByLocationID: empty identifiers
+	// GetIdentifiersByLocationID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
@@ -312,9 +342,12 @@ func TestUpdateLocation_NotFound(t *testing.T) {
 		Name: &newName,
 	}
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnError(errors.New("no rows in result set"))
+	mock.ExpectRollback()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
@@ -343,11 +376,14 @@ func TestGetLocationByID(t *testing.T) {
 		"United States", now, nil, true, now, now, nil,
 	)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, org_id, name, identifier`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetLocationByID(context.Background(), locationID)
+	result, err := storage.GetLocationByID(context.Background(), 1, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -367,11 +403,14 @@ func TestGetLocationByID_NotFound(t *testing.T) {
 
 	locationID := 99999
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, org_id, name, identifier`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnError(errors.New("no rows in result set"))
+	mock.ExpectRollback()
 
-	result, err := storage.GetLocationByID(context.Background(), locationID)
+	result, err := storage.GetLocationByID(context.Background(), 1, locationID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -402,9 +441,12 @@ func TestListAllLocations(t *testing.T) {
 		AddRow(2, orgID, "California", "california", &parent1, "usa.california", 2, "California State", now, nil, true, now, &now, nil).
 		AddRow(3, orgID, "Warehouse 1", "warehouse_1", &parent2, "usa.california.warehouse_1", 3, "Main Warehouse", now, nil, true, now, &now, nil)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, org_id, name, identifier`).
 		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.ListAllLocations(context.Background(), orgID, limit, offset)
 
@@ -434,9 +476,12 @@ func TestListAllLocations_Empty(t *testing.T) {
 		"created_at", "updated_at", "deleted_at",
 	})
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, org_id, name, identifier`).
 		WithArgs(orgID, limit, offset).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.ListAllLocations(context.Background(), orgID, limit, offset)
 
@@ -457,9 +502,12 @@ func TestCountAllLocations(t *testing.T) {
 
 	rows := pgxmock.NewRows([]string{"count"}).AddRow(expectedCount)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT COUNT`).
 		WithArgs(orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	count, err := storage.CountAllLocations(context.Background(), orgID)
 
@@ -478,9 +526,12 @@ func TestDeleteLocation(t *testing.T) {
 	locationID := 1
 	orgID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.locations SET deleted_at`).
 		WithArgs(locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
 
 	result, err := storage.DeleteLocation(context.Background(), orgID, locationID)
 
@@ -499,9 +550,12 @@ func TestDeleteLocation_NotFound(t *testing.T) {
 	locationID := 99999
 	orgID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.locations SET deleted_at`).
 		WithArgs(locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectCommit()
 
 	result, err := storage.DeleteLocation(context.Background(), orgID, locationID)
 
@@ -532,14 +586,22 @@ func TestGetAncestors(t *testing.T) {
 		AddRow(1, 1, "USA", "usa", nil, "usa", 1, "United States", now, nil, true, now, &now, nil, nil).
 		AddRow(2, 1, "California", "california", &parent1, "usa.california", 2, "California State", now, nil, true, now, &now, nil, &usaIdent)
 
+	// scanHierarchyRows: hierarchy query (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
 		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
+	// getIdentifiersForLocations (wrapped in WithOrgTx)
 	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
-		WithArgs([]int{1, 2}).
+		WithArgs([]int{1, 2}, orgID).
 		WillReturnRows(identifierRows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetAncestors(context.Background(), orgID, locationID)
 
@@ -573,9 +635,12 @@ func TestGetAncestors_RootLocation(t *testing.T) {
 		"parent_identifier",
 	})
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
 		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetAncestors(context.Background(), orgID, locationID)
 
@@ -611,14 +676,22 @@ func TestGetDescendants(t *testing.T) {
 		AddRow(3, 1, "Warehouse 1", "warehouse_1", &parent2, "usa.california.warehouse_1", 3, "Main Warehouse", now, nil, true, now, &now, nil, &caIdent).
 		AddRow(4, 1, "Zone A", "zone_a", &parent3, "usa.california.warehouse_1.zone_a", 4, "Storage Zone A", now, nil, true, now, &now, nil, &whIdent)
 
+	// scanHierarchyRows: hierarchy query (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
 		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
+	// getIdentifiersForLocations (wrapped in WithOrgTx)
 	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
-		WithArgs([]int{2, 3, 4}).
+		WithArgs([]int{2, 3, 4}, orgID).
 		WillReturnRows(identifierRows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetDescendants(context.Background(), orgID, locationID)
 
@@ -654,9 +727,12 @@ func TestGetDescendants_LeafLocation(t *testing.T) {
 		"parent_identifier",
 	})
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
 		WithArgs(orgID, locationID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetDescendants(context.Background(), orgID, locationID)
 
@@ -686,14 +762,22 @@ func TestGetChildren(t *testing.T) {
 		AddRow(3, 1, "Warehouse 1", "warehouse_1", &parentID, "usa.california.warehouse_1", 3, "Main Warehouse", now, nil, true, now, &now, nil, &caIdent).
 		AddRow(4, 1, "Warehouse 2", "warehouse_2", &parentID, "usa.california.warehouse_2", 3, "Secondary Warehouse", now, nil, true, now, &now, nil, &caIdent)
 
+	// scanHierarchyRows: hierarchy query (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
 		WithArgs(orgID, parentID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
+	// getIdentifiersForLocations (wrapped in WithOrgTx)
 	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
-		WithArgs([]int{3, 4}).
+		WithArgs([]int{3, 4}, orgID).
 		WillReturnRows(identifierRows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetChildren(context.Background(), orgID, parentID)
 
@@ -728,9 +812,12 @@ func TestGetChildren_NoChildren(t *testing.T) {
 		"parent_identifier",
 	})
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT l.id, l.org_id, l.name, l.identifier`).
 		WithArgs(orgID, parentID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetChildren(context.Background(), orgID, parentID)
 
@@ -771,11 +858,15 @@ func TestGetLocationWithRelations(t *testing.T) {
 		AddRow(5, 1, "Zone B", "zone_b", &targetID, "usa.california.warehouse_1.zone_b", 4,
 			"Storage Zone B", now, nil, true, now, &now, nil, "child")
 
+	orgID := 1
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`WITH target AS`).
-		WithArgs(targetID).
+		WithArgs(targetID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetLocationWithRelations(context.Background(), targetID)
+	result, err := storage.GetLocationWithRelations(context.Background(), orgID, targetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -825,11 +916,15 @@ func TestGetLocationWithRelations_RootLocation(t *testing.T) {
 		AddRow(3, 1, "Texas", "texas", &rootID, "usa.texas", 2,
 			"Texas State", now, nil, true, now, &now, nil, "child")
 
+	orgID := 1
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`WITH target AS`).
-		WithArgs(rootID).
+		WithArgs(rootID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetLocationWithRelations(context.Background(), rootID)
+	result, err := storage.GetLocationWithRelations(context.Background(), orgID, rootID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -870,11 +965,15 @@ func TestGetLocationWithRelations_LeafLocation(t *testing.T) {
 		AddRow(3, 1, "Warehouse 1", "warehouse_1", &parent2, "usa.california.warehouse_1", 3,
 			"Main Warehouse", now, nil, true, now, &now, nil, "ancestor")
 
+	orgID := 1
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`WITH target AS`).
-		WithArgs(leafID).
+		WithArgs(leafID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetLocationWithRelations(context.Background(), leafID)
+	result, err := storage.GetLocationWithRelations(context.Background(), orgID, leafID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -903,11 +1002,15 @@ func TestGetLocationWithRelations_NotFound(t *testing.T) {
 		"created_at", "updated_at", "deleted_at", "relation_type",
 	})
 
+	orgID := 1
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`WITH target AS`).
-		WithArgs(locationID).
+		WithArgs(locationID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetLocationWithRelations(context.Background(), locationID)
+	result, err := storage.GetLocationWithRelations(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	assert.Nil(t, result)

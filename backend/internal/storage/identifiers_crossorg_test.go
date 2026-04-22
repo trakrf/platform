@@ -52,7 +52,7 @@ func TestRemoveAssetIdentifier_CrossOrg_ReturnsFalse(t *testing.T) {
 	assert.False(t, deleted, "cross-org asset identifier removal must return false")
 
 	// Confirm the identifier was NOT mutated.
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist after cross-org removal attempt")
 	assert.Equal(t, ident.ID, fetched.ID)
@@ -100,7 +100,7 @@ func TestRemoveAssetIdentifier_WrongAssetID_ReturnsFalse(t *testing.T) {
 	assert.False(t, deleted, "removal via wrong assetID must return false")
 
 	// Identifier must still exist.
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist after wrong-assetID removal attempt")
 }
@@ -135,7 +135,7 @@ func TestRemoveLocationIdentifier_CrossOrg_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, deleted, "cross-org location identifier removal must return false")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist after cross-org removal attempt")
 	assert.Equal(t, ident.ID, fetched.ID)
@@ -180,7 +180,7 @@ func TestRemoveLocationIdentifier_WrongLocationID_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, deleted, "removal via wrong locationID must return false")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist after wrong-locationID removal attempt")
 }

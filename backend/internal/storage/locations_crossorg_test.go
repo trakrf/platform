@@ -41,7 +41,7 @@ func TestUpdateLocation_CrossOrgReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, result, "cross-org update must return nil (not found), not apply the change")
 
-	fetched, err := store.GetLocationByID(context.Background(), created.ID)
+	fetched, err := store.GetLocationByID(context.Background(), orgA, created.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
 	assert.Equal(t, "Owned by A", fetched.Name, "original location must be untouched by cross-org update")
@@ -69,7 +69,7 @@ func TestDeleteLocation_CrossOrgReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, deleted, "cross-org delete must return false")
 
-	fetched, err := store.GetLocationByID(context.Background(), created.ID)
+	fetched, err := store.GetLocationByID(context.Background(), orgA, created.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "location must still exist")
 	assert.Nil(t, fetched.DeletedAt, "location must not be soft-deleted by cross-org delete")
