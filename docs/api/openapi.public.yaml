@@ -455,11 +455,11 @@ paths:
                             schema:
                                 type: integer
                         X-RateLimit-Remaining:
-                            description: Tokens left in bucket at response time
+                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
                             schema:
                                 type: integer
                         X-RateLimit-Reset:
-                            description: Unix timestamp when bucket fully refills
+                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
                             schema:
                                 type: integer
                 "400":
@@ -637,11 +637,11 @@ paths:
                             schema:
                                 type: integer
                         X-RateLimit-Remaining:
-                            description: Tokens left in bucket at response time
+                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
                             schema:
                                 type: integer
                         X-RateLimit-Reset:
-                            description: Unix timestamp when bucket fully refills
+                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
                             schema:
                                 type: integer
                 "400":
@@ -803,11 +803,11 @@ paths:
                             schema:
                                 type: integer
                         X-RateLimit-Remaining:
-                            description: Tokens left in bucket at response time
+                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
                             schema:
                                 type: integer
                         X-RateLimit-Reset:
-                            description: Unix timestamp when bucket fully refills
+                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
                             schema:
                                 type: integer
                 "400":
@@ -1073,11 +1073,11 @@ paths:
                             schema:
                                 type: integer
                         X-RateLimit-Remaining:
-                            description: Tokens left in bucket at response time
+                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
                             schema:
                                 type: integer
                         X-RateLimit-Reset:
-                            description: Unix timestamp when bucket fully refills
+                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
                             schema:
                                 type: integer
                 "429":
@@ -1237,11 +1237,11 @@ paths:
                             schema:
                                 type: integer
                         X-RateLimit-Remaining:
-                            description: Tokens left in bucket at response time
+                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
                             schema:
                                 type: integer
                         X-RateLimit-Reset:
-                            description: Unix timestamp when bucket fully refills
+                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
                             schema:
                                 type: integer
                 "400":
@@ -1699,11 +1699,11 @@ paths:
                             schema:
                                 type: integer
                         X-RateLimit-Remaining:
-                            description: Tokens left in bucket at response time
+                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
                             schema:
                                 type: integer
                         X-RateLimit-Reset:
-                            description: Unix timestamp when bucket fully refills
+                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
                             schema:
                                 type: integer
                 "400":

@@ -338,8 +338,8 @@ type UpdateAssetResponse struct {
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"
 // @Success 200 {object} assets.ListAssetsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
-// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
-// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
+// @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
@@ -421,8 +421,8 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Param identifier path string true "Asset identifier (natural key)"
 // @Success 200 {object} assets.GetAssetResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
-// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
-// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
+// @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse

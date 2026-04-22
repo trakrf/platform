@@ -17,7 +17,7 @@ func newTestLimiter(clock Clock) *Limiter {
 	})
 }
 
-func TestLimiter_FreshKeyAllowedWithFullBurstMinusOne(t *testing.T) {
+func TestLimiter_FreshKeyReportsLimitAsRemaining(t *testing.T) {
 	clock := NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
 	lim := newTestLimiter(clock)
 	defer lim.Close()
@@ -26,25 +26,30 @@ func TestLimiter_FreshKeyAllowedWithFullBurstMinusOne(t *testing.T) {
 
 	require.True(t, d.Allowed, "first request on fresh key must be allowed")
 	require.Equal(t, 60, d.Limit, "Limit reports steady-state rate per minute")
-	require.Equal(t, 119, d.Remaining, "burst=120, one token consumed")
+	require.Equal(t, 60, d.Remaining, "burst tokens above Limit are hidden; Remaining caps at Limit")
 	require.Zero(t, d.RetryAfter, "allowed requests have no RetryAfter")
 }
 
-func TestLimiter_SuccessiveAllowsDecrementRemaining(t *testing.T) {
+func TestLimiter_RemainingDecrementsOnceBelowLimit(t *testing.T) {
 	clock := NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
 	lim := newTestLimiter(clock)
 	defer lim.Close()
 
-	d1 := lim.Allow("key-a")
-	d2 := lim.Allow("key-a")
-	d3 := lim.Allow("key-a")
+	// Consume through the burst overflow (tokens > Limit): Remaining stays
+	// pinned at Limit because the cap hides the burst safety margin.
+	for i := 0; i < 60; i++ {
+		d := lim.Allow("key-a")
+		require.Equal(t, 60, d.Remaining,
+			"request %d: tokens still ≥ Limit, Remaining pinned at Limit", i+1)
+	}
 
-	require.True(t, d1.Allowed)
-	require.True(t, d2.Allowed)
-	require.True(t, d3.Allowed)
-	require.Equal(t, 119, d1.Remaining)
-	require.Equal(t, 118, d2.Remaining)
-	require.Equal(t, 117, d3.Remaining)
+	// Next request drops tokens to 59 (< Limit=60) — Remaining now tracks the
+	// true token count.
+	d := lim.Allow("key-a")
+	require.Equal(t, 59, d.Remaining, "tokens below Limit: Remaining reflects actual bucket")
+
+	d = lim.Allow("key-a")
+	require.Equal(t, 58, d.Remaining)
 }
 
 func TestLimiter_ExhaustedBurstIsDenied(t *testing.T) {
@@ -90,23 +95,6 @@ func TestLimiter_RefillsOverTime(t *testing.T) {
 	require.False(t, lim.Allow("key-a").Allowed, "third in the same instant is denied")
 }
 
-func TestLimiter_ResetAtReflectsTimeToFullRefill(t *testing.T) {
-	start := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
-	clock := NewFakeClock(start)
-	lim := newTestLimiter(clock)
-	defer lim.Close()
-
-	// Drain the full burst (120 tokens).
-	for i := 0; i < 120; i++ {
-		lim.Allow("key-a")
-	}
-
-	d := lim.Allow("key-a") // denied; bucket at 0
-	// At 60/min = 1/sec, refilling 120 tokens takes 120s.
-	expected := start.Add(120 * time.Second)
-	require.WithinDuration(t, expected, d.ResetAt, 100*time.Millisecond)
-}
-
 func TestLimiter_KeysAreIndependent(t *testing.T) {
 	clock := NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
 	lim := newTestLimiter(clock)
@@ -118,10 +106,11 @@ func TestLimiter_KeysAreIndependent(t *testing.T) {
 	}
 	require.False(t, lim.Allow("key-a").Allowed)
 
-	// key-b untouched — should still have full burst.
+	// key-b untouched — should still have full burst under the hood, but
+	// Remaining reports the advertised Limit ceiling.
 	d := lim.Allow("key-b")
 	require.True(t, d.Allowed)
-	require.Equal(t, 119, d.Remaining)
+	require.Equal(t, 60, d.Remaining)
 }
 
 func TestLimiter_SweepEvictsIdleBuckets(t *testing.T) {
@@ -163,6 +152,54 @@ func TestLimiter_SweepEvictsIdleBuckets(t *testing.T) {
 	require.False(t, bPresent, "key-b idle >1h, must be evicted")
 }
 
+func TestLimiter_RemainingNeverExceedsLimit(t *testing.T) {
+	clock := NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	lim := newTestLimiter(clock)
+	defer lim.Close()
+
+	// Drive every possible bucket state: fresh full-burst, draining through burst
+	// overflow, down to exhaustion. Limit is the externally-advertised ceiling —
+	// clients pace against it and treat it as the maximum of Remaining. The
+	// internal burst capacity is a safety margin, not advertised quota.
+	for i := 0; i < 125; i++ {
+		d := lim.Allow("key-a")
+		require.LessOrEqualf(t, d.Remaining, d.Limit,
+			"request %d: Remaining=%d must be ≤ Limit=%d", i+1, d.Remaining, d.Limit)
+	}
+}
+
+func TestLimiter_ResetAtIsNowWhenBucketAboveLimit(t *testing.T) {
+	start := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	clock := NewFakeClock(start)
+	lim := newTestLimiter(clock)
+	defer lim.Close()
+
+	// Fresh bucket has 120 tokens (burst), Limit=60. Since tokens ≥ Limit, the
+	// client already has their full advertised quota — ResetAt should be "now"
+	// (no wait required) rather than "time when burst refills".
+	d := lim.Allow("key-a")
+	require.Equal(t, start, d.ResetAt,
+		"tokens above limit: ResetAt must equal now; remaining already at limit")
+}
+
+func TestLimiter_ResetAtReflectsTimeToRefillToLimit(t *testing.T) {
+	start := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	clock := NewFakeClock(start)
+	lim := newTestLimiter(clock)
+	defer lim.Close()
+
+	// Drain fully. Bucket at 0 tokens, limit=60, refill rate 1/sec.
+	// "Quota reset" = when Remaining next reaches Limit = 60 more tokens = 60s.
+	for i := 0; i < 120; i++ {
+		lim.Allow("key-a")
+	}
+	d := lim.Allow("key-a") // denied, bucket at 0
+
+	expected := start.Add(60 * time.Second)
+	require.WithinDuration(t, expected, d.ResetAt, 100*time.Millisecond,
+		"bucket drained: ResetAt should be now + Limit/perSec (time to refill to Limit)")
+}
+
 func TestLimiter_SweptKeyReturnsWithFullBucket(t *testing.T) {
 	clock := NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
 	lim := NewLimiter(Config{
@@ -186,5 +223,5 @@ func TestLimiter_SweptKeyReturnsWithFullBucket(t *testing.T) {
 
 	d := lim.Allow("key-a")
 	require.True(t, d.Allowed)
-	require.Equal(t, 119, d.Remaining, "fresh bucket after eviction")
+	require.Equal(t, 60, d.Remaining, "fresh bucket after eviction")
 }
