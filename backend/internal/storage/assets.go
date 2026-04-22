@@ -619,6 +619,48 @@ func (s *Storage) GetAssetByIdentifier(
 	}, nil
 }
 
+// GetAssetIDsByIdentifiers resolves a batch of natural identifiers to internal
+// surrogate IDs for one org. Returns a map keyed by identifier; identifiers not
+// found in the org are absent from the map. Empty/nil input returns an empty
+// map without querying.
+//
+// Used by inventory/save (TRA-448) to convert public-API identifier lists to
+// the numeric IDs the storage layer expects.
+func (s *Storage) GetAssetIDsByIdentifiers(
+	ctx context.Context, orgID int, identifiers []string,
+) (map[string]int, error) {
+	if len(identifiers) == 0 {
+		return map[string]int{}, nil
+	}
+
+	query := `
+		SELECT identifier, id
+		FROM trakrf.assets
+		WHERE org_id = $1 AND identifier = ANY($2) AND deleted_at IS NULL
+	`
+	rows, err := s.pool.Query(ctx, query, orgID, identifiers)
+	if err != nil {
+		return nil, fmt.Errorf("get asset ids by identifiers: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]int, len(identifiers))
+	for rows.Next() {
+		var (
+			ident string
+			id    int
+		)
+		if err := rows.Scan(&ident, &id); err != nil {
+			return nil, fmt.Errorf("scan asset identifier row: %w", err)
+		}
+		out[ident] = id
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate asset identifier rows: %w", err)
+	}
+	return out, nil
+}
+
 // ListAssetsFiltered returns assets matching the filter, joined with their
 // current location's natural key. Sort fields allowlisted by handler.
 func (s *Storage) ListAssetsFiltered(

@@ -374,3 +374,84 @@ func TestUpdateAsset_PopulatesCurrentLocationIdentifier(t *testing.T) {
 	assert.Equal(t, newName, result.Name)
 	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
 }
+
+func TestGetAssetIDsByIdentifiers_HappyPath(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	a1, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra448-a1", Name: "A1", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	a2, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra448-a2", Name: "A2", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	got, err := store.GetAssetIDsByIdentifiers(context.Background(), orgID,
+		[]string{"tra448-a1", "tra448-a2"})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{
+		"tra448-a1": a1.ID,
+		"tra448-a2": a2.ID,
+	}, got)
+}
+
+func TestGetAssetIDsByIdentifiers_MissingIdentifierAbsent(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	a, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra448-present", Name: "A", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	got, err := store.GetAssetIDsByIdentifiers(context.Background(), orgID,
+		[]string{"tra448-present", "tra448-ghost"})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{"tra448-present": a.ID}, got)
+}
+
+func TestGetAssetIDsByIdentifiers_OtherOrgFilteredOut(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgA := testutil.CreateTestAccount(t, pool)
+	var orgB int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.organizations (name, identifier, is_active)
+         VALUES ('tra448-orgB','tra448-orgB',true) RETURNING id`).Scan(&orgB))
+
+	_, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgB, Identifier: "tra448-shared", Name: "A", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	got, err := store.GetAssetIDsByIdentifiers(context.Background(), orgA,
+		[]string{"tra448-shared"})
+	require.NoError(t, err)
+	require.Empty(t, got, "asset belonging to orgB must not surface for orgA")
+}
+
+func TestGetAssetIDsByIdentifiers_EmptyInput(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	got, err := store.GetAssetIDsByIdentifiers(context.Background(), 1, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+
+	got, err = store.GetAssetIDsByIdentifiers(context.Background(), 1, []string{})
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
