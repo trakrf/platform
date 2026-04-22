@@ -259,7 +259,7 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
 }
 
-func TestRemoveAssetIdentifier_WrongAssetIdentifier_ReturnsDeletedFalse(t *testing.T) {
+func TestRemoveAssetIdentifier_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-assets-write-remove-ident-wrong-owner")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()

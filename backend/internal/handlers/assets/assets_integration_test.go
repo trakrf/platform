@@ -707,7 +707,8 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
-		assertNoLeaks(t, w.Body.Bytes())
+		data := assertNoLeaks(t, w.Body.Bytes())
+		assert.NotContains(t, data, "current_location", "current_location must be omitted entirely when no parent")
 	})
 
 	t.Run("POST_WithParent", func(t *testing.T) {
