@@ -41,7 +41,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Accept       json
 // @Produce      json
 // @Param        request  body  location.CreateLocationWithIdentifiersRequest  true  "Location to create with optional identifiers"
-// @Success      201  {object}  map[string]any                "data: location.LocationView"
+// @Success      201  {object}  locations.CreateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -94,7 +94,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        identifier  path  string                           true  "Location identifier"
 // @Param        request     body  location.UpdateLocationRequest   true  "Fields to update"
-// @Success      200  {object}  map[string]any                "data: location.Location"
+// @Success      200  {object}  locations.UpdateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -240,6 +240,17 @@ type ListLocationsResponse struct {
 
 // GetLocationResponse is the typed envelope returned by GET /api/v1/locations/{identifier}.
 type GetLocationResponse struct {
+	Data location.PublicLocationView `json:"data"`
+}
+
+// CreateLocationResponse is the typed envelope returned by POST /api/v1/locations.
+type CreateLocationResponse struct {
+	Data location.PublicLocationView `json:"data"`
+}
+
+// UpdateLocationResponse is the typed envelope returned by PUT /api/v1/locations/{identifier}
+// and PUT /api/v1/locations/by-id/{id}.
+type UpdateLocationResponse struct {
 	Data location.PublicLocationView `json:"data"`
 }
 
