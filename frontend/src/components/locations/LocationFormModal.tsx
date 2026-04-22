@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import type { Location, CreateLocationRequest, UpdateLocationRequest, TagIdentifierInput } from '@/types/locations';
 import { LocationForm } from './LocationForm';
 import { locationsApi } from '@/lib/api/locations';
+import { normalizeLocation } from '@/lib/location/normalize';
 import { useLocationStore } from '@/stores/locations/locationStore';
 
 interface LocationFormModalProps {
@@ -33,11 +34,16 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
         const response = await locationsApi.create(createData as CreateLocationRequest);
 
-        if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
+        const raw = response.data?.data;
+        if (!raw || typeof raw !== 'object') {
+          throw new Error('Invalid response from server. Location API may not be available.');
+        }
+        const normalized = normalizeLocation(raw);
+        if (!normalized.id) {
           throw new Error('Invalid response from server. Location API may not be available.');
         }
 
-        const newLocationId = response.data.data.id;
+        const newLocationId = normalized.id;
         const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
         for (const identifier of validIdentifiers) {
           try {
@@ -50,19 +56,18 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
           }
         }
 
-        // Refetch to get identifiers included in response
         if (validIdentifiers.length > 0) {
           const freshResponse = await locationsApi.get(newLocationId);
           if (freshResponse.data?.data) {
-            addLocation(freshResponse.data.data);
+            addLocation(normalizeLocation(freshResponse.data.data));
           } else {
-            addLocation(response.data.data);
+            addLocation(normalized);
           }
         } else {
-          addLocation(response.data.data);
+          addLocation(normalized);
         }
 
-        toast.success(`Location "${response.data.data.identifier}" created successfully`);
+        toast.success(`Location "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && location) {
         // New identifiers (without id) need to be added after update
         const identifiers = (data as UpdateLocationRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
@@ -73,7 +78,12 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
         const response = await locationsApi.update(location.id, updateData);
 
-        if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
+        const raw = response.data?.data;
+        if (!raw || typeof raw !== 'object') {
+          throw new Error('Invalid response from server. Location API may not be available.');
+        }
+        const normalized = normalizeLocation(raw);
+        if (!normalized.id) {
           throw new Error('Invalid response from server. Location API may not be available.');
         }
 
@@ -90,12 +100,12 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
         const freshResponse = await locationsApi.get(location.id);
         if (freshResponse.data?.data) {
-          updateLocation(location.id, freshResponse.data.data);
+          updateLocation(location.id, normalizeLocation(freshResponse.data.data));
         } else {
-          updateLocation(location.id, response.data.data);
+          updateLocation(location.id, normalized);
         }
 
-        toast.success(`Location "${response.data.data.identifier}" updated successfully`);
+        toast.success(`Location "${normalized.identifier}" updated successfully`);
       }
 
       onClose();
