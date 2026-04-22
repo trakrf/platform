@@ -186,3 +186,40 @@ func TestGetLocationByIdentifier_CrossOrgReturns404(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 }
+
+func TestLocationsHierarchy_MissingScope_Returns403(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra446-hierarchy-missing-scope")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"assets:read"})
+
+	// Seed a location so the handler has something to resolve if auth were to pass.
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID:      orgID,
+		Identifier: "scope-test",
+		Name:       "Scope Test",
+		Path:       "scope-test",
+		ValidFrom:  time.Now(),
+		IsActive:   true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicReadRouter(store)
+
+	paths := []string{
+		"/api/v1/locations/scope-test/ancestors",
+		"/api/v1/locations/scope-test/children",
+		"/api/v1/locations/scope-test/descendants",
+	}
+	for _, p := range paths {
+		t.Run(p, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, p, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+		})
+	}
+}
