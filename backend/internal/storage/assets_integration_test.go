@@ -220,3 +220,157 @@ func TestGetAssetByIdentifier_CrossOrgLocationFenced(t *testing.T) {
 	require.Len(t, items, 1)
 	assert.Nil(t, items[0].CurrentLocationIdentifier)
 }
+
+// TestGetAssetWithLocationByID_ResolvesParent verifies that the private
+// helper returns AssetWithLocation with CurrentLocationIdentifier populated
+// when the asset has a live parent location, and nil when unset.
+// Guards against regression to the bare Asset/AssetView shape on write paths.
+func TestGetAssetWithLocationByID_ResolvesParent(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	// Create parent location inline
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Create asset with parent
+	placed, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-placed", Name: "Placed", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Happy path: parent identifier resolves
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), placed.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.NotNil(t, got.CurrentLocationIdentifier)
+	assert.Equal(t, "wh-1", *got.CurrentLocationIdentifier)
+	assert.Equal(t, "tra429-placed", got.Identifier)
+
+	// Create asset without parent
+	unplaced, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-unplaced", Name: "Unplaced", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Negative: no parent → nil CurrentLocationIdentifier
+	got2, err := store.GetAssetWithLocationByIDForTest(context.Background(), unplaced.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got2)
+	assert.Nil(t, got2.CurrentLocationIdentifier)
+}
+
+// TestGetAssetWithLocationByID_SoftDeletedAssetReturnsNil verifies the helper
+// honors the `a.deleted_at IS NULL` predicate — a tombstoned asset must surface
+// as (nil, nil), matching GetAssetByIdentifier's semantics.
+func TestGetAssetWithLocationByID_SoftDeletedAssetReturnsNil(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	a, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-doomed", Name: "Doomed", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Soft-delete via the storage method (same path production uses).
+	deleted, err := store.DeleteAsset(context.Background(), orgID, a.ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), a.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got, "soft-deleted asset should surface as nil, not the stale row")
+}
+
+// TestGetAssetWithLocationByID_SoftDeletedLocationYieldsNilIdentifier verifies
+// the LEFT JOIN's `l.deleted_at IS NULL` predicate — a live asset pointing at
+// a tombstoned location should expose nil CurrentLocationIdentifier, never
+// the stale identifier.
+func TestGetAssetWithLocationByID_SoftDeletedLocationYieldsNilIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "tra429-loc-tombstone", Name: "Tombstone",
+		Path: "tra429-loc-tombstone", ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	a, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-stale-ref", Name: "StaleRef", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Soft-delete the parent location, leaving the FK dangling.
+	deleted, err := store.DeleteLocation(context.Background(), orgID, loc.ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), a.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Nil(t, got.CurrentLocationIdentifier,
+		"LEFT JOIN's deleted_at IS NULL predicate must suppress the stale parent identifier")
+}
+
+// TestGetAssetWithLocationByID_UnknownIDReturnsNil verifies the (nil, nil)
+// sentinel on pgx.ErrNoRows for a surrogate id that names no asset.
+func TestGetAssetWithLocationByID_UnknownIDReturnsNil(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	got, err := store.GetAssetWithLocationByIDForTest(context.Background(), 99999999)
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+// TestUpdateAsset_PopulatesCurrentLocationIdentifier verifies that an
+// UpdateAsset call returns the AssetWithLocation shape with the parent
+// location's natural key resolved — the contract write-handlers depend on
+// to emit PublicAssetView (TRA-429).
+func TestUpdateAsset_PopulatesCurrentLocationIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	base, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-widget", Name: "Widget", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	newName := "updated for tra-429"
+	result, err := store.UpdateAsset(context.Background(), orgID, base.ID, asset.UpdateAssetRequest{
+		Name: &newName,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.CurrentLocationIdentifier)
+	assert.Equal(t, "wh-1", *result.CurrentLocationIdentifier)
+	assert.Equal(t, newName, result.Name)
+	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
+}

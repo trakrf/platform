@@ -446,19 +446,28 @@ func TestUpdateAsset(t *testing.T) {
 		Description: &newDescription,
 	}
 
-	rows := pgxmock.NewRows([]string{
-		"id", "org_id", "identifier", "name", "type", "description",
-		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
-		"created_at", "updated_at", "deleted_at",
-	}).AddRow(
-		assetID, 1, "TEST-001", newName, "equipment", newDescription,
-		nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
-		now, now, nil,
-	)
-
+	// UPDATE ... RETURNING id
 	mock.ExpectQuery(`update trakrf.assets`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
-		WillReturnRows(rows)
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(assetID))
+
+	// getAssetWithLocationByID: SELECT asset + joined location identifier
+	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.assets a[\s\S]+LEFT JOIN trakrf.locations`).
+		WithArgs(assetID).
+		WillReturnRows(pgxmock.NewRows([]string{
+			"id", "org_id", "identifier", "name", "type", "description",
+			"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
+			"created_at", "updated_at", "deleted_at", "loc_identifier",
+		}).AddRow(
+			assetID, 1, "TEST-001", newName, "equipment", newDescription,
+			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), true,
+			now, now, nil, nil,
+		))
+
+	// GetIdentifiersByAssetID: empty identifiers
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+		WithArgs(assetID).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 
 	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
@@ -527,19 +536,28 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 		IsActive: &isActive,
 	}
 
-	rows := pgxmock.NewRows([]string{
-		"id", "org_id", "identifier", "name", "type", "description",
-		"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
-		"created_at", "updated_at", "deleted_at",
-	}).AddRow(
-		assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
-		nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), false,
-		now, now, nil,
-	)
-
+	// UPDATE ... RETURNING id
 	mock.ExpectQuery(`update trakrf.assets`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
-		WillReturnRows(rows)
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(assetID))
+
+	// getAssetWithLocationByID: SELECT asset + joined location identifier
+	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.assets a[\s\S]+LEFT JOIN trakrf.locations`).
+		WithArgs(assetID).
+		WillReturnRows(pgxmock.NewRows([]string{
+			"id", "org_id", "identifier", "name", "type", "description",
+			"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
+			"created_at", "updated_at", "deleted_at", "loc_identifier",
+		}).AddRow(
+			assetID, 1, "TEST-001", "Test Asset", "equipment", "Test description",
+			nil, now, timePtr(now.Add(24*time.Hour)), []byte(`{"key":"value"}`), false,
+			now, now, nil, nil,
+		))
+
+	// GetIdentifiersByAssetID: empty identifiers
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+		WithArgs(assetID).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 
 	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 

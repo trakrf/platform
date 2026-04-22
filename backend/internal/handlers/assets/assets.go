@@ -1,12 +1,10 @@
 package assets
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -38,34 +36,6 @@ func NewHandler(storage *storage.Storage) *Handler {
 	}
 }
 
-func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
-	var validTo *time.Time
-	if request.ValidTo != nil && !request.ValidTo.IsZero() {
-		t := request.ValidTo.ToTime()
-		validTo = &t
-	}
-
-	assetToCreate := asset.Asset{
-		OrgID:             request.OrgID,
-		Identifier:        request.Identifier,
-		Name:              request.Name,
-		Type:              request.Type,
-		Description:       request.Description,
-		CurrentLocationID: request.CurrentLocationID,
-		ValidFrom:         request.ValidFrom.ToTime(),
-		ValidTo:           validTo,
-		Metadata:          request.Metadata,
-		IsActive:          request.IsActive,
-	}
-
-	baseAsset, err := handler.storage.CreateAsset(ctx, assetToCreate)
-	if err != nil {
-		return nil, err
-	}
-
-	return &asset.AssetView{Asset: *baseAsset, Identifiers: []shared.TagIdentifier{}}, nil
-}
-
 // @Summary      Create an asset
 // @Description  Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
 // @Description  Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
@@ -74,7 +44,7 @@ func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, reque
 // @Accept       json
 // @Produce      json
 // @Param        request  body  asset.CreateAssetWithIdentifiersRequest  true  "Asset to create with optional identifiers"
-// @Success      201  {object}  map[string]any                "data: asset.AssetView"
+// @Success      201  {object}  assets.CreateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -106,17 +76,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	request.OrgID = orgID
 
-	var result *asset.AssetView
-
-	if len(request.Identifiers) > 0 {
-		result, err = handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
-	} else {
-		result, err = handler.createAssetWithoutIdentifiers(r.Context(), request)
-	}
-
+	result, err := handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
 	if err != nil {
-		// Storage returns "already exists" / "already exist" strings for unique violations
-		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.AssetCreateFailed, err.Error(), requestID)
@@ -127,7 +88,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Location", "/api/v1/assets/"+strconv.Itoa(result.ID))
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": asset.ToPublicAssetView(*result)})
 }
 
 // @Summary      Update an asset
@@ -138,7 +99,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        identifier  path  string                      true  "Asset identifier"
 // @Param        request     body  asset.UpdateAssetRequest    true  "Fields to update"
-// @Success      200  {object}  map[string]any                "data: asset.Asset"
+// @Success      200  {object}  assets.UpdateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -210,7 +171,7 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]*asset.Asset{"data": result})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": asset.ToPublicAssetView(*result)})
 }
 
 // @Summary Get asset by surrogate ID (internal)
@@ -332,6 +293,17 @@ type ListAssetsResponse struct {
 
 // GetAssetResponse is the typed envelope returned by GET /api/v1/assets/{identifier}.
 type GetAssetResponse struct {
+	Data asset.PublicAssetView `json:"data"`
+}
+
+// CreateAssetResponse is the typed envelope returned by POST /api/v1/assets.
+type CreateAssetResponse struct {
+	Data asset.PublicAssetView `json:"data"`
+}
+
+// UpdateAssetResponse is the typed envelope returned by PUT /api/v1/assets/{identifier}
+// and PUT /api/v1/assets/by-id/{id}.
+type UpdateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
 

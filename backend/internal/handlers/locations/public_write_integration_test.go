@@ -187,11 +187,9 @@ func TestDeleteLocation_APIKey_HappyPath(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped DeleteLocation from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 }
 
 func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
@@ -256,18 +254,16 @@ func TestRemoveLocationIdentifier_APIKey_HappyPath(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped RemoveIdentifier from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
 	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
 }
 
-func TestRemoveLocationIdentifier_WrongLocationID_ReturnsDeletedFalse(t *testing.T) {
+func TestRemoveLocationIdentifier_WrongLocationID_DoesNotDelete(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations-write-remove-ident-wrong-owner")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -296,17 +292,17 @@ func TestRemoveLocationIdentifier_WrongLocationID_ReturnsDeletedFalse(t *testing
 	r := buildLocationsPublicWriteRouter(store)
 
 	// DELETE via otherLoc's identifier targeting ident (which belongs to owningLoc).
+	// Storage cross-location check: identifierID's location_id won't match other-loc's ID → no row
+	// is soft-deleted, but TRA-407 changed the response to an unconditional 204. The invariant
+	// being verified here is that the identifier itself survives — not the (now gone) "deleted"
+	// flag in the response body.
 	url := "/api/v1/locations/other-loc/identifiers/" + strconv.Itoa(ident.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.False(t, resp["deleted"], "mismatched identifier must not delete the identifier")
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
 	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
 	require.NoError(t, err)
@@ -337,7 +333,8 @@ func TestLocationsUpdate_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	// TRA-407 flipped UpdateLocation from 202 to 200.
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
@@ -382,10 +379,9 @@ func TestLocationsDelete_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped DeleteLocation from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 }
 
 func TestLocationsDelete_UnknownIdentifier_Returns404(t *testing.T) {
@@ -480,10 +476,9 @@ func TestLocationsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped RemoveIdentifier from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 }
 
 func TestLocationsRemoveIdentifier_UnknownParent_Returns404(t *testing.T) {

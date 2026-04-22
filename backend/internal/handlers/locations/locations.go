@@ -1,12 +1,10 @@
 package locations
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -35,32 +33,6 @@ func NewHandler(storage *storage.Storage) *Handler {
 	}
 }
 
-func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationView, error) {
-	var validTo *time.Time
-	if request.ValidTo != nil && !request.ValidTo.IsZero() {
-		t := request.ValidTo.ToTime()
-		validTo = &t
-	}
-
-	loc := location.Location{
-		OrgID:            orgID,
-		Name:             request.Name,
-		Identifier:       request.Identifier,
-		ParentLocationID: request.ParentLocationID,
-		Description:      request.Description,
-		ValidFrom:        request.ValidFrom.ToTime(),
-		ValidTo:          validTo,
-		IsActive:         request.IsActive,
-	}
-
-	baseLoc, err := handler.storage.CreateLocation(ctx, loc)
-	if err != nil {
-		return nil, err
-	}
-
-	return &location.LocationView{Location: *baseLoc, Identifiers: []shared.TagIdentifier{}}, nil
-}
-
 // @Summary      Create a location
 // @Description  Create a new location in the hierarchy, optionally with one or more tag identifiers.
 // @Description  Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
@@ -69,7 +41,7 @@ func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, or
 // @Accept       json
 // @Produce      json
 // @Param        request  body  location.CreateLocationWithIdentifiersRequest  true  "Location to create with optional identifiers"
-// @Success      201  {object}  map[string]any                "data: location.LocationView"
+// @Success      201  {object}  locations.CreateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -99,17 +71,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var result *location.LocationView
-
-	if len(request.Identifiers) > 0 {
-		result, err = handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
-	} else {
-		result, err = handler.createLocationWithoutIdentifiers(r.Context(), orgID, request)
-	}
-
+	result, err := handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
 	if err != nil {
-		// Storage returns "already exists" / "already exist" strings for unique violations
-		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.LocationCreateFailed, err.Error(), requestID)
@@ -120,7 +83,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Location", "/api/v1/locations/"+strconv.Itoa(result.ID))
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": location.ToPublicLocationView(*result)})
 }
 
 // @Summary      Update a location
@@ -131,7 +94,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        identifier  path  string                           true  "Location identifier"
 // @Param        request     body  location.UpdateLocationRequest   true  "Fields to update"
-// @Success      200  {object}  map[string]any                "data: location.Location"
+// @Success      200  {object}  locations.UpdateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -201,7 +164,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]*location.Location{"data": result})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": location.ToPublicLocationView(*result)})
 }
 
 // @Summary Delete location
@@ -277,6 +240,17 @@ type ListLocationsResponse struct {
 
 // GetLocationResponse is the typed envelope returned by GET /api/v1/locations/{identifier}.
 type GetLocationResponse struct {
+	Data location.PublicLocationView `json:"data"`
+}
+
+// CreateLocationResponse is the typed envelope returned by POST /api/v1/locations.
+type CreateLocationResponse struct {
+	Data location.PublicLocationView `json:"data"`
+}
+
+// UpdateLocationResponse is the typed envelope returned by PUT /api/v1/locations/{identifier}
+// and PUT /api/v1/locations/by-id/{id}.
+type UpdateLocationResponse struct {
 	Data location.PublicLocationView `json:"data"`
 }
 

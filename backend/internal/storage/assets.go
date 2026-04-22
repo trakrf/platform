@@ -80,7 +80,7 @@ func GenerateAssetIdentifier(seq int) string {
 	return fmt.Sprintf("ASSET-%04d", seq)
 }
 
-func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.Asset, error) {
+func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.AssetWithLocation, error) {
 	updates := []string{}
 	args := []any{id, orgID}
 	argPos := 3
@@ -106,16 +106,11 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		update trakrf.assets
 		set %s, updated_at = now()
 		where id = $1 and org_id = $2 and deleted_at is null
-		returning id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
-		          metadata, is_active, created_at, updated_at, deleted_at
+		returning id
 	`, strings.Join(updates, ", "))
 
-	var asset asset.Asset
-	err = s.pool.QueryRow(ctx, query, args...).Scan(&asset.ID, &asset.OrgID,
-		&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
-		&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
-		&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
-	)
+	var updatedID int
+	err = s.pool.QueryRow(ctx, query, args...).Scan(&updatedID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -134,7 +129,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		return nil, fmt.Errorf("failed to update asset: %w", err)
 	}
 
-	return &asset, nil
+	return s.getAssetWithLocationByID(ctx, updatedID)
 }
 
 func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, error) {
@@ -409,7 +404,7 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	return fields, nil
 }
 
-func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
+func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetWithLocation, error) {
 	// Auto-generate identifier if empty
 	if strings.TrimSpace(request.Identifier) == "" {
 		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
@@ -455,7 +450,7 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		return nil, parseAssetWithIdentifiersError(err, request.Identifier)
 	}
 
-	return s.GetAssetViewByID(ctx, assetID)
+	return s.getAssetWithLocationByID(ctx, assetID)
 }
 
 func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetView, error) {
@@ -475,6 +470,55 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetVie
 	return &asset.AssetView{
 		Asset:       *baseAsset,
 		Identifiers: identifiers,
+	}, nil
+}
+
+// getAssetWithLocationByID returns an AssetWithLocation by surrogate id,
+// performing the LEFT JOIN on parent location and fetching identifiers.
+// Used by CreateAssetWithIdentifiers and UpdateAsset to emit the public
+// write-response shape. Returns (nil, nil) if the asset doesn't exist
+// or is soft-deleted.
+// Caller MUST have already authorized access to this asset id; this helper does not filter by org_id.
+func (s *Storage) getAssetWithLocationByID(ctx context.Context, id int) (*asset.AssetWithLocation, error) {
+	query := `
+		SELECT
+			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
+			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
+			a.is_active, a.created_at, a.updated_at, a.deleted_at,
+			l.identifier
+		FROM trakrf.assets a
+		LEFT JOIN trakrf.locations l ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
+		WHERE a.id = $1 AND a.deleted_at IS NULL
+		LIMIT 1
+	`
+	var (
+		a      asset.Asset
+		locIdt *string
+	)
+	err := s.pool.QueryRow(ctx, query, id).Scan(
+		&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+		&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+		&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+		&locIdt,
+	)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get asset with location by id: %w", err)
+	}
+
+	identifiers, err := s.GetIdentifiersByAssetID(ctx, a.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &asset.AssetWithLocation{
+		AssetView: asset.AssetView{
+			Asset:       a,
+			Identifiers: identifiers,
+		},
+		CurrentLocationIdentifier: locIdt,
 	}, nil
 }
 
@@ -727,4 +771,11 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 	}
 
 	return fmt.Errorf("failed to create asset with identifiers: %w", err)
+}
+
+// GetAssetWithLocationByIDForTest exposes getAssetWithLocationByID to integration
+// tests in the same package. Production code must use GetAssetByIdentifier or
+// the CreateAssetWithIdentifiers / UpdateAsset return values.
+func (s *Storage) GetAssetWithLocationByIDForTest(ctx context.Context, id int) (*asset.AssetWithLocation, error) {
+	return s.getAssetWithLocationByID(ctx, id)
 }

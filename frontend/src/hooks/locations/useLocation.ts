@@ -9,7 +9,12 @@ function normalizeLocation(raw: Location): Location {
   const parentId = raw.parent
     ? (byIdentifier?.get(raw.parent)?.id ?? null)
     : null;
-  return { ...raw, id: raw.surrogate_id, parent_location_id: parentId };
+  return {
+    ...raw,
+    id: raw.surrogate_id ?? raw.id,
+    surrogate_id: raw.surrogate_id ?? raw.id,
+    parent_location_id: parentId,
+  };
 }
 
 export interface UseLocationOptions {

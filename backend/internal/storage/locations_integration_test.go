@@ -143,3 +143,160 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 	assert.Len(t, tagged.Identifiers, 1)
 	assert.Equal(t, "EPC-TAGGED", tagged.Identifiers[0].Value)
 }
+
+// TestGetLocationWithParentByID_ResolvesParent verifies that the private
+// helper returns LocationWithParent with ParentIdentifier populated when the
+// location has a live parent, and nil when the location is root-level.
+// Guards against regression to the bare Location/LocationView shape on write
+// paths.
+func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	// Create parent location inline
+	parent, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Create child with parent
+	child, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1.bay-3", Name: "Bay 3",
+		ParentLocationID: &parent.ID,
+		Path:             "wh-1.bay-3", ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Happy path: parent identifier resolves
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), child.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.NotNil(t, got.ParentIdentifier)
+	assert.Equal(t, "wh-1", *got.ParentIdentifier)
+	assert.Equal(t, "wh-1.bay-3", got.Identifier)
+
+	// Create a root-level location (no parent)
+	root, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-2", Name: "Warehouse 2", Path: "wh-2",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Negative: no parent → nil ParentIdentifier
+	got2, err := store.GetLocationWithParentByIDForTest(context.Background(), root.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got2)
+	assert.Nil(t, got2.ParentIdentifier)
+}
+
+// TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil verifies the
+// helper honors the `l.deleted_at IS NULL` predicate — a tombstoned location
+// must surface as (nil, nil), matching GetLocationByIdentifier's semantics.
+func TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "tra429-loc-doomed", Name: "Doomed",
+		Path: "tra429-loc-doomed", ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Soft-delete via the storage method (same path production uses).
+	deleted, err := store.DeleteLocation(context.Background(), orgID, loc.ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), loc.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got, "soft-deleted location should surface as nil, not the stale row")
+}
+
+// TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier verifies
+// the LEFT JOIN's `p.deleted_at IS NULL` predicate — a live child pointing at
+// a tombstoned parent should expose nil ParentIdentifier, never the stale
+// identifier.
+func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	parent, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "tra429-parent-tombstone", Name: "ParentTombstone",
+		Path: "tra429-parent-tombstone", ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	child, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "tra429-stale-child", Name: "StaleChild",
+		ParentLocationID: &parent.ID,
+		Path:             "tra429-stale-child", ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Soft-delete the parent location, leaving the FK dangling.
+	deleted, err := store.DeleteLocation(context.Background(), orgID, parent.ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), child.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Nil(t, got.ParentIdentifier,
+		"LEFT JOIN's deleted_at IS NULL predicate must suppress the stale parent identifier")
+}
+
+// TestGetLocationWithParentByID_UnknownIDReturnsNil verifies the (nil, nil)
+// sentinel on pgx.ErrNoRows for a surrogate id that names no location.
+func TestGetLocationWithParentByID_UnknownIDReturnsNil(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	got, err := store.GetLocationWithParentByIDForTest(context.Background(), 99999999)
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+// TestUpdateLocation_PopulatesParentIdentifier verifies UpdateLocation
+// returns the LocationWithParent shape with ParentIdentifier populated
+// when the location has a live parent (TRA-429).
+func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	parent, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	child, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1.bay-3", Name: "Bay 3",
+		Path: "wh-1.bay-3", ParentLocationID: &parent.ID,
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	newName := "updated for tra-429"
+	result, err := store.UpdateLocation(context.Background(), orgID, child.ID, location.UpdateLocationRequest{
+		Name: &newName,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.ParentIdentifier)
+	assert.Equal(t, "wh-1", *result.ParentIdentifier)
+	assert.Equal(t, newName, result.Name)
+	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
+}

@@ -41,7 +41,7 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 	return &loc, nil
 }
 
-func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.Location, error) {
+func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.LocationWithParent, error) {
 	updates := []string{}
 	args := []any{id, orgID}
 	argPos := 3
@@ -67,15 +67,11 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		UPDATE trakrf.locations
 		SET %s, updated_at = NOW()
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-		RETURNING id, org_id, name, identifier, parent_location_id, path, depth,
-		          description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
+		RETURNING id
 	`, strings.Join(updates, ", "))
 
-	var loc location.Location
-	err = s.pool.QueryRow(ctx, query, args...).Scan(&loc.ID, &loc.OrgID, &loc.Name,
-		&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-		&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-	)
+	var updatedID int
+	err = s.pool.QueryRow(ctx, query, args...).Scan(&updatedID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -94,7 +90,7 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		return nil, fmt.Errorf("failed to update location: %w", err)
 	}
 
-	return &loc, nil
+	return s.getLocationWithParentByID(ctx, updatedID)
 }
 
 func (s *Storage) GetLocationByID(ctx context.Context, id int) (*location.Location, error) {
@@ -430,7 +426,7 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 }
 
 // CreateLocationWithIdentifiers creates a location with tag identifiers in a single transaction
-func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationView, error) {
+func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationWithParent, error) {
 	identifiersJSON, err := identifiersToJSON(request.Identifiers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
@@ -466,7 +462,7 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 		return nil, parseLocationWithIdentifiersError(err, request.Identifier)
 	}
 
-	return s.GetLocationViewByID(ctx, locationID)
+	return s.getLocationWithParentByID(ctx, locationID)
 }
 
 // GetLocationViewByID fetches a location with its tag identifiers
@@ -487,6 +483,56 @@ func (s *Storage) GetLocationViewByID(ctx context.Context, id int) (*location.Lo
 	return &location.LocationView{
 		Location:    *baseLoc,
 		Identifiers: identifiers,
+	}, nil
+}
+
+// getLocationWithParentByID returns a LocationWithParent by surrogate id,
+// performing the self-join on parent location and fetching identifiers.
+// Used by CreateLocationWithIdentifiers and UpdateLocation to emit the
+// public write-response shape. Returns (nil, nil) if the location doesn't
+// exist or is soft-deleted.
+// Caller MUST have already authorized access to this location id; this
+// helper does not filter by org_id.
+func (s *Storage) getLocationWithParentByID(ctx context.Context, id int) (*location.LocationWithParent, error) {
+	query := `
+		SELECT
+			l.id, l.org_id, l.name, l.identifier, l.parent_location_id,
+			l.path, l.depth, l.description, l.valid_from, l.valid_to,
+			l.is_active, l.created_at, l.updated_at, l.deleted_at,
+			p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.id = $1 AND l.deleted_at IS NULL
+		LIMIT 1
+	`
+	var (
+		loc    location.Location
+		parIdt *string
+	)
+	err := s.pool.QueryRow(ctx, query, id).Scan(
+		&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+		&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+		&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+		&parIdt,
+	)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get location with parent by id: %w", err)
+	}
+
+	identifiers, err := s.GetIdentifiersByLocationID(ctx, loc.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &location.LocationWithParent{
+		LocationView: location.LocationView{
+			Location:    loc,
+			Identifiers: identifiers,
+		},
+		ParentIdentifier: parIdt,
 	}, nil
 }
 
@@ -766,4 +812,12 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	}
 
 	return fields, nil
+}
+
+// GetLocationWithParentByIDForTest exposes getLocationWithParentByID to
+// integration tests in the same package. Production code must use
+// GetLocationByIdentifier or the CreateLocationWithIdentifiers /
+// UpdateLocation return values.
+func (s *Storage) GetLocationWithParentByIDForTest(ctx context.Context, id int) (*location.LocationWithParent, error) {
+	return s.getLocationWithParentByID(ctx, id)
 }

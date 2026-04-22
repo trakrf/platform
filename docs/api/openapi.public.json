@@ -135,6 +135,14 @@
         },
         "type": "object"
       },
+      "assets.CreateAssetResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/asset.PublicAssetView"
+          }
+        },
+        "type": "object"
+      },
       "assets.GetAssetResponse": {
         "properties": {
           "data": {
@@ -162,6 +170,14 @@
           "total_count": {
             "example": 100,
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "assets.UpdateAssetResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/asset.PublicAssetView"
           }
         },
         "type": "object"
@@ -388,6 +404,14 @@
         },
         "type": "object"
       },
+      "locations.CreateLocationResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/location.PublicLocationView"
+          }
+        },
+        "type": "object"
+      },
       "locations.GetLocationResponse": {
         "properties": {
           "data": {
@@ -415,6 +439,14 @@
           "total_count": {
             "example": 100,
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "locations.UpdateLocationResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/location.PublicLocationView"
           }
         },
         "type": "object"
@@ -706,12 +738,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/assets.CreateAssetResponse"
                 }
               }
             },
-            "description": "data: asset.AssetView"
+            "description": "Created"
           },
           "400": {
             "content": {
@@ -1015,12 +1046,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/assets.UpdateAssetResponse"
                 }
               }
             },
-            "description": "data: asset.Asset"
+            "description": "OK"
           },
           "400": {
             "content": {
@@ -1677,12 +1707,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/locations.CreateLocationResponse"
                 }
               }
             },
-            "description": "data: location.LocationView"
+            "description": "Created"
           },
           "400": {
             "content": {
@@ -2125,12 +2154,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/locations.UpdateLocationResponse"
                 }
               }
             },
-            "description": "data: location.Location"
+            "description": "OK"
           },
           "400": {
             "content": {

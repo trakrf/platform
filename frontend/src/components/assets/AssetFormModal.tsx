@@ -60,13 +60,17 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
         const response = await assetsApi.create(createData as CreateAssetRequest);
 
-        if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
+        const raw = response.data?.data;
+        if (!raw || typeof raw !== 'object') {
+          throw new Error('Invalid response from server. Asset API may not be available.');
+        }
+        const normalized = normalizeAsset(raw);
+        if (!normalized.id) {
           throw new Error('Invalid response from server. Asset API may not be available.');
         }
 
-        const newAssetId = response.data.data.id;
+        const newAssetId = normalized.id;
 
-        // Add identifiers to the newly created asset
         const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
         for (const identifier of validIdentifiers) {
           try {
@@ -80,38 +84,35 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
           }
         }
 
-        // Fetch fresh asset data with all identifiers if any were added.
-        // Normalize before caching: the GET /by-id response uses `surrogate_id`,
-        // the POST /assets response uses `id` — addAsset needs `id` populated
-        // either way, otherwise the cache stores a null-keyed phantom (TRA-427).
         if (validIdentifiers.length > 0) {
           const freshResponse = await assetsApi.get(newAssetId);
           if (freshResponse.data?.data) {
             addAsset(normalizeAsset(freshResponse.data.data));
           } else {
-            addAsset(normalizeAsset(response.data.data));
+            addAsset(normalized);
           }
         } else {
-          addAsset(normalizeAsset(response.data.data));
+          addAsset(normalized);
         }
 
-        toast.success(`Asset "${response.data.data.identifier}" created successfully`);
+        toast.success(`Asset "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
-        // Extract new identifiers (those without an id) from the request
         const identifiers = (data as UpdateAssetRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
         const newIdentifiers = identifiers.filter(id => !id.id);
 
-        // Remove identifiers from the update request (backend doesn't support it)
         const { identifiers: _, ...updateData } = data as UpdateAssetRequest & { identifiers?: TagIdentifierInput[] };
 
-        // Update the asset first
         const response = await assetsApi.update(asset.id, updateData);
 
-        if (!response.data?.data || typeof response.data.data !== 'object' || !response.data.data.id) {
+        const raw = response.data?.data;
+        if (!raw || typeof raw !== 'object') {
+          throw new Error('Invalid response from server. Asset API may not be available.');
+        }
+        const normalized = normalizeAsset(raw);
+        if (!normalized.id) {
           throw new Error('Invalid response from server. Asset API may not be available.');
         }
 
-        // Add new identifiers one by one
         for (const identifier of newIdentifiers) {
           try {
             await assetsApi.addIdentifier(asset.id, {
@@ -119,22 +120,19 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
               value: identifier.value,
             });
           } catch (idErr: any) {
-            // If adding identifier fails, show a warning but don't fail the whole operation
             console.error('Failed to add identifier:', idErr);
             toast.error(`Failed to add tag "${identifier.value}": ${idErr.message || 'Unknown error'}`);
           }
         }
 
-        // Fetch fresh asset data with all identifiers
         const freshResponse = await assetsApi.get(asset.id);
         if (freshResponse.data?.data) {
           updateCachedAsset(asset.id, normalizeAsset(freshResponse.data.data));
         } else {
-          // Fall back to the update response if get fails
-          updateCachedAsset(asset.id, normalizeAsset(response.data.data));
+          updateCachedAsset(asset.id, normalized);
         }
 
-        toast.success(`Asset "${response.data.data.identifier}" updated successfully`);
+        toast.success(`Asset "${normalized.identifier}" updated successfully`);
       }
 
       onClose(true);

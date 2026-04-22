@@ -18,7 +18,11 @@ const PAGE_SIZE = 100;
  * natural key → surrogate ID).
  */
 function normalizeLocation(raw: Location): Location {
-  return { ...raw, id: raw.surrogate_id };
+  return {
+    ...raw,
+    id: raw.surrogate_id ?? raw.id,
+    surrogate_id: raw.surrogate_id ?? raw.id,
+  };
 }
 
 /**
