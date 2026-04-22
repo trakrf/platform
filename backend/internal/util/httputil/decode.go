@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
 )
@@ -44,7 +45,19 @@ func DecodeJSONStrict(r *http.Request, dst any) error {
 
 // RespondDecodeError writes a 400 with a stable, human-safe detail string.
 // Use this as the failure branch partner of DecodeJSON.
+// If the error is a DisallowUnknownFields error, the detail includes the field name.
 func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
+	detail := "Request body is not valid JSON"
+	// Extract field name from json.SyntaxError for unknown field errors
+	if err != nil {
+		errStr := err.Error()
+		// Match "json: unknown field "fieldname"" pattern
+		re := regexp.MustCompile(`unknown field "([^"]+)"`)
+		if matches := re.FindStringSubmatch(errStr); len(matches) > 1 {
+			fieldName := matches[1]
+			detail = fmt.Sprintf("Request body is not valid JSON: unknown field %q", fieldName)
+		}
+	}
 	WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
-		"Bad Request", "Request body is not valid JSON", requestID)
+		"Bad Request", detail, requestID)
 }

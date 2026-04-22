@@ -60,6 +60,24 @@ func TestRespondDecodeError_StableDetail(t *testing.T) {
 	}
 }
 
+func TestRespondDecodeError_UnknownField_IncludesFieldName(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	// Simulate json.Decoder error for unknown field
+	httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: errors.New("json: unknown field \"parent_path\"")}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+	if !strings.Contains(resp.Error.Detail, "parent_path") {
+		t.Fatalf("detail = %q, should contain field name \"parent_path\"", resp.Error.Detail)
+	}
+}
+
 func TestDecodeJSONStrict_RejectsUnknownField(t *testing.T) {
 	type target struct {
 		Name string `json:"name"`
