@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -69,7 +70,8 @@ func TestRateLimit_AllowedRequestSetsHeaders(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
-	require.Equal(t, "119", rec.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"),
+		"tokens above Limit: Remaining caps at Limit")
 	require.NotEmpty(t, rec.Header().Get("X-RateLimit-Reset"))
 	require.Empty(t, rec.Header().Get("Retry-After"), "allowed responses have no Retry-After")
 }
@@ -117,6 +119,30 @@ func TestRateLimit_DeniedRequestReturns429WithEnvelope(t *testing.T) {
 	require.Equal(t, "/api/v1/assets", body.Error.Instance)
 }
 
+func TestRateLimit_HeaderInvariantsAcrossManyRequests(t *testing.T) {
+	lim, _ := newTestRateLimiter(t)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Drive enough requests to move through the full range of bucket states:
+	// fresh (tokens above limit), at-limit, below-limit, drained. IETF
+	// RateLimit header contract requires remaining ≤ limit on every response.
+	for i := 0; i < 130; i++ {
+		rec := httptest.NewRecorder()
+		RateLimit(lim)(next).ServeHTTP(rec, requestWithAPIKey("invariant-key", 1))
+
+		limit, err := strconv.Atoi(rec.Header().Get("X-RateLimit-Limit"))
+		require.NoErrorf(t, err, "request %d: X-RateLimit-Limit must be integer", i+1)
+		remaining, err := strconv.Atoi(rec.Header().Get("X-RateLimit-Remaining"))
+		require.NoErrorf(t, err, "request %d: X-RateLimit-Remaining must be integer", i+1)
+		require.LessOrEqualf(t, remaining, limit,
+			"request %d: X-RateLimit-Remaining=%d must be ≤ X-RateLimit-Limit=%d",
+			i+1, remaining, limit)
+	}
+}
+
 func TestRateLimit_TwoPrincipalsIndependent(t *testing.T) {
 	lim, _ := newTestRateLimiter(t)
 
@@ -139,5 +165,5 @@ func TestRateLimit_TwoPrincipalsIndependent(t *testing.T) {
 	recB := httptest.NewRecorder()
 	RateLimit(lim)(drain).ServeHTTP(recB, requestWithAPIKey("key-b", 2))
 	require.Equal(t, http.StatusOK, recB.Code)
-	require.Equal(t, "119", recB.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "60", recB.Header().Get("X-RateLimit-Remaining"))
 }

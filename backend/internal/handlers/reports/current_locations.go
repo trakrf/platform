@@ -37,8 +37,8 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
 // @Success 200 {object} map[string]any
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
-// @Header  200 {integer} X-RateLimit-Remaining "Tokens left in bucket at response time"
-// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp when bucket fully refills"
+// @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
+// @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"

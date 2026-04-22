@@ -48,7 +48,7 @@ func TestRateLimit_MountedOnEitherAuthGroup(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
-	require.Equal(t, "119", rec.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"))
 }
 
 // contextWithPrincipal mirrors what APIKeyAuth does internally. Kept inline

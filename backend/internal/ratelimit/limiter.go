@@ -10,11 +10,17 @@ import (
 )
 
 // Decision is returned from Allow for every request.
+//
+// Header semantics follow IETF draft-ietf-httpapi-ratelimit-headers: clients
+// treat Limit as a ceiling, so Remaining is always ≤ Limit. The underlying
+// token bucket retains a burst capacity above Limit as a silent safety margin
+// for spiky-but-well-intentioned clients; we don't surface it as quota because
+// advertising it would defeat the steady-state pacing signal.
 type Decision struct {
 	Allowed    bool
 	Limit      int           // steady-state requests per minute
-	Remaining  int           // whole tokens left after this call
-	ResetAt    time.Time     // when the bucket will be fully refilled
+	Remaining  int           // requests left before throttling; always ≤ Limit
+	ResetAt    time.Time     // when Remaining will next equal Limit (== now if already there)
 	RetryAfter time.Duration // 0 when allowed; else wait time until next token
 }
 
@@ -91,18 +97,35 @@ func (l *Limiter) Allow(key string) Decision {
 	}
 
 	perSec := float64(l.cfg.RatePerMinute) / 60.0
+	limit := l.cfg.RatePerMinute
+
+	// Cap Remaining at Limit. Burst tokens above Limit are a safety margin for
+	// spiky clients, not advertised quota — surfacing them would violate the
+	// IETF invariant (remaining ≤ limit) and encourage clients to pace against
+	// a ceiling higher than the steady-state rate they were sold.
+	remaining := int(math.Floor(tokens))
+	if remaining > limit {
+		remaining = limit
+	}
+
+	// ResetAt = wall-clock time when Remaining will next equal Limit. When
+	// tokens ≥ limit the client already has full quota, so ResetAt is now
+	// (sleep(reset-now) → 0, the correct no-op). Below limit, it's the time
+	// by which enough tokens will have refilled to restore the full quota.
+	var resetAt time.Time
+	if tokens >= float64(limit) {
+		resetAt = now
+	} else {
+		deficit := float64(limit) - tokens
+		resetAt = now.Add(time.Duration(deficit / perSec * float64(time.Second)))
+	}
 
 	d := Decision{
 		Allowed:   allowed,
-		Limit:     l.cfg.RatePerMinute,
-		Remaining: int(math.Floor(tokens)),
+		Limit:     limit,
+		Remaining: remaining,
+		ResetAt:   resetAt,
 	}
-
-	deficit := float64(l.cfg.Burst) - tokens
-	if deficit < 0 {
-		deficit = 0
-	}
-	d.ResetAt = now.Add(time.Duration(deficit / perSec * float64(time.Second)))
 
 	if !allowed {
 		needed := 1.0 - tokens
