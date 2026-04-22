@@ -176,11 +176,9 @@ func TestDeleteAsset_APIKey_HappyPath(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped DeleteAsset from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 }
 
 func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
@@ -252,11 +250,9 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped RemoveIdentifier from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
 	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
 	require.NoError(t, err)
@@ -292,18 +288,17 @@ func TestRemoveAssetIdentifier_WrongAssetIdentifier_ReturnsDeletedFalse(t *testi
 	r := buildAssetsPublicWriteRouter(store)
 
 	// DELETE via other-asset's {identifier} targeting ident (which belongs to owning-asset).
-	// Storage cross-asset check: identifierID's asset_id won't match other-asset's ID → deleted=false.
+	// Storage cross-asset check: identifierID's asset_id won't match other-asset's ID → no row
+	// is soft-deleted, but TRA-407 changed the response to an unconditional 204. The invariant
+	// being verified here is that the identifier itself survives — not the (now gone) "deleted"
+	// flag in the response body.
 	url := "/api/v1/assets/other-asset/identifiers/" + strconv.Itoa(ident.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.False(t, resp["deleted"], "mismatched {identifier} must not delete the identifier")
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
 	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
 	require.NoError(t, err)
@@ -334,7 +329,8 @@ func TestAssetsUpdate_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	// TRA-407 flipped UpdateAsset from 202 to 200.
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -387,11 +383,9 @@ func TestAssetsDelete_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped DeleteAsset from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 }
 
 func TestAssetsDelete_UnknownIdentifier_Returns404(t *testing.T) {
@@ -502,11 +496,9 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
-
-	var resp map[string]bool
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, resp["deleted"])
+	// TRA-407 flipped RemoveIdentifier from 202+body to 204 no-body.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
 	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
 	require.NoError(t, err)

@@ -81,9 +81,9 @@ func TestUpdateAssetByID_HappyPath(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var resp map[string]*asset.Asset
+	var resp UpdateAssetResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "After", resp["data"].Name)
+	assert.Equal(t, "After", resp.Data.Name)
 }
 
 func TestUpdateAssetByID_CrossOrg_Returns404(t *testing.T) {

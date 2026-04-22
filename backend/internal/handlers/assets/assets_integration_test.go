@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -81,12 +82,12 @@ func TestCreateAsset(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	var response map[string]asset.Asset
+	var response CreateAssetResponse
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "Test Asset", response["data"].Name)
-	assert.Equal(t, "TEST-001", response["data"].Identifier)
-	assert.Greater(t, response["data"].ID, 0)
+	assert.Equal(t, "Test Asset", response.Data.Name)
+	assert.Equal(t, "TEST-001", response.Data.Identifier)
+	assert.Greater(t, response.Data.SurrogateID, 0)
 }
 
 func TestCreateAsset_InvalidJSON(t *testing.T) {
@@ -248,13 +249,14 @@ func TestUpdateAsset(t *testing.T) {
 
 	handler.UpdateAsset(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
+	// TRA-407 flipped UpdateAsset from 202 to 200; handler now matches.
+	assert.Equal(t, http.StatusOK, w.Code)
 
-	var response map[string]*asset.Asset
+	var response UpdateAssetResponse
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, newName, response["data"].Name)
-	assert.Equal(t, newDescription, response["data"].Description)
+	assert.Equal(t, newName, response.Data.Name)
+	assert.Equal(t, newDescription, response.Data.Description)
 }
 
 func TestDeleteAsset(t *testing.T) {
@@ -290,12 +292,9 @@ func TestDeleteAsset(t *testing.T) {
 
 	handler.DeleteAsset(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
-
-	var response map[string]bool
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.True(t, response["deleted"])
+	// TRA-407 flipped DeleteAsset from 202+body to 204 no-body; handler now matches.
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
 	deleted, err := store.GetAssetByID(context.Background(), &created.ID)
 	require.NoError(t, err)
@@ -556,11 +555,11 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 		assert.Equal(t, http.StatusCreated, w.Code)
 
-		var response map[string]asset.Asset
+		var response CreateAssetResponse
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
-		assert.Equal(t, "Workflow Test Asset", response["data"].Name)
-		createdID = response["data"].ID
+		assert.Equal(t, "Workflow Test Asset", response.Data.Name)
+		createdID = response.Data.SurrogateID
 	})
 
 	t.Run("Read", func(t *testing.T) {
@@ -607,12 +606,13 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 		handler.UpdateAsset(w, req)
 
-		assert.Equal(t, http.StatusAccepted, w.Code)
+		// TRA-407 flipped UpdateAsset from 202 to 200; handler now matches.
+		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response map[string]*asset.Asset
+		var response UpdateAssetResponse
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
-		assert.Equal(t, newName, response["data"].Name)
+		assert.Equal(t, newName, response.Data.Name)
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -628,11 +628,145 @@ func TestFullCRUDWorkflow(t *testing.T) {
 
 		handler.DeleteAsset(w, req)
 
-		assert.Equal(t, http.StatusAccepted, w.Code)
+		// TRA-407 flipped DeleteAsset from 202+body to 204 no-body; handler now matches.
+		assert.Equal(t, http.StatusNoContent, w.Code)
+		assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
+	})
+}
 
-		var response map[string]bool
-		err := json.Unmarshal(w.Body.Bytes(), &response)
+// TestAssetWriteResponses_OmitInternalFields defends the public contract:
+// POST and PUT responses MUST NOT contain "id" or "org_id" keys (TRA-429).
+// If this test breaks, either the handler regressed or the shape definition did.
+//
+// Decoding into map[string]any deliberately bypasses the typed PublicAssetView
+// decoder so that leaks of unknown internal fields (id, org_id, current_location_id,
+// parent_location_id) show up in the assertion rather than silently being dropped.
+func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	// Seed a parent location so we can exercise the CurrentLocation path.
+	parent, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID:      accountID,
+		Identifier: "tra429-parent-loc",
+		Name:       "TRA-429 Parent",
+		Path:       "tra429-parent-loc",
+		ValidFrom:  time.Now(),
+		IsActive:   true,
+	})
+	require.NoError(t, err)
+
+	// assertNoLeaks checks a single write response body for the forbidden
+	// internal fields and confirms the public surrogate_id is present+non-zero.
+	assertNoLeaks := func(t *testing.T, raw []byte) map[string]any {
+		t.Helper()
+		var envelope map[string]any
+		require.NoError(t, json.Unmarshal(raw, &envelope))
+
+		data, ok := envelope["data"].(map[string]any)
+		require.True(t, ok, "data must be an object; got: %v", envelope["data"])
+
+		// Forbidden internal fields — these MUST NOT appear on the wire.
+		assert.NotContains(t, data, "id", "response leaks internal surrogate id as 'id'")
+		assert.NotContains(t, data, "org_id", "response leaks org_id")
+		assert.NotContains(t, data, "current_location_id", "response leaks raw FK current_location_id")
+		assert.NotContains(t, data, "parent_location_id", "response leaks raw FK parent_location_id")
+
+		// Required public fields.
+		require.Contains(t, data, "surrogate_id", "response missing surrogate_id")
+		surrID, ok := data["surrogate_id"].(float64)
+		require.True(t, ok, "surrogate_id must be numeric; got: %T", data["surrogate_id"])
+		assert.Greater(t, surrID, float64(0), "surrogate_id must be non-zero")
+
+		return data
+	}
+
+	t.Run("POST_NoParent", func(t *testing.T) {
+		requestBody := testutil.NewAssetFactory(accountID).
+			WithIdentifier("tra429-no-parent").
+			WithName("TRA-429 Leak Guard").
+			WithType("asset").
+			Build()
+
+		body, err := json.Marshal(requestBody)
 		require.NoError(t, err)
-		assert.True(t, response["deleted"])
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req = withOrgContext(req, accountID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		assertNoLeaks(t, w.Body.Bytes())
+	})
+
+	t.Run("POST_WithParent", func(t *testing.T) {
+		// Use CreateAssetRequest directly so we can set CurrentLocationID — the
+		// factory doesn't expose it.
+		reqBody := asset.CreateAssetRequest{
+			Identifier:        "tra429-with-parent",
+			Name:              "TRA-429 With Parent",
+			Type:              "asset",
+			CurrentLocationID: &parent.ID,
+			IsActive:          true,
+		}
+
+		body, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req = withOrgContext(req, accountID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		data := assertNoLeaks(t, w.Body.Bytes())
+
+		// When a parent is present, the public shape exposes it as the parent's
+		// natural key under "current_location".
+		assert.Equal(t, "tra429-parent-loc", data["current_location"],
+			"current_location must be the parent's natural identifier")
+	})
+
+	t.Run("PUT_Update", func(t *testing.T) {
+		// Seed an asset to update.
+		_, err := store.CreateAsset(context.Background(), asset.Asset{
+			OrgID: accountID, Identifier: "tra429-update-target",
+			Name: "Before", Type: "asset",
+			ValidFrom: time.Now(), IsActive: true,
+		})
+		require.NoError(t, err)
+
+		newName := "After"
+		body, err := json.Marshal(asset.UpdateAssetRequest{Name: &newName})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/tra429-update-target", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+			URLParams: chi.RouteParams{
+				Keys:   []string{"identifier"},
+				Values: []string{"tra429-update-target"},
+			},
+		}))
+		req = withOrgContext(req, accountID)
+		w := httptest.NewRecorder()
+
+		handler.UpdateAsset(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		data := assertNoLeaks(t, w.Body.Bytes())
+		assert.Equal(t, "After", data["name"])
 	})
 }
