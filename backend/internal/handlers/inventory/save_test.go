@@ -218,7 +218,7 @@ func TestSaveRequest_Validation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing location_id",
+			name: "missing location_id passes struct validator (handler enforces)",
 			request: SaveRequest{
 				LocationID: 0,
 				AssetIDs:   []int{100},
@@ -234,7 +234,7 @@ func TestSaveRequest_Validation(t *testing.T) {
 			wantErr: true, // direct struct validation catches empty non-nil slice via min=1
 		},
 		{
-			name: "nil asset_ids",
+			name: "nil asset_ids passes struct validator (handler enforces)",
 			request: SaveRequest{
 				LocationID: 1,
 				AssetIDs:   nil,
@@ -250,9 +250,9 @@ func TestSaveRequest_Validation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "all empty fails (legacy required-style still triggers somewhere)",
+			name:    "all-empty passes struct validator; cross-field lives in handler",
 			request: SaveRequest{},
-			wantErr: false, // struct-level validator no longer rejects; cross-field check is in handler
+			wantErr: false,
 		},
 		{
 			name: "asset_identifiers with empty string element fails",
@@ -657,6 +657,29 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, 2, resp.Data.Count)
 	assert.Equal(t, 42, resp.Data.LocationID)
+}
+
+func TestSave_BothLocationFieldsAgree_Succeeds(t *testing.T) {
+	ts := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
+	mock := &mockInventoryStorage{
+		saveResult: &storage.SaveInventoryResult{
+			Count: 1, LocationID: 42, LocationName: "WH-01", Timestamp: ts,
+		},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-01", Name: "WH-01"}}},
+		},
+	}
+	handler := NewHandler(mock)
+	body := map[string]any{
+		"location_id":         42, // matches resolved
+		"location_identifier": "WH-01",
+		"asset_ids":           []int{7},
+	}
+	req := newTestRequest(t, body, 1)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 }
 
 func ptr[T any](v T) *T { return &v }
