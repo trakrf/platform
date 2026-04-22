@@ -223,7 +223,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 			apierrors.AssetGetFailed, err.Error(), reqID)
 		return
 	}
-	if view == nil || view.OrgID != orgID {
+	if view == nil {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
 			apierrors.AssetNotFound, "", reqID)
 		return
@@ -719,7 +719,7 @@ func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.R
 			apierrors.AssetGetFailed, err.Error(), reqID)
 		return 0, false
 	}
-	if a == nil || a.OrgID != orgID {
+	if a == nil {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
 			apierrors.AssetNotFound, "", reqID)
 		return 0, false

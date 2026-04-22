@@ -31,13 +31,15 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	          metadata, is_active, created_at, updated_at, deleted_at
 	`
 	var asset asset.Asset
-	err := s.pool.QueryRow(ctx, query, request.Name, request.Identifier, request.Type,
-		request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo, request.Metadata,
-		request.IsActive, request.OrgID,
-	).Scan(&asset.ID, &asset.OrgID, &asset.Identifier, &asset.Name, &asset.Type,
-		&asset.Description, &asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
-		&asset.IsActive, &asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
-	)
+	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, request.Name, request.Identifier, request.Type,
+			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo, request.Metadata,
+			request.IsActive, request.OrgID,
+		).Scan(&asset.ID, &asset.OrgID, &asset.Identifier, &asset.Name, &asset.Type,
+			&asset.Description, &asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
+			&asset.IsActive, &asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
+		)
+	})
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -64,7 +66,9 @@ func (s *Storage) GetNextAssetSequence(ctx context.Context, orgID int) (int, err
 		  AND identifier ~ '^ASSET-[0-9]+$'
 		  AND deleted_at IS NULL
 	`
-	err := s.pool.QueryRow(ctx, query, orgID).Scan(&maxSeq)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID).Scan(&maxSeq)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get max sequence: %w", err)
 	}
@@ -110,7 +114,9 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 	`, strings.Join(updates, ", "))
 
 	var updatedID int
-	err = s.pool.QueryRow(ctx, query, args...).Scan(&updatedID)
+	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(&updatedID)
+	})
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -140,11 +146,13 @@ func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.
 	where id = $1 and org_id = $2 and deleted_at is null
 	`
 	var asset asset.Asset
-	err := s.pool.QueryRow(ctx, query, id, orgID).Scan(&asset.ID, &asset.OrgID,
-		&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
-		&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
-		&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
-	)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id, orgID).Scan(&asset.ID, &asset.OrgID,
+			&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
+			&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
+			&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
+		)
+	})
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -170,27 +178,28 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
 	`
 
-	rows, err := s.pool.Query(ctx, query, orgID, ids)
+	assets := []*asset.Asset{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, ids)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var a asset.Asset
+			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
+				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+			); err != nil {
+				return fmt.Errorf("failed to scan asset: %w", err)
+			}
+			assets = append(assets, &a)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch fetch assets: %w", err)
-	}
-	defer rows.Close()
-
-	assets := []*asset.Asset{}
-	for rows.Next() {
-		var a asset.Asset
-		err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
-			&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
-			&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan asset: %w", err)
-		}
-		assets = append(assets, &a)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating assets: %w", err)
 	}
 
 	return assets, nil
@@ -205,27 +214,28 @@ func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offse
 		order by created_at desc
 		limit $2 offset $3
 	`
-	rows, err := s.pool.Query(ctx, query, orgID, limit, offset)
+	assets := []asset.Asset{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, limit, offset)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var a asset.Asset
+			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
+				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+			); err != nil {
+				return fmt.Errorf("failed to scan asset: %w", err)
+			}
+			assets = append(assets, a)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list assets: %w", err)
-	}
-	defer rows.Close()
-
-	assets := []asset.Asset{}
-	for rows.Next() {
-		var a asset.Asset
-		err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
-			&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
-			&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan asset: %w", err)
-		}
-		assets = append(assets, a)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating assets: %w", err)
 	}
 
 	return assets, nil
@@ -240,7 +250,9 @@ func (s *Storage) CountAllAssets(ctx context.Context, orgID int) (int, error) {
 	`
 
 	var count int
-	err := s.pool.QueryRow(ctx, query, orgID).Scan(&count)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID).Scan(&count)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count assets: %w", err)
 	}
@@ -250,11 +262,19 @@ func (s *Storage) CountAllAssets(ctx context.Context, orgID int) (int, error) {
 
 func (s *Storage) DeleteAsset(ctx context.Context, orgID, id int) (bool, error) {
 	query := `update trakrf.assets set deleted_at = now() where id = $1 and org_id = $2 and deleted_at is null`
-	result, err := s.pool.Exec(ctx, query, id, orgID)
+	var rowsAffected int64
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, query, id, orgID)
+		if err != nil {
+			return err
+		}
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		return false, fmt.Errorf("could not delete asset: %w", err)
 	}
-	return result.RowsAffected() > 0, nil
+	return rowsAffected > 0, nil
 }
 
 // BatchCreateAssets atomically inserts multiple assets in a single transaction.
@@ -266,9 +286,17 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 		return 0, nil
 	}
 
-	// Auto-generate identifiers for assets with empty identifiers
-	// Assumes all assets in batch belong to same org (first asset's OrgID)
+	// Defensive: all assets in batch must share the same OrgID. The prior
+	// implementation assumed this silently; make it enforceable so that a
+	// WithOrgTx-wrapped batch cannot accidentally mix tenants.
 	orgID := assets[0].OrgID
+	for _, a := range assets {
+		if a.OrgID != orgID {
+			return 0, []error{fmt.Errorf("BatchCreateAssets: heterogeneous OrgIDs in batch (expected %d, got %d)", orgID, a.OrgID)}
+		}
+	}
+
+	// Auto-generate identifiers for assets with empty identifiers.
 	seq, err := s.GetNextAssetSequence(ctx, orgID)
 	if err != nil {
 		return 0, []error{fmt.Errorf("failed to get sequence for auto-generation: %w", err)}
@@ -280,13 +308,6 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 			seq++
 		}
 	}
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return 0, []error{fmt.Errorf("failed to begin transaction: %w", err)}
-	}
-
-	defer tx.Rollback(ctx)
 
 	query := `
 		INSERT INTO trakrf.assets
@@ -305,28 +326,22 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 			updated_at = NOW()
 	`
 
-	for i, a := range assets {
-		_, err := tx.Exec(ctx, query,
-			a.Name, a.Identifier, a.Type, a.Description, a.CurrentLocationID,
-			a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
-		)
-
-		if err != nil {
-			tx.Rollback(ctx)
-
-			var singleError error
-			if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-				singleError = fmt.Errorf("row %d: asset with identifier %s already exists", i, a.Identifier)
-			} else {
-				singleError = fmt.Errorf("row %d: %w", i, err)
+	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		for i, a := range assets {
+			if _, err := tx.Exec(ctx, query,
+				a.Name, a.Identifier, a.Type, a.Description, a.CurrentLocationID,
+				a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
+			); err != nil {
+				if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+					return fmt.Errorf("row %d: asset with identifier %s already exists", i, a.Identifier)
+				}
+				return fmt.Errorf("row %d: %w", i, err)
 			}
-
-			return 0, []error{singleError}
 		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, []error{fmt.Errorf("failed to commit transaction: %w", err)}
+		return nil
+	})
+	if err != nil {
+		return 0, []error{err}
 	}
 
 	return len(assets), nil
@@ -345,23 +360,25 @@ func (s *Storage) CheckDuplicateIdentifiers(ctx context.Context, orgID int, iden
 		WHERE org_id = $1 AND identifier = ANY($2) AND deleted_at IS NULL
 	`
 
-	rows, err := s.pool.Query(ctx, query, orgID, identifiers)
+	existingIdentifiers := make(map[string]bool)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, identifiers)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var identifier string
+			if err := rows.Scan(&identifier); err != nil {
+				return fmt.Errorf("failed to scan identifier: %w", err)
+			}
+			existingIdentifiers[identifier] = true
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check duplicate identifiers: %w", err)
-	}
-	defer rows.Close()
-
-	existingIdentifiers := make(map[string]bool)
-	for rows.Next() {
-		var identifier string
-		if err := rows.Scan(&identifier); err != nil {
-			return nil, fmt.Errorf("failed to scan identifier: %w", err)
-		}
-		existingIdentifiers[identifier] = true
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating duplicate identifiers: %w", err)
 	}
 
 	return existingIdentifiers, nil
@@ -446,19 +463,21 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 	var assetID int
 	var identifierIDs []int
 
-	err = s.pool.QueryRow(ctx, query,
-		request.OrgID,
-		request.Identifier,
-		request.Name,
-		assetType,
-		request.Description,
-		request.CurrentLocationID,
-		validFrom,
-		validTo,
-		isActive,
-		request.Metadata,
-		identifiersJSON,
-	).Scan(&assetID, &identifierIDs)
+	err = s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			request.OrgID,
+			request.Identifier,
+			request.Name,
+			assetType,
+			request.Description,
+			request.CurrentLocationID,
+			validFrom,
+			validTo,
+			isActive,
+			request.Metadata,
+			identifiersJSON,
+		).Scan(&assetID, &identifierIDs)
+	})
 
 	if err != nil {
 		return nil, parseAssetWithIdentifiersError(err, request.Identifier)
@@ -508,12 +527,14 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 		a      asset.Asset
 		locIdt *string
 	)
-	err := s.pool.QueryRow(ctx, query, id, orgID).Scan(
-		&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
-		&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
-		&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-		&locIdt,
-	)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id, orgID).Scan(
+			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+			&locIdt,
+		)
+	})
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -591,12 +612,14 @@ func (s *Storage) GetAssetByIdentifier(
 		a      asset.Asset
 		locIdt *string
 	)
-	err := s.pool.QueryRow(ctx, query, orgID, identifier).Scan(
-		&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
-		&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
-		&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-		&locIdt,
-	)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, identifier).Scan(
+			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+			&locIdt,
+		)
+	})
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -637,25 +660,31 @@ func (s *Storage) GetAssetIDsByIdentifiers(
 		FROM trakrf.assets
 		WHERE org_id = $1 AND identifier = ANY($2) AND deleted_at IS NULL
 	`
-	rows, err := s.pool.Query(ctx, query, orgID, identifiers)
+	out := make(map[string]int, len(identifiers))
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, identifiers)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				ident string
+				id    int
+			)
+			if err := rows.Scan(&ident, &id); err != nil {
+				return fmt.Errorf("scan asset identifier row: %w", err)
+			}
+			out[ident] = id
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate asset identifier rows: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get asset ids by identifiers: %w", err)
-	}
-	defer rows.Close()
-
-	out := make(map[string]int, len(identifiers))
-	for rows.Next() {
-		var (
-			ident string
-			id    int
-		)
-		if err := rows.Scan(&ident, &id); err != nil {
-			return nil, fmt.Errorf("scan asset identifier row: %w", err)
-		}
-		out[ident] = id
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate asset identifier rows: %w", err)
 	}
 	return out, nil
 }
@@ -684,33 +713,36 @@ func (s *Storage) ListAssetsFiltered(
 
 	args = append(args, clampAssetListLimit(f.Limit), f.Offset)
 
-	rows, err := s.pool.Query(ctx, query, args...)
+	out := []asset.AssetWithLocation{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				a      asset.Asset
+				locIdt *string
+			)
+			if err := rows.Scan(
+				&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+				&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+				&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
+				&locIdt,
+			); err != nil {
+				return fmt.Errorf("scan asset: %w", err)
+			}
+			out = append(out, asset.AssetWithLocation{
+				AssetView:                 asset.AssetView{Asset: a, Identifiers: nil},
+				CurrentLocationIdentifier: locIdt,
+			})
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list assets filtered: %w", err)
-	}
-	defer rows.Close()
-
-	out := []asset.AssetWithLocation{}
-	for rows.Next() {
-		var (
-			a      asset.Asset
-			locIdt *string
-		)
-		if err := rows.Scan(
-			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
-			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
-			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-			&locIdt,
-		); err != nil {
-			return nil, fmt.Errorf("scan asset: %w", err)
-		}
-		out = append(out, asset.AssetWithLocation{
-			AssetView:                 asset.AssetView{Asset: a, Identifiers: nil},
-			CurrentLocationIdentifier: locIdt,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 
 	// Bulk-fetch identifiers for the returned assets.
@@ -748,7 +780,10 @@ func (s *Storage) CountAssetsFiltered(
 	`, where)
 
 	var n int
-	if err := s.pool.QueryRow(ctx, query, args...).Scan(&n); err != nil {
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(&n)
+	})
+	if err != nil {
 		return 0, fmt.Errorf("count assets filtered: %w", err)
 	}
 	return n, nil

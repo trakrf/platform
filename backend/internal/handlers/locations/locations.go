@@ -473,7 +473,7 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 			apierrors.LocationGetFailed, err.Error(), reqID)
 		return
 	}
-	if view == nil || view.OrgID != orgID {
+	if view == nil {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
 			apierrors.LocationNotFound, "", reqID)
 		return

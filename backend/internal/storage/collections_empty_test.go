@@ -72,6 +72,8 @@ func TestListActiveAPIKeys_EmptyReturnsNonNil(t *testing.T) {
 func TestListAllAssets_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`from trakrf.assets`).
 		WithArgs(1, 10, 0).
 		WillReturnRows(pgxmock.NewRows([]string{
@@ -79,6 +81,7 @@ func TestListAllAssets_EmptyReturnsNonNil(t *testing.T) {
 			"current_location_id", "valid_from", "valid_to", "metadata",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
+	mock.ExpectCommit()
 
 	assets, err := storage.ListAllAssets(context.Background(), 1, 10, 0)
 	assert.NoError(t, err)
@@ -91,6 +94,8 @@ func TestGetAssetsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 
 	orgID := 1
 	ids := []int{99}
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.assets[\s\S]*WHERE org_id = \$1 AND id = ANY\(\$2\)`).
 		WithArgs(orgID, ids).
 		WillReturnRows(pgxmock.NewRows([]string{
@@ -98,6 +103,7 @@ func TestGetAssetsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 			"current_location_id", "valid_from", "valid_to", "metadata",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
+	mock.ExpectCommit()
 
 	assets, err := storage.GetAssetsByIDs(context.Background(), orgID, ids)
 	assert.NoError(t, err)
