@@ -120,6 +120,18 @@ func ContentType(next http.Handler) http.Handler {
 	})
 }
 
+// missingAuthDetail returns the 401 detail string for a missing Authorization
+// header, substituting a hint toward the correct header format when the
+// request carries X-API-Key. Docs call the credential an "API key," so
+// integrators often try X-API-Key first and chase a credential-rotation red
+// herring on the resulting 401.
+func missingAuthDetail(r *http.Request, fallback string) string {
+	if r.Header.Get("X-API-Key") != "" {
+		return "Use Authorization: Bearer <token>"
+	}
+	return fallback
+}
+
 // Auth validates JWT token and injects claims into the request context.
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +141,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("Missing authorization header")
-			httputil.Respond401(w, r, "Authorization header is required", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, missingAuthDetail(r, "Authorization header is required"), GetRequestID(r.Context()))
 			return
 		}
 

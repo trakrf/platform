@@ -36,7 +36,7 @@ func APIKeyAuth(store *storage.Storage) func(http.Handler) http.Handler {
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				httputil.Respond401(w, r, "Authorization header is required", reqID)
+				httputil.Respond401(w, r, missingAuthDetail(r, "Authorization header is required"), reqID)
 				return
 			}
 			parts := strings.SplitN(authHeader, " ", 2)

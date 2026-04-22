@@ -29,7 +29,8 @@ func EitherAuth(store *storage.Storage) func(http.Handler) http.Handler {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Missing authorization header", "", reqID)
+					errors.ErrUnauthorized,
+					missingAuthDetail(r, "Missing authorization header"), "", reqID)
 				return
 			}
 			parts := strings.SplitN(authHeader, " ", 2)

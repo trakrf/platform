@@ -331,3 +331,42 @@ func TestAPIKey_InvalidJWT_Respond401(t *testing.T) {
 		t.Errorf("detail = %q, want canonical invalid-token string", resp.Error.Detail)
 	}
 }
+
+// TRA-449 D10: requests that send X-API-Key without Authorization should see
+// a 401 detail hinting at the correct header format, not the generic
+// missing-header string that sends integrators chasing credential issues.
+
+func TestAuth_XAPIKeyWithoutAuthorization_HintsBearer(t *testing.T) {
+	h := Auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("should not reach handler") }))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/x", nil)
+	r.Header.Set("X-API-Key", "some-token-value")
+	h.ServeHTTP(w, r)
+
+	if w.Code != 401 {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if !strings.Contains(resp.Error.Detail, "Authorization: Bearer") {
+		t.Errorf("detail = %q, want a hint containing %q", resp.Error.Detail, "Authorization: Bearer")
+	}
+}
+
+func TestAPIKey_XAPIKeyWithoutAuthorization_HintsBearer(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	h := APIKeyAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("should not reach handler") }))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/x", nil)
+	r.Header.Set("X-API-Key", "some-token-value")
+	h.ServeHTTP(w, r)
+
+	if w.Code != 401 {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if !strings.Contains(resp.Error.Detail, "Authorization: Bearer") {
+		t.Errorf("detail = %q, want a hint containing %q", resp.Error.Detail, "Authorization: Bearer")
+	}
+}
