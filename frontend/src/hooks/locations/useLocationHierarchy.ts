@@ -4,6 +4,21 @@ import { useLocationStore } from '@/stores/locations/locationStore';
 import { locationsApi } from '@/lib/api/locations';
 import type { Location } from '@/types/locations';
 
+/**
+ * Normalize a raw public API location to the internal cache shape.
+ * Maps surrogate_id → id and resolves parent_location_id from the store's
+ * natural-key index. Mirrors the helper used in the other location hooks;
+ * required because PublicLocationView only carries surrogate_id, and
+ * locationStore.addLocation keys by .id.
+ */
+function normalizeLocation(raw: Location): Location {
+  const byIdentifier = useLocationStore.getState().cache?.byIdentifier;
+  const parentId = raw.parent
+    ? (byIdentifier?.get(raw.parent)?.id ?? null)
+    : null;
+  return { ...raw, id: raw.surrogate_id ?? raw.id, parent_location_id: parentId };
+}
+
 export function useLocationHierarchy(locationId: number | null) {
   const location = useLocationStore((state) =>
     locationId ? state.getLocationById(locationId) : undefined
@@ -39,10 +54,11 @@ export function useLocationHierarchy(locationId: number | null) {
     queryFn: async () => {
       if (!locationId) return [];
       const response = await locationsApi.getAncestors(locationId);
-      response.data.data.forEach((loc: Location) => {
+      const normalized = response.data.data.map(normalizeLocation);
+      normalized.forEach((loc) => {
         useLocationStore.getState().addLocation(loc);
       });
-      return response.data.data;
+      return normalized;
     },
     enabled: !!locationId && locationPath.length === 0,
     staleTime: 60 * 60 * 1000,
@@ -53,10 +69,11 @@ export function useLocationHierarchy(locationId: number | null) {
     queryFn: async () => {
       if (!locationId) return [];
       const response = await locationsApi.getDescendants(locationId);
-      response.data.data.forEach((loc: Location) => {
+      const normalized = response.data.data.map(normalizeLocation);
+      normalized.forEach((loc) => {
         useLocationStore.getState().addLocation(loc);
       });
-      return response.data.data;
+      return normalized;
     },
     enabled: !!locationId && subsidiaries.length === 0,
     staleTime: 60 * 60 * 1000,
