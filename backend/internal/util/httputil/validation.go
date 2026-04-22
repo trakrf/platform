@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -70,8 +71,9 @@ func isNumericKind(k reflect.Kind) bool {
 	return false
 }
 
-// messageForField produces a short human-safe message. Keeps wording
-// stable so clients may key on it, but callers should read `code` first.
+// messageForField produces a short human-safe message. Embeds the
+// validator parameter (e.g. allowed enum values, max length) so the
+// string is informative on its own; Params carries the structured form.
 func messageForField(fe validator.FieldError) string {
 	switch codeForTag(fe) {
 	case "required":
@@ -85,9 +87,48 @@ func messageForField(fe validator.FieldError) string {
 	case "too_large":
 		return fmt.Sprintf("%s must be <= %s", fe.Field(), fe.Param())
 	case "invalid_value":
+		if fe.Tag() == "oneof" && fe.Param() != "" {
+			return fmt.Sprintf("%s must be one of: %s", fe.Field(),
+				strings.Join(strings.Fields(fe.Param()), ", "))
+		}
 		return fmt.Sprintf("%s is not a valid value", fe.Field())
 	}
 	return fmt.Sprintf("%s failed validation", fe.Field())
+}
+
+// paramsForField returns structured context for a failure, or nil when
+// nothing useful can be derived. See FieldError.Params for the key schema.
+func paramsForField(fe validator.FieldError) map[string]any {
+	switch codeForTag(fe) {
+	case "required":
+		return nil
+	case "invalid_value":
+		if fe.Tag() == "oneof" && fe.Param() != "" {
+			vals := strings.Fields(fe.Param())
+			out := make([]any, len(vals))
+			for i, v := range vals {
+				out[i] = v
+			}
+			return map[string]any{"allowed_values": out}
+		}
+	case "too_short":
+		if n, err := strconv.ParseFloat(fe.Param(), 64); err == nil {
+			return map[string]any{"min_length": n}
+		}
+	case "too_long":
+		if n, err := strconv.ParseFloat(fe.Param(), 64); err == nil {
+			return map[string]any{"max_length": n}
+		}
+	case "too_small":
+		if n, err := strconv.ParseFloat(fe.Param(), 64); err == nil {
+			return map[string]any{"min": n}
+		}
+	case "too_large":
+		if n, err := strconv.ParseFloat(fe.Param(), 64); err == nil {
+			return map[string]any{"max": n}
+		}
+	}
+	return nil
 }
 
 // RespondValidationError translates validator.ValidationErrors into the
@@ -105,6 +146,7 @@ func RespondValidationError(w http.ResponseWriter, r *http.Request, err error, r
 			Field:   fe.Field(),
 			Code:    codeForTag(fe),
 			Message: messageForField(fe),
+			Params:  paramsForField(fe),
 		})
 	}
 	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,

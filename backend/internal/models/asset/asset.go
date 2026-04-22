@@ -13,7 +13,7 @@ type Asset struct {
 	Org               *org.Org   `json:"org"`
 	Identifier        string     `json:"identifier"`
 	Name              string     `json:"name"`
-	Type              string     `json:"type" example:"asset" enums:"asset" extensions:"x-extensible-enum=true"`
+	Type              string     `json:"type" example:"asset" enums:"asset,person,inventory" extensions:"x-extensible-enum=true"`
 	Description       string     `json:"description"`
 	CurrentLocationID *int       `json:"current_location_id"`
 	ValidFrom         time.Time  `json:"valid_from"`
@@ -27,21 +27,21 @@ type Asset struct {
 
 type CreateAssetRequest struct {
 	OrgID             int                  `json:"-" swaggerignore:"true"`
-	Identifier        string               `json:"identifier" validate:"omitempty,max=255"`
+	Identifier        string               `json:"identifier,omitempty" validate:"omitempty,max=255"`
 	Name              string               `json:"name" validate:"required,min=1,max=255"`
-	Type              string               `json:"type" validate:"oneof=asset"`
-	Description       string               `json:"description" validate:"omitempty,max=1024"`
-	CurrentLocationID *int                 `json:"current_location_id" validate:"omitempty,min=1"`
-	ValidFrom         shared.FlexibleDate  `json:"valid_from" swaggertype:"string" example:"2025-01-01"`
+	Type              string               `json:"type,omitempty" validate:"omitempty,oneof=asset person inventory" enums:"asset,person,inventory" example:"asset"`
+	Description       string               `json:"description,omitempty" validate:"omitempty,max=1024"`
+	CurrentLocationID *int                 `json:"current_location_id,omitempty" validate:"omitempty,min=1"`
+	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
-	Metadata          any                  `json:"metadata"`
-	IsActive          bool                 `json:"is_active"`
+	Metadata          any                  `json:"metadata,omitempty"`
+	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
 }
 
 type UpdateAssetRequest struct {
 	Identifier        *string              `json:"identifier" validate:"omitempty,min=1,max=255"`
 	Name              *string              `json:"name" validate:"omitempty,min=1,max=255"`
-	Type              *string              `json:"type" validate:"omitempty,oneof=asset"`
+	Type              *string              `json:"type,omitempty" validate:"omitempty,oneof=asset person inventory" enums:"asset,person,inventory"`
 	Description       *string              `json:"description" validate:"omitempty,max=1024"`
 	CurrentLocationID *int                 `json:"current_location_id"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`

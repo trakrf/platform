@@ -68,12 +68,14 @@ func TestCreateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
+	vfFD := shared.FlexibleDate{Time: validFrom}
+	active := true
 	body, err := json.Marshal(locmodel.CreateLocationWithIdentifiersRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
 			Name:       "Duplicate",
 			Identifier: "dup-loc",
-			ValidFrom:  shared.FlexibleDate{Time: validFrom},
-			IsActive:   true,
+			ValidFrom:  &vfFD,
+			IsActive:   &active,
 		},
 	})
 	require.NoError(t, err)
@@ -112,12 +114,14 @@ func TestCreateLocationWithIdentifiers_DuplicateReturns409(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
+	vfFD2 := shared.FlexibleDate{Time: validFrom}
+	active2 := true
 	body, err := json.Marshal(locmodel.CreateLocationWithIdentifiersRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
 			Name:       "Duplicate",
 			Identifier: "dup-loc-ids",
-			ValidFrom:  shared.FlexibleDate{Time: validFrom},
-			IsActive:   true,
+			ValidFrom:  &vfFD2,
+			IsActive:   &active2,
 		},
 		Identifiers: []shared.TagIdentifierRequest{
 			{Type: "rfid", Value: "E2000000DEADBEEF"},
@@ -204,12 +208,14 @@ func TestLocationsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
+	vfFD3 := shared.FlexibleDate{Time: validFrom}
+	active3 := true
 	body, err := json.Marshal(locmodel.CreateLocationWithIdentifiersRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
 			Name:       "Second",
 			Identifier: "tra407-dup-loc",
-			ValidFrom:  shared.FlexibleDate{Time: validFrom},
-			IsActive:   true,
+			ValidFrom:  &vfFD3,
+			IsActive:   &active3,
 		},
 	})
 	require.NoError(t, err)
@@ -390,12 +396,14 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	t.Run("POST_NoParent", func(t *testing.T) {
+		vfFD4 := shared.FlexibleDate{Time: validFrom}
+		active4 := true
 		reqBody := locmodel.CreateLocationWithIdentifiersRequest{
 			CreateLocationRequest: locmodel.CreateLocationRequest{
 				Name:       "TRA-429 Leak Guard",
 				Identifier: "tra429-no-parent",
-				ValidFrom:  shared.FlexibleDate{Time: validFrom},
-				IsActive:   true,
+				ValidFrom:  &vfFD4,
+				IsActive:   &active4,
 			},
 		}
 
@@ -414,13 +422,15 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 	})
 
 	t.Run("POST_WithParent", func(t *testing.T) {
+		vfFD5 := shared.FlexibleDate{Time: validFrom}
+		active5 := true
 		reqBody := locmodel.CreateLocationWithIdentifiersRequest{
 			CreateLocationRequest: locmodel.CreateLocationRequest{
 				Name:             "TRA-429 With Parent",
 				Identifier:       "tra429-with-parent",
 				ParentLocationID: &parent.ID,
-				ValidFrom:        shared.FlexibleDate{Time: validFrom},
-				IsActive:         true,
+				ValidFrom:        &vfFD5,
+				IsActive:         &active5,
 			},
 		}
 

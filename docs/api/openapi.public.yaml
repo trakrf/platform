@@ -16,6 +16,7 @@ components:
                         $ref: '#/components/schemas/shared.TagIdentifierRequest'
                     type: array
                 is_active:
+                    example: true
                     type: boolean
                 metadata: {}
                 name:
@@ -25,6 +26,9 @@ components:
                 type:
                     enum:
                         - asset
+                        - person
+                        - inventory
+                    example: asset
                     type: string
                 valid_from:
                     example: "2025-01-01"
@@ -86,6 +90,8 @@ components:
                 type:
                     enum:
                         - asset
+                        - person
+                        - inventory
                     type: string
                 valid_from:
                     example: "2025-01-01"
@@ -166,6 +172,9 @@ components:
                     type: string
                 message:
                     type: string
+                params:
+                    additionalProperties: {}
+                    type: object
             type: object
         inventory.SaveRequest:
             properties:
@@ -208,10 +217,11 @@ components:
                     maxLength: 255
                     minLength: 1
                     type: string
-                parent_location_id:
-                    example: 1
-                    minimum: 1
-                    type: integer
+                parent_identifier:
+                    example: wh1
+                    maxLength: 255
+                    minLength: 1
+                    type: string
                 valid_from:
                     example: "2025-12-14"
                     type: string
@@ -272,10 +282,11 @@ components:
                     maxLength: 255
                     minLength: 1
                     type: string
-                parent_location_id:
-                    example: 1
-                    minimum: 1
-                    type: integer
+                parent_identifier:
+                    example: wh1
+                    maxLength: 255
+                    minLength: 1
+                    type: string
                 valid_from:
                     example: "2025-12-14"
                     type: string

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -669,6 +670,192 @@ func TestLocationsGetDescendants_UnknownIdentifier_Returns404(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestCreateLocation_APIKey_Defaults(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-create-defaults")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	before := time.Now().Add(-2 * time.Second)
+	body := `{"identifier":"tra447-loc-def","name":"Defaults"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, true, data["is_active"])
+	vf, err := time.Parse(time.RFC3339, data["valid_from"].(string))
+	require.NoError(t, err)
+	after := time.Now().Add(2 * time.Second)
+	assert.Truef(t, vf.After(before) && vf.Before(after),
+		"valid_from %s must fall within [%s, %s]", vf, before, after)
+}
+
+func TestCreateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-create-parent-happy")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra447-parent", Name: "Parent",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	body := `{"identifier":"tra447-child","name":"Child","parent_identifier":"tra447-parent"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "tra447-parent", data["parent"])
+	depth, _ := data["depth"].(float64)
+	assert.Equal(t, float64(parent.Depth+1), depth)
+}
+
+func TestCreateLocation_APIKey_ParentIdentifier_NotFound(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-create-parent-404")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	body := `{"identifier":"tra447-orphan","name":"x","parent_identifier":"ghost"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "not found")
+}
+
+func TestCreateLocation_APIKey_UnknownField_Rejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-create-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	for _, field := range []string{"parent_path", "path", "parent"} {
+		t.Run(field, func(t *testing.T) {
+			body := fmt.Sprintf(`{"identifier":"tra447-u-%s","name":"x","%s":"anything"}`, field, field)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), field)
+		})
+	}
+}
+
+func TestUpdateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-update-parent")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra447-u-parent", Name: "Parent",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra447-u-child", Name: "Child",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	body := `{"parent_identifier":"tra447-u-parent"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/tra447-u-child", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "tra447-u-parent", data["parent"])
+	// Reparented from root → child of tra447-u-parent. Depth advances.
+	depth, _ := data["depth"].(float64)
+	assert.Equal(t, float64(parent.Depth+1), depth, "child should now sit at parent.depth+1")
+}
+
+func TestUpdateLocation_APIKey_UnknownField_Rejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-update-unknown")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra447-u-unknown", Name: "x",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	body := `{"name":"x","parent_path":"nope"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/tra447-u-unknown", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "parent_path")
+}
+
+func TestCreateLocation_APIKey_ParentDisagree_Rejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-create-parent-disagree")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra447-disagree-parent", Name: "Parent",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicWriteRouter(store)
+	bogusID := parent.ID + 9999
+	body := fmt.Sprintf(`{"identifier":"tra447-d-child","name":"x","parent_identifier":"tra447-disagree-parent","parent_location_id":%d}`, bogusID)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "disagree")
 }
 
 // seedTra428HierarchyPair seeds two orgs with the SAME whs-01 → dock-01 identifiers.

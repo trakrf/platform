@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -61,7 +62,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request location.CreateLocationWithIdentifiersRequest
-	if err := httputil.DecodeJSON(r, &request); err != nil {
+	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
@@ -69,6 +70,42 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, r, err, requestID)
 		return
+	}
+
+	// Resolve parent_identifier → internal surrogate FK (TRA-447).
+	// parent_identifier is the API-consumer natural key; parent_location_id
+	// stays for the UI (hidden from public OpenAPI).
+	if request.ParentIdentifier != nil && *request.ParentIdentifier != "" {
+		parent, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, *request.ParentIdentifier)
+		if err != nil {
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+				apierrors.LocationCreateFailed, err.Error(), requestID)
+			return
+		}
+		if parent == nil {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.LocationCreateFailed,
+				fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier), requestID)
+			return
+		}
+		if request.ParentLocationID != nil && *request.ParentLocationID != parent.ID {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.LocationCreateFailed,
+				"parent_identifier and parent_location_id disagree", requestID)
+			return
+		}
+		request.ParentLocationID = &parent.ID
+	}
+
+	// API create-path defaults (TRA-447). The UI always sends these; API
+	// consumers commonly omit.
+	if request.IsActive == nil {
+		t := true
+		request.IsActive = &t
+	}
+	if request.ValidFrom == nil || request.ValidFrom.IsZero() {
+		fd := shared.FlexibleDate{Time: time.Now().UTC()}
+		request.ValidFrom = &fd
 	}
 
 	result, err := handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
@@ -137,7 +174,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	reqID := middleware.GetRequestID(req.Context())
 
 	var request location.UpdateLocationRequest
-	if err := httputil.DecodeJSON(req, &request); err != nil {
+	if err := httputil.DecodeJSONStrict(req, &request); err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
 	}
@@ -145,6 +182,30 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, req, err, reqID)
 		return
+	}
+
+	// Resolve parent_identifier → parent_location_id (TRA-447). Empty
+	// string is treated as nil (detach not supported in this ticket).
+	if request.ParentIdentifier != nil && *request.ParentIdentifier != "" {
+		parent, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, *request.ParentIdentifier)
+		if err != nil {
+			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+				apierrors.LocationUpdateFailed, err.Error(), reqID)
+			return
+		}
+		if parent == nil {
+			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.LocationUpdateFailed,
+				fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier), reqID)
+			return
+		}
+		if request.ParentLocationID != nil && *request.ParentLocationID != parent.ID {
+			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.LocationUpdateFailed,
+				"parent_identifier and parent_location_id disagree", reqID)
+			return
+		}
+		request.ParentLocationID = &parent.ID
 	}
 
 	result, err := handler.storage.UpdateLocation(req.Context(), orgID, id, request)

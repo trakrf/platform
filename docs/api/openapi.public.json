@@ -22,6 +22,7 @@
             "type": "array"
           },
           "is_active": {
+            "example": true,
             "type": "boolean"
           },
           "metadata": {},
@@ -32,8 +33,11 @@
           },
           "type": {
             "enum": [
-              "asset"
+              "asset",
+              "person",
+              "inventory"
             ],
+            "example": "asset",
             "type": "string"
           },
           "valid_from": {
@@ -120,7 +124,9 @@
           },
           "type": {
             "enum": [
-              "asset"
+              "asset",
+              "person",
+              "inventory"
             ],
             "type": "string"
           },
@@ -238,6 +244,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "params": {
+            "additionalProperties": {},
+            "type": "object"
           }
         },
         "type": "object"
@@ -298,10 +308,11 @@
             "minLength": 1,
             "type": "string"
           },
-          "parent_location_id": {
-            "example": 1,
-            "minimum": 1,
-            "type": "integer"
+          "parent_identifier": {
+            "example": "wh1",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
           },
           "valid_from": {
             "example": "2025-12-14",
@@ -388,10 +399,11 @@
             "minLength": 1,
             "type": "string"
           },
-          "parent_location_id": {
-            "example": 1,
-            "minimum": 1,
-            "type": "integer"
+          "parent_identifier": {
+            "example": "wh1",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
           },
           "valid_from": {
             "example": "2025-12-14",

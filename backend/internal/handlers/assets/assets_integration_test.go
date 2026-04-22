@@ -714,12 +714,13 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 	t.Run("POST_WithParent", func(t *testing.T) {
 		// Use CreateAssetRequest directly so we can set CurrentLocationID — the
 		// factory doesn't expose it.
+		active := true
 		reqBody := asset.CreateAssetRequest{
 			Identifier:        "tra429-with-parent",
 			Name:              "TRA-429 With Parent",
 			Type:              "asset",
 			CurrentLocationID: &parent.ID,
-			IsActive:          true,
+			IsActive:          &active,
 		}
 
 		body, err := json.Marshal(reqBody)

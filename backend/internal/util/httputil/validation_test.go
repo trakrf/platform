@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
@@ -61,6 +63,36 @@ func TestRespondValidationError_PopulatesFields(t *testing.T) {
 	}
 }
 
+func TestRespondValidationError_PopulatesParams(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		Kind  string `json:"kind"  validate:"required,oneof=red green blue"`
+		Name  string `json:"name"  validate:"required,min=2,max=5"`
+		Score int    `json:"score" validate:"gte=18"`
+		Age   int    `json:"age"   validate:"lte=99"`
+	}
+	// kind: bad oneof; name: too long (max=5); score: too small (gte=18); age: too large (lte=99)
+	err := v.Struct(s{Kind: "purple", Name: "xxxxxxxx", Score: 5, Age: 150})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	httputil.RespondValidationError(w, r, err, "req-1")
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+	byField := map[string]apierrors.FieldError{}
+	for _, f := range resp.Error.Fields {
+		byField[f.Field] = f
+	}
+
+	assert.Equal(t, []any{"red", "green", "blue"}, byField["kind"].Params["allowed_values"])
+	assert.EqualValues(t, 5, byField["name"].Params["max_length"])
+	assert.EqualValues(t, 18, byField["score"].Params["min"])
+	assert.EqualValues(t, 99, byField["age"].Params["max"])
+}
+
 func TestRespondValidationError_UnknownTagFallsBackToInvalidValue(t *testing.T) {
 	v := validator.New()
 	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
@@ -82,4 +114,5 @@ func TestRespondValidationError_UnknownTagFallsBackToInvalidValue(t *testing.T) 
 	if resp.Error.Fields[0].Code != "invalid_value" {
 		t.Errorf("code = %q, want invalid_value fallback", resp.Error.Fields[0].Code)
 	}
+	assert.Nil(t, resp.Error.Fields[0].Params, "unknown tag should produce no structured params (omitempty contract)")
 }

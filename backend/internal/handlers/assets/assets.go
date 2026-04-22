@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -64,9 +65,24 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request asset.CreateAssetWithIdentifiersRequest
-	if err := httputil.DecodeJSON(r, &request); err != nil {
+	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
+	}
+
+	// Apply API-consumer defaults for fields the UI always sends explicitly
+	// but API consumers commonly omit. Absence is distinguishable from zero
+	// because these fields are pointer-typed.
+	if request.Type == "" {
+		request.Type = "asset"
+	}
+	if request.IsActive == nil {
+		t := true
+		request.IsActive = &t
+	}
+	if request.ValidFrom == nil || request.ValidFrom.IsZero() {
+		fd := shared.FlexibleDate{Time: time.Now().UTC()}
+		request.ValidFrom = &fd
 	}
 
 	if err := validate.Struct(request); err != nil {
@@ -144,7 +160,7 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 	reqID := middleware.GetRequestID(req.Context())
 
 	var request asset.UpdateAssetRequest
-	if err := httputil.DecodeJSON(req, &request); err != nil {
+	if err := httputil.DecodeJSONStrict(req, &request); err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
 	}
