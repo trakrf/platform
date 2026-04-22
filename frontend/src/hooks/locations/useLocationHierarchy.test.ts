@@ -171,6 +171,85 @@ describe('useLocationHierarchy', () => {
     expect(locationsApi.getDescendants).toHaveBeenCalledWith(1);
   });
 
+  it('should populate byId cache from surrogate_id when API returns ancestors without id', async () => {
+    // Simulate a public-API-shape payload that carries only surrogate_id
+    // (the TRA-429 wire shape). The hook's normalizeLocation helper should
+    // fall back to surrogate_id when id is absent.
+    const ancestorRaw = {
+      surrogate_id: 42,
+      org_id: 100,
+      identifier: 'usa',
+      name: 'United States',
+      description: '',
+      parent: null,
+      path: 'usa',
+      depth: 1,
+      valid_from: '2024-01-01',
+      valid_to: null,
+      is_active: true,
+      metadata: {},
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    } as unknown as Location;
+
+    vi.mocked(locationsApi.getAncestors).mockResolvedValue({
+      data: { data: [ancestorRaw], total_count: 1, count: 1, offset: 0 },
+    } as any);
+
+    useLocationStore.getState().addLocation(mockChild);
+
+    const { result } = renderHook(() => useLocationHierarchy(2), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoadingParents).toBe(false);
+    });
+
+    const byId = useLocationStore.getState().cache.byId;
+    expect(byId.get(42)).toBeDefined();
+    expect(byId.get(42)?.id).toBe(42);
+    expect(byId.get(42)?.surrogate_id).toBe(42);
+  });
+
+  it('should populate byId cache from surrogate_id when API returns descendants without id', async () => {
+    const descendantRaw = {
+      surrogate_id: 99,
+      org_id: 100,
+      identifier: 'california',
+      name: 'California',
+      description: '',
+      parent: null,
+      path: 'usa.california',
+      depth: 2,
+      valid_from: '2024-01-01',
+      valid_to: null,
+      is_active: true,
+      metadata: {},
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    } as unknown as Location;
+
+    vi.mocked(locationsApi.getDescendants).mockResolvedValue({
+      data: { data: [descendantRaw], total_count: 1, count: 1, offset: 0 },
+    } as any);
+
+    useLocationStore.getState().addLocation(mockRoot);
+
+    const { result } = renderHook(() => useLocationHierarchy(1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoadingSubsidiaries).toBe(false);
+    });
+
+    const byId = useLocationStore.getState().cache.byId;
+    expect(byId.get(99)).toBeDefined();
+    expect(byId.get(99)?.id).toBe(99);
+    expect(byId.get(99)?.surrogate_id).toBe(99);
+  });
+
   it('should return empty arrays for null locationId', () => {
     const { result } = renderHook(() => useLocationHierarchy(null), {
       wrapper: createWrapper(),
