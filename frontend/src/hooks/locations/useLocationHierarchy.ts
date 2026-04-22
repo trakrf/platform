@@ -54,11 +54,15 @@ export function useLocationHierarchy(locationId: number | null) {
     queryFn: async () => {
       if (!locationId) return [];
       const response = await locationsApi.getAncestors(locationId);
-      const normalized = response.data.data.map(normalizeLocation);
-      normalized.forEach((loc) => {
+      // Ancestors arrive root-first. Normalize and write each entry to the
+      // store in order so the next entry's parent_location_id can resolve
+      // through byIdentifier — required for non-root ancestors whose parent
+      // is also part of the response.
+      return response.data.data.map((raw) => {
+        const loc = normalizeLocation(raw);
         useLocationStore.getState().addLocation(loc);
+        return loc;
       });
-      return normalized;
     },
     enabled: !!locationId && locationPath.length === 0,
     staleTime: 60 * 60 * 1000,
@@ -69,11 +73,13 @@ export function useLocationHierarchy(locationId: number | null) {
     queryFn: async () => {
       if (!locationId) return [];
       const response = await locationsApi.getDescendants(locationId);
-      const normalized = response.data.data.map(normalizeLocation);
-      normalized.forEach((loc) => {
+      // Descendants arrive in ltree-path order so parents precede children —
+      // same interleave pattern lets parent_location_id resolve entry-by-entry.
+      return response.data.data.map((raw) => {
+        const loc = normalizeLocation(raw);
         useLocationStore.getState().addLocation(loc);
+        return loc;
       });
-      return normalized;
     },
     enabled: !!locationId && subsidiaries.length === 0,
     staleTime: 60 * 60 * 1000,
