@@ -21,12 +21,14 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 	          description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	`
 	var loc location.Location
-	err := s.pool.QueryRow(ctx, query, request.Name, request.Identifier, request.ParentLocationID,
-		request.Description, request.ValidFrom, request.ValidTo, request.IsActive, request.OrgID,
-	).Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
-		&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
-		&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-	)
+	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, request.Name, request.Identifier, request.ParentLocationID,
+			request.Description, request.ValidFrom, request.ValidTo, request.IsActive, request.OrgID,
+		).Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+		)
+	})
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -71,7 +73,9 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 	`, strings.Join(updates, ", "))
 
 	var updatedID int
-	err = s.pool.QueryRow(ctx, query, args...).Scan(&updatedID)
+	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(&updatedID)
+	})
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -101,10 +105,12 @@ func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location
 	WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	`
 	var loc location.Location
-	err := s.pool.QueryRow(ctx, query, id, orgID).Scan(&loc.ID, &loc.OrgID, &loc.Name,
-		&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-		&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-	)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id, orgID).Scan(&loc.ID, &loc.OrgID, &loc.Name,
+			&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+		)
+	})
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -130,40 +136,41 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
 	`
 
-	rows, err := s.pool.Query(ctx, query, orgID, ids)
+	locations := []*location.Location{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, ids)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var loc location.Location
+			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name,
+				&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+			); err != nil {
+				return fmt.Errorf("failed to scan location: %w", err)
+			}
+			locations = append(locations, &loc)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch fetch locations: %w", err)
-	}
-	defer rows.Close()
-
-	locations := []*location.Location{}
-	for rows.Next() {
-		var loc location.Location
-		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name,
-			&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan location: %w", err)
-		}
-		locations = append(locations, &loc)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating locations: %w", err)
 	}
 
 	return locations, nil
 }
 
-func (s *Storage) GetLocationWithRelations(ctx context.Context, id int) (*location.Location, error) {
+func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (*location.Location, error) {
 	query := `
 	WITH target AS (
 		SELECT id, org_id, name, identifier, parent_location_id, path, depth,
 		       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
 		       'target' as relation_type
 		FROM trakrf.locations
-		WHERE id = $1 AND deleted_at IS NULL
+		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	)
 	SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
 	       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
@@ -174,7 +181,7 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, id int) (*locati
 	           ELSE 'other'
 	       END as relation_type
 	FROM trakrf.locations l, target t
-	WHERE l.deleted_at IS NULL
+	WHERE l.org_id = $2 AND l.deleted_at IS NULL
 	  AND (
 	      l.id = $1
 	      OR l.path @> t.path
@@ -189,41 +196,42 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, id int) (*locati
 	    l.depth
 	`
 
-	rows, err := s.pool.Query(ctx, query, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get location with relations: %w", err)
-	}
-	defer rows.Close()
-
 	var target *location.Location
 	ancestors := []location.Location{}
 	children := []location.Location{}
 
-	for rows.Next() {
-		var loc location.Location
-		var relationType string
-
-		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
-			&loc.UpdatedAt, &loc.DeletedAt, &relationType,
-		)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, id, orgID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan location with relations: %w", err)
+			return err
 		}
+		defer rows.Close()
 
-		switch relationType {
-		case "target":
-			target = &loc
-		case "ancestor":
-			ancestors = append(ancestors, loc)
-		case "child":
-			children = append(children, loc)
+		for rows.Next() {
+			var loc location.Location
+			var relationType string
+
+			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
+				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
+				&loc.UpdatedAt, &loc.DeletedAt, &relationType,
+			); err != nil {
+				return fmt.Errorf("failed to scan location with relations: %w", err)
+			}
+
+			switch relationType {
+			case "target":
+				target = &loc
+			case "ancestor":
+				ancestors = append(ancestors, loc)
+			case "child":
+				children = append(children, loc)
+			}
 		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating location relations: %w", err)
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get location with relations: %w", err)
 	}
 
 	if target == nil {
@@ -246,28 +254,29 @@ func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, of
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`
-	rows, err := s.pool.Query(ctx, query, orgID, limit, offset)
+	locations := []location.Location{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, limit, offset)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var loc location.Location
+			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
+				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
+				&loc.UpdatedAt, &loc.DeletedAt,
+			); err != nil {
+				return fmt.Errorf("failed to scan location: %w", err)
+			}
+			locations = append(locations, loc)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list locations: %w", err)
-	}
-	defer rows.Close()
-
-	locations := []location.Location{}
-	for rows.Next() {
-		var loc location.Location
-		err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
-			&loc.UpdatedAt, &loc.DeletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan location: %w", err)
-		}
-		locations = append(locations, loc)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating locations: %w", err)
 	}
 
 	return locations, nil
@@ -282,7 +291,9 @@ func (s *Storage) CountAllLocations(ctx context.Context, orgID int) (int, error)
 	`
 
 	var count int
-	err := s.pool.QueryRow(ctx, query, orgID).Scan(&count)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID).Scan(&count)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count locations: %w", err)
 	}
@@ -292,11 +303,19 @@ func (s *Storage) CountAllLocations(ctx context.Context, orgID int) (int, error)
 
 func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, error) {
 	query := `UPDATE trakrf.locations SET deleted_at = NOW() WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`
-	result, err := s.pool.Exec(ctx, query, id, orgID)
+	var rowsAffected int64
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, query, id, orgID)
+		if err != nil {
+			return err
+		}
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		return false, fmt.Errorf("could not delete location: %w", err)
 	}
-	return result.RowsAffected() > 0, nil
+	return rowsAffected > 0, nil
 }
 
 // GetAncestors returns all ancestor locations of a given location (from root to parent),
@@ -374,34 +393,37 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 func (s *Storage) scanHierarchyRows(
 	ctx context.Context, query, kind string, orgID int, args ...any,
 ) ([]location.LocationWithParent, error) {
-	rows, err := s.pool.Query(ctx, query, args...)
+	out := []location.LocationWithParent{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				loc    location.Location
+				parIdt *string
+			)
+			if err := rows.Scan(
+				&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
+				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
+				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+				&parIdt,
+			); err != nil {
+				return fmt.Errorf("failed to scan %s: %w", kind, err)
+			}
+			out = append(out, location.LocationWithParent{
+				LocationView:     location.LocationView{Location: loc},
+				ParentIdentifier: parIdt,
+			})
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %ss: %w", kind, err)
-	}
-	defer rows.Close()
-
-	out := []location.LocationWithParent{}
-	for rows.Next() {
-		var (
-			loc    location.Location
-			parIdt *string
-		)
-		if err := rows.Scan(
-			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
-			&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-			&parIdt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan %s: %w", kind, err)
-		}
-		out = append(out, location.LocationWithParent{
-			LocationView:     location.LocationView{Location: loc},
-			ParentIdentifier: parIdt,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating %ss: %w", kind, err)
 	}
 
 	if len(out) > 0 {
@@ -453,18 +475,20 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 	var locationID int
 	var identifierIDs []int
 
-	err = s.pool.QueryRow(ctx, query,
-		orgID,
-		request.Identifier,
-		request.Name,
-		request.Description,
-		request.ParentLocationID,
-		validFrom,
-		validTo,
-		isActive,
-		nil, // metadata - not used in CreateLocationRequest
-		identifiersJSON,
-	).Scan(&locationID, &identifierIDs)
+	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			orgID,
+			request.Identifier,
+			request.Name,
+			request.Description,
+			request.ParentLocationID,
+			validFrom,
+			validTo,
+			isActive,
+			nil, // metadata - not used in CreateLocationRequest
+			identifiersJSON,
+		).Scan(&locationID, &identifierIDs)
+	})
 
 	if err != nil {
 		return nil, parseLocationWithIdentifiersError(err, request.Identifier)
@@ -515,12 +539,14 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 		loc    location.Location
 		parIdt *string
 	)
-	err := s.pool.QueryRow(ctx, query, id, orgID).Scan(
-		&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
-		&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
-		&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-		&parIdt,
-	)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id, orgID).Scan(
+			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+			&parIdt,
+		)
+	})
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -619,12 +645,14 @@ func (s *Storage) GetLocationByIdentifier(
 		loc    location.Location
 		parIdt *string
 	)
-	err := s.pool.QueryRow(ctx, query, orgID, identifier).Scan(
-		&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
-		&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
-		&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-		&parIdt,
-	)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, identifier).Scan(
+			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+			&parIdt,
+		)
+	})
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -671,34 +699,36 @@ func (s *Storage) ListLocationsFiltered(
 
 	args = append(args, clampLocListLimit(f.Limit), f.Offset)
 
-	rows, err := s.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("list locations filtered: %w", err)
-	}
-	defer rows.Close()
-
 	out := []location.LocationWithParent{}
-	for rows.Next() {
-		var (
-			loc    location.Location
-			parIdt *string
-		)
-		if err := rows.Scan(
-			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-			&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
-			&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-			&parIdt,
-		); err != nil {
-			return nil, fmt.Errorf("scan location: %w", err)
+	if err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return err
 		}
-		out = append(out, location.LocationWithParent{
-			LocationView:     location.LocationView{Location: loc},
-			ParentIdentifier: parIdt,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				loc    location.Location
+				parIdt *string
+			)
+			if err := rows.Scan(
+				&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
+				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
+				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+				&parIdt,
+			); err != nil {
+				return fmt.Errorf("scan location: %w", err)
+			}
+			out = append(out, location.LocationWithParent{
+				LocationView:     location.LocationView{Location: loc},
+				ParentIdentifier: parIdt,
+			})
+		}
+		return rows.Err()
+	}); err != nil {
+		return nil, fmt.Errorf("list locations filtered: %w", err)
 	}
 
 	// Bulk-fetch identifiers for the returned locations, matching the
@@ -738,7 +768,9 @@ func (s *Storage) CountLocationsFiltered(
 	`, where)
 
 	var n int
-	if err := s.pool.QueryRow(ctx, query, args...).Scan(&n); err != nil {
+	if err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(&n)
+	}); err != nil {
 		return 0, fmt.Errorf("count locations filtered: %w", err)
 	}
 	return n, nil

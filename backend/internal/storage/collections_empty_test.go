@@ -108,6 +108,8 @@ func TestGetAssetsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 func TestListAllLocations_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.locations`).
 		WithArgs(1, 10, 0).
 		WillReturnRows(pgxmock.NewRows([]string{
@@ -115,6 +117,7 @@ func TestListAllLocations_EmptyReturnsNonNil(t *testing.T) {
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
+	mock.ExpectCommit()
 
 	locations, err := storage.ListAllLocations(context.Background(), 1, 10, 0)
 	assert.NoError(t, err)
@@ -127,6 +130,8 @@ func TestGetLocationsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 
 	orgID := 1
 	ids := []int{99}
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.locations[\s\S]*WHERE org_id = \$1 AND id = ANY\(\$2\)`).
 		WithArgs(orgID, ids).
 		WillReturnRows(pgxmock.NewRows([]string{
@@ -134,6 +139,7 @@ func TestGetLocationsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
 		}))
+	mock.ExpectCommit()
 
 	locations, err := storage.GetLocationsByIDs(context.Background(), orgID, ids)
 	assert.NoError(t, err)
@@ -144,6 +150,8 @@ func TestGetLocationsByIDs_EmptyRowsReturnsNonNil(t *testing.T) {
 func TestGetAncestors_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.locations l`).
 		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
@@ -152,6 +160,7 @@ func TestGetAncestors_EmptyReturnsNonNil(t *testing.T) {
 			"is_active", "created_at", "updated_at", "deleted_at",
 			"parent_identifier",
 		}))
+	mock.ExpectCommit()
 
 	ancestors, err := storage.GetAncestors(context.Background(), 1, 1)
 	assert.NoError(t, err)
@@ -162,6 +171,8 @@ func TestGetAncestors_EmptyReturnsNonNil(t *testing.T) {
 func TestGetDescendants_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.locations l`).
 		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
@@ -170,6 +181,7 @@ func TestGetDescendants_EmptyReturnsNonNil(t *testing.T) {
 			"is_active", "created_at", "updated_at", "deleted_at",
 			"parent_identifier",
 		}))
+	mock.ExpectCommit()
 
 	descendants, err := storage.GetDescendants(context.Background(), 1, 1)
 	assert.NoError(t, err)
@@ -180,6 +192,8 @@ func TestGetDescendants_EmptyReturnsNonNil(t *testing.T) {
 func TestGetChildren_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.locations l`).
 		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
@@ -188,6 +202,7 @@ func TestGetChildren_EmptyReturnsNonNil(t *testing.T) {
 			"is_active", "created_at", "updated_at", "deleted_at",
 			"parent_identifier",
 		}))
+	mock.ExpectCommit()
 
 	children, err := storage.GetChildren(context.Background(), 1, 1)
 	assert.NoError(t, err)
