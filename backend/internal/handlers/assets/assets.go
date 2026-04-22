@@ -1,12 +1,10 @@
 package assets
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -36,34 +34,6 @@ func NewHandler(storage *storage.Storage) *Handler {
 		storage:           storage,
 		bulkImportService: bulkimport.NewService(storage),
 	}
-}
-
-func (handler *Handler) createAssetWithoutIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
-	var validTo *time.Time
-	if request.ValidTo != nil && !request.ValidTo.IsZero() {
-		t := request.ValidTo.ToTime()
-		validTo = &t
-	}
-
-	assetToCreate := asset.Asset{
-		OrgID:             request.OrgID,
-		Identifier:        request.Identifier,
-		Name:              request.Name,
-		Type:              request.Type,
-		Description:       request.Description,
-		CurrentLocationID: request.CurrentLocationID,
-		ValidFrom:         request.ValidFrom.ToTime(),
-		ValidTo:           validTo,
-		Metadata:          request.Metadata,
-		IsActive:          request.IsActive,
-	}
-
-	baseAsset, err := handler.storage.CreateAsset(ctx, assetToCreate)
-	if err != nil {
-		return nil, err
-	}
-
-	return &asset.AssetView{Asset: *baseAsset, Identifiers: []shared.TagIdentifier{}}, nil
 }
 
 // @Summary      Create an asset
@@ -106,17 +76,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	request.OrgID = orgID
 
-	var result *asset.AssetView
-
-	if len(request.Identifiers) > 0 {
-		result, err = handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
-	} else {
-		result, err = handler.createAssetWithoutIdentifiers(r.Context(), request)
-	}
-
+	result, err := handler.storage.CreateAssetWithIdentifiers(r.Context(), request)
 	if err != nil {
-		// Storage returns "already exists" / "already exist" strings for unique violations
-		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.AssetCreateFailed, err.Error(), requestID)
@@ -127,7 +88,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Location", "/api/v1/assets/"+strconv.Itoa(result.ID))
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": asset.ToPublicAssetView(*result)})
 }
 
 // @Summary      Update an asset
@@ -210,7 +171,7 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]*asset.Asset{"data": result})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": asset.ToPublicAssetView(*result)})
 }
 
 // @Summary Get asset by surrogate ID (internal)

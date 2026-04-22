@@ -339,3 +339,38 @@ func TestGetAssetWithLocationByID_UnknownIDReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
+
+// TestUpdateAsset_PopulatesCurrentLocationIdentifier verifies that an
+// UpdateAsset call returns the AssetWithLocation shape with the parent
+// location's natural key resolved — the contract write-handlers depend on
+// to emit PublicAssetView (TRA-429).
+func TestUpdateAsset_PopulatesCurrentLocationIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	base, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "tra429-widget", Name: "Widget", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	newName := "updated for tra-429"
+	result, err := store.UpdateAsset(context.Background(), orgID, base.ID, asset.UpdateAssetRequest{
+		Name: &newName,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.CurrentLocationIdentifier)
+	assert.Equal(t, "wh-1", *result.CurrentLocationIdentifier)
+	assert.Equal(t, newName, result.Name)
+	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
+}

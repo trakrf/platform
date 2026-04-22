@@ -80,7 +80,7 @@ func GenerateAssetIdentifier(seq int) string {
 	return fmt.Sprintf("ASSET-%04d", seq)
 }
 
-func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.Asset, error) {
+func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.AssetWithLocation, error) {
 	updates := []string{}
 	args := []any{id, orgID}
 	argPos := 3
@@ -106,16 +106,11 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		update trakrf.assets
 		set %s, updated_at = now()
 		where id = $1 and org_id = $2 and deleted_at is null
-		returning id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
-		          metadata, is_active, created_at, updated_at, deleted_at
+		returning id
 	`, strings.Join(updates, ", "))
 
-	var asset asset.Asset
-	err = s.pool.QueryRow(ctx, query, args...).Scan(&asset.ID, &asset.OrgID,
-		&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
-		&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
-		&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
-	)
+	var updatedID int
+	err = s.pool.QueryRow(ctx, query, args...).Scan(&updatedID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -134,7 +129,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		return nil, fmt.Errorf("failed to update asset: %w", err)
 	}
 
-	return &asset, nil
+	return s.getAssetWithLocationByID(ctx, updatedID)
 }
 
 func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, error) {
@@ -409,7 +404,7 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	return fields, nil
 }
 
-func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetView, error) {
+func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetWithLocation, error) {
 	// Auto-generate identifier if empty
 	if strings.TrimSpace(request.Identifier) == "" {
 		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
@@ -455,7 +450,7 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		return nil, parseAssetWithIdentifiersError(err, request.Identifier)
 	}
 
-	return s.GetAssetViewByID(ctx, assetID)
+	return s.getAssetWithLocationByID(ctx, assetID)
 }
 
 func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetView, error) {
