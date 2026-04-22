@@ -490,6 +490,56 @@ func (s *Storage) GetLocationViewByID(ctx context.Context, id int) (*location.Lo
 	}, nil
 }
 
+// getLocationWithParentByID returns a LocationWithParent by surrogate id,
+// performing the self-join on parent location and fetching identifiers.
+// Used by CreateLocationWithIdentifiers and UpdateLocation to emit the
+// public write-response shape. Returns (nil, nil) if the location doesn't
+// exist or is soft-deleted.
+// Caller MUST have already authorized access to this location id; this
+// helper does not filter by org_id.
+func (s *Storage) getLocationWithParentByID(ctx context.Context, id int) (*location.LocationWithParent, error) {
+	query := `
+		SELECT
+			l.id, l.org_id, l.name, l.identifier, l.parent_location_id,
+			l.path, l.depth, l.description, l.valid_from, l.valid_to,
+			l.is_active, l.created_at, l.updated_at, l.deleted_at,
+			p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.id = $1 AND l.deleted_at IS NULL
+		LIMIT 1
+	`
+	var (
+		loc    location.Location
+		parIdt *string
+	)
+	err := s.pool.QueryRow(ctx, query, id).Scan(
+		&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+		&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+		&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
+		&parIdt,
+	)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get location with parent by id: %w", err)
+	}
+
+	identifiers, err := s.GetIdentifiersByLocationID(ctx, loc.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &location.LocationWithParent{
+		LocationView: location.LocationView{
+			Location:    loc,
+			Identifiers: identifiers,
+		},
+		ParentIdentifier: parIdt,
+	}, nil
+}
+
 // ListLocationViews fetches locations with their tag identifiers for an org
 func (s *Storage) ListLocationViews(ctx context.Context, orgID, limit, offset int) ([]location.LocationView, error) {
 	locations, err := s.ListAllLocations(ctx, orgID, limit, offset)
@@ -766,4 +816,10 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	}
 
 	return fields, nil
+}
+
+// GetLocationWithParentByIDForTest exposes getLocationWithParentByID to
+// integration tests in the same package.
+func (s *Storage) GetLocationWithParentByIDForTest(ctx context.Context, id int) (*location.LocationWithParent, error) {
+	return s.getLocationWithParentByID(ctx, id)
 }
