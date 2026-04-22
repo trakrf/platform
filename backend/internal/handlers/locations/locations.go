@@ -1,12 +1,10 @@
 package locations
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -33,32 +31,6 @@ func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{
 		storage: storage,
 	}
-}
-
-func (handler *Handler) createLocationWithoutIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationView, error) {
-	var validTo *time.Time
-	if request.ValidTo != nil && !request.ValidTo.IsZero() {
-		t := request.ValidTo.ToTime()
-		validTo = &t
-	}
-
-	loc := location.Location{
-		OrgID:            orgID,
-		Name:             request.Name,
-		Identifier:       request.Identifier,
-		ParentLocationID: request.ParentLocationID,
-		Description:      request.Description,
-		ValidFrom:        request.ValidFrom.ToTime(),
-		ValidTo:          validTo,
-		IsActive:         request.IsActive,
-	}
-
-	baseLoc, err := handler.storage.CreateLocation(ctx, loc)
-	if err != nil {
-		return nil, err
-	}
-
-	return &location.LocationView{Location: *baseLoc, Identifiers: []shared.TagIdentifier{}}, nil
 }
 
 // @Summary      Create a location
@@ -99,17 +71,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var result *location.LocationView
-
-	if len(request.Identifiers) > 0 {
-		result, err = handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
-	} else {
-		result, err = handler.createLocationWithoutIdentifiers(r.Context(), orgID, request)
-	}
-
+	result, err := handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
 	if err != nil {
-		// Storage returns "already exists" / "already exist" strings for unique violations
-		// (SQLSTATE 23505 is unwrapped to a plain string by the storage layer).
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
 				apierrors.LocationCreateFailed, err.Error(), requestID)
@@ -120,7 +83,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Location", "/api/v1/locations/"+strconv.Itoa(result.ID))
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": location.ToPublicLocationView(*result)})
 }
 
 // @Summary      Update a location
@@ -201,7 +164,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]*location.Location{"data": result})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": location.ToPublicLocationView(*result)})
 }
 
 // @Summary Delete location

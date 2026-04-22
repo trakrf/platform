@@ -200,18 +200,27 @@ func TestUpdateLocation(t *testing.T) {
 		Description: &newDescription,
 	}
 
-	rows := pgxmock.NewRows([]string{
-		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
-		"description", "valid_from", "valid_to", "is_active",
-		"created_at", "updated_at", "deleted_at",
-	}).AddRow(
-		locationID, 1, newName, "warehouse_1", nil, "warehouse_1", 1,
-		newDescription, now, nil, true, now, now, nil,
-	)
-
+	// UPDATE ... RETURNING id
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
-		WillReturnRows(rows)
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(locationID))
+
+	// getLocationWithParentByID: SELECT location + joined parent identifier
+	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).
+		WithArgs(locationID).
+		WillReturnRows(pgxmock.NewRows([]string{
+			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
+			"description", "valid_from", "valid_to", "is_active",
+			"created_at", "updated_at", "deleted_at", "parent_identifier",
+		}).AddRow(
+			locationID, 1, newName, "warehouse_1", nil, "warehouse_1", 1,
+			newDescription, now, nil, true, now, now, nil, nil,
+		))
+
+	// GetIdentifiersByLocationID: empty identifiers
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+		WithArgs(locationID).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
@@ -238,19 +247,29 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 		ParentLocationID: &newParentID,
 	}
 
-	rows := pgxmock.NewRows([]string{
-		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
-		"description", "valid_from", "valid_to", "is_active",
-		"created_at", "updated_at", "deleted_at",
-	}).AddRow(
-		locationID, 1, "Zone A", "zone_a", &newParentID,
-		"usa.california.zone_a", 3, "Test zone", now, nil, true,
-		now, now, nil,
-	)
-
+	// UPDATE ... RETURNING id
 	mock.ExpectQuery(`UPDATE trakrf.locations`).
 		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
-		WillReturnRows(rows)
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(locationID))
+
+	// getLocationWithParentByID: SELECT location + joined parent identifier
+	parentIdentifier := "california"
+	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).
+		WithArgs(locationID).
+		WillReturnRows(pgxmock.NewRows([]string{
+			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
+			"description", "valid_from", "valid_to", "is_active",
+			"created_at", "updated_at", "deleted_at", "parent_identifier",
+		}).AddRow(
+			locationID, 1, "Zone A", "zone_a", &newParentID,
+			"usa.california.zone_a", 3, "Test zone", now, nil, true,
+			now, now, nil, &parentIdentifier,
+		))
+
+	// GetIdentifiersByLocationID: empty identifiers
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+		WithArgs(locationID).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 

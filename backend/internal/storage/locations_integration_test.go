@@ -265,3 +265,38 @@ func TestGetLocationWithParentByID_UnknownIDReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
+
+// TestUpdateLocation_PopulatesParentIdentifier verifies UpdateLocation
+// returns the LocationWithParent shape with ParentIdentifier populated
+// when the location has a live parent (TRA-429).
+func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	parent, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	child, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-1.bay-3", Name: "Bay 3",
+		Path: "wh-1.bay-3", ParentLocationID: &parent.ID,
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	newName := "updated for tra-429"
+	result, err := store.UpdateLocation(context.Background(), orgID, child.ID, location.UpdateLocationRequest{
+		Name: &newName,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.ParentIdentifier)
+	assert.Equal(t, "wh-1", *result.ParentIdentifier)
+	assert.Equal(t, newName, result.Name)
+	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
+}

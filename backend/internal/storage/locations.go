@@ -41,7 +41,7 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 	return &loc, nil
 }
 
-func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.Location, error) {
+func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.LocationWithParent, error) {
 	updates := []string{}
 	args := []any{id, orgID}
 	argPos := 3
@@ -67,15 +67,11 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		UPDATE trakrf.locations
 		SET %s, updated_at = NOW()
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-		RETURNING id, org_id, name, identifier, parent_location_id, path, depth,
-		          description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
+		RETURNING id
 	`, strings.Join(updates, ", "))
 
-	var loc location.Location
-	err = s.pool.QueryRow(ctx, query, args...).Scan(&loc.ID, &loc.OrgID, &loc.Name,
-		&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
-		&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-	)
+	var updatedID int
+	err = s.pool.QueryRow(ctx, query, args...).Scan(&updatedID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -94,7 +90,7 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		return nil, fmt.Errorf("failed to update location: %w", err)
 	}
 
-	return &loc, nil
+	return s.getLocationWithParentByID(ctx, updatedID)
 }
 
 func (s *Storage) GetLocationByID(ctx context.Context, id int) (*location.Location, error) {
@@ -430,7 +426,7 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 }
 
 // CreateLocationWithIdentifiers creates a location with tag identifiers in a single transaction
-func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationView, error) {
+func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationWithParent, error) {
 	identifiersJSON, err := identifiersToJSON(request.Identifiers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
@@ -466,7 +462,7 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 		return nil, parseLocationWithIdentifiersError(err, request.Identifier)
 	}
 
-	return s.GetLocationViewByID(ctx, locationID)
+	return s.getLocationWithParentByID(ctx, locationID)
 }
 
 // GetLocationViewByID fetches a location with its tag identifiers
