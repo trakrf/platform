@@ -467,7 +467,7 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	view, err := handler.storage.GetLocationViewByID(req.Context(), id)
+	view, err := handler.storage.GetLocationViewByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), reqID)
@@ -892,7 +892,7 @@ func (handler *Handler) parseAndVerifyLocationID(w http.ResponseWriter, req *htt
 		return 0, false
 	}
 
-	loc, err := handler.storage.GetLocationByID(req.Context(), id)
+	loc, err := handler.storage.GetLocationByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), reqID)

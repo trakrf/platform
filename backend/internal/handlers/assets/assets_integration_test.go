@@ -296,7 +296,7 @@ func TestDeleteAsset(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	deleted, err := store.GetAssetByID(context.Background(), &created.ID)
+	deleted, err := store.GetAssetByID(context.Background(), accountID, &created.ID)
 	require.NoError(t, err)
 	assert.Nil(t, deleted)
 }

@@ -18,17 +18,21 @@ func TestGetIdentifiersByAssetID(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	assetID := 1
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
 		AddRow(101, "rfid", "E20000001234", true).
 		AddRow(102, "ble", "AA:BB:CC:DD:EE:FF", true)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(assetID).
+		WithArgs(assetID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByAssetID(context.Background(), assetID)
+	results, err := storage.GetIdentifiersByAssetID(context.Background(), orgID, assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -47,15 +51,19 @@ func TestGetIdentifiersByAssetID_Empty(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	assetID := 1
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"})
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(assetID).
+		WithArgs(assetID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByAssetID(context.Background(), assetID)
+	results, err := storage.GetIdentifiersByAssetID(context.Background(), orgID, assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -70,13 +78,17 @@ func TestGetIdentifiersByAssetID_DatabaseError(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	assetID := 1
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(assetID).
+		WithArgs(assetID, orgID).
 		WillReturnError(errors.New("connection lost"))
+	mock.ExpectRollback()
 
-	results, err := storage.GetIdentifiersByAssetID(context.Background(), assetID)
+	results, err := storage.GetIdentifiersByAssetID(context.Background(), orgID, assetID)
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
@@ -91,16 +103,20 @@ func TestGetIdentifiersByLocationID(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	locationID := 1
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
 		AddRow(201, "barcode", "LOC-001", true)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(locationID).
+		WithArgs(locationID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByLocationID(context.Background(), locationID)
+	results, err := storage.GetIdentifiersByLocationID(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -117,15 +133,19 @@ func TestGetIdentifiersByLocationID_Empty(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	locationID := 1
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"})
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(locationID).
+		WithArgs(locationID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByLocationID(context.Background(), locationID)
+	results, err := storage.GetIdentifiersByLocationID(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -246,9 +266,12 @@ func TestRemoveAssetIdentifier(t *testing.T) {
 	assetID := 42
 	identifierID := 101
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
 		WithArgs(identifierID, assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
 
 	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
 
@@ -268,9 +291,12 @@ func TestRemoveAssetIdentifier_NotFound(t *testing.T) {
 	assetID := 42
 	identifierID := 99999
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
 		WithArgs(identifierID, assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectCommit()
 
 	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
 
@@ -290,9 +316,12 @@ func TestRemoveAssetIdentifier_DatabaseError(t *testing.T) {
 	assetID := 42
 	identifierID := 101
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
 		WithArgs(identifierID, assetID, orgID).
 		WillReturnError(errors.New("database error"))
+	mock.ExpectRollback()
 
 	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
 
@@ -313,9 +342,12 @@ func TestRemoveLocationIdentifier(t *testing.T) {
 	locationID := 77
 	identifierID := 201
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
 		WithArgs(identifierID, locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
 
 	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
 
@@ -335,9 +367,12 @@ func TestRemoveLocationIdentifier_NotFound(t *testing.T) {
 	locationID := 77
 	identifierID := 99999
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
 		WithArgs(identifierID, locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectCommit()
 
 	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
 
@@ -357,9 +392,12 @@ func TestRemoveLocationIdentifier_DatabaseError(t *testing.T) {
 	locationID := 77
 	identifierID := 201
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
 		WithArgs(identifierID, locationID, orgID).
 		WillReturnError(errors.New("database error"))
+	mock.ExpectRollback()
 
 	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
 
@@ -376,16 +414,20 @@ func TestGetIdentifierByID(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	identifierID := 101
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
 		AddRow(101, "rfid", "E20000001234", true)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(identifierID).
+		WithArgs(identifierID, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.GetIdentifierByID(context.Background(), identifierID)
+	result, err := storage.GetIdentifierByID(context.Background(), orgID, identifierID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -403,13 +445,17 @@ func TestGetIdentifierByID_NotFound(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	identifierID := 99999
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(identifierID).
+		WithArgs(identifierID, orgID).
 		WillReturnError(errors.New("no rows in result set"))
+	mock.ExpectCommit()
 
-	result, err := storage.GetIdentifierByID(context.Background(), identifierID)
+	result, err := storage.GetIdentifierByID(context.Background(), orgID, identifierID)
 
 	assert.NoError(t, err) // Not found is not an error, returns nil
 	assert.Nil(t, result)
@@ -423,6 +469,7 @@ func TestGetIdentifiersForAssets_Batch(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	assetIDs := []int{1, 2, 3}
 
 	rows := pgxmock.NewRows([]string{"asset_id", "id", "type", "value", "is_active"}).
@@ -431,11 +478,14 @@ func TestGetIdentifiersForAssets_Batch(t *testing.T) {
 		AddRow(2, 201, "barcode", "BC-002", true)
 	// Note: asset 3 has no identifiers
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT asset_id, id, type, value, is_active`).
-		WithArgs(assetIDs).
+		WithArgs(assetIDs, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.getIdentifiersForAssets(context.Background(), assetIDs)
+	result, err := storage.getIdentifiersForAssets(context.Background(), orgID, assetIDs)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -463,6 +513,7 @@ func TestGetIdentifiersForLocations_Batch(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	orgID := 1
 	locationIDs := []int{10, 20}
 
 	rows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"}).
@@ -470,11 +521,14 @@ func TestGetIdentifiersForLocations_Batch(t *testing.T) {
 		AddRow(20, 2001, "rfid", "E20000020001", true).
 		AddRow(20, 2002, "barcode", "LOC-20", true)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
-		WithArgs(locationIDs).
+		WithArgs(locationIDs, orgID).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
-	result, err := storage.getIdentifiersForLocations(context.Background(), locationIDs)
+	result, err := storage.getIdentifiersForLocations(context.Background(), orgID, locationIDs)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)

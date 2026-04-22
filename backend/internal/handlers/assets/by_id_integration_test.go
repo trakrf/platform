@@ -115,7 +115,7 @@ func TestUpdateAssetByID_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Confirm asset untouched.
-	fetched, err := store.GetAssetByID(context.Background(), &created.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgA, &created.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "OrgA Asset", fetched.Name)
 }
@@ -206,7 +206,7 @@ func TestDeleteAssetByID_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
 	// Confirm soft-delete actually took effect.
-	fetched, err := store.GetAssetByID(context.Background(), &created.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgID, &created.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "soft-deleted asset should be hidden by GetAssetByID")
 }
@@ -238,7 +238,7 @@ func TestDeleteAssetByID_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Confirm asset not deleted.
-	fetched, err := store.GetAssetByID(context.Background(), &created.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgA, &created.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "asset must survive cross-org DELETE attempt")
 	assert.Equal(t, "Survivor", fetched.Name)
@@ -369,7 +369,7 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier must be soft-deleted")
 }
@@ -406,7 +406,7 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Identifier must still exist.
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must survive cross-org DELETE attempt")
 }

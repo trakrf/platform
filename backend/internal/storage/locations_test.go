@@ -207,7 +207,7 @@ func TestUpdateLocation(t *testing.T) {
 
 	// getLocationWithParentByID: SELECT location + joined parent identifier
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 			"description", "valid_from", "valid_to", "is_active",
@@ -217,10 +217,13 @@ func TestUpdateLocation(t *testing.T) {
 			newDescription, now, nil, true, now, now, nil, nil,
 		))
 
-	// GetIdentifiersByLocationID: empty identifiers
+	// GetIdentifiersByLocationID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
@@ -255,7 +258,7 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 	// getLocationWithParentByID: SELECT location + joined parent identifier
 	parentIdentifier := "california"
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 			"description", "valid_from", "valid_to", "is_active",
@@ -266,10 +269,13 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 			now, now, nil, &parentIdentifier,
 		))
 
-	// GetIdentifiersByLocationID: empty identifiers
+	// GetIdentifiersByLocationID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
@@ -344,10 +350,10 @@ func TestGetLocationByID(t *testing.T) {
 	)
 
 	mock.ExpectQuery(`SELECT id, org_id, name, identifier`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnRows(rows)
 
-	result, err := storage.GetLocationByID(context.Background(), locationID)
+	result, err := storage.GetLocationByID(context.Background(), 1, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -368,10 +374,10 @@ func TestGetLocationByID_NotFound(t *testing.T) {
 	locationID := 99999
 
 	mock.ExpectQuery(`SELECT id, org_id, name, identifier`).
-		WithArgs(locationID).
+		WithArgs(locationID, 1).
 		WillReturnError(errors.New("no rows in result set"))
 
-	result, err := storage.GetLocationByID(context.Background(), locationID)
+	result, err := storage.GetLocationByID(context.Background(), 1, locationID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -537,9 +543,12 @@ func TestGetAncestors(t *testing.T) {
 		WillReturnRows(rows)
 
 	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
-		WithArgs([]int{1, 2}).
+		WithArgs([]int{1, 2}, orgID).
 		WillReturnRows(identifierRows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetAncestors(context.Background(), orgID, locationID)
 
@@ -616,9 +625,12 @@ func TestGetDescendants(t *testing.T) {
 		WillReturnRows(rows)
 
 	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
-		WithArgs([]int{2, 3, 4}).
+		WithArgs([]int{2, 3, 4}, orgID).
 		WillReturnRows(identifierRows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetDescendants(context.Background(), orgID, locationID)
 
@@ -691,9 +703,12 @@ func TestGetChildren(t *testing.T) {
 		WillReturnRows(rows)
 
 	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
-		WithArgs([]int{3, 4}).
+		WithArgs([]int{3, 4}, orgID).
 		WillReturnRows(identifierRows)
+	mock.ExpectCommit()
 
 	results, err := storage.GetChildren(context.Background(), orgID, parentID)
 

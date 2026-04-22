@@ -129,18 +129,18 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		return nil, fmt.Errorf("failed to update asset: %w", err)
 	}
 
-	return s.getAssetWithLocationByID(ctx, updatedID)
+	return s.getAssetWithLocationByID(ctx, orgID, updatedID)
 }
 
-func (s *Storage) GetAssetByID(ctx context.Context, id *int) (*asset.Asset, error) {
+func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.Asset, error) {
 	query := `
 	select id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	from trakrf.assets
-	where id = $1 and deleted_at is null
+	where id = $1 and org_id = $2 and deleted_at is null
 	`
 	var asset asset.Asset
-	err := s.pool.QueryRow(ctx, query, id).Scan(&asset.ID, &asset.OrgID,
+	err := s.pool.QueryRow(ctx, query, id, orgID).Scan(&asset.ID, &asset.OrgID,
 		&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
 		&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
 		&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
@@ -464,11 +464,11 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		return nil, parseAssetWithIdentifiersError(err, request.Identifier)
 	}
 
-	return s.getAssetWithLocationByID(ctx, assetID)
+	return s.getAssetWithLocationByID(ctx, request.OrgID, assetID)
 }
 
-func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetView, error) {
-	baseAsset, err := s.GetAssetByID(ctx, &id)
+func (s *Storage) GetAssetViewByID(ctx context.Context, orgID, id int) (*asset.AssetView, error) {
+	baseAsset, err := s.GetAssetByID(ctx, orgID, &id)
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +476,7 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetVie
 		return nil, nil
 	}
 
-	identifiers, err := s.GetIdentifiersByAssetID(ctx, id)
+	identifiers, err := s.GetIdentifiersByAssetID(ctx, orgID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -492,8 +492,7 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, id int) (*asset.AssetVie
 // Used by CreateAssetWithIdentifiers and UpdateAsset to emit the public
 // write-response shape. Returns (nil, nil) if the asset doesn't exist
 // or is soft-deleted.
-// Caller MUST have already authorized access to this asset id; this helper does not filter by org_id.
-func (s *Storage) getAssetWithLocationByID(ctx context.Context, id int) (*asset.AssetWithLocation, error) {
+func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
 	query := `
 		SELECT
 			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
@@ -502,14 +501,14 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, id int) (*asset.
 			l.identifier
 		FROM trakrf.assets a
 		LEFT JOIN trakrf.locations l ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
-		WHERE a.id = $1 AND a.deleted_at IS NULL
+		WHERE a.id = $1 AND a.org_id = $2 AND a.deleted_at IS NULL
 		LIMIT 1
 	`
 	var (
 		a      asset.Asset
 		locIdt *string
 	)
-	err := s.pool.QueryRow(ctx, query, id).Scan(
+	err := s.pool.QueryRow(ctx, query, id, orgID).Scan(
 		&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
 		&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 		&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
@@ -522,7 +521,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, id int) (*asset.
 		return nil, fmt.Errorf("get asset with location by id: %w", err)
 	}
 
-	identifiers, err := s.GetIdentifiersByAssetID(ctx, a.ID)
+	identifiers, err := s.GetIdentifiersByAssetID(ctx, orgID, a.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +550,7 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 		assetIDs[i] = a.ID
 	}
 
-	identifierMap, err := s.getIdentifiersForAssets(ctx, assetIDs)
+	identifierMap, err := s.getIdentifiersForAssets(ctx, orgID, assetIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -605,7 +604,7 @@ func (s *Storage) GetAssetByIdentifier(
 		return nil, fmt.Errorf("get asset by identifier: %w", err)
 	}
 
-	identifiers, err := s.GetIdentifiersByAssetID(ctx, a.ID)
+	identifiers, err := s.GetIdentifiersByAssetID(ctx, orgID, a.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -720,7 +719,7 @@ func (s *Storage) ListAssetsFiltered(
 		for i, a := range out {
 			ids[i] = a.ID
 		}
-		idMap, err := s.getIdentifiersForAssets(ctx, ids)
+		idMap, err := s.getIdentifiersForAssets(ctx, orgID, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -832,6 +831,6 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 // GetAssetWithLocationByIDForTest exposes getAssetWithLocationByID to integration
 // tests in the same package. Production code must use GetAssetByIdentifier or
 // the CreateAssetWithIdentifiers / UpdateAsset return values.
-func (s *Storage) GetAssetWithLocationByIDForTest(ctx context.Context, id int) (*asset.AssetWithLocation, error) {
-	return s.getAssetWithLocationByID(ctx, id)
+func (s *Storage) GetAssetWithLocationByIDForTest(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
+	return s.getAssetWithLocationByID(ctx, orgID, id)
 }

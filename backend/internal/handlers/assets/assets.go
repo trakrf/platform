@@ -217,7 +217,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	view, err := handler.storage.GetAssetViewByID(req.Context(), id)
+	view, err := handler.storage.GetAssetViewByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetGetFailed, err.Error(), reqID)
@@ -713,7 +713,7 @@ func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.R
 		return 0, false
 	}
 
-	a, err := handler.storage.GetAssetByID(req.Context(), &id)
+	a, err := handler.storage.GetAssetByID(req.Context(), orgID, &id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.AssetGetFailed, err.Error(), reqID)

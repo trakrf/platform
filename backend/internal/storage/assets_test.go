@@ -453,7 +453,7 @@ func TestUpdateAsset(t *testing.T) {
 
 	// getAssetWithLocationByID: SELECT asset + joined location identifier
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.assets a[\s\S]+LEFT JOIN trakrf.locations`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "identifier", "name", "type", "description",
 			"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
@@ -464,10 +464,13 @@ func TestUpdateAsset(t *testing.T) {
 			now, now, nil, nil,
 		))
 
-	// GetIdentifiersByAssetID: empty identifiers
+	// GetIdentifiersByAssetID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
@@ -543,7 +546,7 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 
 	// getAssetWithLocationByID: SELECT asset + joined location identifier
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.assets a[\s\S]+LEFT JOIN trakrf.locations`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "identifier", "name", "type", "description",
 			"current_location_id", "valid_from", "valid_to", "metadata", "is_active",
@@ -554,10 +557,13 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 			now, now, nil, nil,
 		))
 
-	// GetIdentifiersByAssetID: empty identifiers
+	// GetIdentifiersByAssetID: empty identifiers (wrapped in WithOrgTx)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
-		WithArgs(assetID).
+		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
 	result, err := storage.UpdateAsset(context.Background(), 1, assetID, request)
 
@@ -589,10 +595,10 @@ func TestGetAssetByID(t *testing.T) {
 	)
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnRows(rows)
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -612,10 +618,10 @@ func TestGetAssetByID_NotFound(t *testing.T) {
 	assetID := 99999
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnError(errors.New("no rows in result set"))
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -644,10 +650,10 @@ func TestGetAssetByID_WithNullMetadata(t *testing.T) {
 	)
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnRows(rows)
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -666,10 +672,10 @@ func TestGetAssetByID_DatabaseError(t *testing.T) {
 	assetID := 1
 
 	mock.ExpectQuery(`select id, org_id, identifier, name, type, description`).
-		WithArgs(&assetID).
+		WithArgs(&assetID, 1).
 		WillReturnError(errors.New("connection timeout"))
 
-	result, err := storage.GetAssetByID(context.Background(), &assetID)
+	result, err := storage.GetAssetByID(context.Background(), 1, &assetID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

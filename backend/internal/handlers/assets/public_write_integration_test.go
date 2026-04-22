@@ -116,7 +116,7 @@ func TestUpdateAsset_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Confirm asset untouched
-	fetched, err := store.GetAssetByID(context.Background(), &seededAsset.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgA, &seededAsset.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
 	assert.Equal(t, "A", fetched.Name)
@@ -150,7 +150,7 @@ func TestDeleteAsset_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Confirm the asset survives.
-	fetched, err := store.GetAssetByID(context.Background(), &seededAsset.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgA, &seededAsset.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "asset must survive cross-org DELETE attempt")
 	assert.Equal(t, "Survivor", fetched.Name)
@@ -255,7 +255,7 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
 }
@@ -301,7 +301,7 @@ func TestRemoveAssetIdentifier_WrongAssetIdentifier_DoesNotDelete(t *testing.T) 
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist since the path identifier didn't match its owner")
 	assert.Equal(t, "EPC-WRONG-1", fetched.Value)
@@ -501,7 +501,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), ident.ID)
+	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier must be soft-deleted")
 }

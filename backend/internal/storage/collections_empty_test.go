@@ -198,11 +198,14 @@ func TestGetChildren_EmptyReturnsNonNil(t *testing.T) {
 func TestGetIdentifiersByAssetID_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.identifiers`).
-		WithArgs(1).
+		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
-	ids, err := storage.GetIdentifiersByAssetID(context.Background(), 1)
+	ids, err := storage.GetIdentifiersByAssetID(context.Background(), 1, 1)
 	assert.NoError(t, err)
 	assert.NotNil(t, ids)
 	assertEmptyJSONArray(t, ids)
@@ -211,11 +214,14 @@ func TestGetIdentifiersByAssetID_EmptyReturnsNonNil(t *testing.T) {
 func TestGetIdentifiersByLocationID_EmptyReturnsNonNil(t *testing.T) {
 	storage, mock := newMockStorage(t)
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.identifiers`).
-		WithArgs(1).
+		WithArgs(1, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
 
-	ids, err := storage.GetIdentifiersByLocationID(context.Background(), 1)
+	ids, err := storage.GetIdentifiersByLocationID(context.Background(), 1, 1)
 	assert.NoError(t, err)
 	assert.NotNil(t, ids)
 	assertEmptyJSONArray(t, ids)

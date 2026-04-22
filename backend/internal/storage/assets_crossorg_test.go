@@ -56,7 +56,7 @@ func TestUpdateAsset_CrossOrgReturnsNotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, result, "cross-org update must return nil (not found), not apply the change")
 
-	fetched, err := store.GetAssetByID(context.Background(), &created.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgA, &created.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
 	assert.Equal(t, "Owned by A", fetched.Name, "original asset must be untouched by cross-org update")
@@ -98,7 +98,7 @@ func TestUpdateAsset_OrgIDInBodyIgnored(t *testing.T) {
 	assert.Equal(t, orgA, result.OrgID, "org_id must not change via UpdateAsset")
 
 	// Re-fetch independently and confirm.
-	fetched, err := store.GetAssetByID(context.Background(), &created.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgA, &created.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
 	assert.Equal(t, orgA, fetched.OrgID, "org_id must remain orgA after update")
@@ -127,7 +127,7 @@ func TestDeleteAsset_CrossOrgReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, deleted, "cross-org delete must return false")
 
-	fetched, err := store.GetAssetByID(context.Background(), &created.ID)
+	fetched, err := store.GetAssetByID(context.Background(), orgA, &created.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "asset must still exist")
 	assert.Nil(t, fetched.DeletedAt, "asset must not be soft-deleted by cross-org delete")
