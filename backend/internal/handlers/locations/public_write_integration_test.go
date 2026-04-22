@@ -42,19 +42,6 @@ func buildLocationsPublicWriteRouter(store *storage.Storage) *chi.Mux {
 	return r
 }
 
-func buildLocationsHierarchyRouter(store *storage.Storage) *chi.Mux {
-	handler := locations.NewHandler(store)
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.EitherAuth(store))
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
-	})
-	return r
-}
-
 func TestCreateLocation_APIKey_HappyPath(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations-write-create-happy")
 	store, cleanup := testutil.SetupTestDB(t)
@@ -525,7 +512,7 @@ func TestLocationsGetAncestors_ByIdentifier_Works(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/anc-child/ancestors", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -555,7 +542,7 @@ func TestLocationsGetAncestors_UnknownIdentifier_Returns404(t *testing.T) {
 
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/no-such-loc/ancestors", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -584,7 +571,7 @@ func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/children-parent/children", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -608,7 +595,7 @@ func TestLocationsGetChildren_UnknownIdentifier_Returns404(t *testing.T) {
 
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/no-such-parent/children", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -644,7 +631,7 @@ func TestLocationsGetDescendants_ByIdentifier_Works(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/desc-root/descendants", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -675,7 +662,7 @@ func TestLocationsGetDescendants_UnknownIdentifier_Returns404(t *testing.T) {
 
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/no-such-root/descendants", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -742,7 +729,7 @@ func TestLocationsGetAncestors_CrossOrg_NoLeak(t *testing.T) {
 
 	_, tokenA, _ := seedTra428HierarchyPair(t, pool, store, "tra428-anc")
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/dock-01/ancestors", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenA)
 	w := httptest.NewRecorder()
@@ -767,7 +754,7 @@ func TestLocationsGetChildren_CrossOrg_NoLeak(t *testing.T) {
 
 	_, tokenA, _ := seedTra428HierarchyPair(t, pool, store, "tra428-chd")
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/whs-01/children", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenA)
 	w := httptest.NewRecorder()
@@ -792,7 +779,7 @@ func TestLocationsGetDescendants_CrossOrg_NoLeak(t *testing.T) {
 
 	_, tokenA, _ := seedTra428HierarchyPair(t, pool, store, "tra428-dsc")
 
-	r := buildLocationsHierarchyRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/whs-01/descendants", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenA)
 	w := httptest.NewRecorder()

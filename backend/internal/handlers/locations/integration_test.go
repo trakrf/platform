@@ -38,7 +38,6 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	r.Delete("/api/v1/locations/{identifier}", handler.Delete)
 	r.Post("/api/v1/locations/{identifier}/identifiers", handler.AddIdentifier)
 	r.Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
-	handler.RegisterRoutes(r)
 	return r
 }
 

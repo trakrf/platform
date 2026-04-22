@@ -94,7 +94,6 @@ func setupRouter(
 		orgsHandler.RegisterMeRoutes(r)
 		usersHandler.RegisterRoutes(r)
 		assetsHandler.RegisterRoutes(r)
-		locationsHandler.RegisterRoutes(r)
 		inventoryHandler.RegisterRoutes(r)
 		reportsHandler.RegisterRoutes(r)
 		lookupHandler.RegisterRoutes(r)
@@ -125,6 +124,9 @@ func setupRouter(
 
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", locationsHandler.GetLocationByIdentifier)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/ancestors", locationsHandler.GetAncestors)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/children", locationsHandler.GetChildren)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/descendants", locationsHandler.GetDescendants)
 
 		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
 		// require scans:read per TRA-392 — they moved under /locations/ and /assets/ for URL

@@ -845,12 +845,3 @@ func (handler *Handler) parseAndVerifyLocationID(w http.ResponseWriter, req *htt
 
 	return loc.ID, true
 }
-
-// RegisterRoutes keeps only session-only surface (hierarchy by-identifier). Public write
-// routes are registered in internal/cmd/serve/router.go under EitherAuth +
-// WriteAudit + RequireScope. Public reads likewise (per TRA-396).
-func (handler *Handler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
-	r.Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
-	r.Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
-}

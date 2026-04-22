@@ -59,7 +59,10 @@ func seedLocOrgAndKey(t *testing.T, pool *pgxpool.Pool, store *storage.Storage, 
 	return orgID, tok
 }
 
-func buildLocationsPublicRouter(store *storage.Storage) *chi.Mux {
+// buildLocationsPublicReadRouter mirrors the public-read group in
+// internal/cmd/serve/router.go. RateLimit and SentryContext are intentionally
+// omitted; all other middleware and route registrations must stay in sync.
+func buildLocationsPublicReadRouter(store *storage.Storage) *chi.Mux {
 	handler := locations.NewHandler(store)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -67,6 +70,9 @@ func buildLocationsPublicRouter(store *storage.Storage) *chi.Mux {
 		r.Use(middleware.EitherAuth(store))
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", handler.ListLocations)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", handler.GetLocationByIdentifier)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
 	})
 	return r
 }
@@ -102,7 +108,7 @@ func TestListLocations_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	r := buildLocationsPublicRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -140,7 +146,7 @@ func TestListLocations_WrongScope(t *testing.T) {
 
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"assets:read"})
 
-	r := buildLocationsPublicRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -171,7 +177,7 @@ func TestGetLocationByIdentifier_CrossOrgReturns404(t *testing.T) {
 	// orgB: create key
 	_, tokenB := seedLocOrgAndKey(t, pool, store, "loc-cross-org-b", []string{"locations:read"})
 
-	r := buildLocationsPublicRouter(store)
+	r := buildLocationsPublicReadRouter(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/loc-in-orga", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenB)
@@ -179,4 +185,70 @@ func TestGetLocationByIdentifier_CrossOrgReturns404(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestLocationsHierarchy_WrongScope_Returns403(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra446-hierarchy-wrong-scope")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"assets:read"})
+
+	// Seed a location so the handler has something to resolve if auth were to pass.
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID:      orgID,
+		Identifier: "scope-test",
+		Name:       "Scope Test",
+		Path:       "scope-test",
+		ValidFrom:  time.Now(),
+		IsActive:   true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicReadRouter(store)
+
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"ancestors", "/api/v1/locations/scope-test/ancestors"},
+		{"children", "/api/v1/locations/scope-test/children"},
+		{"descendants", "/api/v1/locations/scope-test/descendants"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+		})
+	}
+}
+
+func TestLocationsHierarchy_NoAuth_Returns401(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra446-hierarchy-no-auth")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	r := buildLocationsPublicReadRouter(store)
+
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"ancestors", "/api/v1/locations/anything/ancestors"},
+		{"children", "/api/v1/locations/anything/children"},
+		{"descendants", "/api/v1/locations/anything/descendants"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			// No Authorization header.
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+		})
+	}
 }
