@@ -226,3 +226,29 @@ func TestLocationsHierarchy_WrongScope_Returns403(t *testing.T) {
 		})
 	}
 }
+
+func TestLocationsHierarchy_NoAuth_Returns401(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra446-hierarchy-no-auth")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	r := buildLocationsPublicReadRouter(store)
+
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"ancestors", "/api/v1/locations/anything/ancestors"},
+		{"children", "/api/v1/locations/anything/children"},
+		{"descendants", "/api/v1/locations/anything/descendants"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			// No Authorization header.
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+		})
+	}
+}
