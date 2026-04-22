@@ -819,7 +819,9 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 }
 
 // GetLocationWithParentByIDForTest exposes getLocationWithParentByID to
-// integration tests in the same package.
+// integration tests in the same package. Production code must use
+// GetLocationByIdentifier or the CreateLocationWithIdentifiers /
+// UpdateLocation return values.
 func (s *Storage) GetLocationWithParentByIDForTest(ctx context.Context, id int) (*location.LocationWithParent, error) {
 	return s.getLocationWithParentByID(ctx, id)
 }
