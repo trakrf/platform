@@ -238,17 +238,29 @@ func (s *Service) Login(ctx context.Context, request auth.LoginRequest, compareP
 		orgID = *orgIDPtr
 	}
 
-	// Update last_login_at timestamp
+	// Persist last_login_at on the user row and reflect it in the response.
+	// The in-memory usr was fetched before this point, so we must assign the
+	// returned value — otherwise the login response serializes a stale null.
+	var loginAt *time.Time
+	err = s.db.QueryRow(ctx,
+		`UPDATE trakrf.users SET last_login_at = NOW() WHERE id = $1 RETURNING last_login_at`,
+		usr.ID,
+	).Scan(&loginAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to record last_login_at: %w", err)
+	}
+	usr.LastLoginAt = loginAt
+
+	// Per-org last_login_at is best-effort for admin views; log and continue on failure.
 	if orgID != 0 {
-		updateLoginQuery := `
+		updateOrgLoginQuery := `
 			UPDATE trakrf.org_users
 			SET last_login_at = NOW()
 			WHERE user_id = $1 AND org_id = $2 AND deleted_at IS NULL
 		`
-		_, err = s.db.Exec(ctx, updateLoginQuery, usr.ID, orgID)
+		_, err = s.db.Exec(ctx, updateOrgLoginQuery, usr.ID, orgID)
 		if err != nil {
-			// Log error but don't fail login
-			fmt.Printf("Warning: failed to update last_login_at: %v\n", err)
+			fmt.Printf("Warning: failed to update org_users.last_login_at: %v\n", err)
 		}
 	}
 

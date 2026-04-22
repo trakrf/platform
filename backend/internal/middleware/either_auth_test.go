@@ -91,6 +91,23 @@ func TestEitherAuth_MissingHeader(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
+// TRA-449 D10: X-API-Key with no Authorization header should get a hint
+// pointing at the correct header format rather than the generic
+// missing-header 401.
+func TestEitherAuth_XAPIKeyWithoutAuthorization_HintsBearer(t *testing.T) {
+	store, cleanup, _, _, _, _ := setupEitherAuth(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req.Header.Set("X-API-Key", "some-token-value")
+	w := httptest.NewRecorder()
+	middleware.EitherAuth(store)(http.HandlerFunc(echoPrincipalHandler)).ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "Authorization: Bearer",
+		"detail should hint at the correct header format when X-API-Key is sent")
+}
+
 func TestEitherAuth_UnknownIssuer(t *testing.T) {
 	store, cleanup, _, _, _, _ := setupEitherAuth(t)
 	defer cleanup()

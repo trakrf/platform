@@ -631,7 +631,7 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 	ts := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
 	mock := &mockInventoryStorage{
 		saveResult: &storage.SaveInventoryResult{
-			Count:        2, LocationID: 42, LocationName: "WH-01", Timestamp: ts,
+			Count: 2, LocationID: 42, LocationName: "WH-01", Timestamp: ts,
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
 			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-01", Name: "WH-01"}}},
