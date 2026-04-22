@@ -431,12 +431,21 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
 	}
 
-	// Convert FlexibleDate to time.Time
-	validFrom := request.ValidFrom.ToTime()
+	// Handler normally applies defaults; storage re-applies as a safety net.
+	var validFrom time.Time
+	if request.ValidFrom != nil && !request.ValidFrom.IsZero() {
+		validFrom = request.ValidFrom.ToTime()
+	} else {
+		validFrom = time.Now().UTC()
+	}
 	var validTo *time.Time
 	if request.ValidTo != nil && !request.ValidTo.IsZero() {
 		t := request.ValidTo.ToTime()
 		validTo = &t
+	}
+	isActive := true
+	if request.IsActive != nil {
+		isActive = *request.IsActive
 	}
 
 	query := `SELECT * FROM trakrf.create_location_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
@@ -452,7 +461,7 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 		request.ParentLocationID,
 		validFrom,
 		validTo,
-		request.IsActive,
+		isActive,
 		nil, // metadata - not used in CreateLocationRequest
 		identifiersJSON,
 	).Scan(&locationID, &identifierIDs)
