@@ -178,16 +178,18 @@ components:
             type: object
         inventory.SaveRequest:
             properties:
-                asset_ids:
+                asset_identifiers:
+                    example:
+                        - ASSET-0001
                     items:
-                        type: integer
+                        type: string
                     minItems: 1
                     type: array
-                location_id:
-                    type: integer
-            required:
-                - asset_ids
-                - location_id
+                location_identifier:
+                    example: WH-01
+                    maxLength: 255
+                    minLength: 1
+                    type: string
             type: object
         inventory.SaveResponse:
             properties:
