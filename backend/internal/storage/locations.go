@@ -792,7 +792,11 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 		args = append(args, "%"+*f.Q+"%")
 		idx := len(args)
 		clauses = append(clauses, fmt.Sprintf(
-			"(l.name ILIKE $%d OR l.identifier ILIKE $%d OR l.description ILIKE $%d)", idx, idx, idx))
+			"(l.name ILIKE $%d OR l.identifier ILIKE $%d OR l.description ILIKE $%d "+
+				"OR EXISTS (SELECT 1 FROM trakrf.identifiers i "+
+				"WHERE i.location_id = l.id AND i.is_active = true "+
+				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
+			idx, idx, idx, idx))
 	}
 	return strings.Join(clauses, " AND "), args
 }
