@@ -40,7 +40,7 @@ func APIKeyAuth(store *storage.Storage) func(http.Handler) http.Handler {
 				return
 			}
 			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 				httputil.Respond401(w, r, "Authorization header must be Bearer <token>", reqID)
 				return
 			}

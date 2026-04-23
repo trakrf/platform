@@ -357,6 +357,32 @@ func TestAPIKey_InvalidJWT_Respond401(t *testing.T) {
 	}
 }
 
+func TestAPIKey_BearerSchemeCaseInsensitive(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	cases := []string{"Bearer", "bearer", "BEARER", "BeArEr"}
+	for _, scheme := range cases {
+		t.Run(scheme, func(t *testing.T) {
+			h := APIKeyAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Fatal("should not reach handler for invalid token")
+			}))
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/x", nil)
+			r.Header.Set("Authorization", scheme+" not-a-valid-jwt")
+			h.ServeHTTP(w, r)
+
+			if w.Code != 401 {
+				t.Fatalf("status = %d, want 401", w.Code)
+			}
+			var resp apierrors.ErrorResponse
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			// The response for invalid-JWT must be reached — scheme must have been accepted.
+			if resp.Error.Detail == "Authorization header must be Bearer <token>" {
+				t.Errorf("scheme %q was rejected as malformed; want token-validation branch reached", scheme)
+			}
+		})
+	}
+}
+
 // TRA-449 D10: requests that send X-API-Key without Authorization should see
 // a 401 detail hinting at the correct header format, not the generic
 // missing-header string that sends integrators chasing credential issues.
