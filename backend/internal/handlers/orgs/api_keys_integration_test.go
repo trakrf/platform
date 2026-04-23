@@ -62,6 +62,17 @@ func newAdminRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	return r
 }
 
+// mintKeysAdminAPIKey inserts a DB row, returns the signed JWT and the row id.
+func mintKeysAdminAPIKey(t *testing.T, store *storage.Storage, orgID, userID int) (string, int) {
+	t.Helper()
+	key, err := store.CreateAPIKey(context.Background(), orgID, "bootstrap admin",
+		[]string{"keys:admin"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+	signed, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"keys:admin"}, nil)
+	require.NoError(t, err)
+	return signed, key.ID
+}
+
 func TestCreateAPIKey_Admin(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-crud")
 	store, cleanup := testutil.SetupTestDB(t)
@@ -366,4 +377,157 @@ func TestCreateAPIKey_ValidationFailed_JSONFieldNames(t *testing.T) {
 	}
 	assert.Contains(t, fieldNames, "name")
 	assert.Contains(t, fieldNames, "scopes")
+}
+
+func TestCreateAPIKey_ByAPIKeyPrincipal(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-keys-admin")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, _ := seedAdminUser(t, pool, orgID)
+	adminKeyJWT, parentID := mintKeysAdminAPIKey(t, store, orgID, userID)
+
+	r := newAdminRouter(t, store)
+
+	body := map[string]any{
+		"name":   "minted-by-key",
+		"scopes": []string{"assets:read"},
+	}
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID), bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	// The new row must have created_by NULL and created_by_key_id = parentID.
+	var createdBy *int
+	var createdByKeyID *int
+	err := pool.QueryRow(context.Background(),
+		`SELECT created_by, created_by_key_id FROM trakrf.api_keys WHERE name = 'minted-by-key'`,
+	).Scan(&createdBy, &createdByKeyID)
+	require.NoError(t, err)
+	assert.Nil(t, createdBy, "session user must be NULL when minted by api-key")
+	require.NotNil(t, createdByKeyID)
+	assert.Equal(t, parentID, *createdByKeyID)
+}
+
+func TestCreateAPIKey_KeysAdminMintsKeysAdmin(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-keys-admin")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, _ := seedAdminUser(t, pool, orgID)
+	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
+
+	r := newAdminRouter(t, store)
+
+	body := map[string]any{
+		"name":   "rotated-admin",
+		"scopes": []string{"keys:admin"},
+	}
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID), bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var scopes []string
+	err := pool.QueryRow(context.Background(),
+		`SELECT scopes FROM trakrf.api_keys WHERE name = 'rotated-admin'`,
+	).Scan(&scopes)
+	require.NoError(t, err)
+	assert.Contains(t, scopes, "keys:admin")
+}
+
+func TestListAPIKeys_ByAPIKeyPrincipal(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-keys-admin")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, _ := seedAdminUser(t, pool, orgID)
+	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
+
+	r := newAdminRouter(t, store)
+
+	req := httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID), nil)
+	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var out struct {
+		Data []apikey.APIKeyListItem `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.Len(t, out.Data, 1, "should see the admin key itself in the list")
+	// The admin key was minted by a user, so CreatedBy is non-nil, CreatedByKeyID is nil.
+	assert.NotNil(t, out.Data[0].CreatedBy)
+	assert.Nil(t, out.Data[0].CreatedByKeyID)
+}
+
+func TestRevokeAPIKey_ByAPIKeyPrincipal(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-keys-admin")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, _ := seedAdminUser(t, pool, orgID)
+	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
+
+	// Create a separate data key to revoke.
+	dataKey, err := store.CreateAPIKey(context.Background(), orgID, "target",
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+
+	r := newAdminRouter(t, store)
+
+	req := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%d", orgID, dataKey.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+}
+
+// A keys:admin key is allowed to revoke its own JTI; the subsequent request with
+// that key should 401 because the token is now revoked.
+func TestRevokeAPIKey_KeyRevokesItself(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-keys-admin")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, _ := seedAdminUser(t, pool, orgID)
+	adminKeyJWT, adminKeyID := mintKeysAdminAPIKey(t, store, orgID, userID)
+
+	r := newAdminRouter(t, store)
+
+	// 1. Revoke self — should succeed.
+	req := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%d", orgID, adminKeyID), nil)
+	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+
+	// 2. Next call with the same (now-revoked) token — should 401.
+	req2 := httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID), nil)
+	req2.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	assert.Equal(t, http.StatusUnauthorized, w2.Code)
 }
