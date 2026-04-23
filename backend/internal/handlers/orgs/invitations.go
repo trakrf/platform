@@ -14,6 +14,19 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
+// @Summary List pending invitations for an organization
+// @Tags org-invitations,internal
+// @ID org_invitations.list
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Success 200 {object} map[string]any "data: []organization.Invitation"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/invitations [get]
 // ListInvitations returns pending invitations for an organization.
 func (h *Handler) ListInvitations(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -33,6 +46,21 @@ func (h *Handler) ListInvitations(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": invitations})
 }
 
+// @Summary Create an invitation and send it by email
+// @Tags org-invitations,internal
+// @ID org_invitations.create
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param request body organization.CreateInvitationRequest true "Invitation payload"
+// @Success 201 {object} map[string]any "data: organization.Invitation"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 409 {object} modelerrors.ErrorResponse "Already invited or member"
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/invitations [post]
 // CreateInvitation creates an invitation and sends an email.
 func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
@@ -88,6 +116,21 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": resp})
 }
 
+// @Summary Cancel a pending invitation
+// @Tags org-invitations,internal
+// @ID org_invitations.cancel
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param inviteId path int true "Invitation id"
+// @Success 200 {object} map[string]any "message: Invitation cancelled"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/invitations/{inviteId} [delete]
 // CancelInvitation cancels a pending invitation.
 func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 	inviteID, err := strconv.Atoi(chi.URLParam(r, "inviteId"))
@@ -111,6 +154,21 @@ func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"message": "Invitation cancelled"})
 }
 
+// @Summary Re-send a pending invitation email
+// @Tags org-invitations,internal
+// @ID org_invitations.resend
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param inviteId path int true "Invitation id"
+// @Success 200 {object} map[string]any "message: Invitation resent"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/invitations/{inviteId}/resend [post]
 // ResendInvitation generates a new token and resends the email.
 func (h *Handler) ResendInvitation(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
