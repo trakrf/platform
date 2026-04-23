@@ -782,10 +782,19 @@ func (s *Storage) CountAssetsFiltered(
 ) (int, error) {
 	where, args := buildAssetsWhere(orgID, f)
 	query := fmt.Sprintf(`
+		WITH latest_scans AS (
+			SELECT DISTINCT ON (s.asset_id)
+				s.asset_id,
+				s.location_id
+			FROM trakrf.asset_scans s
+			WHERE s.org_id = $1
+			ORDER BY s.asset_id, s.timestamp DESC
+		)
 		SELECT COUNT(*)
 		FROM trakrf.assets a
+		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
 		LEFT JOIN trakrf.locations l
-			ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			ON l.id = ls.location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE %s
 	`, where)
 
