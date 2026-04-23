@@ -15,6 +15,17 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
+// @Summary Get the authenticated user's profile with org memberships
+// @Description Returns the caller's user record alongside the organizations they belong to. Used by the SPA to render the user menu and org picker.
+// @Tags users,internal
+// @ID users.me
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]any "data: user profile"
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/users/me [get]
 // GetMe returns the authenticated user's profile with orgs.
 func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
@@ -34,6 +45,20 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": profile})
 }
 
+// @Summary Switch the authenticated user's current organization
+// @Description SPA org-switcher. Issues a fresh session JWT scoped to the selected org. API-key auth has a fixed org — no analog exists for integrators. Note: route is POST (not GET as some earlier docs suggested).
+// @Tags users,internal
+// @ID users.set_current_org
+// @Accept json
+// @Produce json
+// @Param request body organization.SetCurrentOrgRequest true "Org to switch to"
+// @Success 200 {object} map[string]any "message + fresh token"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse "Not a member of the target org"
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/users/me/current-org [post]
 // SetCurrentOrg updates the user's current organization.
 func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
