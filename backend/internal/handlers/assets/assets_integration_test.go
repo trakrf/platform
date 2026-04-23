@@ -945,6 +945,66 @@ func TestListAssets_LocationFilter_MultiValueOR(t *testing.T) {
 	assert.False(t, got["OR-A-003"])
 }
 
+// TRA-468: PATCH/PUT without valid_from/valid_to must not zero or clobber existing values.
+func TestUpdateAsset_DoesNotClobberValidDates(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+
+	// Create with explicit valid_from and valid_to.
+	vf := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	vt := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	createReq := asset.Asset{
+		OrgID:      accountID,
+		Identifier: "TRA468-UPD-001",
+		Name:       "update-test",
+		Type:       "asset",
+		ValidFrom:  vf,
+		ValidTo:    &vt,
+		IsActive:   true,
+	}
+	created, err := store.CreateAsset(context.Background(), createReq)
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	// PUT only the name — no valid_from/valid_to in body.
+	newName := "renamed"
+	updateReq := asset.UpdateAssetRequest{Name: &newName}
+	body, err := json.Marshal(updateReq)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/TRA468-UPD-001", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+		URLParams: chi.RouteParams{
+			Keys:   []string{"identifier"},
+			Values: []string{"TRA468-UPD-001"},
+		},
+	}))
+	req = withOrgContext(req, accountID)
+	w := httptest.NewRecorder()
+	handler.UpdateAsset(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var resp UpdateAssetResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, newName, resp.Data.Name)
+	assert.True(t, resp.Data.ValidFrom.Equal(vf),
+		"valid_from clobbered: got %v, want %v", resp.Data.ValidFrom, vf)
+	require.NotNil(t, resp.Data.ValidTo, "valid_to clobbered to nil")
+	assert.True(t, resp.Data.ValidTo.Equal(vt),
+		"valid_to clobbered: got %v, want %v", resp.Data.ValidTo, vt)
+}
+
 // TRA-465: an asset with no scans is excluded from every ?location=X filter.
 func TestListAssets_LocationFilter_ExcludesAssetsWithNoScans(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)

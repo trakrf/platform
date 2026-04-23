@@ -405,11 +405,11 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	if req.CurrentLocationID != nil {
 		fields["current_location_id"] = *req.CurrentLocationID
 	}
-	if req.ValidFrom != nil {
-		fields["valid_from"] = *req.ValidFrom
+	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {
+		fields["valid_from"] = req.ValidFrom.ToTime()
 	}
-	if req.ValidTo != nil {
-		fields["valid_to"] = *req.ValidTo
+	if req.ValidTo != nil && !req.ValidTo.IsZero() {
+		fields["valid_to"] = req.ValidTo.ToTime()
 	}
 	if req.Metadata != nil {
 		fields["metadata"] = *req.Metadata
