@@ -375,9 +375,9 @@ func TestAPIKey_BearerSchemeCaseInsensitive(t *testing.T) {
 			}
 			var resp apierrors.ErrorResponse
 			_ = json.Unmarshal(w.Body.Bytes(), &resp)
-			// The response for invalid-JWT must be reached — scheme must have been accepted.
-			if resp.Error.Detail == "Authorization header must be Bearer <token>" {
-				t.Errorf("scheme %q was rejected as malformed; want token-validation branch reached", scheme)
+			// Must reach the token-validation branch, not the scheme-rejection branch.
+			if resp.Error.Detail != "Bearer token is invalid or expired" {
+				t.Errorf("detail = %q, want token-validation detail (scheme should have been accepted)", resp.Error.Detail)
 			}
 		})
 	}
