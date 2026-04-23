@@ -102,7 +102,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
 	`
 
@@ -153,7 +153,7 @@ func buildCurrentLocationsQueryDistinctOn() string {
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
 		ORDER BY a.name
 		LIMIT $4 OFFSET $5
@@ -186,7 +186,7 @@ func buildCurrentLocationsQueryTimescale() string {
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.identifiers ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.value ILIKE $3
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
 		ORDER BY a.name
 		LIMIT $4 OFFSET $5
