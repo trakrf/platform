@@ -15,6 +15,22 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
+// @Summary Create a new API key for an organization
+// @Description Mints an API-key JWT scoped to the target org. Session-JWT-only — API-key tokens are rejected with 401.
+// @Tags api-keys,internal
+// @ID api_keys.create
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param request body apikey.CreateAPIKeyRequest true "Key creation payload"
+// @Success 201 {object} apikey.APIKeyCreateResponse
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 409 {object} modelerrors.ErrorResponse "Active-key cap reached"
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/api-keys [post]
 // CreateAPIKey handles POST /api/v1/orgs/{id}/api-keys.
 func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
@@ -91,6 +107,19 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, resp)
 }
 
+// @Summary List active API keys for an organization
+// @Tags api-keys,internal
+// @ID api_keys.list
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Success 200 {object} map[string]any "data: []apikey.APIKeyListItem"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/api-keys [get]
 // ListAPIKeys handles GET /api/v1/orgs/{id}/api-keys.
 func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
@@ -123,6 +152,21 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
+// @Summary Revoke an API key
+// @Tags api-keys,internal
+// @ID api_keys.revoke
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param keyID path int true "API key id"
+// @Success 204 "No Content"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/api-keys/{keyID} [delete]
 // RevokeAPIKey handles DELETE /api/v1/orgs/{id}/api-keys/{keyID}.
 func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
