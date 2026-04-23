@@ -34,7 +34,9 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"id":   org.ID,
-		"name": org.Name,
+		"data": map[string]any{
+			"id":   org.ID,
+			"name": org.Name,
+		},
 	})
 }
