@@ -27,6 +27,16 @@ func NewHandler(storage *storage.Storage, service *orgsservice.Service) *Handler
 	return &Handler{storage: storage, service: service}
 }
 
+// @Summary List organizations the authenticated user belongs to
+// @Tags orgs,internal
+// @ID orgs.list
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]any "data: []organization.Organization"
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs [get]
 // List returns all organizations the authenticated user belongs to.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
@@ -46,6 +56,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": orgs})
 }
 
+// @Summary Create a new organization
+// @Description Creates a team organization with the caller as admin. SPA-only — integrators have a fixed org scoped to their API key.
+// @Tags orgs,internal
+// @ID orgs.create
+// @Accept json
+// @Produce json
+// @Param request body organization.CreateOrganizationRequest true "Organization to create"
+// @Success 201 {object} map[string]any "data: organization.Organization"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 409 {object} modelerrors.ErrorResponse "Identifier already taken"
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs [post]
 // Create creates a new team organization with the creator as admin.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
@@ -84,6 +108,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": org})
 }
 
+// @Summary Get an organization by id
+// @Tags orgs,internal
+// @ID orgs.get
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Success 200 {object} map[string]any "data: organization.Organization"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id} [get]
 // Get returns a single organization by ID.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -109,6 +147,21 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": org})
 }
 
+// @Summary Update an organization's name
+// @Tags orgs,internal
+// @ID orgs.update
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param request body organization.UpdateOrganizationRequest true "Update payload"
+// @Success 200 {object} map[string]any "data: organization.Organization"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id} [put]
 // Update updates an organization's name.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -147,6 +200,22 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": org})
 }
 
+// @Summary Soft-delete an organization
+// @Description Requires the caller to repeat the organization name as a confirmation in the request body.
+// @Tags orgs,internal
+// @ID orgs.delete
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param request body organization.DeleteOrganizationRequest true "Confirmation payload"
+// @Success 200 {object} map[string]any "message: Organization deleted"
+// @Failure 400 {object} modelerrors.ErrorResponse "Name mismatch or invalid id"
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id} [delete]
 // Delete soft-deletes an organization after confirming the name matches.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))

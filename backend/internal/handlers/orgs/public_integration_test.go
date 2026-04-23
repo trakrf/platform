@@ -55,8 +55,12 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	assert.Equal(t, float64(orgID), body["id"])
-	assert.Equal(t, "Test Organization", body["name"])
+	data, ok := body["data"].(map[string]any)
+	require.True(t, ok, "expected top-level `data` object, got %s", w.Body.String())
+	assert.Equal(t, float64(orgID), data["id"])
+	assert.Equal(t, "Test Organization", data["name"])
+	assert.NotContains(t, body, "id", "bare-object shape must be gone")
+	assert.NotContains(t, body, "name", "bare-object shape must be gone")
 }
 
 func TestGetOrgMe_SessionTokenRejected(t *testing.T) {
