@@ -698,14 +698,24 @@ func (s *Storage) ListAssetsFiltered(
 	orderBy := buildAssetsOrderBy(f.Sorts)
 
 	query := fmt.Sprintf(`
+		WITH latest_scans AS (
+			SELECT DISTINCT ON (s.asset_id)
+				s.asset_id,
+				s.location_id
+			FROM trakrf.asset_scans s
+			WHERE s.org_id = $1
+			ORDER BY s.asset_id, s.timestamp DESC
+		)
 		SELECT
 			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
-			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
+			ls.location_id,
+			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.identifier
 		FROM trakrf.assets a
+		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
 		LEFT JOIN trakrf.locations l
-			ON l.id = a.current_location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			ON l.id = ls.location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE %s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
