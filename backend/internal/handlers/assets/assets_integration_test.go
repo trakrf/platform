@@ -796,3 +796,65 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 		assert.Equal(t, "After", data["name"])
 	})
 }
+
+// TRA-465 regression: /assets?location filter must follow the asset's latest scan,
+// not the denormalized assets.current_location_id column. The dead column is written
+// only at create/update time; the real current location lives in asset_scans.
+func TestListAssets_LocationFilter_FollowsLatestScanNotStaleColumn(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	// Two locations.
+	whs1 := createTestLocation(t, pool, orgID, "WHS-01")
+	whs2 := createTestLocation(t, pool, orgID, "WHS-02")
+
+	// Asset whose stale current_location_id points at WHS-01,
+	// but whose latest scan is at WHS-02.
+	a := testutil.NewAssetFactory(orgID).
+		WithIdentifier("STALE-ASSET-001").
+		WithName("Stale column asset").
+		Build()
+	a.CurrentLocationID = &whs1
+	created, err := store.CreateAsset(context.Background(), a)
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	createTestScan(t, pool, orgID, created.ID, &whs1, now.Add(-2*time.Hour)) // older, at WHS-01
+	createTestScan(t, pool, orgID, created.ID, &whs2, now.Add(-1*time.Hour)) // latest, at WHS-02
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Get("/api/v1/assets", handler.ListAssets)
+
+	// ?location=LOC-WHS-01 must NOT return the asset (its latest scan is elsewhere).
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location=LOC-WHS-01", nil)
+	req = withOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data, _ := resp["data"].([]any)
+	assert.Empty(t, data, "asset whose latest scan is at WHS-02 must not match ?location=LOC-WHS-01")
+
+	// ?location=LOC-WHS-02 must return the asset.
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location=LOC-WHS-02", nil)
+	req2 = withOrgContext(req2, orgID)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	require.Equal(t, http.StatusOK, w2.Code)
+	var resp2 map[string]any
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &resp2))
+	data2, _ := resp2["data"].([]any)
+	require.Len(t, data2, 1, "asset whose latest scan is at WHS-02 must match ?location=LOC-WHS-02")
+
+	// Hydrated current_location_identifier must reflect the latest scan, not the stale column.
+	item := data2[0].(map[string]any)
+	assert.Equal(t, "LOC-WHS-02", item["current_location_identifier"])
+}
