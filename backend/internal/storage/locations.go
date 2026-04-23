@@ -841,13 +841,11 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	if req.Description != nil {
 		fields["description"] = *req.Description
 	}
-	if req.ValidFrom != nil {
-		t := req.ValidFrom.ToTime()
-		fields["valid_from"] = t
+	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {
+		fields["valid_from"] = req.ValidFrom.ToTime()
 	}
-	if req.ValidTo != nil {
-		t := req.ValidTo.ToTime()
-		fields["valid_to"] = t
+	if req.ValidTo != nil && !req.ValidTo.IsZero() {
+		fields["valid_to"] = req.ValidTo.ToTime()
 	}
 	if req.IsActive != nil {
 		fields["is_active"] = *req.IsActive
