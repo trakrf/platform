@@ -402,7 +402,7 @@ openapi: 3.0.3
 paths:
     /api/v1/assets:
         get:
-            description: Paginated assets list with natural-key filters, sort, and fuzzy search
+            description: Paginated assets list with natural-key filters, sort, and substring search
             operationId: assets.list
             parameters:
                 - description: max 200
@@ -432,7 +432,7 @@ paths:
                   name: type
                   schema:
                     type: string
-                - description: fuzzy search on name / identifier / description
+                - description: substring search (case-insensitive) on name, identifier, description, and active identifier values
                   in: query
                   name: q
                   schema:
@@ -1050,7 +1050,7 @@ paths:
                   name: is_active
                   schema:
                     type: boolean
-                - description: fuzzy search on name, identifier, description
+                - description: substring search (case-insensitive) on name, identifier, description, and active identifier values
                   in: query
                   name: q
                   schema:
@@ -1675,7 +1675,7 @@ paths:
                   name: location
                   schema:
                     type: string
-                - description: fuzzy search on asset name / identifier
+                - description: substring search (case-insensitive) on asset name, identifier, and active identifier values
                   in: query
                   name: q
                   schema:

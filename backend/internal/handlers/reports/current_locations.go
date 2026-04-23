@@ -33,7 +33,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Param limit query int false "max 200"
 // @Param offset query int false "pagination offset"
 // @Param location query string false "filter by location identifier (may repeat)"
-// @Param q query string false "fuzzy search on asset name / identifier"
+// @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active identifier values"
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
 // @Success 200 {object} map[string]any
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
