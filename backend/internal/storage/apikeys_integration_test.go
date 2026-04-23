@@ -134,3 +134,73 @@ func TestAPIKeyStorage_UpdateLastUsed(t *testing.T) {
 	require.NotNil(t, got.LastUsedAt)
 	assert.WithinDuration(t, time.Now(), *got.LastUsedAt, 5*time.Second)
 }
+
+func TestCreateAPIKey_WithCreatedByKeyID(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	var seedUserID int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.users (name, email, password_hash) VALUES ('seed', 'seed@x', 'stub') RETURNING id`,
+	).Scan(&seedUserID))
+
+	parent, err := store.CreateAPIKey(context.Background(), orgID, "parent",
+		[]string{"keys:admin"}, apikey.Creator{UserID: &seedUserID}, nil)
+	require.NoError(t, err)
+
+	child, err := store.CreateAPIKey(context.Background(), orgID, "child",
+		[]string{"assets:read"}, apikey.Creator{KeyID: &parent.ID}, nil)
+	require.NoError(t, err)
+	require.Nil(t, child.CreatedBy)
+	require.NotNil(t, child.CreatedByKeyID)
+	assert.Equal(t, parent.ID, *child.CreatedByKeyID)
+
+	// Roundtrip via List — creator fields survive scan.
+	list, err := store.ListActiveAPIKeys(context.Background(), orgID)
+	require.NoError(t, err)
+	var roundtripped *apikey.APIKey
+	for i := range list {
+		if list[i].ID == child.ID {
+			roundtripped = &list[i]
+			break
+		}
+	}
+	require.NotNil(t, roundtripped)
+	assert.Nil(t, roundtripped.CreatedBy)
+	require.NotNil(t, roundtripped.CreatedByKeyID)
+	assert.Equal(t, parent.ID, *roundtripped.CreatedByKeyID)
+}
+
+// Direct SQL insert with both creator columns must violate the CHECK constraint.
+func TestAPIKeys_CreatorExactlyOneCheck(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	var userID int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.users (name, email, password_hash) VALUES ('u', 'u@x', 'stub') RETURNING id`,
+	).Scan(&userID))
+
+	parent, err := store.CreateAPIKey(context.Background(), orgID, "p",
+		[]string{"keys:admin"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+
+	// Bypass storage helper — raw INSERT with BOTH creator columns set → CHECK fails.
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.api_keys (org_id, name, scopes, created_by, created_by_key_id)
+		VALUES ($1, 'both', ARRAY['assets:read'], $2, $3)`,
+		orgID, userID, parent.ID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "api_keys_creator_exactly_one")
+
+	// And with NEITHER set → also CHECK fails.
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.api_keys (org_id, name, scopes)
+		VALUES ($1, 'neither', ARRAY['assets:read'])`, orgID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "api_keys_creator_exactly_one")
+}
