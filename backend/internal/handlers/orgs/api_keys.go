@@ -16,8 +16,8 @@ import (
 )
 
 // @Summary Create a new API key for an organization
-// @Description Mints an API-key JWT scoped to the target org. Session-JWT-only — API-key tokens are rejected with 401.
-// @Tags api-keys,internal
+// @Description Mints an API-key JWT scoped to the target org. Accepts either session-admin or an API key with the keys:admin scope.
+// @Tags api-keys,public
 // @ID api_keys.create
 // @Accept json
 // @Produce json
@@ -34,8 +34,22 @@ import (
 // CreateAPIKey handles POST /api/v1/orgs/{id}/api-keys.
 func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
-	claims := middleware.GetUserClaims(r)
-	if claims == nil {
+
+	// Resolve creator — exactly one of session-user or api-key-principal must be present.
+	var creator apikey.Creator
+	if claims := middleware.GetUserClaims(r); claims != nil {
+		userID := claims.UserID
+		creator = apikey.Creator{UserID: &userID}
+	} else if p := middleware.GetAPIKeyPrincipal(r); p != nil {
+		parent, err := h.storage.GetAPIKeyByJTI(r.Context(), p.JTI)
+		if err != nil {
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+				"Failed to resolve parent key", "", reqID)
+			return
+		}
+		parentID := parent.ID
+		creator = apikey.Creator{KeyID: &parentID}
+	} else {
 		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
 			"Unauthorized", "", reqID)
 		return
@@ -82,7 +96,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key, err := h.storage.CreateAPIKey(r.Context(), orgID, req.Name, req.Scopes,
-		apikey.Creator{UserID: &claims.UserID}, req.ExpiresAt)
+		creator, req.ExpiresAt)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			"Failed to create api key", "", reqID)
@@ -108,7 +122,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List active API keys for an organization
-// @Tags api-keys,internal
+// @Tags api-keys,public
 // @ID api_keys.list
 // @Accept json
 // @Produce json
@@ -140,20 +154,22 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	items := make([]apikey.APIKeyListItem, 0, len(keys))
 	for _, k := range keys {
 		items = append(items, apikey.APIKeyListItem{
-			ID:         k.ID,
-			JTI:        k.JTI,
-			Name:       k.Name,
-			Scopes:     k.Scopes,
-			CreatedAt:  k.CreatedAt,
-			ExpiresAt:  k.ExpiresAt,
-			LastUsedAt: k.LastUsedAt,
+			ID:             k.ID,
+			JTI:            k.JTI,
+			Name:           k.Name,
+			Scopes:         k.Scopes,
+			CreatedBy:      k.CreatedBy,
+			CreatedByKeyID: k.CreatedByKeyID,
+			CreatedAt:      k.CreatedAt,
+			ExpiresAt:      k.ExpiresAt,
+			LastUsedAt:     k.LastUsedAt,
 		})
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
 // @Summary Revoke an API key
-// @Tags api-keys,internal
+// @Tags api-keys,public
 // @ID api_keys.revoke
 // @Accept json
 // @Produce json

@@ -278,10 +278,18 @@ func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations", h.CreateInvitation)
 		r.With(middleware.RequireOrgAdmin(store)).Delete("/invitations/{inviteId}", h.CancelInvitation)
 		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations/{inviteId}/resend", h.ResendInvitation)
+	})
+}
 
-		// API keys (admin only)
-		r.With(middleware.RequireOrgAdmin(store)).Post("/api-keys", h.CreateAPIKey)
-		r.With(middleware.RequireOrgAdmin(store)).Get("/api-keys", h.ListAPIKeys)
-		r.With(middleware.RequireOrgAdmin(store)).Delete("/api-keys/{keyID}", h.RevokeAPIKey)
+// RegisterAPIKeyRoutes registers the /api/v1/orgs/{id}/api-keys endpoints.
+// Registered SEPARATELY from RegisterRoutes because these routes accept api-key
+// auth via keys:admin scope — they must live under an EitherAuth group, not
+// the session-only middleware.Auth group used by the rest of the org subtree.
+func (h *Handler) RegisterAPIKeyRoutes(r chi.Router, store middleware.OrgRoleStore) {
+	r.Route("/api/v1/orgs/{id}/api-keys", func(r chi.Router) {
+		r.Use(middleware.RequireOrgAdminOrKeysAdmin(store))
+		r.Post("/", h.CreateAPIKey)
+		r.Get("/", h.ListAPIKeys)
+		r.Delete("/{keyID}", h.RevokeAPIKey)
 	})
 }

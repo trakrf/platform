@@ -44,6 +44,10 @@ func seedAdminUser(t *testing.T, pool *pgxpool.Pool, orgID int) (int, string) {
 	return userID, token
 }
 
+// newAdminRouter wires the api-keys routes under EitherAuth so tests can
+// exercise both session and api-key auth paths. This mirrors the production
+// layout in cmd/serve/router.go: api-keys routes live in their own EitherAuth
+// group separate from the session-only org subtree.
 func newAdminRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	t.Helper()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -52,8 +56,8 @@ func newAdminRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth)
-		handler.RegisterRoutes(r, store)
+		r.Use(middleware.EitherAuth(store))
+		handler.RegisterAPIKeyRoutes(r, store)
 	})
 	return r
 }
