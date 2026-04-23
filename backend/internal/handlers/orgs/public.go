@@ -8,9 +8,20 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
+// @Summary Get the org associated with the authenticated API key
+// @Description Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.
+// @Tags orgs,public
+// @ID orgs.me
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]any "data: {id, name}"
+// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
+// @Security APIKey
+// @Router /api/v1/orgs/me [get]
 // GetOrgMe returns the org that the authenticated API key belongs to.
 // Scoped to API-key auth (not session auth); serves as the canary endpoint
-// customers hit to verify a key works end-to-end before TRA-396 lands.
+// customers hit to verify a key works end-to-end.
 func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	principal := middleware.GetAPIKeyPrincipal(r)
