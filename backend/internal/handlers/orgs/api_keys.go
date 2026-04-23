@@ -23,7 +23,7 @@ import (
 // @Produce json
 // @Param id path int true "Organization id"
 // @Param request body apikey.CreateAPIKeyRequest true "Key creation payload"
-// @Success 201 {object} apikey.APIKeyCreateResponse
+// @Success 201 {object} map[string]any "data: apikey.APIKeyCreateResponse"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
@@ -103,7 +103,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: key.CreatedAt,
 		ExpiresAt: key.ExpiresAt,
 	}
-	httputil.WriteJSON(w, http.StatusCreated, resp)
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": resp})
 }
 
 // @Summary List active API keys for an organization

@@ -81,8 +81,15 @@ func TestCreateAPIKey_Admin(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
-	var resp apikey.APIKeyCreateResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	var envelope struct {
+		Data apikey.APIKeyCreateResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	// Response must be wrapped in {"data": {...}}; a top-level "key" field must NOT exist.
+	var flat map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &flat))
+	assert.NotContains(t, flat, "key", "response must be wrapped in data envelope")
+	resp := envelope.Data
 	assert.NotEmpty(t, resp.Key)
 	assert.Equal(t, "TeamCentral sync", resp.Name)
 	assert.Equal(t, []string{"assets:read", "locations:read"}, resp.Scopes)
