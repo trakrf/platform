@@ -43,4 +43,32 @@ describe('ScopeSelector', () => {
     fireEvent.change(select, { target: { value: 'readwrite' } });
     expect(onChange).toHaveBeenCalledWith(['scans:read', 'scans:write']);
   });
+
+  it('renders Key management row with None/Admin options', () => {
+    render(<ScopeSelector value={[]} onChange={() => {}} />);
+    const select = screen.getByLabelText(/key management/i);
+    expect(within(select).getByRole('option', { name: /none/i })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: /admin/i })).toBeInTheDocument();
+    // No "Read" or "Read + Write" on this row — it's binary.
+    expect(within(select).queryByRole('option', { name: /^read$/i })).not.toBeInTheDocument();
+  });
+
+  it('emits keys:admin when Key management is set to Admin', () => {
+    const onChange = vi.fn();
+    render(<ScopeSelector value={[]} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText(/key management/i), { target: { value: 'admin' } });
+    expect(onChange).toHaveBeenCalledWith(['keys:admin']);
+  });
+
+  it('shows initial value correctly for keys:admin', () => {
+    render(<ScopeSelector value={['keys:admin']} onChange={() => {}} />);
+    expect(screen.getByLabelText(/key management/i)).toHaveValue('admin');
+  });
+
+  it('preserves data scopes when toggling key management', () => {
+    const onChange = vi.fn();
+    render(<ScopeSelector value={['assets:read']} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText(/key management/i), { target: { value: 'admin' } });
+    expect(onChange).toHaveBeenCalledWith(expect.arrayContaining(['assets:read', 'keys:admin']));
+  });
 });
