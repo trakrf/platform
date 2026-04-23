@@ -83,7 +83,7 @@ type ListFilter struct {
 	LocationIdentifiers []string // OR semantics when multi-valued
 	IsActive            *bool
 	Type                *string
-	Q                   *string // fuzzy match on name, identifier, description
+	Q                   *string // substring match (case-insensitive) on name, identifier, description, and active identifier values
 	Sorts               []ListSort
 	Limit               int
 	Offset              int

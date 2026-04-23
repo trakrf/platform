@@ -24,7 +24,7 @@ type CurrentLocationsResponse struct {
 // CurrentLocationFilter contains query parameters for filtering
 type CurrentLocationFilter struct {
 	LocationIdentifiers []string // filter by location natural key(s)
-	Q                   *string  // search asset name or identifier
+	Q                   *string  // substring match (case-insensitive) on asset name, identifier, and active identifier values
 	Limit               int
 	Offset              int
 }

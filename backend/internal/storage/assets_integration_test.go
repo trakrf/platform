@@ -166,6 +166,78 @@ func TestListAssetsFiltered_Q(t *testing.T) {
 	assert.Equal(t, "forklift-1", items[0].Identifier)
 }
 
+func TestListAssetsFiltered_QMatchesActiveIdentifier(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	activeAsset, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "asset-active", Name: "Active", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	inactiveIDAsset, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "asset-inactive-id", Name: "InactiveID", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	deletedIDAsset, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "asset-deleted-id", Name: "DeletedID", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active)
+		VALUES ($1, 'rfid', 'EPC-ACTIVE-10023', $2, NOW(), true)
+	`, orgID, activeAsset.ID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active)
+		VALUES ($1, 'rfid', 'EPC-INACTIVE-10023', $2, NOW(), false)
+	`, orgID, inactiveIDAsset.ID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active, deleted_at)
+		VALUES ($1, 'rfid', 'EPC-DELETED-10023', $2, NOW(), true, NOW())
+	`, orgID, deletedIDAsset.ID)
+	require.NoError(t, err)
+
+	t.Run("active identifier matches", func(t *testing.T) {
+		q := "10023"
+		items, err := store.ListAssetsFiltered(context.Background(), orgID, asset.ListFilter{
+			Q: &q, Limit: 50,
+		})
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		assert.Equal(t, "asset-active", items[0].Identifier)
+	})
+
+	t.Run("inactive identifier does not match", func(t *testing.T) {
+		q := "INACTIVE-10023"
+		items, err := store.ListAssetsFiltered(context.Background(), orgID, asset.ListFilter{
+			Q: &q, Limit: 50,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, items)
+	})
+
+	t.Run("soft-deleted identifier does not match", func(t *testing.T) {
+		q := "DELETED-10023"
+		items, err := store.ListAssetsFiltered(context.Background(), orgID, asset.ListFilter{
+			Q: &q, Limit: 50,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, items)
+	})
+}
+
 // TestGetAssetByIdentifier_CrossOrgLocationFenced defends the cross-tenant
 // LEFT JOIN leak. An asset in org A whose current_location_id points at a
 // location in org B (possible in theory via admin error, corrupt data, or a

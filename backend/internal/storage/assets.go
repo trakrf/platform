@@ -809,7 +809,11 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 		args = append(args, "%"+*f.Q+"%")
 		idx := len(args)
 		clauses = append(clauses, fmt.Sprintf(
-			"(a.name ILIKE $%d OR a.identifier ILIKE $%d OR a.description ILIKE $%d)", idx, idx, idx))
+			"(a.name ILIKE $%d OR a.identifier ILIKE $%d OR a.description ILIKE $%d "+
+				"OR EXISTS (SELECT 1 FROM trakrf.identifiers i "+
+				"WHERE i.asset_id = a.id AND i.is_active = true "+
+				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
+			idx, idx, idx, idx))
 	}
 	return strings.Join(clauses, " AND "), args
 }

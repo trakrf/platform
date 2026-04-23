@@ -324,7 +324,7 @@ type UpdateAssetResponse struct {
 }
 
 // @Summary List assets
-// @Description Paginated assets list with natural-key filters, sort, and fuzzy search
+// @Description Paginated assets list with natural-key filters, sort, and substring search
 // @Tags assets,public
 // @ID assets.list
 // @Accept json
@@ -334,7 +334,7 @@ type UpdateAssetResponse struct {
 // @Param location query string false "filter by location natural key (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
 // @Param type     query string false "filter by type"
-// @Param q        query string false "fuzzy search on name / identifier / description"
+// @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active identifier values"
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"
 // @Success 200 {object} assets.ListAssetsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"

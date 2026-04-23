@@ -300,3 +300,85 @@ func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
 	assert.Equal(t, newName, result.Name)
 	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
 }
+
+func TestListLocationsFiltered_Q(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	activeLoc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "loc-active", Name: "Warehouse Active", Path: "loc-active",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	inactiveIDLoc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "loc-inactive-id", Name: "InactiveID", Path: "loc-inactive-id",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	deletedIDLoc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "loc-deleted-id", Name: "DeletedID", Path: "loc-deleted-id",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, valid_from, is_active)
+		VALUES ($1, 'rfid', 'LOC-ACTIVE-20055', $2, NOW(), true)
+	`, orgID, activeLoc.ID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, valid_from, is_active)
+		VALUES ($1, 'rfid', 'LOC-INACTIVE-20055', $2, NOW(), false)
+	`, orgID, inactiveIDLoc.ID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, valid_from, is_active, deleted_at)
+		VALUES ($1, 'rfid', 'LOC-DELETED-20055', $2, NOW(), true, NOW())
+	`, orgID, deletedIDLoc.ID)
+	require.NoError(t, err)
+
+	t.Run("name substring matches", func(t *testing.T) {
+		q := "Warehouse"
+		items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
+			Q: &q, Limit: 50,
+		})
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		assert.Equal(t, "loc-active", items[0].Identifier)
+	})
+
+	t.Run("active identifier value matches", func(t *testing.T) {
+		q := "20055"
+		items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
+			Q: &q, Limit: 50,
+		})
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		assert.Equal(t, "loc-active", items[0].Identifier)
+	})
+
+	t.Run("inactive identifier value does not match", func(t *testing.T) {
+		q := "INACTIVE-20055"
+		items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
+			Q: &q, Limit: 50,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, items)
+	})
+
+	t.Run("soft-deleted identifier value does not match", func(t *testing.T) {
+		q := "DELETED-20055"
+		items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
+			Q: &q, Limit: 50,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, items)
+	})
+}
