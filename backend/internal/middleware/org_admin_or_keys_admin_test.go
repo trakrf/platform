@@ -152,3 +152,42 @@ func TestRequireOrgAdminOrKeysAdmin_APIKeyWrongOrg(t *testing.T) {
 	newCombinedAuthRouter(store).ServeHTTP(w, req)
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
+
+func TestRequireOrgAdminOrKeysAdmin_NoPrincipal(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-combined")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	// Mount the middleware WITHOUT EitherAuth upstream, so no principal is ever set.
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Route("/orgs/{id}/api-keys", func(r chi.Router) {
+		r.Use(middleware.RequireOrgAdminOrKeysAdmin(store))
+		r.Get("/", okHandler)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/orgs/%d/api-keys/", orgID), nil)
+	// No Authorization header — and no EitherAuth to attach a principal.
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestRequireOrgAdminOrKeysAdmin_APIKeyInvalidOrgID(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-combined")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	token := mintAPIKeyJWT(t, store, orgID, []string{"keys:admin"})
+
+	// Request to a route where {id} is non-numeric. Chi will still match because
+	// its default URL params are strings, not typed — so this reaches the middleware.
+	req := httptest.NewRequest(http.MethodGet, "/orgs/abc/api-keys/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	newCombinedAuthRouter(store).ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
