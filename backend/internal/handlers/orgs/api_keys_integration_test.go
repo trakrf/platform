@@ -274,3 +274,85 @@ func TestRevokeAPIKey_CrossOrgReturns404(t *testing.T) {
 	require.Len(t, list, 1)
 	assert.Equal(t, victimKey.ID, list[0].ID)
 }
+
+func TestCreateAPIKey_EmptyBody_CleanMessage(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-crud")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	_, sessionToken := seedAdminUser(t, pool, orgID)
+
+	r := newAdminRouter(t, store)
+
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID), bytes.NewReader(nil))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	body := w.Body.String()
+	assert.NotContains(t, body, "EOF", "raw decoder error must not leak to clients")
+	assert.NotContains(t, body, "unexpected end", "raw decoder error must not leak to clients")
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "bad_request", resp.Error.Type)
+	assert.Equal(t, "Invalid JSON body", resp.Error.Title)
+	assert.Empty(t, resp.Error.Detail, "detail must not carry runtime error text")
+}
+
+func TestCreateAPIKey_ValidationFailed_JSONFieldNames(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-crud")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	_, sessionToken := seedAdminUser(t, pool, orgID)
+
+	r := newAdminRouter(t, store)
+
+	// Valid JSON, missing required name and scopes fields.
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID),
+		bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	body := w.Body.String()
+	assert.NotContains(t, body, "CreateAPIKeyRequest", "raw validator output must not leak Go struct name")
+	assert.NotContains(t, body, "'Name'", "field names must be JSON names, not Go struct names")
+	assert.NotContains(t, body, "'Scopes'", "field names must be JSON names, not Go struct names")
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+
+	fieldNames := make([]string, 0, len(resp.Error.Fields))
+	for _, f := range resp.Error.Fields {
+		fieldNames = append(fieldNames, f.Field)
+	}
+	assert.Contains(t, fieldNames, "name")
+	assert.Contains(t, fieldNames, "scopes")
+}
