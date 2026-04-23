@@ -945,6 +945,66 @@ func TestListAssets_LocationFilter_MultiValueOR(t *testing.T) {
 	assert.False(t, got["OR-A-003"])
 }
 
+// TRA-468: PATCH/PUT without valid_from/valid_to must not zero or clobber existing values.
+func TestUpdateAsset_DoesNotClobberValidDates(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+
+	// Create with explicit valid_from and valid_to.
+	vf := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	vt := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	createReq := asset.Asset{
+		OrgID:      accountID,
+		Identifier: "TRA468-UPD-001",
+		Name:       "update-test",
+		Type:       "asset",
+		ValidFrom:  vf,
+		ValidTo:    &vt,
+		IsActive:   true,
+	}
+	created, err := store.CreateAsset(context.Background(), createReq)
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	// PUT only the name — no valid_from/valid_to in body.
+	newName := "renamed"
+	updateReq := asset.UpdateAssetRequest{Name: &newName}
+	body, err := json.Marshal(updateReq)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/TRA468-UPD-001", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+		URLParams: chi.RouteParams{
+			Keys:   []string{"identifier"},
+			Values: []string{"TRA468-UPD-001"},
+		},
+	}))
+	req = withOrgContext(req, accountID)
+	w := httptest.NewRecorder()
+	handler.UpdateAsset(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var resp UpdateAssetResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, newName, resp.Data.Name)
+	assert.True(t, resp.Data.ValidFrom.Equal(vf),
+		"valid_from clobbered: got %v, want %v", resp.Data.ValidFrom, vf)
+	require.NotNil(t, resp.Data.ValidTo, "valid_to clobbered to nil")
+	assert.True(t, resp.Data.ValidTo.Equal(vt),
+		"valid_to clobbered: got %v, want %v", resp.Data.ValidTo, vt)
+}
+
 // TRA-465: an asset with no scans is excluded from every ?location=X filter.
 func TestListAssets_LocationFilter_ExcludesAssetsWithNoScans(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
@@ -986,4 +1046,90 @@ func TestListAssets_LocationFilter_ExcludesAssetsWithNoScans(t *testing.T) {
 	data2, _ := resp2["data"].([]any)
 	require.Len(t, data2, 1)
 	assert.Nil(t, data2[0].(map[string]any)["current_location"])
+}
+
+// TRA-468: POST with no valid_to must omit the `valid_to` key from the response JSON.
+func TestCreateAsset_OmitsValidToWhenNull(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	reqBody := `{"identifier":"TRA468-OMIT","name":"no-expiry","type":"asset","valid_from":"2026-01-01"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	data := envelope["data"].(map[string]any)
+
+	_, hasValidTo := data["valid_to"]
+	assert.False(t, hasValidTo, "response contained valid_to key when none was set: %#v", data["valid_to"])
+	_, hasValidFrom := data["valid_from"]
+	assert.True(t, hasValidFrom, "response missing valid_from (should always be present)")
+}
+
+// TRA-468: POST with explicit valid_to must return it as RFC3339 on both POST and GET.
+func TestCreateAsset_IncludesValidToWhenSet(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	reqBody := `{"identifier":"TRA468-KEEP","name":"with-expiry","type":"asset","valid_from":"2026-01-01","valid_to":"2027-06-15"}`
+	reqC := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(reqBody))
+	reqC.Header.Set("Content-Type", "application/json")
+	reqC = withOrgContext(reqC, accountID)
+	wC := httptest.NewRecorder()
+	router.ServeHTTP(wC, reqC)
+
+	require.Equal(t, http.StatusCreated, wC.Code, wC.Body.String())
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(wC.Body.Bytes(), &envelope))
+	data := envelope["data"].(map[string]any)
+	vt, ok := data["valid_to"].(string)
+	require.True(t, ok, "valid_to missing or wrong type on POST: %#v", data["valid_to"])
+	_, err := time.Parse(time.RFC3339, vt)
+	require.NoError(t, err, "valid_to not RFC3339 on POST: %q", vt)
+
+	// GET the asset back via handler.GetAssetByID (direct call with chi context,
+	// matching the pattern used by TestGetAssetByID) and verify the same shape round-trips.
+	surrogateID := int(data["surrogate_id"].(float64))
+	idStr := strconv.Itoa(surrogateID)
+	reqG := httptest.NewRequest(http.MethodGet, "/api/v1/assets/by-id/"+idStr, nil)
+	reqG = reqG.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+		URLParams: chi.RouteParams{
+			Keys:   []string{"id"},
+			Values: []string{idStr},
+		},
+	}))
+	reqG = withOrgContext(reqG, accountID)
+	wG := httptest.NewRecorder()
+	handler.GetAssetByID(wG, reqG)
+
+	require.Equal(t, http.StatusOK, wG.Code, wG.Body.String())
+	var getEnvelope map[string]any
+	require.NoError(t, json.Unmarshal(wG.Body.Bytes(), &getEnvelope))
+	getData := getEnvelope["data"].(map[string]any)
+	assert.Equal(t, vt, getData["valid_to"], "GET valid_to differs from POST")
 }

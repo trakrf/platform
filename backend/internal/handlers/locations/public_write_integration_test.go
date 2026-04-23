@@ -982,3 +982,109 @@ func TestLocationsGetDescendants_CrossOrg_NoLeak(t *testing.T) {
 	assert.Equal(t, "OrgA Dock", got["name"])
 	assertNoInternalLocationFields(t, got)
 }
+
+// TRA-468: PUT without valid_from/valid_to must not clobber existing values.
+func TestUpdateLocation_DoesNotClobberValidDates(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-loc-write-clobber-valid-dates")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	// Create with explicit valid_to.
+	createBody := `{"identifier":"tra468-clobber","name":"clobber-test",` +
+		`"valid_from":"2026-01-01","valid_to":"2027-01-01","is_active":true}`
+	reqC := httptest.NewRequest(http.MethodPost, "/api/v1/locations",
+		bytes.NewBufferString(createBody))
+	reqC.Header.Set("Authorization", "Bearer "+token)
+	reqC.Header.Set("Content-Type", "application/json")
+	wC := httptest.NewRecorder()
+	r.ServeHTTP(wC, reqC)
+	require.Equal(t, http.StatusCreated, wC.Code, wC.Body.String())
+
+	var createdResp map[string]any
+	require.NoError(t, json.Unmarshal(wC.Body.Bytes(), &createdResp))
+	createdData := createdResp["data"].(map[string]any)
+	origValidFrom := createdData["valid_from"]
+	origValidTo := createdData["valid_to"]
+	require.NotNil(t, origValidFrom)
+	require.NotNil(t, origValidTo, "seed create did not return valid_to")
+
+	// PUT only the name — nothing else.
+	updateBody := `{"name":"renamed-loc"}`
+	reqU := httptest.NewRequest(http.MethodPut, "/api/v1/locations/tra468-clobber",
+		bytes.NewBufferString(updateBody))
+	reqU.Header.Set("Authorization", "Bearer "+token)
+	reqU.Header.Set("Content-Type", "application/json")
+	wU := httptest.NewRecorder()
+	r.ServeHTTP(wU, reqU)
+	require.Equal(t, http.StatusOK, wU.Code, wU.Body.String())
+
+	var updatedResp map[string]any
+	require.NoError(t, json.Unmarshal(wU.Body.Bytes(), &updatedResp))
+	updatedData := updatedResp["data"].(map[string]any)
+
+	assert.Equal(t, origValidFrom, updatedData["valid_from"],
+		"valid_from clobbered on PUT")
+	assert.Equal(t, origValidTo, updatedData["valid_to"],
+		"valid_to clobbered on PUT")
+}
+
+// TRA-468: POST with no valid_to must omit the `valid_to` key from the response JSON.
+func TestCreateLocation_OmitsValidToWhenNull(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-loc-write-omit-valid-to")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	body := `{"identifier":"tra468-loc-omit","name":"no-expiry","valid_from":"2026-01-01","is_active":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	data := envelope["data"].(map[string]any)
+
+	_, hasValidTo := data["valid_to"]
+	assert.False(t, hasValidTo, "response contained valid_to key when none was set: %#v", data["valid_to"])
+	_, hasValidFrom := data["valid_from"]
+	assert.True(t, hasValidFrom, "response missing valid_from (should always be present)")
+}
+
+// TRA-468: POST with explicit valid_to must return it as RFC3339.
+func TestCreateLocation_IncludesValidToWhenSet(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-loc-write-include-valid-to")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	body := `{"identifier":"tra468-loc-keep","name":"with-expiry","valid_from":"2026-01-01","valid_to":"2027-06-15","is_active":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	data := envelope["data"].(map[string]any)
+	vt, ok := data["valid_to"].(string)
+	require.True(t, ok, "valid_to missing or wrong type: %#v", data["valid_to"])
+	_, err := time.Parse(time.RFC3339, vt)
+	assert.NoError(t, err, "valid_to not RFC3339: %q", vt)
+}
