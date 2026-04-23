@@ -50,6 +50,30 @@ func withOrgContext(req *http.Request, orgID int) *http.Request {
 	return req.WithContext(ctx)
 }
 
+// createTestLocation inserts a location and returns its surrogate ID.
+// identifier is LOC-<name>, matching the reports test helper pattern.
+func createTestLocation(t *testing.T, pool *pgxpool.Pool, orgID int, name string) int {
+	t.Helper()
+	var id int
+	err := pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations (org_id, identifier, name, is_active)
+		VALUES ($1, $2, $3, true)
+		RETURNING id
+	`, orgID, "LOC-"+name, name).Scan(&id)
+	require.NoError(t, err)
+	return id
+}
+
+// createTestScan inserts an asset_scan row at the given timestamp.
+func createTestScan(t *testing.T, pool *pgxpool.Pool, orgID, assetID int, locationID *int, ts time.Time) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO trakrf.asset_scans (org_id, asset_id, location_id, timestamp)
+		VALUES ($1, $2, $3, $4)
+	`, orgID, assetID, locationID, ts)
+	require.NoError(t, err)
+}
+
 func TestCreateAsset(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
