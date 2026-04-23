@@ -858,3 +858,132 @@ func TestListAssets_LocationFilter_FollowsLatestScanNotStaleColumn(t *testing.T)
 	item := data2[0].(map[string]any)
 	assert.Equal(t, "LOC-WHS-02", item["current_location"])
 }
+
+// TRA-465: single-value ?location= happy path.
+func TestListAssets_LocationFilter_HappyPath(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	loc := createTestLocation(t, pool, orgID, "WHS-01")
+
+	a := testutil.NewAssetFactory(orgID).WithIdentifier("HP-ASSET-001").Build()
+	created, err := store.CreateAsset(context.Background(), a)
+	require.NoError(t, err)
+	createTestScan(t, pool, orgID, created.ID, &loc, time.Now().UTC().Add(-1*time.Hour))
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Get("/api/v1/assets", handler.ListAssets)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location=LOC-WHS-01", nil)
+	req = withOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data, _ := resp["data"].([]any)
+	require.Len(t, data, 1)
+	assert.Equal(t, "HP-ASSET-001", data[0].(map[string]any)["identifier"])
+	assert.Equal(t, "LOC-WHS-01", data[0].(map[string]any)["current_location"])
+	assert.EqualValues(t, 1, resp["total_count"])
+}
+
+// TRA-465: multi-value ?location=A&location=B has OR semantics.
+func TestListAssets_LocationFilter_MultiValueOR(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	whs1 := createTestLocation(t, pool, orgID, "WHS-01")
+	whs2 := createTestLocation(t, pool, orgID, "WHS-02")
+	whs3 := createTestLocation(t, pool, orgID, "WHS-03")
+
+	a1 := testutil.NewAssetFactory(orgID).WithIdentifier("OR-A-001").Build()
+	c1, err := store.CreateAsset(context.Background(), a1)
+	require.NoError(t, err)
+	a2 := testutil.NewAssetFactory(orgID).WithIdentifier("OR-A-002").Build()
+	c2, err := store.CreateAsset(context.Background(), a2)
+	require.NoError(t, err)
+	a3 := testutil.NewAssetFactory(orgID).WithIdentifier("OR-A-003").Build()
+	c3, err := store.CreateAsset(context.Background(), a3)
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	createTestScan(t, pool, orgID, c1.ID, &whs1, now.Add(-1*time.Hour))
+	createTestScan(t, pool, orgID, c2.ID, &whs2, now.Add(-1*time.Hour))
+	createTestScan(t, pool, orgID, c3.ID, &whs3, now.Add(-1*time.Hour))
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Get("/api/v1/assets", handler.ListAssets)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location=LOC-WHS-01&location=LOC-WHS-02", nil)
+	req = withOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data, _ := resp["data"].([]any)
+	require.Len(t, data, 2, "expected OR of WHS-01 and WHS-02 to include both assets but not the one at WHS-03")
+	assert.EqualValues(t, 2, resp["total_count"])
+
+	got := map[string]bool{}
+	for _, row := range data {
+		got[row.(map[string]any)["identifier"].(string)] = true
+	}
+	assert.True(t, got["OR-A-001"])
+	assert.True(t, got["OR-A-002"])
+	assert.False(t, got["OR-A-003"])
+}
+
+// TRA-465: an asset with no scans is excluded from every ?location=X filter.
+func TestListAssets_LocationFilter_ExcludesAssetsWithNoScans(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	createTestLocation(t, pool, orgID, "WHS-01") // location exists, but nothing scanned here
+
+	a := testutil.NewAssetFactory(orgID).WithIdentifier("NO-SCAN-001").Build()
+	_, err := store.CreateAsset(context.Background(), a)
+	require.NoError(t, err)
+	// Intentionally: no scan inserted.
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Get("/api/v1/assets", handler.ListAssets)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location=LOC-WHS-01", nil)
+	req = withOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data, _ := resp["data"].([]any)
+	assert.Empty(t, data, "asset with no scans must not match any location filter")
+
+	// Sanity: unfiltered list should include the asset with current_location = null.
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
+	req2 = withOrgContext(req2, orgID)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	require.Equal(t, http.StatusOK, w2.Code)
+	var resp2 map[string]any
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &resp2))
+	data2, _ := resp2["data"].([]any)
+	require.Len(t, data2, 1)
+	assert.Nil(t, data2[0].(map[string]any)["current_location"])
+}
