@@ -14,6 +14,19 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
+// @Summary List members of an organization
+// @Tags org-members,internal
+// @ID org_members.list
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Success 200 {object} map[string]any "data: []organization.Member"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/members [get]
 // ListMembers returns all members of an organization.
 func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -33,6 +46,22 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": members})
 }
 
+// @Summary Update a member's role in an organization
+// @Tags org-members,internal
+// @ID org_members.update_role
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param userId path int true "User id"
+// @Param request body organization.UpdateMemberRoleRequest true "New role"
+// @Success 200 {object} map[string]any "message: Role updated"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/members/{userId} [put]
 // UpdateMemberRole updates a member's role in an organization.
 func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -89,6 +118,21 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"message": "Role updated"})
 }
 
+// @Summary Remove a member from an organization
+// @Tags org-members,internal
+// @ID org_members.remove
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param userId path int true "User id"
+// @Success 200 {object} map[string]any "message: Member removed"
+// @Failure 400 {object} modelerrors.ErrorResponse "Self-removal or last-admin"
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/orgs/{id}/members/{userId} [delete]
 // RemoveMember removes a member from an organization.
 func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
