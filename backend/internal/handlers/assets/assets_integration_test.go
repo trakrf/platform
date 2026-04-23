@@ -854,7 +854,7 @@ func TestListAssets_LocationFilter_FollowsLatestScanNotStaleColumn(t *testing.T)
 	data2, _ := resp2["data"].([]any)
 	require.Len(t, data2, 1, "asset whose latest scan is at WHS-02 must match ?location=LOC-WHS-02")
 
-	// Hydrated current_location_identifier must reflect the latest scan, not the stale column.
+	// Hydrated current_location must reflect the latest scan, not the stale column.
 	item := data2[0].(map[string]any)
-	assert.Equal(t, "LOC-WHS-02", item["current_location_identifier"])
+	assert.Equal(t, "LOC-WHS-02", item["current_location"])
 }
