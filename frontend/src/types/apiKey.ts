@@ -3,13 +3,17 @@ export type Scope =
   | 'assets:write'
   | 'locations:read'
   | 'locations:write'
-  | 'scans:read';
+  | 'scans:read'
+  | 'scans:write'
+  | 'keys:admin';
 
 export interface APIKey {
   id: number;
   jti: string;
   name: string;
   scopes: Scope[];
+  created_by: number | null;
+  created_by_key_id: number | null;
   created_at: string;
   expires_at: string | null;
   last_used_at: string | null;
@@ -36,6 +40,8 @@ export const ALL_SCOPES: Scope[] = [
   'locations:read',
   'locations:write',
   'scans:read',
+  'scans:write',
+  'keys:admin',
 ];
 
 export const ACTIVE_KEY_CAP = 10;
