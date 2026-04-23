@@ -4,7 +4,7 @@
 
 **Goal:** Make `GET /api/v1/assets?location={identifier}` return assets whose most recent scan is at that location, matching the `/locations/current` semantics, with an integration test that guards the regression.
 
-**Architecture:** Replace the stale `assets.current_location_id` join in `ListAssetsFiltered` and `CountAssetsFiltered` with a `LEFT JOIN` through a `latest_scans` CTE (`DISTINCT ON (asset_id) ... ORDER BY timestamp DESC` over `asset_scans`), mirroring the pattern already working in `storage/reports.go`. Both the surrogate `current_location_id` and the hydrated `current_location_identifier` returned by the endpoint are sourced from the CTE so filter and response cannot disagree.
+**Architecture:** Replace the stale `assets.current_location_id` join in `ListAssetsFiltered` and `CountAssetsFiltered` with a `LEFT JOIN` through a `latest_scans` CTE (`DISTINCT ON (asset_id) ... ORDER BY timestamp DESC` over `asset_scans`), mirroring the pattern already working in `storage/reports.go`. Both the surrogate `current_location_id` and the hydrated `current_location` returned by the endpoint are sourced from the CTE so filter and response cannot disagree.
 
 **Tech Stack:** Go 1.x, `pgx/v5`, PostgreSQL + TimescaleDB, `chi` router, `testify`. Tests run with build tag `integration` against a real DB.
 
@@ -142,9 +142,9 @@ func TestListAssets_LocationFilter_FollowsLatestScanNotStaleColumn(t *testing.T)
 	data2, _ := resp2["data"].([]any)
 	require.Len(t, data2, 1, "asset whose latest scan is at WHS-02 must match ?location=LOC-WHS-02")
 
-	// Hydrated current_location_identifier must reflect the latest scan, not the stale column.
+	// Hydrated current_location must reflect the latest scan, not the stale column.
 	item := data2[0].(map[string]any)
-	assert.Equal(t, "LOC-WHS-02", item["current_location_identifier"])
+	assert.Equal(t, "LOC-WHS-02", item["current_location"])
 }
 ```
 
@@ -304,7 +304,7 @@ func TestListAssets_LocationFilter_HappyPath(t *testing.T) {
 	data, _ := resp["data"].([]any)
 	require.Len(t, data, 1)
 	assert.Equal(t, "HP-ASSET-001", data[0].(map[string]any)["identifier"])
-	assert.Equal(t, "LOC-WHS-01", data[0].(map[string]any)["current_location_identifier"])
+	assert.Equal(t, "LOC-WHS-01", data[0].(map[string]any)["current_location"])
 }
 
 // TRA-465: multi-value ?location=A&location=B has OR semantics.
@@ -388,7 +388,7 @@ func TestListAssets_LocationFilter_ExcludesAssetsWithNoScans(t *testing.T) {
 	data, _ := resp["data"].([]any)
 	assert.Empty(t, data, "asset with no scans must not match any location filter")
 
-	// Sanity: unfiltered list should include the asset with current_location_identifier = null.
+	// Sanity: unfiltered list should include the asset with current_location = null.
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
 	req2 = withOrgContext(req2, orgID)
 	w2 := httptest.NewRecorder()
@@ -398,7 +398,7 @@ func TestListAssets_LocationFilter_ExcludesAssetsWithNoScans(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &resp2))
 	data2, _ := resp2["data"].([]any)
 	require.Len(t, data2, 1)
-	assert.Nil(t, data2[0].(map[string]any)["current_location_identifier"])
+	assert.Nil(t, data2[0].(map[string]any)["current_location"])
 }
 ```
 
@@ -453,10 +453,10 @@ gh pr create --title "fix(tra-465): /assets?location filter follows latest scan,
 ## Summary
 - `GET /api/v1/assets?location={identifier}` now returns assets whose **most recent scan** is at that location, matching the `/locations/current` semantics that iPaaS connectors (e.g. TeamCentral) rely on.
 - Root cause was that `assets.current_location_id` is a dead denormalized column — written only at create/update and never synced from scans. The filter ran correctly against a source of truth that wasn't true.
-- Both the surrogate `current_location_id` and the hydrated `current_location_identifier` in the response are now sourced from the same `latest_scans` CTE as the filter, so they cannot disagree.
+- Both the surrogate `current_location_id` and the hydrated `current_location` in the response are now sourced from the same `latest_scans` CTE as the filter, so they cannot disagree.
 
 ## Behavior change for callers
-Anyone who was reading `current_location_identifier` or `current_location_id` from `/api/v1/assets` was previously seeing the stale create-time value. They now see scan-derived current location. This is a correctness fix, but it is observable.
+Anyone who was reading `current_location` or `current_location_id` from `/api/v1/assets` was previously seeing the stale create-time value. They now see scan-derived current location. This is a correctness fix, but it is observable.
 
 ## Deferred follow-up (post-v1, not a TeamCentral launch blocker)
 The `latest_scans` CTE is fine at MVP scan volume. A separate ticket (to be filed) will evaluate two Timescale-native replacements and remove the dead column + its write paths:

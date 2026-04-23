@@ -18,7 +18,7 @@ So the assets filter runs correctly against a column that does not reflect reali
 
 - `GET /api/v1/assets?location={identifier}` returns assets whose **most recent scan** is at that location.
 - Multiple `?location=` params OR together, matching existing docs.
-- Response hydration of `current_location_identifier` (and the surrogate `current_location_id`) reflects the same scan-derived truth as the filter — no internal disagreement.
+- Response hydration of `current_location` (the JSON field on `PublicAssetView` — sourced from `AssetWithLocation.CurrentLocationIdentifier` internally) reflects the same scan-derived truth as the filter — no internal disagreement.
 - Integration test coverage guards against the exact regression we're fixing.
 
 ## Non-goals
