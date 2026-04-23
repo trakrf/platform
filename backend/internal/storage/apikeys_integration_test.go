@@ -171,6 +171,13 @@ func TestCreateAPIKey_WithCreatedByKeyID(t *testing.T) {
 	assert.Nil(t, roundtripped.CreatedBy)
 	require.NotNil(t, roundtripped.CreatedByKeyID)
 	assert.Equal(t, parent.ID, *roundtripped.CreatedByKeyID)
+
+	// Also exercise GetAPIKeyByJTI scan — the third scan site in apikeys.go.
+	byJTI, err := store.GetAPIKeyByJTI(context.Background(), child.JTI)
+	require.NoError(t, err)
+	assert.Nil(t, byJTI.CreatedBy)
+	require.NotNil(t, byJTI.CreatedByKeyID)
+	assert.Equal(t, parent.ID, *byJTI.CreatedByKeyID)
 }
 
 // Direct SQL insert with both creator columns must violate the CHECK constraint.
