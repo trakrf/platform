@@ -257,6 +257,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // RegisterRoutes registers org endpoints on the given router.
+// NOTE: API-key endpoints are registered separately via RegisterAPIKeyRoutes —
+// they live under EitherAuth because they accept api-key auth, not just session.
 func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 	// Public routes (any authenticated user)
 	r.Get("/api/v1/orgs", h.List)

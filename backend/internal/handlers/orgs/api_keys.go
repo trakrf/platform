@@ -43,6 +43,11 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	} else if p := middleware.GetAPIKeyPrincipal(r); p != nil {
 		parent, err := h.storage.GetAPIKeyByJTI(r.Context(), p.JTI)
 		if err != nil {
+			if stderrors.Is(err, storage.ErrAPIKeyNotFound) {
+				httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
+					"API key is no longer valid", "", reqID)
+				return
+			}
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 				"Failed to resolve parent key", "", reqID)
 			return
