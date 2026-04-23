@@ -51,12 +51,11 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	var req apikey.CreateAPIKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid JSON", err.Error(), reqID)
+			"Invalid JSON body", "", reqID)
 		return
 	}
 	if err := validate.Struct(req); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			"Validation failed", err.Error(), reqID)
+		httputil.RespondValidationError(w, r, err, reqID)
 		return
 	}
 	for _, s := range req.Scopes {
