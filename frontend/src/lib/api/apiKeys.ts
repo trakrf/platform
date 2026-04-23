@@ -12,8 +12,8 @@ export const apiKeysApi = {
   },
 
   create: async (orgId: number, req: CreateAPIKeyRequest): Promise<APIKeyCreateResponse> => {
-    const resp = await apiClient.post<APIKeyCreateResponse>(`/orgs/${orgId}/api-keys`, req);
-    return resp.data;
+    const resp = await apiClient.post<{ data: APIKeyCreateResponse }>(`/orgs/${orgId}/api-keys`, req);
+    return resp.data.data;
   },
 
   revoke: async (orgId: number, keyId: number): Promise<void> => {

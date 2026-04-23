@@ -21,18 +21,22 @@ describe('apiKeysApi', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/orgs/42/api-keys');
   });
 
-  it('create POSTs request body to /orgs/{orgId}/api-keys', async () => {
-    (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+  it('create POSTs request body to /orgs/{orgId}/api-keys and returns unwrapped data', async () => {
+    const payload = {
       key: 'eyJ...',
       id: 1,
       name: 'x',
-      scopes: ['assets:read'],
+      scopes: ['assets:read' as const],
       created_at: '2026-04-19T00:00:00Z',
       expires_at: null,
+    };
+    (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { data: payload },
     });
     const req = { name: 'x', scopes: ['assets:read' as const] };
-    await apiKeysApi.create(42, req);
+    const result = await apiKeysApi.create(42, req);
     expect(apiClient.post).toHaveBeenCalledWith('/orgs/42/api-keys', req);
+    expect(result).toEqual(payload);
   });
 
   it('revoke DELETEs /orgs/{orgId}/api-keys/{id}', async () => {

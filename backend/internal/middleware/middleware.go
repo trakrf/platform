@@ -146,7 +146,7 @@ func Auth(next http.Handler) http.Handler {
 		}
 
 		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 			logger.Get().Info().
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).

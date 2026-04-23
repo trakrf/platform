@@ -265,6 +265,31 @@ func TestAuth_InvalidToken_Respond401(t *testing.T) {
 	}
 }
 
+func TestAuth_BearerSchemeCaseInsensitive(t *testing.T) {
+	cases := []string{"Bearer", "bearer", "BEARER", "BeArEr"}
+	for _, scheme := range cases {
+		t.Run(scheme, func(t *testing.T) {
+			h := Auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Fatal("should not reach handler for invalid token")
+			}))
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/x", nil)
+			r.Header.Set("Authorization", scheme+" not-a-valid-jwt")
+			h.ServeHTTP(w, r)
+
+			if w.Code != 401 {
+				t.Fatalf("status = %d, want 401", w.Code)
+			}
+			var resp apierrors.ErrorResponse
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			// Must reach the token-validation branch, not the scheme-rejection branch.
+			if resp.Error.Detail != "Bearer token is invalid or expired" {
+				t.Errorf("detail = %q, want token-validation detail (scheme should have been accepted)", resp.Error.Detail)
+			}
+		})
+	}
+}
+
 // APIKeyAuth unit tests (no DB required for early-exit branches).
 
 func TestAPIKey_MissingHeader_Respond401(t *testing.T) {
@@ -329,6 +354,32 @@ func TestAPIKey_InvalidJWT_Respond401(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Error.Detail != "Bearer token is invalid or expired" {
 		t.Errorf("detail = %q, want canonical invalid-token string", resp.Error.Detail)
+	}
+}
+
+func TestAPIKey_BearerSchemeCaseInsensitive(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	cases := []string{"Bearer", "bearer", "BEARER", "BeArEr"}
+	for _, scheme := range cases {
+		t.Run(scheme, func(t *testing.T) {
+			h := APIKeyAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Fatal("should not reach handler for invalid token")
+			}))
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/x", nil)
+			r.Header.Set("Authorization", scheme+" not-a-valid-jwt")
+			h.ServeHTTP(w, r)
+
+			if w.Code != 401 {
+				t.Fatalf("status = %d, want 401", w.Code)
+			}
+			var resp apierrors.ErrorResponse
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			// Must reach the token-validation branch, not the scheme-rejection branch.
+			if resp.Error.Detail != "Bearer token is invalid or expired" {
+				t.Errorf("detail = %q, want token-validation detail (scheme should have been accepted)", resp.Error.Detail)
+			}
+		})
 	}
 }
 

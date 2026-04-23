@@ -16,7 +16,11 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
-var validate = validator.New()
+var validate = func() *validator.Validate {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+	return v
+}()
 
 type Handler struct {
 	storage *storage.Storage
