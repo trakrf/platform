@@ -144,10 +144,10 @@ func TestListAPIKeys_ExcludesRevoked(t *testing.T) {
 	userID, sessionToken := seedAdminUser(t, pool, orgID)
 
 	active, err := store.CreateAPIKey(context.Background(), orgID, "active",
-		[]string{"assets:read"}, userID, nil)
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	revoked, err := store.CreateAPIKey(context.Background(), orgID, "revoked",
-		[]string{"assets:read"}, userID, nil)
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	require.NoError(t, store.RevokeAPIKey(context.Background(), orgID, revoked.ID))
 
@@ -181,7 +181,7 @@ func TestCreateAPIKey_SoftCap(t *testing.T) {
 
 	for i := 0; i < apikey.ActiveKeyCap; i++ {
 		_, err := store.CreateAPIKey(context.Background(), orgID, "k",
-			[]string{"assets:read"}, userID, nil)
+			[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 		require.NoError(t, err)
 	}
 
@@ -209,7 +209,7 @@ func TestRevokeAPIKey(t *testing.T) {
 	userID, sessionToken := seedAdminUser(t, pool, orgID)
 
 	key, err := store.CreateAPIKey(context.Background(), orgID, "to-revoke",
-		[]string{"assets:read"}, userID, nil)
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	r := newAdminRouter(t, store)
@@ -260,7 +260,7 @@ func TestRevokeAPIKey_CrossOrgReturns404(t *testing.T) {
 
 	// Key belonging to org2
 	victimKey, err := store.CreateAPIKey(context.Background(), org2, "victim",
-		[]string{"assets:read"}, creatorID, nil)
+		[]string{"assets:read"}, apikey.Creator{UserID: &creatorID}, nil)
 	require.NoError(t, err)
 
 	r := newAdminRouter(t, store)

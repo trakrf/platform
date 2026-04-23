@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/trakrf/platform/backend/internal/models/apikey"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
@@ -37,7 +38,7 @@ func TestAPIKeyStorage_CreateAndGetByJTI(t *testing.T) {
 
 	ctx := context.Background()
 	scopes := []string{"assets:read", "locations:read"}
-	key, err := store.CreateAPIKey(ctx, orgID, "test-key", scopes, userID, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "test-key", scopes, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	assert.NotZero(t, key.ID)
 	assert.NotEmpty(t, key.JTI)
@@ -60,9 +61,9 @@ func TestAPIKeyStorage_ListExcludesRevoked(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	active, err := store.CreateAPIKey(ctx, orgID, "active", []string{"assets:read"}, userID, nil)
+	active, err := store.CreateAPIKey(ctx, orgID, "active", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
-	revoked, err := store.CreateAPIKey(ctx, orgID, "revoked", []string{"assets:read"}, userID, nil)
+	revoked, err := store.CreateAPIKey(ctx, orgID, "revoked", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	require.NoError(t, store.RevokeAPIKey(ctx, orgID, revoked.ID))
 
@@ -82,7 +83,7 @@ func TestAPIKeyStorage_CountActive(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		_, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, userID, nil)
+		_, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 		require.NoError(t, err)
 	}
 	n, err := store.CountActiveAPIKeys(ctx, orgID)
@@ -105,7 +106,7 @@ func TestAPIKeyStorage_RevokeReturnsNotFoundForCrossOrg(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	key, err := store.CreateAPIKey(ctx, org1, "org1-key", []string{"assets:read"}, userID, nil)
+	key, err := store.CreateAPIKey(ctx, org1, "org1-key", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	err = store.RevokeAPIKey(ctx, org2, key.ID)
@@ -121,7 +122,7 @@ func TestAPIKeyStorage_UpdateLastUsed(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, userID, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	assert.Nil(t, key.LastUsedAt)
 

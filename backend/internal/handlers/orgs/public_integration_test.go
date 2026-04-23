@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/handlers/orgs"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/apikey"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -36,7 +37,7 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	require.NoError(t, err)
 
 	key, err := store.CreateAPIKey(context.Background(), orgID, "pub-key",
-		[]string{"assets:read"}, userID, nil)
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
 	require.NoError(t, err)

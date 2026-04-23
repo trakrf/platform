@@ -81,7 +81,8 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := h.storage.CreateAPIKey(r.Context(), orgID, req.Name, req.Scopes, claims.UserID, req.ExpiresAt)
+	key, err := h.storage.CreateAPIKey(r.Context(), orgID, req.Name, req.Scopes,
+		apikey.Creator{UserID: &claims.UserID}, req.ExpiresAt)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			"Failed to create api key", "", reqID)
