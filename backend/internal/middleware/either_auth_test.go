@@ -132,3 +132,21 @@ func TestEitherAuth_GarbageToken(t *testing.T) {
 	middleware.EitherAuth(store)(http.HandlerFunc(echoPrincipalHandler)).ServeHTTP(w, req)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
+
+func TestEitherAuth_BearerSchemeCaseInsensitive(t *testing.T) {
+	store, cleanup, _, _, _, sessTok := setupEitherAuth(t)
+	defer cleanup()
+
+	cases := []string{"Bearer", "bearer", "BEARER", "BeArEr"}
+	for _, scheme := range cases {
+		t.Run(scheme, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/x", nil)
+			req.Header.Set("Authorization", scheme+" "+sessTok)
+			w := httptest.NewRecorder()
+			middleware.EitherAuth(store)(http.HandlerFunc(echoPrincipalHandler)).ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Equal(t, "session", w.Header().Get("X-Principal"))
+		})
+	}
+}

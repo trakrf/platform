@@ -34,7 +34,7 @@ func EitherAuth(store *storage.Storage) func(http.Handler) http.Handler {
 				return
 			}
 			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
 					errors.ErrUnauthorized, "Invalid authorization header format", "", reqID)
 				return
