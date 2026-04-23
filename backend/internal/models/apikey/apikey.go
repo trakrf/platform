@@ -10,6 +10,7 @@ var ValidScopes = map[string]bool{
 	"locations:write": true,
 	"scans:read":      true,
 	"scans:write":     true,
+	"keys:admin":      true,
 }
 
 // APIKey is the row as stored. Full JWT is NOT stored — only the jti for revocation.
