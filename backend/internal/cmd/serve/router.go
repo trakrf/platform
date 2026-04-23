@@ -113,6 +113,15 @@ func setupRouter(
 	// Public API — API-key auth (TRA-393 canary)
 	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
 
+	// TRA-466 API-key management — accepts session admin OR api-key with keys:admin scope.
+	// Lives outside the session-only orgs subtree so api-key JWTs are accepted.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.EitherAuth(store))
+		r.Use(middleware.RateLimit(rl))
+		r.Use(middleware.SentryContext)
+		orgsHandler.RegisterAPIKeyRoutes(r, store)
+	})
+
 	// TRA-396 public read surface — accepts API-key OR session auth via EitherAuth.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.EitherAuth(store))

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/apikey"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -31,7 +32,7 @@ func setupEitherAuth(t *testing.T) (*storage.Storage, func(), int, int, string, 
 	).Scan(&userID))
 
 	key, err := store.CreateAPIKey(context.Background(), orgID, "ea-key",
-		[]string{"assets:read"}, userID, nil)
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	apiTok, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)

@@ -20,6 +20,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/handlers/assets"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/apikey"
 	assetmodel "github.com/trakrf/platform/backend/internal/models/asset"
 	locmodel "github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -51,7 +52,7 @@ func seedOrgAndKey(t *testing.T, pool *pgxpool.Pool, store *storage.Storage, nam
 		fmt.Sprintf("assets-user-%d@t.com", n),
 	).Scan(&userID))
 
-	key, err := store.CreateAPIKey(context.Background(), orgID, "k", scopes, userID, nil)
+	key, err := store.CreateAPIKey(context.Background(), orgID, "k", scopes, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	tok, err := jwt.GenerateAPIKey(key.JTI, orgID, scopes, nil)

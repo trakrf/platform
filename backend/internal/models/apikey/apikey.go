@@ -10,20 +10,23 @@ var ValidScopes = map[string]bool{
 	"locations:write": true,
 	"scans:read":      true,
 	"scans:write":     true,
+	"keys:admin":      true,
 }
 
 // APIKey is the row as stored. Full JWT is NOT stored — only the jti for revocation.
+// Exactly one of CreatedBy / CreatedByKeyID is non-nil (DB CHECK enforced).
 type APIKey struct {
-	ID         int        `json:"id"`
-	JTI        string     `json:"jti"`
-	OrgID      int        `json:"org_id"`
-	Name       string     `json:"name"`
-	Scopes     []string   `json:"scopes"`
-	CreatedBy  int        `json:"created_by"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	ID             int        `json:"id"`
+	JTI            string     `json:"jti"`
+	OrgID          int        `json:"org_id"`
+	Name           string     `json:"name"`
+	Scopes         []string   `json:"scopes"`
+	CreatedBy      *int       `json:"created_by"`
+	CreatedByKeyID *int       `json:"created_by_key_id"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
 }
 
 // CreateAPIKeyRequest is the POST body from the admin UI.
@@ -45,14 +48,24 @@ type APIKeyCreateResponse struct {
 
 // APIKeyListItem is what GET returns — never includes the JWT.
 type APIKeyListItem struct {
-	ID         int        `json:"id"`
-	JTI        string     `json:"jti"`
-	Name       string     `json:"name"`
-	Scopes     []string   `json:"scopes"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	ID             int        `json:"id"`
+	JTI            string     `json:"jti"`
+	Name           string     `json:"name"`
+	Scopes         []string   `json:"scopes"`
+	CreatedBy      *int       `json:"created_by"`
+	CreatedByKeyID *int       `json:"created_by_key_id"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
 }
 
 // ActiveKeyCap is the per-org soft cap enforced by the POST handler.
 const ActiveKeyCap = 10
+
+// Creator identifies who minted an API key. Exactly one field must be non-nil.
+// UserID populated when a session admin created the key; KeyID populated when a
+// parent API key with keys:admin scope created the key.
+type Creator struct {
+	UserID *int
+	KeyID  *int
+}

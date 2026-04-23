@@ -14,23 +14,29 @@ import (
 var ErrAPIKeyNotFound = stderrors.New("api key not found")
 
 // CreateAPIKey inserts a new active key and returns it (populated id + jti).
+// creator must have exactly one non-nil field (enforced at call site AND by DB CHECK).
 func (s *Storage) CreateAPIKey(
 	ctx context.Context,
 	orgID int,
 	name string,
 	scopes []string,
-	createdBy int,
+	creator apikey.Creator,
 	expiresAt *time.Time,
 ) (*apikey.APIKey, error) {
+	if (creator.UserID == nil) == (creator.KeyID == nil) {
+		return nil, fmt.Errorf("creator must have exactly one of UserID/KeyID set")
+	}
 	var k apikey.APIKey
 	err := s.pool.QueryRow(ctx, `
         INSERT INTO trakrf.api_keys
-            (org_id, name, scopes, created_by, expires_at)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, jti, org_id, name, scopes, created_by, created_at, expires_at, last_used_at, revoked_at
-    `, orgID, name, scopes, createdBy, expiresAt).Scan(
+            (org_id, name, scopes, created_by, created_by_key_id, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, jti, org_id, name, scopes, created_by, created_by_key_id,
+                  created_at, expires_at, last_used_at, revoked_at
+    `, orgID, name, scopes, creator.UserID, creator.KeyID, expiresAt).Scan(
 		&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
-		&k.CreatedBy, &k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
+		&k.CreatedBy, &k.CreatedByKeyID,
+		&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert api_keys: %w", err)
@@ -41,7 +47,8 @@ func (s *Storage) CreateAPIKey(
 // ListActiveAPIKeys returns non-revoked keys for the given org, newest first.
 func (s *Storage) ListActiveAPIKeys(ctx context.Context, orgID int) ([]apikey.APIKey, error) {
 	rows, err := s.pool.Query(ctx, `
-        SELECT id, jti, org_id, name, scopes, created_by, created_at, expires_at, last_used_at, revoked_at
+        SELECT id, jti, org_id, name, scopes, created_by, created_by_key_id,
+               created_at, expires_at, last_used_at, revoked_at
         FROM trakrf.api_keys
         WHERE org_id = $1 AND revoked_at IS NULL
         ORDER BY created_at DESC
@@ -56,7 +63,8 @@ func (s *Storage) ListActiveAPIKeys(ctx context.Context, orgID int) ([]apikey.AP
 		var k apikey.APIKey
 		if err := rows.Scan(
 			&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
-			&k.CreatedBy, &k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
+			&k.CreatedBy, &k.CreatedByKeyID,
+			&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan api_key row: %w", err)
 		}
@@ -84,12 +92,14 @@ func (s *Storage) CountActiveAPIKeys(ctx context.Context, orgID int) (int, error
 func (s *Storage) GetAPIKeyByJTI(ctx context.Context, jti string) (*apikey.APIKey, error) {
 	var k apikey.APIKey
 	err := s.pool.QueryRow(ctx, `
-        SELECT id, jti, org_id, name, scopes, created_by, created_at, expires_at, last_used_at, revoked_at
+        SELECT id, jti, org_id, name, scopes, created_by, created_by_key_id,
+               created_at, expires_at, last_used_at, revoked_at
         FROM trakrf.api_keys
         WHERE jti = $1
     `, jti).Scan(
 		&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
-		&k.CreatedBy, &k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
+		&k.CreatedBy, &k.CreatedByKeyID,
+		&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
 	)
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {

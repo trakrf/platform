@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/apikey"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -34,7 +35,7 @@ func setupAPIKey(t *testing.T) (*storage.Storage, func(), int, string) {
 	require.NoError(t, err)
 
 	key, err := store.CreateAPIKey(context.Background(), orgID, "mw-key",
-		[]string{"assets:read"}, userID, nil)
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
@@ -140,7 +141,7 @@ func TestAPIKeyAuth_DBExpiredKeyRejected(t *testing.T) {
 
 	past := time.Now().Add(-1 * time.Hour)
 	key, err := store.CreateAPIKey(context.Background(), orgID, "expired",
-		[]string{"assets:read"}, userID, &past)
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, &past)
 	require.NoError(t, err)
 
 	// Generate a token WITHOUT exp claim so JWT parser doesn't reject;
