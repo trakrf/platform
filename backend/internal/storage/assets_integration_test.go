@@ -115,10 +115,15 @@ func TestListAssetsFiltered_LocationAndSort(t *testing.T) {
 		{"bbb", "B Asset", &locB.ID},
 		{"ccc", "C Asset", &locA.ID},
 	} {
-		_, err := store.CreateAsset(context.Background(), asset.Asset{
+		created, err := store.CreateAsset(context.Background(), asset.Asset{
 			OrgID: orgID, Identifier: spec.id, Name: spec.name, Type: "asset",
-			CurrentLocationID: spec.loc, ValidFrom: time.Now(), IsActive: true,
+			ValidFrom: time.Now(), IsActive: true,
 		})
+		require.NoError(t, err)
+		_, err = pool.Exec(context.Background(),
+			`INSERT INTO trakrf.asset_scans (org_id, asset_id, location_id, timestamp) VALUES ($1, $2, $3, $4)`,
+			orgID, created.ID, spec.loc, time.Now().UTC(),
+		)
 		require.NoError(t, err)
 	}
 
