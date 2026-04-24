@@ -532,3 +532,34 @@ func TestGetAssetIDsByIdentifiers_EmptyInput(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, got)
 }
+
+func TestAssetsPartialUniqueIndex_BlocksLiveDuplicates(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	insert := func(identifier string) error {
+		_, err := pool.Exec(ctx, `
+			INSERT INTO trakrf.assets (org_id, identifier, name, type, valid_from)
+			VALUES ($1, $2, 'name', 'asset', now())
+		`, orgID, identifier)
+		return err
+	}
+
+	require.NoError(t, insert("part-idx-1"))
+
+	err := insert("part-idx-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate key")
+
+	_, err = pool.Exec(ctx, `
+		UPDATE trakrf.assets SET deleted_at = now()
+		 WHERE org_id = $1 AND identifier = $2
+	`, orgID, "part-idx-1")
+	require.NoError(t, err)
+
+	require.NoError(t, insert("part-idx-1"), "should be allowed after soft-delete")
+}
