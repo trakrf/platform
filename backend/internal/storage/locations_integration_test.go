@@ -382,3 +382,34 @@ func TestListLocationsFiltered_Q(t *testing.T) {
 		assert.Empty(t, items)
 	})
 }
+
+func TestLocationsPartialUniqueIndex_BlocksLiveDuplicates(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	insert := func(identifier string) error {
+		_, err := pool.Exec(ctx, `
+			INSERT INTO trakrf.locations (org_id, identifier, name, valid_from)
+			VALUES ($1, $2, 'name', now())
+		`, orgID, identifier)
+		return err
+	}
+
+	require.NoError(t, insert("part-idx-loc-1"))
+
+	err := insert("part-idx-loc-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate key")
+
+	_, err = pool.Exec(ctx, `
+		UPDATE trakrf.locations SET deleted_at = now()
+		 WHERE org_id = $1 AND identifier = $2
+	`, orgID, "part-idx-loc-1")
+	require.NoError(t, err)
+
+	require.NoError(t, insert("part-idx-loc-1"), "should be allowed after soft-delete")
+}
