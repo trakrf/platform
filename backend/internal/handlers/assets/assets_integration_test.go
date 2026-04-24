@@ -108,7 +108,7 @@ func TestCreateAsset(t *testing.T) {
 		WithName("Test Asset").
 		WithType("asset").
 		WithDescription("Test description").
-		Build()
+		BuildCreateRequest()
 
 	body, err := json.Marshal(requestBody)
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestCreateAsset(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
 	var response CreateAssetResponse
 	err = json.Unmarshal(w.Body.Bytes(), &response)
@@ -566,7 +566,7 @@ func TestFullCRUDWorkflow(t *testing.T) {
 		requestBody := testutil.NewAssetFactory(accountID).
 			WithIdentifier("WF-001").
 			WithName("Workflow Test Asset").
-			Build()
+			BuildCreateRequest()
 
 		body, err := json.Marshal(requestBody)
 		require.NoError(t, err)
@@ -721,7 +721,7 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 			WithIdentifier("tra429-no-parent").
 			WithName("TRA-429 Leak Guard").
 			WithType("asset").
-			Build()
+			BuildCreateRequest()
 
 		body, err := json.Marshal(requestBody)
 		require.NoError(t, err)

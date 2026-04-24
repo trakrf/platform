@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
 type AssetFactory struct {
@@ -72,6 +73,27 @@ func (f *AssetFactory) Build() asset.Asset {
 		ValidTo:     f.ValidTo,
 		IsActive:    f.IsActive,
 	}
+}
+
+// BuildCreateRequest returns the public POST /api/v1/assets request shape.
+// Use this for handler tests that marshal the result as a request body — Build()
+// emits the full DB shape (id, org_id, created_at, ...) which the strict
+// DisallowUnknownFields decoder on the public write path rejects.
+func (f *AssetFactory) BuildCreateRequest() asset.CreateAssetRequest {
+	validFrom := shared.FlexibleDate{Time: f.ValidFrom}
+	req := asset.CreateAssetRequest{
+		Identifier:  f.Identifier,
+		Name:        f.Name,
+		Type:        f.Type,
+		Description: f.Description,
+		ValidFrom:   &validFrom,
+		IsActive:    &f.IsActive,
+	}
+	if f.ValidTo != nil {
+		validTo := shared.FlexibleDate{Time: *f.ValidTo}
+		req.ValidTo = &validTo
+	}
+	return req
 }
 
 func (f *AssetFactory) BuildBatch(count int) []asset.Asset {
