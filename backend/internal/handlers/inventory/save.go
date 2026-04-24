@@ -102,9 +102,14 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	hasLocID := request.LocationID > 0
 	hasLocIdent := request.LocationIdentifier != nil && *request.LocationIdentifier != ""
 	if !hasLocID && !hasLocIdent {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InventorySaveFailed,
-			"location_identifier or location_id is required", requestID)
+		msg := "location_identifier or location_id is required"
+		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			apierrors.InventorySaveFailed, msg, requestID,
+			[]modelerrors.FieldError{{
+				Field:   "location_identifier",
+				Code:    "required",
+				Message: msg,
+			}})
 		return
 	}
 
@@ -112,15 +117,25 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	hasAssetIDs := len(request.AssetIDs) > 0
 	hasAssetIdents := len(request.AssetIdentifiers) > 0
 	if !hasAssetIDs && !hasAssetIdents {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InventorySaveFailed,
-			"asset_identifiers or asset_ids is required", requestID)
+		msg := "asset_identifiers or asset_ids is required"
+		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			apierrors.InventorySaveFailed, msg, requestID,
+			[]modelerrors.FieldError{{
+				Field:   "asset_identifiers",
+				Code:    "required",
+				Message: msg,
+			}})
 		return
 	}
 	if hasAssetIDs && hasAssetIdents {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InventorySaveFailed,
-			"specify either asset_identifiers or asset_ids, not both", requestID)
+		msg := "specify either asset_identifiers or asset_ids, not both"
+		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			apierrors.InventorySaveFailed, msg, requestID,
+			[]modelerrors.FieldError{{
+				Field:   "asset_identifiers",
+				Code:    "invalid_value",
+				Message: msg,
+			}})
 		return
 	}
 
@@ -133,15 +148,25 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if loc == nil {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.InventorySaveFailed,
-				fmt.Sprintf("location_identifier %q not found", *request.LocationIdentifier), requestID)
+			msg := fmt.Sprintf("location_identifier %q not found", *request.LocationIdentifier)
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.InventorySaveFailed, msg, requestID,
+				[]modelerrors.FieldError{{
+					Field:   "location_identifier",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		if hasLocID && request.LocationID != loc.ID {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.InventorySaveFailed,
-				"location_identifier and location_id disagree", requestID)
+			msg := "location_identifier and location_id disagree"
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.InventorySaveFailed, msg, requestID,
+				[]modelerrors.FieldError{{
+					Field:   "location_identifier",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		locationID = loc.ID
@@ -165,9 +190,17 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(missing) > 0 {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.InventorySaveFailed,
-				fmt.Sprintf("asset_identifier(s) not found: %s", strings.Join(missing, ", ")), requestID)
+			msg := fmt.Sprintf("asset_identifier(s) not found: %s", strings.Join(missing, ", "))
+			fields := make([]modelerrors.FieldError, 0, len(missing))
+			for _, m := range missing {
+				fields = append(fields, modelerrors.FieldError{
+					Field:   "asset_identifiers",
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("asset_identifier %q not found", m),
+				})
+			}
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.InventorySaveFailed, msg, requestID, fields)
 			return
 		}
 		assetIDs = ids

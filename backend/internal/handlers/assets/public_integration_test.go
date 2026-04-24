@@ -193,3 +193,57 @@ func TestGetAssetByIdentifier_CrossOrgReturns404(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 }
+
+// TRA-478: query-param validation must return validation_error + fields[]
+// (previously bad_request with no fields). Covers the three mismatch cases
+// called out in the ticket for the assets list endpoint.
+func TestListAssets_APIKey_InvalidQueryParams_EnvelopeIsValidationError(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-tra478")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:read"})
+	r := buildAssetsPublicRouter(store)
+
+	cases := []struct {
+		name      string
+		query     string
+		field     string
+		code      string
+		msgSubstr string
+	}{
+		{"limit too large", "?limit=500", "limit", "too_large", "200"},
+		{"unknown sort", "?sort=bogus", "sort", "invalid_value", "bogus"},
+		{"unknown filter", "?mystery=1", "mystery", "invalid_value", "mystery"},
+		{"invalid bool", "?is_active=maybe", "is_active", "invalid_value", "'true' or 'false'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/assets"+tc.query, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field   string `json:"field"`
+						Code    string `json:"code"`
+						Message string `json:"message"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type,
+				"query-param validation must match docs (type=validation_error), not the old bad_request shape")
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, tc.code, resp.Error.Fields[0].Code)
+			assert.Contains(t, resp.Error.Fields[0].Message, tc.msgSubstr)
+		})
+	}
+}

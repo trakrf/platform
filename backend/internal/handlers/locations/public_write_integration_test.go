@@ -748,7 +748,17 @@ func TestCreateLocation_APIKey_ParentIdentifier_NotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), "not found")
+
+	// TRA-478: orphan FK must emit validation_error + fields[] so clients can
+	// branch on type + fields[].code like any other body validation failure.
+	var resp modelerrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, string(modelerrors.ErrValidation), resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "parent_identifier", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Contains(t, resp.Error.Fields[0].Message, "ghost")
+	assert.Contains(t, resp.Error.Fields[0].Message, "not found")
 }
 
 func TestCreateLocation_APIKey_UnknownField_Rejected(t *testing.T) {

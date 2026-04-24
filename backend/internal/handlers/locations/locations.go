@@ -83,15 +83,25 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if parent == nil {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.LocationCreateFailed,
-				fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier), requestID)
+			msg := fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier)
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.LocationCreateFailed, msg, requestID,
+				[]modelerrors.FieldError{{
+					Field:   "parent_identifier",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		if request.ParentLocationID != nil && *request.ParentLocationID != parent.ID {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.LocationCreateFailed,
-				"parent_identifier and parent_location_id disagree", requestID)
+			msg := "parent_identifier and parent_location_id disagree"
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.LocationCreateFailed, msg, requestID,
+				[]modelerrors.FieldError{{
+					Field:   "parent_identifier",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		request.ParentLocationID = &parent.ID
@@ -211,15 +221,25 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			return
 		}
 		if parent == nil {
-			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.LocationUpdateFailed,
-				fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier), reqID)
+			msg := fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier)
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.LocationUpdateFailed, msg, reqID,
+				[]modelerrors.FieldError{{
+					Field:   "parent_identifier",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		if request.ParentLocationID != nil && *request.ParentLocationID != parent.ID {
-			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.LocationUpdateFailed,
-				"parent_identifier and parent_location_id disagree", reqID)
+			msg := "parent_identifier and parent_location_id disagree"
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.LocationUpdateFailed, msg, reqID,
+				[]modelerrors.FieldError{{
+					Field:   "parent_identifier",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		request.ParentLocationID = &parent.ID
@@ -365,8 +385,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		Sorts:       []string{"path", "identifier", "name", "created_at"},
 	})
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid list parameters", err.Error(), reqID)
+		httputil.RespondListParamError(w, req, err, reqID)
 		return
 	}
 

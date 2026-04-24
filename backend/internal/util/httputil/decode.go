@@ -77,20 +77,27 @@ func DecodeJSONStrictWithNulls(r *http.Request, dst any) (map[string]struct{}, e
 }
 
 // RespondDecodeError writes a 400 with a stable, human-safe detail string.
-// Use this as the failure branch partner of DecodeJSON.
-// If the error is a DisallowUnknownFields error, the detail includes the field name.
+// Use this as the failure branch partner of DecodeJSON. An unknown-field
+// error surfaces as a validation_error keyed on the offending field so
+// clients can branch on type+fields[].code like any other body failure.
+// Other decode failures (syntax, truncated input) stay as bad_request
+// because there is no field name to attach.
 func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
-	detail := "Request body is not valid JSON"
-	// Extract field name from json.SyntaxError for unknown field errors
 	if err != nil {
-		errStr := err.Error()
-		// Match "json: unknown field "fieldname"" pattern
 		re := regexp.MustCompile(`unknown field "([^"]+)"`)
-		if matches := re.FindStringSubmatch(errStr); len(matches) > 1 {
+		if matches := re.FindStringSubmatch(err.Error()); len(matches) > 1 {
 			fieldName := matches[1]
-			detail = fmt.Sprintf("Request body is not valid JSON: unknown field %q", fieldName)
+			msg := fmt.Sprintf("unknown field %q in request body", fieldName)
+			WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
+				"Invalid request", msg, requestID,
+				[]apierrors.FieldError{{
+					Field:   fieldName,
+					Code:    "invalid_value",
+					Message: msg,
+				}})
+			return
 		}
 	}
 	WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
-		"Bad Request", detail, requestID)
+		"Bad Request", "Request body is not valid JSON", requestID)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -142,14 +143,15 @@ func TestSave_NeitherLocationFieldProvided(t *testing.T) {
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	assert.Equal(t, "bad_request", response.Error.Type)
+	assert.Equal(t, "validation_error", response.Error.Type)
 	assert.Contains(t, response.Error.Detail, "location_identifier")
 }
 
 func TestSave_EmptyAssetIDs(t *testing.T) {
 	// JSON-marshalling SaveRequest with omitempty drops the empty slice, so the
 	// decoded request has nil AssetIDs. The cross-field check fires before the
-	// struct validator can reject the empty slice, returning bad_request.
+	// struct validator can reject the empty slice, returning a
+	// validation_error naming asset_identifiers as required.
 	handler := NewHandler(&mockInventoryStorage{})
 
 	body := SaveRequest{
@@ -184,7 +186,7 @@ func TestSave_EmptyAssetIDs(t *testing.T) {
 	}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "bad_request", response.Error.Type)
+	assert.Equal(t, "validation_error", response.Error.Type)
 }
 
 func TestSave_RouteRegistration(t *testing.T) {
@@ -423,7 +425,8 @@ func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
 		"must not leak encoding/json internals")
 }
 
-// Bug reproduction: TRA-407 item 2 — cross-field validation replaces old fields[] envelope.
+// Bug reproduction: TRA-478 — cross-field errors surface as validation_error
+// with fields[] so clients have a single branch on type + fields[].code.
 func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	orgID := 1
 	claims := &jwt.Claims{UserID: 1, Email: "test@example.com", CurrentOrgID: &orgID}
@@ -439,13 +442,17 @@ func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	var body struct {
 		Error struct {
-			Type   string `json:"type"`
-			Detail string `json:"detail"`
+			Type   string                   `json:"type"`
+			Detail string                   `json:"detail"`
+			Fields []modelerrors.FieldError `json:"fields"`
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	assert.Equal(t, "bad_request", body.Error.Type)
+	assert.Equal(t, "validation_error", body.Error.Type)
 	assert.Contains(t, body.Error.Detail, "location_identifier")
+	require.Len(t, body.Error.Fields, 1)
+	assert.Equal(t, "location_identifier", body.Error.Fields[0].Field)
+	assert.Equal(t, "required", body.Error.Fields[0].Code)
 }
 
 // --- Handler-level tests using mockInventoryStorage ---
