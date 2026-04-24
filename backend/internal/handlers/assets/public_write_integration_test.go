@@ -808,3 +808,33 @@ func TestCreateAsset_AfterSoftDelete_ReusesIdentifier(t *testing.T) {
 	assert.Equal(t, "reuse-asset-1", data["identifier"])
 	assert.Equal(t, "v2", data["name"])
 }
+
+func TestDeleteAsset_SecondDeleteReturns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-delete-idempotent")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"idem-asset-1","name":"x","type":"asset"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	d1 := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/idem-asset-1", nil)
+	d1.Header.Set("Authorization", "Bearer "+token)
+	d1w := httptest.NewRecorder()
+	r.ServeHTTP(d1w, d1)
+	require.Equal(t, http.StatusNoContent, d1w.Code)
+
+	d2 := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/idem-asset-1", nil)
+	d2.Header.Set("Authorization", "Bearer "+token)
+	d2w := httptest.NewRecorder()
+	r.ServeHTTP(d2w, d2)
+	require.Equal(t, http.StatusNotFound, d2w.Code, d2w.Body.String())
+}
