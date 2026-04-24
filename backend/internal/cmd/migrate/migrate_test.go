@@ -4,12 +4,14 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/trakrf/platform/backend/internal/buildinfo"
 )
 
 func TestRun_MissingPGURL(t *testing.T) {
 	t.Setenv("PG_URL", "")
 
-	err := Run(context.Background(), "test")
+	err := Run(context.Background(), buildinfo.Info{Version: "test"})
 	if err == nil {
 		t.Fatal("expected error when PG_URL is empty, got nil")
 	}

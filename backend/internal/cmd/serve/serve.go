@@ -10,6 +10,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/trakrf/platform/backend/internal/buildinfo"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -34,7 +35,7 @@ import (
 // frontendFS is the embedded React bundle. The dispatcher owns the go:embed
 // directive because its path (frontend/dist) cannot be reached from this
 // package's subtree.
-func Run(ctx context.Context, version string, frontendFS fs.FS) error {
+func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	startTime := time.Now()
 	log := logger.Get()
 
@@ -42,7 +43,7 @@ func Run(ctx context.Context, version string, frontendFS fs.FS) error {
 		err := sentry.Init(sentry.ClientOptions{
 			Dsn:           dsn,
 			Environment:   os.Getenv("APP_ENV"),
-			Release:       version,
+			Release:       info.Version,
 			EnableTracing: false,
 		})
 		if err != nil {
@@ -79,7 +80,7 @@ func Run(ctx context.Context, version string, frontendFS fs.FS) error {
 	inventoryHandler := inventoryhandler.NewHandler(store)
 	reportsHandler := reportshandler.NewHandler(store)
 	lookupHandler := lookuphandler.NewHandler(store)
-	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), version, startTime)
+	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
@@ -97,7 +98,12 @@ func Run(ctx context.Context, version string, frontendFS fs.FS) error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		log.Info().Str("port", port).Str("version", version).Msg("Server starting")
+		log.Info().
+			Str("port", port).
+			Str("version", info.Version).
+			Str("commit", info.Commit).
+			Str("tag", info.Tag).
+			Msg("Server starting")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}

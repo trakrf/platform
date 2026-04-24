@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/migrations"
 )
@@ -22,7 +23,7 @@ import (
 // Run applies all pending embedded migrations to the database identified
 // by the PG_URL environment variable, then returns. A nil return means
 // success (including the "no pending migrations" case).
-func Run(ctx context.Context, version string) error {
+func Run(ctx context.Context, info buildinfo.Info) error {
 	log := logger.Get()
 
 	pgURL := os.Getenv("PG_URL")
@@ -64,7 +65,7 @@ func Run(ctx context.Context, version string) error {
 	}
 	defer m.Close()
 
-	log.Info().Str("version", version).Msg("Starting migrations")
+	log.Info().Str("version", info.Version).Str("commit", info.Commit).Msg("Starting migrations")
 
 	err = m.Up()
 	switch err {
