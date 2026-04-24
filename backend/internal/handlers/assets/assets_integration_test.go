@@ -65,6 +65,21 @@ func createTestLocation(t *testing.T, pool *pgxpool.Pool, orgID int, name string
 	return id
 }
 
+// createTestLocationWithDesc is like createTestLocation but writes an empty
+// description so pgx scans succeed in code paths that route the row through
+// GetLocationByIdentifier (which targets a non-nullable string).
+func createTestLocationWithDesc(t *testing.T, pool *pgxpool.Pool, orgID int, name string) int {
+	t.Helper()
+	var id int
+	err := pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations (org_id, identifier, name, description, is_active)
+		VALUES ($1, $2, $3, '', true)
+		RETURNING id
+	`, orgID, "LOC-"+name, name).Scan(&id)
+	require.NoError(t, err)
+	return id
+}
+
 // createTestScan inserts an asset_scan row at the given timestamp.
 func createTestScan(t *testing.T, pool *pgxpool.Pool, orgID, assetID int, locationID *int, ts time.Time) {
 	t.Helper()
@@ -719,7 +734,10 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 		data := assertNoLeaks(t, w.Body.Bytes())
-		assert.NotContains(t, data, "current_location", "current_location must be omitted entirely when no parent")
+		// TRA-477: current_location is always present in the response; null when
+		// the asset has no explicit parent and no scan-inferred location.
+		assert.Contains(t, data, "current_location", "current_location must always be present")
+		assert.Nil(t, data["current_location"], "current_location should be null when no parent and no scans")
 	})
 
 	t.Run("POST_WithParent", func(t *testing.T) {
@@ -1177,4 +1195,183 @@ func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	wReadd := httptest.NewRecorder()
 	router.ServeHTTP(wReadd, reqReadd)
 	require.Equal(t, http.StatusCreated, wReadd.Code, wReadd.Body.String())
+}
+
+// --- TRA-477: current_location natural identifier ---
+
+func TestCreateAsset_CurrentLocation_HappyPath(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	createTestLocationWithDesc(t, pool, accountID, "TRA477WHS")
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	body := `{"identifier":"TRA477-A1","name":"Asset","current_location":"LOC-TRA477WHS"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var resp struct {
+		Data struct {
+			Identifier      string  `json:"identifier"`
+			CurrentLocation *string `json:"current_location"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Data.CurrentLocation, "current_location should be set from natural identifier")
+	assert.Equal(t, "LOC-TRA477WHS", *resp.Data.CurrentLocation)
+}
+
+func TestCreateAsset_CurrentLocation_NotFound(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	body := `{"identifier":"TRA477-A2","name":"Asset","current_location":"DOES-NOT-EXIST"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "not found")
+}
+
+func TestUpdateAsset_CurrentLocation_HappyPath(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	createTestLocationWithDesc(t, pool, accountID, "TRA477UPD")
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	// Create without a location.
+	createBody := `{"identifier":"TRA477-UA1","name":"Asset"}`
+	creq := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(createBody))
+	creq.Header.Set("Content-Type", "application/json")
+	creq = withOrgContext(creq, accountID)
+	cw := httptest.NewRecorder()
+	router.ServeHTTP(cw, creq)
+	require.Equal(t, http.StatusCreated, cw.Code, cw.Body.String())
+
+	// PUT with current_location natural identifier.
+	updateBody := `{"current_location":"LOC-TRA477UPD"}`
+	ureq := httptest.NewRequest(http.MethodPut, "/api/v1/assets/TRA477-UA1", bytes.NewBufferString(updateBody))
+	ureq.Header.Set("Content-Type", "application/json")
+	ureq = withOrgContext(ureq, accountID)
+	uw := httptest.NewRecorder()
+	router.ServeHTTP(uw, ureq)
+	require.Equal(t, http.StatusOK, uw.Code, uw.Body.String())
+
+	var resp struct {
+		Data struct {
+			CurrentLocation *string `json:"current_location"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(uw.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Data.CurrentLocation)
+	assert.Equal(t, "LOC-TRA477UPD", *resp.Data.CurrentLocation)
+}
+
+func TestGetAsset_LocationInferredFromLatestScan(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	locID := createTestLocationWithDesc(t, pool, accountID, "TRA477SCAN")
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+	// Wire the identifier-keyed GET (not registered by setupTestRouter).
+	router.Get("/api/v1/assets/{identifier}", handler.GetAssetByIdentifier)
+
+	// Seed asset directly (no explicit current_location_id).
+	a, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: accountID, Identifier: "TRA477-SA1", Name: "Scan Asset", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Insert a scan so asset_scans has a row pointing at the location; the
+	// asset's own current_location_id remains NULL.
+	createTestScan(t, pool, accountID, a.ID, &locID, time.Now())
+
+	// GET single asset should infer current_location from the latest scan.
+	greq := httptest.NewRequest(http.MethodGet, "/api/v1/assets/TRA477-SA1", nil)
+	greq = withOrgContext(greq, accountID)
+	gw := httptest.NewRecorder()
+	router.ServeHTTP(gw, greq)
+	require.Equal(t, http.StatusOK, gw.Code, gw.Body.String())
+
+	var resp struct {
+		Data struct {
+			CurrentLocation *string `json:"current_location"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(gw.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Data.CurrentLocation,
+		"current_location must be inferred from the latest scan when current_location_id is NULL")
+	assert.Equal(t, "LOC-TRA477SCAN", *resp.Data.CurrentLocation)
+}
+
+func TestCreateAsset_CurrentLocation_Disagree(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	locID := createTestLocationWithDesc(t, pool, accountID, "TRA477WHS2")
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	// Send a current_location_id that deliberately disagrees with current_location.
+	body := fmt.Sprintf(
+		`{"identifier":"TRA477-A3","name":"Asset","current_location":"LOC-TRA477WHS2","current_location_id":%d}`,
+		locID+99999,
+	)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, accountID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "disagree")
 }

@@ -14,7 +14,7 @@ type PublicAssetView struct {
 	Name            string                 `json:"name"`
 	Type            string                 `json:"type,omitempty"`
 	Description     string                 `json:"description,omitempty"`
-	CurrentLocation *string                `json:"current_location,omitempty"`
+	CurrentLocation *string                `json:"current_location"`
 	Metadata        any                    `json:"metadata,omitempty"`
 	IsActive        bool                   `json:"is_active"`
 	ValidFrom       time.Time              `json:"valid_from"`

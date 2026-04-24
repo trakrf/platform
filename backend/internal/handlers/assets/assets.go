@@ -85,6 +85,30 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		request.ValidFrom = &fd
 	}
 
+	// Resolve current_location → current_location_id (TRA-477). Empty string
+	// is treated as nil. Parallels parent_identifier handling on locations.
+	if request.CurrentLocation != nil && *request.CurrentLocation != "" {
+		loc, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, *request.CurrentLocation)
+		if err != nil {
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+				apierrors.AssetCreateFailed, err.Error(), requestID)
+			return
+		}
+		if loc == nil {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.AssetCreateFailed,
+				fmt.Sprintf("current_location %q not found", *request.CurrentLocation), requestID)
+			return
+		}
+		if request.CurrentLocationID != nil && *request.CurrentLocationID != loc.ID {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.AssetCreateFailed,
+				"current_location and current_location_id disagree", requestID)
+			return
+		}
+		request.CurrentLocationID = &loc.ID
+	}
+
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, r, err, requestID)
 		return
@@ -185,6 +209,29 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, req, err, reqID)
 		return
+	}
+
+	// Resolve current_location → current_location_id (TRA-477).
+	if request.CurrentLocation != nil && *request.CurrentLocation != "" {
+		loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, *request.CurrentLocation)
+		if err != nil {
+			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+				apierrors.AssetUpdateFailed, err.Error(), reqID)
+			return
+		}
+		if loc == nil {
+			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.AssetUpdateFailed,
+				fmt.Sprintf("current_location %q not found", *request.CurrentLocation), reqID)
+			return
+		}
+		if request.CurrentLocationID != nil && *request.CurrentLocationID != loc.ID {
+			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.AssetUpdateFailed,
+				"current_location and current_location_id disagree", reqID)
+			return
+		}
+		request.CurrentLocationID = &loc.ID
 	}
 
 	result, err := handler.storage.UpdateAsset(req.Context(), orgID, id, request)
