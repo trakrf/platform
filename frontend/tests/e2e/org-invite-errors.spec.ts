@@ -79,11 +79,10 @@ test.describe('Invitation Error Handling', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await signupTestUser(page, testUserEmail, testUserPassword);
 
-    // Navigate to accept-invite with invalid token
+    // Navigate to accept-invite with invalid token.
+    // New UX (2026-01-14): invitation-info fetch fails → "Invalid Invitation"
+    // error screen renders immediately; no accept-invite-button to click.
     await page.goto('/#accept-invite?token=invalid-token-123');
-
-    // Try to accept
-    await page.locator('[data-testid="accept-invite-button"]').click();
 
     // Should show error (use specific selector to avoid matching icons)
     await expect(
@@ -113,9 +112,9 @@ test.describe('Invitation Error Handling', () => {
     // Accept via API
     await acceptInviteViaAPI(page, token);
 
-    // Now try to accept same token via UI
+    // Navigate to accept-invite with already-used token.
+    // Invitation-info fetch rejects → error screen renders on nav.
     await page.goto(`/#accept-invite?token=${token}`);
-    await page.locator('[data-testid="accept-invite-button"]').click();
 
     // Should show error (already used)
     await expect(
@@ -145,9 +144,9 @@ test.describe('Invitation Error Handling', () => {
     await clearAuthState(page);
     await signupTestUser(page, inviteeEmail, inviteePassword);
 
-    // Try to use the cancelled token
+    // Navigate to accept-invite with cancelled token.
+    // Invitation-info fetch rejects → error screen renders on nav.
     await page.goto(`/#accept-invite?token=${token}`);
-    await page.locator('[data-testid="accept-invite-button"]').click();
 
     // Should show error
     await expect(

@@ -47,9 +47,15 @@ test.describe('Redirect Flow - Token Preservation', () => {
   test('login redirect preserves token in URL params', async ({ page }) => {
     const id = uniqueId();
     const inviteeEmail = `redirect-login-${id}@example.com`;
+    const inviteePassword = 'TestPassword123!';
+
+    // Pre-signup invitee so user_exists=true triggers the login redirect path.
+    await page.goto('/');
+    await clearAuthState(page);
+    await page.reload({ waitUntil: 'networkidle' });
+    await signupTestUser(page, inviteeEmail, inviteePassword);
 
     // Setup as admin
-    await page.goto('/');
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, adminEmail, adminPassword);
@@ -64,8 +70,9 @@ test.describe('Redirect Flow - Token Preservation', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Click "Sign In" link
-    await page.locator('a:has-text("Sign In")').click();
+    // AcceptInviteScreen auto-redirects to #login (existing user path) with
+    // token+returnTo preserved in URL hash params.
+    await page.waitForURL(/#login.*returnTo=accept-invite.*token=/, { timeout: 10000 });
 
     // Verify URL contains token
     const currentUrl = page.url();
@@ -84,7 +91,7 @@ test.describe('Redirect Flow - Token Preservation', () => {
     await loginTestUser(page, adminEmail, adminPassword);
     await switchOrgViaAPI(page, testOrgId);
 
-    // Create invitation
+    // Create invitation - invitee does not exist, triggers signup redirect path.
     const inviteId = await createInviteViaAPI(page, testOrgId, inviteeEmail, 'operator');
     const token = await getInviteToken(page, inviteId);
 
@@ -93,8 +100,9 @@ test.describe('Redirect Flow - Token Preservation', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Click "Create Account" link
-    await page.locator('a:has-text("Create Account")').click();
+    // AcceptInviteScreen auto-redirects to #signup (new user path) with
+    // token+returnTo preserved in URL hash params.
+    await page.waitForURL(/#signup.*returnTo=accept-invite.*token=/, { timeout: 10000 });
 
     // Verify URL contains token
     const currentUrl = page.url();
@@ -107,8 +115,15 @@ test.describe('Redirect Flow - Token Preservation', () => {
     const inviteeEmail = `redirect-return-${id}@example.com`;
     const inviteePassword = 'TestPassword123!';
 
-    // Setup as admin
+    // Pre-signup invitee so post-auth-redirect path goes through #login,
+    // which handleAuthRedirect loops back to accept-invite (signup auto-accepts
+    // and lands on #home, bypassing accept-invite — not this test's subject).
     await page.goto('/');
+    await clearAuthState(page);
+    await page.reload({ waitUntil: 'networkidle' });
+    await signupTestUser(page, inviteeEmail, inviteePassword);
+
+    // Setup as admin
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, adminEmail, adminPassword);
@@ -123,15 +138,15 @@ test.describe('Redirect Flow - Token Preservation', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Go through signup
-    await page.locator('a:has-text("Create Account")').click();
-    await page.locator('input#email').fill(inviteeEmail);
-    await page.locator('input#orgName').fill(`Personal Org ${id}`);
+    // Auto-redirect lands on #login with email pre-filled from URL param
+    await page.waitForURL(/#login.*returnTo=accept-invite/, { timeout: 10000 });
+
+    // Complete login (email already populated from URL)
     await page.locator('input#password').fill(inviteePassword);
     await page.locator('button[type="submit"]').click();
 
-    // Wait for redirect back to accept-invite
-    await page.waitForURL(/accept-invite/, { timeout: 10000 });
+    // handleAuthRedirect returns to accept-invite with token preserved
+    await page.waitForURL(/#accept-invite.*token=/, { timeout: 10000 });
 
     // Verify token is in URL
     const currentUrl = page.url();
@@ -143,8 +158,14 @@ test.describe('Redirect Flow - Token Preservation', () => {
     const inviteeEmail = `redirect-extract-${id}@example.com`;
     const inviteePassword = 'TestPassword123!';
 
-    // Setup as admin
+    // Pre-signup invitee to force login-path redirect, which returns to
+    // accept-invite and lets us click accept to prove token extraction works.
     await page.goto('/');
+    await clearAuthState(page);
+    await page.reload({ waitUntil: 'networkidle' });
+    await signupTestUser(page, inviteeEmail, inviteePassword);
+
+    // Setup as admin
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, adminEmail, adminPassword);
@@ -159,15 +180,13 @@ test.describe('Redirect Flow - Token Preservation', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Go through signup
-    await page.locator('a:has-text("Create Account")').click();
-    await page.locator('input#email').fill(inviteeEmail);
-    await page.locator('input#orgName').fill(`Personal Org ${id}`);
+    // Auto-redirect to login, complete login
+    await page.waitForURL(/#login.*returnTo=accept-invite/, { timeout: 10000 });
     await page.locator('input#password').fill(inviteePassword);
     await page.locator('button[type="submit"]').click();
 
-    // Wait for redirect back to accept-invite
-    await page.waitForURL(/accept-invite/, { timeout: 10000 });
+    // handleAuthRedirect returns to accept-invite with token
+    await page.waitForURL(/#accept-invite.*token=/, { timeout: 10000 });
 
     // Accept the invitation - this proves the token was extracted correctly
     await page.locator('[data-testid="accept-invite-button"]').click();
