@@ -56,15 +56,19 @@ test.describe('Pagination', () => {
   });
 
   test('should paginate large datasets correctly', async () => {
-    // Inject test data directly into store
+    // Inject test data directly into store (requires DEV-only __ZUSTAND_STORES__)
     const testTags = generateTestTags(150);
-    await sharedPage.evaluate((tags) => {
+    const injected = await sharedPage.evaluate((tags) => {
       const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      if (tagStore) {
-        tags.forEach(tag => tagStore.getState().addTag(tag));
-      }
+      if (!tagStore) return false;
+      tags.forEach(tag => tagStore.getState().addTag(tag));
+      return true;
     }, testTags);
-    
+
+    // __ZUSTAND_STORES__ is only exposed under import.meta.env.DEV (frontend/src/main.tsx),
+    // so this test can't seed tags on production/preview builds.
+    test.skip(!injected, 'requires DEV-mode __ZUSTAND_STORES__ to seed tags');
+
     // Wait for UI to update
     await sharedPage.waitForTimeout(500);
     

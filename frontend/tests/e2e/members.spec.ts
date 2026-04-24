@@ -64,10 +64,10 @@ test.describe('Members Screen (TRA-181)', () => {
     expect(pageContent).not.toContain('TypeError');
 
     // Should see either:
-    // - The members table (if members exist)
+    // - The members list (if members exist)
     // - OR "No members" empty state
     // - OR loading state that eventually resolves
-    const membersTable = page.locator('table');
+    const membersList = page.getByTestId('members-list');
     const emptyState = page.getByText(/no members|add your first member/i);
     const loadingState = page.getByText(/loading/i);
 
@@ -76,11 +76,11 @@ test.describe('Members Screen (TRA-181)', () => {
       // Loading might have already finished, that's ok
     });
 
-    // Either table or empty state should be visible (but not an error)
-    const hasTable = await membersTable.isVisible();
+    // Either list or empty state should be visible (but not an error)
+    const hasList = await membersList.isVisible();
     const hasEmptyState = await emptyState.isVisible().catch(() => false);
 
-    expect(hasTable || hasEmptyState).toBeTruthy();
+    expect(hasList || hasEmptyState).toBeTruthy();
   });
 
   test('should render invitations section without null crash', async ({ page }) => {

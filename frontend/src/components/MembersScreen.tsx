@@ -171,7 +171,7 @@ export default function MembersScreen() {
 
         {/* Members Table */}
         {!isLoading && members.length > 0 && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" data-testid="members-list">
             <table className="w-full">
               <thead>
                 <tr className="text-left text-gray-400 text-sm border-b border-gray-700">
