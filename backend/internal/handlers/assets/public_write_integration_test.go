@@ -838,3 +838,34 @@ func TestDeleteAsset_SecondDeleteReturns404(t *testing.T) {
 	r.ServeHTTP(d2w, d2)
 	require.Equal(t, http.StatusNotFound, d2w.Code, d2w.Body.String())
 }
+
+func TestUpdateAsset_RenameToExistingIdentifier_Returns409(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-rename-conflict")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	mkPost := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-a","name":"a","type":"asset"}`).Code)
+	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-b","name":"b","type":"asset"}`).Code)
+
+	upBody := `{"identifier":"rn-a"}`
+	upReq := httptest.NewRequest(http.MethodPut, "/api/v1/assets/rn-b", bytes.NewBufferString(upBody))
+	upReq.Header.Set("Authorization", "Bearer "+token)
+	upReq.Header.Set("Content-Type", "application/json")
+	upW := httptest.NewRecorder()
+	r.ServeHTTP(upW, upReq)
+
+	require.Equal(t, http.StatusConflict, upW.Code, upW.Body.String())
+}

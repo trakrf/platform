@@ -1189,3 +1189,34 @@ func TestDeleteLocation_SecondDeleteReturns404(t *testing.T) {
 	r.ServeHTTP(d2w, d2)
 	require.Equal(t, http.StatusNotFound, d2w.Code, d2w.Body.String())
 }
+
+func TestUpdateLocation_RenameToExistingIdentifier_Returns409(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-write-rename-conflict")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	mkPost := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-loc-a","name":"a"}`).Code)
+	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-loc-b","name":"b"}`).Code)
+
+	upBody := `{"identifier":"rn-loc-a"}`
+	upReq := httptest.NewRequest(http.MethodPut, "/api/v1/locations/rn-loc-b", bytes.NewBufferString(upBody))
+	upReq.Header.Set("Authorization", "Bearer "+token)
+	upReq.Header.Set("Content-Type", "application/json")
+	upW := httptest.NewRecorder()
+	r.ServeHTTP(upW, upReq)
+
+	require.Equal(t, http.StatusConflict, upW.Code, upW.Body.String())
+}
