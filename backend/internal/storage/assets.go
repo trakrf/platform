@@ -309,21 +309,20 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 		}
 	}
 
+	// TRA-475: BatchCreateAssets is documented and tested as all-or-nothing
+	// insert — any duplicate identifier rolls the whole transaction back.
+	// The legacy ON CONFLICT clause referenced a non-existent unique index,
+	// so it never actually upserted; conflicts surfaced as "no matching
+	// unique constraint" errors that the substring sniff below caught.
+	// Now that the partial index exists, plain INSERT is the right shape:
+	// the partial UNIQUE(org_id, identifier) WHERE deleted_at IS NULL fires
+	// on duplicate, the substring sniff converts it to a row-numbered
+	// error, and WithOrgTx rolls the transaction back. Upsert-on-bulk-import
+	// is intentionally out of scope (see TRA-475 spec).
 	query := `
 		INSERT INTO trakrf.assets
 		(name, identifier, type, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (org_id, identifier) DO UPDATE SET
-			name = EXCLUDED.name,
-			type = EXCLUDED.type,
-			description = EXCLUDED.description,
-			current_location_id = EXCLUDED.current_location_id,
-			valid_from = EXCLUDED.valid_from,
-			valid_to = EXCLUDED.valid_to,
-			metadata = EXCLUDED.metadata,
-			is_active = EXCLUDED.is_active,
-			deleted_at = NULL,
-			updated_at = NOW()
 	`
 
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
