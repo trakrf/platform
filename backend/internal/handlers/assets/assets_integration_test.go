@@ -1254,6 +1254,49 @@ func TestCreateAsset_CurrentLocation_NotFound(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "not found")
 }
 
+func TestUpdateAsset_CurrentLocation_HappyPath(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	createTestLocationWithDesc(t, pool, accountID, "TRA477UPD")
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	// Create without a location.
+	createBody := `{"identifier":"TRA477-UA1","name":"Asset"}`
+	creq := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(createBody))
+	creq.Header.Set("Content-Type", "application/json")
+	creq = withOrgContext(creq, accountID)
+	cw := httptest.NewRecorder()
+	router.ServeHTTP(cw, creq)
+	require.Equal(t, http.StatusCreated, cw.Code, cw.Body.String())
+
+	// PUT with current_location natural identifier.
+	updateBody := `{"current_location":"LOC-TRA477UPD"}`
+	ureq := httptest.NewRequest(http.MethodPut, "/api/v1/assets/TRA477-UA1", bytes.NewBufferString(updateBody))
+	ureq.Header.Set("Content-Type", "application/json")
+	ureq = withOrgContext(ureq, accountID)
+	uw := httptest.NewRecorder()
+	router.ServeHTTP(uw, ureq)
+	require.Equal(t, http.StatusOK, uw.Code, uw.Body.String())
+
+	var resp struct {
+		Data struct {
+			CurrentLocation *string `json:"current_location"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(uw.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Data.CurrentLocation)
+	assert.Equal(t, "LOC-TRA477UPD", *resp.Data.CurrentLocation)
+}
+
 func TestCreateAsset_CurrentLocation_Disagree(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()

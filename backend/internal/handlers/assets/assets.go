@@ -211,6 +211,29 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
+	// Resolve current_location → current_location_id (TRA-477).
+	if request.CurrentLocation != nil && *request.CurrentLocation != "" {
+		loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, *request.CurrentLocation)
+		if err != nil {
+			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+				apierrors.AssetUpdateFailed, err.Error(), reqID)
+			return
+		}
+		if loc == nil {
+			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.AssetUpdateFailed,
+				fmt.Sprintf("current_location %q not found", *request.CurrentLocation), reqID)
+			return
+		}
+		if request.CurrentLocationID != nil && *request.CurrentLocationID != loc.ID {
+			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+				apierrors.AssetUpdateFailed,
+				"current_location and current_location_id disagree", reqID)
+			return
+		}
+		request.CurrentLocationID = &loc.ID
+	}
+
 	result, err := handler.storage.UpdateAsset(req.Context(), orgID, id, request)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
