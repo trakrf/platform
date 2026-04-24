@@ -62,12 +62,24 @@ export function createCacheActions(
         cache.allIds = [...state.cache.allIds];
         cache.allIdentifiers = [...state.cache.allIdentifiers];
 
-        const parentId = location.parent_location_id;
+        // Public API responses (POST /locations) omit parent_location_id and
+        // only include the natural-key `parent` field — resolve it here so
+        // single-item create/refetch payloads land in rootIds / byParentId
+        // correctly without waiting for a full list refetch (TRA-484).
+        let resolved = location;
+        if (resolved.parent_location_id == null) {
+          const parentId = resolved.parent
+            ? (state.cache.byIdentifier.get(resolved.parent)?.id ?? null)
+            : null;
+          resolved = { ...resolved, parent_location_id: parentId };
+        }
 
-        updatePrimaryIndexes(cache, location);
-        updateParentChildMapping(cache, location.id, parentId);
-        updateRootSet(cache, location.id, parentId);
-        updateActiveSet(cache, location);
+        const parentId = resolved.parent_location_id;
+
+        updatePrimaryIndexes(cache, resolved);
+        updateParentChildMapping(cache, resolved.id, parentId);
+        updateRootSet(cache, resolved.id, parentId);
+        updateActiveSet(cache, resolved);
         rebuildOrderedLists(cache);
 
         return { cache };
