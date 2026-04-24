@@ -1300,6 +1300,52 @@ func TestUpdateAsset_CurrentLocation_HappyPath(t *testing.T) {
 	assert.Equal(t, "LOC-TRA477UPD", *resp.Data.CurrentLocation)
 }
 
+func TestGetAsset_LocationInferredFromLatestScan(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	locID := createTestLocationWithDesc(t, pool, accountID, "TRA477SCAN")
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+	// Wire the identifier-keyed GET (not registered by setupTestRouter).
+	router.Get("/api/v1/assets/{identifier}", handler.GetAssetByIdentifier)
+
+	// Seed asset directly (no explicit current_location_id).
+	a, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: accountID, Identifier: "TRA477-SA1", Name: "Scan Asset", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Insert a scan so asset_scans has a row pointing at the location; the
+	// asset's own current_location_id remains NULL.
+	createTestScan(t, pool, accountID, a.ID, &locID, time.Now())
+
+	// GET single asset should infer current_location from the latest scan.
+	greq := httptest.NewRequest(http.MethodGet, "/api/v1/assets/TRA477-SA1", nil)
+	greq = withOrgContext(greq, accountID)
+	gw := httptest.NewRecorder()
+	router.ServeHTTP(gw, greq)
+	require.Equal(t, http.StatusOK, gw.Code, gw.Body.String())
+
+	var resp struct {
+		Data struct {
+			CurrentLocation *string `json:"current_location"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(gw.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Data.CurrentLocation,
+		"current_location must be inferred from the latest scan when current_location_id is NULL")
+	assert.Equal(t, "LOC-TRA477SCAN", *resp.Data.CurrentLocation)
+}
+
 func TestCreateAsset_CurrentLocation_Disagree(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
