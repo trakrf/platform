@@ -141,21 +141,22 @@ export async function getAuthToken(page: Page): Promise<string> {
 }
 
 /**
- * Get the base API URL for E2E tests
- * Always uses localhost:8080 since E2E tests require the backend to be running locally
+ * Get the base API URL for E2E tests.
+ * Honors PLAYWRIGHT_BASE_URL when running against a remote deployment
+ * (preview, gke, staging, prod). Falls back to localhost:8080 for local runs.
  */
 function getApiBaseUrl(_page: Page): string {
-  // E2E tests always run against local backend
-  return 'http://localhost:8080/api/v1';
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+  return `${base.replace(/\/$/, '')}/api/v1`;
 }
 
 /**
- * Get invitation token from test endpoint
- * Only works in non-production environments
+ * Get invitation token from test endpoint.
+ * Only works in non-production environments (test-only route).
  */
 export async function getInviteToken(page: Page, inviteId: number): Promise<string> {
-  // E2E tests always run against local backend
-  const testEndpoint = `http://localhost:8080/test/invitations/${inviteId}/token`;
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+  const testEndpoint = `${base.replace(/\/$/, '')}/test/invitations/${inviteId}/token`;
 
   const response = await page.request.get(testEndpoint);
   if (!response.ok()) {

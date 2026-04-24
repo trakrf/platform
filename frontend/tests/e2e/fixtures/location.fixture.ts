@@ -32,10 +32,13 @@ export interface CreatedLocation {
 }
 
 /**
- * Get the base API URL for E2E tests
+ * Get the base API URL for E2E tests.
+ * Honors PLAYWRIGHT_BASE_URL when running against a remote deployment
+ * (preview, gke, staging, prod). Falls back to localhost:8080 for local runs.
  */
 function getApiBaseUrl(): string {
-  return 'http://localhost:8080/api/v1';
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+  return `${base.replace(/\/$/, '')}/api/v1`;
 }
 
 /**
