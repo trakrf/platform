@@ -6,6 +6,7 @@ package bulkimport
 import (
 	"bytes"
 	"mime/multipart"
+	"net/textproto"
 	"testing"
 )
 
@@ -15,7 +16,13 @@ func createTestCSV(t *testing.T, content string) (multipart.File, *multipart.Fil
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
 
-	part, err := writer.CreateFormFile("file", "test.csv")
+	// CreateFormFile hardcodes Content-Type=application/octet-stream, which the
+	// upload validator rejects. Set text/csv explicitly so the helper exercises
+	// the validator's happy path.
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", `form-data; name="file"; filename="test.csv"`)
+	header.Set("Content-Type", "text/csv")
+	part, err := writer.CreatePart(header)
 	if err != nil {
 		t.Fatal(err)
 	}

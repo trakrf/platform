@@ -126,9 +126,9 @@ func TestProcessCSVAsync_ParseErrors(t *testing.T) {
 	service := NewService(store)
 
 	csvFactory := testutil.NewCSVFactory().
-		AddRow("TEST-001", "Valid Asset", "device", "This should work", "2024-01-01", "2024-12-31", "true").
-		AddRow("TEST-002", "Invalid Date", "device", "Bad date format", "invalid-date", "2024-12-31", "true").
-		AddRow("TEST-003", "Another Valid", "device", "This should work too", "2024-01-01", "2024-12-31", "true")
+		AddRow("TEST-001", "Valid Asset", "asset", "This should work", "2024-01-01", "2024-12-31", "true").
+		AddRow("TEST-002", "Invalid Date", "asset", "Bad date format", "invalid-date", "2024-12-31", "true").
+		AddRow("TEST-003", "Another Valid", "asset", "This should work too", "2024-01-01", "2024-12-31", "true")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -159,8 +159,8 @@ func TestProcessCSVAsync_InsertErrors(t *testing.T) {
 	testutil.CreateTestAsset(t, pool, orgID, "DUPLICATE-001")
 
 	csvFactory := testutil.NewCSVFactory().
-		AddRow("DUPLICATE-001", "Try Duplicate", "device", "Should fail", "2024-01-01", "2024-12-31", "true").
-		AddRow("NEW-001", "New Asset", "device", "Should succeed", "2024-01-01", "2024-12-31", "true")
+		AddRow("DUPLICATE-001", "Try Duplicate", "asset", "Should fail", "2024-01-01", "2024-12-31", "true").
+		AddRow("NEW-001", "New Asset", "asset", "Should succeed", "2024-01-01", "2024-12-31", "true")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -187,9 +187,9 @@ func TestProcessCSVAsync_AllSuccess(t *testing.T) {
 	service := NewService(store)
 
 	csvFactory := testutil.NewCSVFactory().
-		AddRow("SUCCESS-001", "Asset 1", "device", "First asset", "2024-01-01", "2024-12-31", "true").
-		AddRow("SUCCESS-002", "Asset 2", "device", "Second asset", "2024-01-01", "2024-12-31", "true").
-		AddRow("SUCCESS-003", "Asset 3", "device", "Third asset", "2024-01-01", "2024-12-31", "true")
+		AddRow("SUCCESS-001", "Asset 1", "asset", "First asset", "2024-01-01", "2024-12-31", "true").
+		AddRow("SUCCESS-002", "Asset 2", "asset", "Second asset", "2024-01-01", "2024-12-31", "true").
+		AddRow("SUCCESS-003", "Asset 3", "asset", "Third asset", "2024-01-01", "2024-12-31", "true")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -222,8 +222,8 @@ func TestConcurrentUploads(t *testing.T) {
 
 	for i := 0; i < numJobs; i++ {
 		csvFactory := testutil.NewCSVFactory().
-			AddRow(fmt.Sprintf("CONCURRENT-%d-001", i), fmt.Sprintf("Job %d Asset 1", i), "device", "Test", "2024-01-01", "2024-12-31", "true").
-			AddRow(fmt.Sprintf("CONCURRENT-%d-002", i), fmt.Sprintf("Job %d Asset 2", i), "device", "Test", "2024-01-01", "2024-12-31", "true")
+			AddRow(fmt.Sprintf("CONCURRENT-%d-001", i), fmt.Sprintf("Job %d Asset 1", i), "asset", "Test", "2024-01-01", "2024-12-31", "true").
+			AddRow(fmt.Sprintf("CONCURRENT-%d-002", i), fmt.Sprintf("Job %d Asset 2", i), "asset", "Test", "2024-01-01", "2024-12-31", "true")
 		records := csvFactory.Build()
 
 		job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -256,7 +256,7 @@ func TestJobStatusTracking(t *testing.T) {
 	ctx := context.Background()
 
 	csvFactory := testutil.NewCSVFactory().
-		AddRow("STATUS-001", "Asset 1", "device", "Test", "2024-01-01", "2024-12-31", "true")
+		AddRow("STATUS-001", "Asset 1", "asset", "Test", "2024-01-01", "2024-12-31", "true")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -316,7 +316,7 @@ func TestErrorRecovery_DatabaseFailure(t *testing.T) {
 	invalidOrgID := 999999
 
 	csvFactory := testutil.NewCSVFactory().
-		AddRow("FAIL-001", "Should Fail", "device", "Invalid org", "2024-01-01", "2024-12-31", "true")
+		AddRow("FAIL-001", "Should Fail", "asset", "Invalid org", "2024-01-01", "2024-12-31", "true")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -342,7 +342,7 @@ func TestProcessUpload_ValidCSV(t *testing.T) {
 	service := NewService(store)
 
 	csv := `identifier,name,type,description,valid_from,valid_to,is_active
-ASSET-TEST-001,Test Asset 1,device,Description 1,2024-01-01,2024-12-31,true
+ASSET-TEST-001,Test Asset 1,asset,Description 1,2024-01-01,2024-12-31,true
 ASSET-TEST-002,Test Asset 2,person,Description 2,2024-01-01,2024-12-31,false`
 
 	file, header := createTestCSV(t, csv)
@@ -407,8 +407,8 @@ func TestProcessCSVAsync_WithValidTags(t *testing.T) {
 
 	// CSV with tags column
 	csvFactory := testutil.NewCSVFactory().
-		AddRowWithTags("TAGS-001", "Asset with Tags", "device", "Has RFID tags", "2024-01-01", "2024-12-31", "true", "E280119020004F3D94E00C91,E280119020004F3D94E00C92").
-		AddRowWithTags("TAGS-002", "Another Asset", "device", "Single tag", "2024-01-01", "2024-12-31", "true", "E280119020004F3D94E00C93")
+		AddRowWithTags("TAGS-001", "Asset with Tags", "asset", "Has RFID tags", "2024-01-01", "2024-12-31", "true", "E280119020004F3D94E00C91,E280119020004F3D94E00C92").
+		AddRowWithTags("TAGS-002", "Another Asset", "asset", "Single tag", "2024-01-01", "2024-12-31", "true", "E280119020004F3D94E00C93")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -440,8 +440,8 @@ func TestProcessCSVAsync_WithEmptyTags(t *testing.T) {
 
 	// CSV with tags column but empty values
 	csvFactory := testutil.NewCSVFactory().
-		AddRowWithTags("NOTAGS-001", "Asset No Tags", "device", "No tags here", "2024-01-01", "2024-12-31", "true", "").
-		AddRowWithTags("NOTAGS-002", "Another No Tags", "device", "Also no tags", "2024-01-01", "2024-12-31", "true", "")
+		AddRowWithTags("NOTAGS-001", "Asset No Tags", "asset", "No tags here", "2024-01-01", "2024-12-31", "true", "").
+		AddRowWithTags("NOTAGS-002", "Another No Tags", "asset", "Also no tags", "2024-01-01", "2024-12-31", "true", "")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -472,8 +472,8 @@ func TestProcessCSVAsync_DuplicateTagsWithinCSV(t *testing.T) {
 
 	// CSV with duplicate tag across rows
 	csvFactory := testutil.NewCSVFactory().
-		AddRowWithTags("DUP-TAG-001", "First Asset", "device", "Has a tag", "2024-01-01", "2024-12-31", "true", "SAME_TAG_123").
-		AddRowWithTags("DUP-TAG-002", "Second Asset", "device", "Same tag", "2024-01-01", "2024-12-31", "true", "SAME_TAG_123")
+		AddRowWithTags("DUP-TAG-001", "First Asset", "asset", "Has a tag", "2024-01-01", "2024-12-31", "true", "SAME_TAG_123").
+		AddRowWithTags("DUP-TAG-002", "Second Asset", "asset", "Same tag", "2024-01-01", "2024-12-31", "true", "SAME_TAG_123")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -514,9 +514,9 @@ func TestProcessCSVAsync_MixedWithAndWithoutTags(t *testing.T) {
 
 	// CSV with tags column, some rows have tags, some don't
 	csvFactory := testutil.NewCSVFactory().
-		AddRowWithTags("MIX-001", "Has Tags", "device", "With tags", "2024-01-01", "2024-12-31", "true", "TAG_A,TAG_B").
-		AddRowWithTags("MIX-002", "No Tags", "device", "Without tags", "2024-01-01", "2024-12-31", "true", "").
-		AddRowWithTags("MIX-003", "More Tags", "device", "With one tag", "2024-01-01", "2024-12-31", "true", "TAG_C")
+		AddRowWithTags("MIX-001", "Has Tags", "asset", "With tags", "2024-01-01", "2024-12-31", "true", "TAG_A,TAG_B").
+		AddRowWithTags("MIX-002", "No Tags", "asset", "Without tags", "2024-01-01", "2024-12-31", "true", "").
+		AddRowWithTags("MIX-003", "More Tags", "asset", "With one tag", "2024-01-01", "2024-12-31", "true", "TAG_C")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -547,8 +547,8 @@ func TestProcessCSVAsync_WithoutTagsColumn(t *testing.T) {
 
 	// Standard CSV without tags column (backward compatibility)
 	csvFactory := testutil.NewCSVFactory().
-		AddRow("LEGACY-001", "Legacy Asset", "device", "No tags column", "2024-01-01", "2024-12-31", "true").
-		AddRow("LEGACY-002", "Another Legacy", "device", "Still no tags", "2024-01-01", "2024-12-31", "true")
+		AddRow("LEGACY-001", "Legacy Asset", "asset", "No tags column", "2024-01-01", "2024-12-31", "true").
+		AddRow("LEGACY-002", "Another Legacy", "asset", "Still no tags", "2024-01-01", "2024-12-31", "true")
 	records := csvFactory.Build()
 
 	job, err := store.CreateBulkImportJob(ctx, orgID, len(records)-1)
@@ -577,8 +577,8 @@ func TestProcessUpload_ValidCSVWithTags(t *testing.T) {
 	service := NewService(store)
 
 	csv := `identifier,name,type,description,valid_from,valid_to,is_active,tags
-ASSET-TAG-001,Tagged Asset 1,device,Has tags,2024-01-01,2024-12-31,true,RFID_001
-ASSET-TAG-002,Tagged Asset 2,device,More tags,2024-01-01,2024-12-31,true,"RFID_002,RFID_003"`
+ASSET-TAG-001,Tagged Asset 1,asset,Has tags,2024-01-01,2024-12-31,true,RFID_001
+ASSET-TAG-002,Tagged Asset 2,asset,More tags,2024-01-01,2024-12-31,true,"RFID_002,RFID_003"`
 
 	file, header := createTestCSV(t, csv)
 	defer file.Close()

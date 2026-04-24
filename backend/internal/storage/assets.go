@@ -727,6 +727,10 @@ func (s *Storage) ListAssetsFiltered(
 	where, args := buildAssetsWhere(orgID, f)
 	orderBy := buildAssetsOrderBy(f.Sorts)
 
+	// Latest scan wins (TRA-465: ?location filter follows scans, not the
+	// stale current_location_id column). When an asset has no scan history,
+	// fall back to the explicit FK so create-only assets still surface a
+	// location (TRA-495).
 	query := fmt.Sprintf(`
 		WITH latest_scans AS (
 			SELECT DISTINCT ON (s.asset_id)
@@ -738,14 +742,15 @@ func (s *Storage) ListAssetsFiltered(
 		)
 		SELECT
 			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
-			ls.location_id,
+			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.identifier
 		FROM trakrf.assets a
 		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
 		LEFT JOIN trakrf.locations l
-			ON l.id = ls.location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			ON l.id = COALESCE(ls.location_id, a.current_location_id)
+			AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE %s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
@@ -824,7 +829,8 @@ func (s *Storage) CountAssetsFiltered(
 		FROM trakrf.assets a
 		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
 		LEFT JOIN trakrf.locations l
-			ON l.id = ls.location_id AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			ON l.id = COALESCE(ls.location_id, a.current_location_id)
+			AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE %s
 	`, where)
 
