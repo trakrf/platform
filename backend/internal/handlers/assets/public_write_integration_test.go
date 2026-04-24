@@ -738,3 +738,35 @@ func TestCreateAsset_APIKey_ExplicitInactive_Respected(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, false, resp["data"].(map[string]any)["is_active"])
 }
+
+func TestCreateAsset_DuplicateIdentifier_Returns409(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-dup-409")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"dup-asset-1","name":"first","type":"asset"}`
+
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req1.Header.Set("Authorization", "Bearer "+token)
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+	require.Equal(t, http.StatusCreated, w1.Code, w1.Body.String())
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req2.Header.Set("Authorization", "Bearer "+token)
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	require.Equal(t, http.StatusConflict, w2.Code, w2.Body.String())
+
+	var errResp modelerrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &errResp))
+	assert.Equal(t, "conflict", errResp.Error.Type)
+	assert.Contains(t, errResp.Error.Detail, "dup-asset-1")
+}

@@ -22,6 +22,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/handlers/locations"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	locmodel "github.com/trakrf/platform/backend/internal/models/location"
+	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
@@ -1087,4 +1088,36 @@ func TestCreateLocation_IncludesValidToWhenSet(t *testing.T) {
 	require.True(t, ok, "valid_to missing or wrong type: %#v", data["valid_to"])
 	_, err := time.Parse(time.RFC3339, vt)
 	assert.NoError(t, err, "valid_to not RFC3339: %q", vt)
+}
+
+func TestCreateLocation_DuplicateIdentifier_Returns409(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-write-dup-409")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	body := `{"identifier":"dup-loc-1","name":"first"}`
+
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req1.Header.Set("Authorization", "Bearer "+token)
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+	require.Equal(t, http.StatusCreated, w1.Code, w1.Body.String())
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
+	req2.Header.Set("Authorization", "Bearer "+token)
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	require.Equal(t, http.StatusConflict, w2.Code, w2.Body.String())
+
+	var errResp modelerrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &errResp))
+	assert.Equal(t, "conflict", errResp.Error.Type)
+	assert.Contains(t, errResp.Error.Detail, "dup-loc-1")
 }
