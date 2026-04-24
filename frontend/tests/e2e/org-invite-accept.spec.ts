@@ -15,6 +15,7 @@ import {
   switchOrgViaAPI,
   createInviteViaAPI,
   getInviteToken,
+  listOrgsViaAPI,
 } from './fixtures/org.fixture';
 
 test.describe('Accept Invitation - Existing User', () => {
@@ -199,7 +200,7 @@ test.describe('Accept Invitation - New User', () => {
     await page.close();
   });
 
-  test('non-logged-in user sees login/signup options', async ({ page }) => {
+  test('non-logged-in new user is auto-redirected to signup with token', async ({ page }) => {
     const id = uniqueId();
     const inviteeEmail = `new-invitee-${id}@example.com`;
 
@@ -210,7 +211,7 @@ test.describe('Accept Invitation - New User', () => {
     await loginTestUser(page, adminEmail, adminPassword);
     await switchOrgViaAPI(page, testOrgId);
 
-    // Create invitation
+    // Create invitation - invitee does not exist, triggers signup redirect.
     const inviteId = await createInviteViaAPI(page, testOrgId, inviteeEmail, 'viewer');
     const token = await getInviteToken(page, inviteId);
 
@@ -219,10 +220,13 @@ test.describe('Accept Invitation - New User', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Should see login/signup options (use specific link selector to avoid matching text)
-    await expect(page.locator('a:has-text("Sign In")')).toBeVisible();
-    await expect(page.locator('a:has-text("Create Account")')).toBeVisible();
-    await expect(page.locator('text=You\'ve Been Invited!')).toBeVisible();
+    // AcceptInviteScreen auto-redirects unauthenticated users based on
+    // user existence; new users land on #signup with token+returnTo preserved.
+    await page.waitForURL(/#signup.*returnTo=accept-invite.*token=/, { timeout: 10000 });
+
+    const currentUrl = page.url();
+    expect(currentUrl).toContain('returnTo=accept-invite');
+    expect(currentUrl).toContain(`token=${encodeURIComponent(token)}`);
   });
 
   test('signup redirect preserves token', async ({ page }) => {
@@ -245,17 +249,14 @@ test.describe('Accept Invitation - New User', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Click signup
-    await page.locator('a:has-text("Create Account")').click();
-
-    // Verify URL contains token in returnTo params
+    // Auto-redirect to signup preserves token+returnTo in URL
+    await expect(page).toHaveURL(/#signup/);
     await expect(page).toHaveURL(/token=/);
     await expect(page).toHaveURL(/returnTo=accept-invite/);
   });
 
-  test('after signup user returns to accept-invite screen', async ({ page }) => {
-    const id = uniqueId();
-    const inviteeEmail = `new-return-${id}@example.com`;
+  test('new user invite-signup auto-accepts and lands on home', async ({ page }) => {
+    const inviteeEmail = `new-return-${uniqueId()}@example.com`;
     const inviteePassword = 'TestPassword123!';
 
     // Setup as admin
@@ -274,28 +275,21 @@ test.describe('Accept Invitation - New User', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Click signup
-    await page.locator('a:has-text("Create Account")').click();
+    // Auto-redirect to signup
+    await page.waitForURL(/#signup.*token=/, { timeout: 10000 });
 
-    // Complete signup form
-    await page.locator('input#email').fill(inviteeEmail);
-    await page.locator('input#orgName').fill(`Personal Org ${id}`);
+    // Invite-flow signup: email is pre-filled + disabled, no orgName input.
+    // Fill password only, submit.
     await page.locator('input#password').fill(inviteePassword);
     await page.locator('button[type="submit"]').click();
 
-    // Should redirect back to accept-invite with token
-    await page.waitForURL(/accept-invite/, { timeout: 10000 });
-    await expect(page).toHaveURL(/token=/);
-
-    // Should see accept button now (logged in)
-    await expect(page.locator('[data-testid="accept-invite-button"]')).toBeVisible({
-      timeout: 10000,
-    });
+    // SignupScreen.tsx calls signup(email, password, undefined, inviteToken)
+    // which accepts the invitation server-side and redirects to #home.
+    await page.waitForURL(/#home/, { timeout: 10000 });
   });
 
   test('new user can complete full invite flow', async ({ page }) => {
-    const id = uniqueId();
-    const inviteeEmail = `new-full-${id}@example.com`;
+    const inviteeEmail = `new-full-${uniqueId()}@example.com`;
     const inviteePassword = 'TestPassword123!';
 
     // Setup as admin
@@ -314,23 +308,18 @@ test.describe('Accept Invitation - New User', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.goto(`/#accept-invite?token=${token}`);
 
-    // Signup flow
-    await page.locator('a:has-text("Create Account")').click();
-    await page.locator('input#email').fill(inviteeEmail);
-    await page.locator('input#orgName').fill(`Personal Org ${id}`);
+    // Auto-redirect to signup
+    await page.waitForURL(/#signup.*token=/, { timeout: 10000 });
+
+    // Invite-flow signup: email pre-filled + disabled, no orgName input.
     await page.locator('input#password').fill(inviteePassword);
     await page.locator('button[type="submit"]').click();
 
-    // Should return to accept-invite
-    await page.waitForURL(/accept-invite/, { timeout: 10000 });
+    // Signup auto-accepts invitation and redirects to home
+    await page.waitForURL(/#home/, { timeout: 10000 });
 
-    // Accept invitation
-    await page.locator('[data-testid="accept-invite-button"]').click();
-
-    // Verify success
-    await expect(page.locator(`text=Welcome to ${testOrgName}!`)).toBeVisible({
-      timeout: 10000,
-    });
-    await expect(page.locator('text=operator')).toBeVisible();
+    // Verify membership - user is now in testOrg (confirms the invitation was accepted)
+    const orgs = await listOrgsViaAPI(page);
+    expect(orgs.some((o) => o.id === testOrgId)).toBe(true);
   });
 });

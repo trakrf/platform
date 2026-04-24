@@ -118,9 +118,9 @@ test.describe('Manage Invitations', () => {
     await clearAuthState(page);
     await signupTestUser(page, inviteEmail, inviteePassword);
 
-    // Try to use the canceled token
+    // Navigate to accept-invite with canceled token.
+    // Invitation-info fetch rejects → error screen renders on nav.
     await page.goto(`/#accept-invite?token=${token}`);
-    await page.locator('[data-testid="accept-invite-button"]').click();
 
     // Should show error (use specific selector to avoid matching icons)
     await expect(
