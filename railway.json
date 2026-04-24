@@ -4,7 +4,9 @@
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile",
     "dockerBuildArgs": {
-      "VITE_SENTRY_DSN": "${{ VITE_SENTRY_DSN }}"
+      "VITE_SENTRY_DSN": "${{ VITE_SENTRY_DSN }}",
+      "COMMIT_SHA": "${{ RAILWAY_GIT_COMMIT_SHA }}",
+      "BUILD_TAG": "${{ RAILWAY_GIT_BRANCH }}"
     }
   },
   "deploy": {
