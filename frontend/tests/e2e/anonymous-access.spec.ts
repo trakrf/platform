@@ -55,7 +55,7 @@ test.describe('Anonymous Access', () => {
     expect(url).toContain('#barcode');
   });
 
-  test('should not redirect when tags are added to store while anonymous (TRA-305)', async ({
+  test('@hardware should not redirect when tags are added to store while anonymous (TRA-305)', async ({
     page,
   }) => {
     // TRA-305: Tags scanned while anonymous should NOT trigger login redirect

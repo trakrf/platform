@@ -8,7 +8,7 @@ import { connectToDevice, disconnectDevice } from './helpers/connection';
 
 test.describe('Worker Log Level', () => {
 
-  test('respects log level settings', async ({ page }) => {
+  test('@hardware respects log level settings', async ({ page }) => {
     // Collect console messages
     const consoleLogs: string[] = [];
     page.on('console', msg => {
@@ -105,7 +105,7 @@ test.describe('Worker Log Level', () => {
     await disconnectDevice(page);
   });
 
-  test('persists log level setting across page refresh', async ({ page }) => {
+  test('@hardware persists log level setting across page refresh', async ({ page }) => {
     await page.goto('/');
     await connectToDevice(page);
 

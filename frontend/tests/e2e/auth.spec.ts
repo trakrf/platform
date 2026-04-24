@@ -119,7 +119,7 @@ test.describe('Authentication', () => {
       await expect(page.getByRole('heading', { name: 'Sign Up' })).toBeVisible();
       await expect(page.locator('input#email')).toBeVisible();
       await expect(page.locator('input#password')).toBeVisible();
-      await expect(page.locator('input#organizationName')).toBeVisible();
+      await expect(page.locator('input#orgName')).toBeVisible();
       await expect(page.locator('button[type="submit"]')).toBeVisible();
     });
 
@@ -150,8 +150,8 @@ test.describe('Authentication', () => {
       await page.goto('/#signup');
 
       // Enter short org name
-      await page.locator('input#organizationName').fill('A');
-      await page.locator('input#organizationName').blur();
+      await page.locator('input#orgName').fill('A');
+      await page.locator('input#orgName').blur();
 
       // Should show validation error
       await expect(page.locator('text=Organization name must be at least 2 characters')).toBeVisible();
@@ -163,7 +163,7 @@ test.describe('Authentication', () => {
       // Fill in credentials with existing email (should fail)
       await page.locator('input#email').fill('existing@example.com');
       await page.locator('input#password').fill('password123');
-      await page.locator('input#organizationName').fill('Test Organization');
+      await page.locator('input#orgName').fill('Test Organization');
 
       // Submit form
       await page.locator('button[type="submit"]').click();
