@@ -60,7 +60,7 @@ func TestRespondDecodeError_StableDetail(t *testing.T) {
 	}
 }
 
-func TestRespondDecodeError_UnknownField_IncludesFieldName(t *testing.T) {
+func TestRespondDecodeError_UnknownField_EmitsValidationError(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
 	// Simulate json.Decoder error for unknown field
@@ -73,8 +73,23 @@ func TestRespondDecodeError_UnknownField_IncludesFieldName(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode resp: %v", err)
 	}
-	if !strings.Contains(resp.Error.Detail, "parent_path") {
-		t.Fatalf("detail = %q, should contain field name \"parent_path\"", resp.Error.Detail)
+	if resp.Error.Type != string(apierrors.ErrValidation) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrValidation)
+	}
+	if !strings.Contains(resp.Error.Detail, "unknown field") || !strings.Contains(resp.Error.Detail, "parent_path") {
+		t.Fatalf("detail = %q, should describe the unknown field by name", resp.Error.Detail)
+	}
+	if strings.HasPrefix(resp.Error.Detail, "Request body is not valid JSON") {
+		t.Fatalf("detail = %q, should not claim the body is invalid JSON — it is valid, the field is just unknown", resp.Error.Detail)
+	}
+	if len(resp.Error.Fields) != 1 {
+		t.Fatalf("fields = %d, want 1", len(resp.Error.Fields))
+	}
+	if resp.Error.Fields[0].Field != "parent_path" {
+		t.Fatalf("fields[0].field = %q, want %q", resp.Error.Fields[0].Field, "parent_path")
+	}
+	if resp.Error.Fields[0].Code != "invalid_value" {
+		t.Fatalf("fields[0].code = %q, want %q", resp.Error.Fields[0].Code, "invalid_value")
 	}
 }
 

@@ -390,13 +390,23 @@ func TestGetAssetHistory_Integration_InvalidFromTimestamp_StaticMessage(t *testi
 
 	var body struct {
 		Error struct {
+			Type   string `json:"type"`
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
+			Fields []struct {
+				Field   string `json:"field"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"fields"`
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	assert.Equal(t, "Invalid 'from' timestamp", body.Error.Title)
-	assert.Equal(t, "Expected RFC 3339 timestamp, e.g. 2026-04-21T00:00:00Z", body.Error.Detail)
+	assert.Equal(t, "validation_error", body.Error.Type)
+	assert.Contains(t, body.Error.Detail, "Invalid 'from' timestamp")
+	assert.Contains(t, body.Error.Detail, "RFC 3339")
+	require.Len(t, body.Error.Fields, 1)
+	assert.Equal(t, "from", body.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", body.Error.Fields[0].Code)
 	// Regression guard: Go's time-layout string must never resurface in the detail.
 	assert.NotContains(t, body.Error.Detail, "2006-01-02")
 	assert.NotContains(t, body.Error.Detail, "parsing time")

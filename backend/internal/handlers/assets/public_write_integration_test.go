@@ -691,7 +691,11 @@ func TestCreateAsset_APIKey_UnknownField_Rejected(t *testing.T) {
 
 	var resp modelerrors.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, string(modelerrors.ErrBadRequest), resp.Error.Type)
+	assert.Equal(t, string(modelerrors.ErrValidation), resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "foo", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Contains(t, resp.Error.Fields[0].Message, "unknown field")
 }
 
 func TestUpdateAsset_APIKey_UnknownField_Rejected(t *testing.T) {

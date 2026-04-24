@@ -95,15 +95,25 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if loc == nil {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.AssetCreateFailed,
-				fmt.Sprintf("current_location %q not found", *request.CurrentLocation), requestID)
+			msg := fmt.Sprintf("current_location %q not found", *request.CurrentLocation)
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.AssetCreateFailed, msg, requestID,
+				[]modelerrors.FieldError{{
+					Field:   "current_location",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		if request.CurrentLocationID != nil && *request.CurrentLocationID != loc.ID {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.AssetCreateFailed,
-				"current_location and current_location_id disagree", requestID)
+			msg := "current_location and current_location_id disagree"
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.AssetCreateFailed, msg, requestID,
+				[]modelerrors.FieldError{{
+					Field:   "current_location",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		request.CurrentLocationID = &loc.ID
@@ -220,15 +230,25 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 			return
 		}
 		if loc == nil {
-			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.AssetUpdateFailed,
-				fmt.Sprintf("current_location %q not found", *request.CurrentLocation), reqID)
+			msg := fmt.Sprintf("current_location %q not found", *request.CurrentLocation)
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.AssetUpdateFailed, msg, reqID,
+				[]modelerrors.FieldError{{
+					Field:   "current_location",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		if request.CurrentLocationID != nil && *request.CurrentLocationID != loc.ID {
-			httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.AssetUpdateFailed,
-				"current_location and current_location_id disagree", reqID)
+			msg := "current_location and current_location_id disagree"
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+				apierrors.AssetUpdateFailed, msg, reqID,
+				[]modelerrors.FieldError{{
+					Field:   "current_location",
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 			return
 		}
 		request.CurrentLocationID = &loc.ID
@@ -428,8 +448,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		Sorts:       []string{"identifier", "name", "created_at", "updated_at"},
 	})
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid list parameters", err.Error(), reqID)
+		httputil.RespondListParamError(w, req, err, reqID)
 		return
 	}
 

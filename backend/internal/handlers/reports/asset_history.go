@@ -19,6 +19,20 @@ const (
 	defaultDateRangeDays     = 30
 )
 
+// respondInvalidTimestamp writes a 400 validation_error envelope naming the
+// offending query parameter. Keeps detail copy consistent across the two
+// asset-history handlers (public identifier and internal surrogate ID).
+func respondInvalidTimestamp(w http.ResponseWriter, r *http.Request, field, reqID string) {
+	msg := fmt.Sprintf("Invalid '%s' timestamp; expected RFC 3339, e.g. 2026-04-21T00:00:00Z", field)
+	httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+		"Invalid request", msg, reqID,
+		[]modelerrors.FieldError{{
+			Field:   field,
+			Code:    "invalid_value",
+			Message: msg,
+		}})
+}
+
 // @Summary Asset movement history
 // @Description Location history for an asset identified by its natural key.
 // @Tags reports,public
@@ -67,8 +81,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		Sorts:   []string{"timestamp"},
 	})
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid list parameters", err.Error(), reqID)
+		httputil.RespondListParamError(w, r, err, reqID)
 		return
 	}
 
@@ -76,9 +89,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	if vs, ok := params.Filters["from"]; ok && len(vs) > 0 {
 		t, err := time.Parse(time.RFC3339, vs[0])
 		if err != nil {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				"Invalid 'from' timestamp",
-				"Expected RFC 3339 timestamp, e.g. 2026-04-21T00:00:00Z", reqID)
+			respondInvalidTimestamp(w, r, "from", reqID)
 			return
 		}
 		filter.From = &t
@@ -86,9 +97,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	if vs, ok := params.Filters["to"]; ok && len(vs) > 0 {
 		t, err := time.Parse(time.RFC3339, vs[0])
 		if err != nil {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				"Invalid 'to' timestamp",
-				"Expected RFC 3339 timestamp, e.g. 2026-04-21T00:00:00Z", reqID)
+			respondInvalidTimestamp(w, r, "to", reqID)
 			return
 		}
 		filter.To = &t
@@ -160,8 +169,7 @@ func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 		Sorts:   []string{"timestamp"},
 	})
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid list parameters", err.Error(), reqID)
+		httputil.RespondListParamError(w, r, err, reqID)
 		return
 	}
 
@@ -169,9 +177,7 @@ func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 	if vs, ok := params.Filters["from"]; ok && len(vs) > 0 {
 		t, err := time.Parse(time.RFC3339, vs[0])
 		if err != nil {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				"Invalid 'from' timestamp",
-				"Expected RFC 3339 timestamp, e.g. 2026-04-21T00:00:00Z", reqID)
+			respondInvalidTimestamp(w, r, "from", reqID)
 			return
 		}
 		filter.From = &t
@@ -179,9 +185,7 @@ func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 	if vs, ok := params.Filters["to"]; ok && len(vs) > 0 {
 		t, err := time.Parse(time.RFC3339, vs[0])
 		if err != nil {
-			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				"Invalid 'to' timestamp",
-				"Expected RFC 3339 timestamp, e.g. 2026-04-21T00:00:00Z", reqID)
+			respondInvalidTimestamp(w, r, "to", reqID)
 			return
 		}
 		filter.To = &t

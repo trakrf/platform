@@ -60,8 +60,7 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 		Sorts:   []string{"last_seen", "asset", "location"},
 	})
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid list parameters", err.Error(), reqID)
+		httputil.RespondListParamError(w, r, err, reqID)
 		return
 	}
 
