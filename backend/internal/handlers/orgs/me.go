@@ -15,13 +15,24 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
+// GetMeResponse is the typed envelope returned by GET /api/v1/users/me.
+type GetMeResponse struct {
+	Data organization.UserProfile `json:"data"`
+}
+
+// SetCurrentOrgResponse is returned by POST /api/v1/users/me/current-org.
+type SetCurrentOrgResponse struct {
+	Message string `json:"message" example:"Current organization updated"`
+	Token   string `json:"token"   example:"eyJhbGciOiJIUzI1NiIsInR5cCI6..."`
+}
+
 // @Summary Get the authenticated user's profile with org memberships
 // @Description Returns the caller's user record alongside the organizations they belong to. Used by the SPA to render the user menu and org picker.
 // @Tags users,internal
 // @ID users.me
 // @Accept json
 // @Produce json
-// @Success 200 {object} map[string]any "data: user profile"
+// @Success 200 {object} orgs.GetMeResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
@@ -52,7 +63,7 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body organization.SetCurrentOrgRequest true "Org to switch to"
-// @Success 200 {object} map[string]any "message + fresh token"
+// @Success 200 {object} orgs.SetCurrentOrgResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse "Not a member of the target org"

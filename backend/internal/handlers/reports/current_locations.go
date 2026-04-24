@@ -27,20 +27,31 @@ func NewHandler(storage *storage.Storage) *Handler {
 	return &Handler{storage: storage}
 }
 
+// ListCurrentLocationsResponse is the typed envelope returned by
+// GET /api/v1/locations/current.
+type ListCurrentLocationsResponse struct {
+	Data       []report.PublicCurrentLocationItem `json:"data"`
+	Limit      int                                `json:"limit"       example:"50"`
+	Offset     int                                `json:"offset"      example:"0"`
+	TotalCount int                                `json:"total_count" example:"100"`
+}
+
 // @Summary List current asset locations
 // @Description Snapshot of each asset's most recent location, filterable by natural key.
 // @Tags reports,public
+// @ID locations.current
 // @Param limit query int false "max 200"
 // @Param offset query int false "pagination offset"
 // @Param location query string false "filter by location identifier (may repeat)"
 // @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active identifier values"
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} reports.ListCurrentLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security APIKey[scans:read]

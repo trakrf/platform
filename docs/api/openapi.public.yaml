@@ -1,8 +1,54 @@
 components:
     schemas:
+        apikey.APIKeyCreateResponse:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                key:
+                    type: string
+                name:
+                    type: string
+                scopes:
+                    items:
+                        type: string
+                    type: array
+            type: object
+        apikey.APIKeyListItem:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                created_by:
+                    type: integer
+                created_by_key_id:
+                    type: integer
+                expires_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                jti:
+                    type: string
+                last_used_at:
+                    format: date-time
+                    type: string
+                name:
+                    type: string
+                scopes:
+                    items:
+                        type: string
+                    type: array
+            type: object
         apikey.CreateAPIKeyRequest:
             properties:
                 expires_at:
+                    format: date-time
                     type: string
                 name:
                     maxLength: 255
@@ -37,7 +83,9 @@ components:
                 is_active:
                     example: true
                     type: boolean
-                metadata: {}
+                metadata:
+                    additionalProperties: true
+                    type: object
                 name:
                     maxLength: 255
                     minLength: 1
@@ -50,10 +98,12 @@ components:
                     example: asset
                     type: string
                 valid_from:
-                    example: "2025-01-01"
+                    example: "2025-01-01T00:00:00Z"
+                    format: date-time
                     type: string
                 valid_to:
-                    example: "2026-01-01"
+                    example: "2026-01-01T00:00:00Z"
+                    format: date-time
                     type: string
             required:
                 - name
@@ -61,6 +111,7 @@ components:
         asset.PublicAssetView:
             properties:
                 created_at:
+                    format: date-time
                     type: string
                 current_location:
                     type: string
@@ -74,7 +125,9 @@ components:
                     type: array
                 is_active:
                     type: boolean
-                metadata: {}
+                metadata:
+                    additionalProperties: true
+                    type: object
                 name:
                     type: string
                 surrogate_id:
@@ -82,10 +135,13 @@ components:
                 type:
                     type: string
                 updated_at:
+                    format: date-time
                     type: string
                 valid_from:
+                    format: date-time
                     type: string
                 valid_to:
+                    format: date-time
                     type: string
             type: object
         asset.UpdateAssetRequest:
@@ -104,7 +160,9 @@ components:
                     type: string
                 is_active:
                     type: boolean
-                metadata: {}
+                metadata:
+                    additionalProperties: true
+                    type: object
                 name:
                     maxLength: 255
                     minLength: 1
@@ -116,10 +174,12 @@ components:
                         - inventory
                     type: string
                 valid_from:
-                    example: "2025-01-01"
+                    example: "2025-01-01T00:00:00Z"
+                    format: date-time
                     type: string
                 valid_to:
-                    example: "2026-01-01"
+                    example: "2026-01-01T00:00:00Z"
+                    format: date-time
                     type: string
             type: object
         assets.CreateAssetResponse:
@@ -183,7 +243,7 @@ components:
                                 - internal_error
                             example: validation_error
                             type: string
-                            x-extensible-enum: "true"
+                            x-extensible-enum: true
                     type: object
             type: object
         errors.FieldError:
@@ -247,10 +307,12 @@ components:
                     minLength: 1
                     type: string
                 valid_from:
-                    example: "2025-12-14"
+                    example: "2025-12-14T00:00:00Z"
+                    format: date-time
                     type: string
                 valid_to:
-                    example: "2026-12-14"
+                    example: "2026-12-14T00:00:00Z"
+                    format: date-time
                     type: string
             required:
                 - identifier
@@ -259,6 +321,7 @@ components:
         location.PublicLocationView:
             properties:
                 created_at:
+                    format: date-time
                     type: string
                 depth:
                     type: integer
@@ -281,10 +344,13 @@ components:
                 surrogate_id:
                     type: integer
                 updated_at:
+                    format: date-time
                     type: string
                 valid_from:
+                    format: date-time
                     type: string
                 valid_to:
+                    format: date-time
                     type: string
             type: object
         location.UpdateLocationRequest:
@@ -312,10 +378,12 @@ components:
                     minLength: 1
                     type: string
                 valid_from:
-                    example: "2025-12-14"
+                    example: "2025-12-14T00:00:00Z"
+                    format: date-time
                     type: string
                 valid_to:
-                    example: "2026-12-14"
+                    example: "2026-12-14T00:00:00Z"
+                    format: date-time
                     type: string
             type: object
         locations.CreateLocationResponse:
@@ -344,10 +412,95 @@ components:
                     example: 100
                     type: integer
             type: object
+        locations.LocationHierarchyResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/location.PublicLocationView'
+                    type: array
+            type: object
         locations.UpdateLocationResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/location.PublicLocationView'
+            type: object
+        orgs.CreateAPIKeyResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/apikey.APIKeyCreateResponse'
+            type: object
+        orgs.GetOrgMeResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/orgs.OrgMeView'
+            type: object
+        orgs.ListAPIKeysResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/apikey.APIKeyListItem'
+                    type: array
+            type: object
+        orgs.OrgMeView:
+            properties:
+                id:
+                    example: 42
+                    type: integer
+                name:
+                    example: Acme Logistics
+                    type: string
+            type: object
+        report.PublicAssetHistoryItem:
+            properties:
+                duration_seconds:
+                    type: integer
+                location:
+                    type: string
+                timestamp:
+                    format: date-time
+                    type: string
+            type: object
+        report.PublicCurrentLocationItem:
+            properties:
+                asset:
+                    type: string
+                last_seen:
+                    format: date-time
+                    type: string
+                location:
+                    type: string
+            type: object
+        reports.AssetHistoryResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/report.PublicAssetHistoryItem'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            type: object
+        reports.ListCurrentLocationsResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/report.PublicCurrentLocationItem'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
             type: object
         shared.TagIdentifier:
             properties:
@@ -362,7 +515,7 @@ components:
                         - barcode
                     example: rfid
                     type: string
-                    x-extensible-enum: "true"
+                    x-extensible-enum: true
                 value:
                     maxLength: 255
                     minLength: 1
@@ -380,7 +533,7 @@ components:
                         - barcode
                     example: rfid
                     type: string
-                    x-extensible-enum: "true"
+                    x-extensible-enum: true
                 value:
                     maxLength: 255
                     minLength: 1
@@ -397,19 +550,20 @@ components:
                 location_name:
                     type: string
                 timestamp:
+                    format: date-time
                     type: string
             type: object
     securitySchemes:
         APIKey:
-            bearerFormat: JWT
             description: 'TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account.'
-            scheme: bearer
-            type: http
-        BearerAuth:
-            description: Session JWT for internal endpoints (platform frontend uses this).
             in: header
             name: Authorization
             type: apiKey
+        BearerAuth:
+            bearerFormat: JWT
+            description: Session JWT for internal endpoints (platform frontend uses this).
+            scheme: bearer
+            type: http
 info:
     contact:
         email: support@trakrf.id
@@ -816,8 +970,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
+                                $ref: '#/components/schemas/reports.AssetHistoryResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:
@@ -844,6 +997,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Forbidden
                 "404":
                     content:
                         application/json:
@@ -861,6 +1020,12 @@ paths:
                             description: Seconds to wait before retrying
                             schema:
                                 type: integer
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Internal Server Error
             security:
                 - APIKey:
                     - scans:read
@@ -1003,6 +1168,7 @@ paths:
     /api/v1/inventory/save:
         post:
             description: Persist scanned RFID assets to the asset_scans hypertable
+            operationId: inventory.save
             requestBody:
                 content:
                     application/json:
@@ -1036,6 +1202,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Location or assets not owned by org
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
                 "500":
                     content:
                         application/json:
@@ -1102,6 +1279,24 @@ paths:
                             description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
                             schema:
                                 type: integer
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
                 "429":
                     content:
                         application/json:
@@ -1396,9 +1591,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: []location.PublicLocationView'
+                                $ref: '#/components/schemas/locations.LocationHierarchyResponse'
+                    description: OK
                 "400":
                     content:
                         application/json:
@@ -1451,9 +1645,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: []location.PublicLocationView'
+                                $ref: '#/components/schemas/locations.LocationHierarchyResponse'
+                    description: OK
                 "400":
                     content:
                         application/json:
@@ -1506,9 +1699,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: []location.PublicLocationView'
+                                $ref: '#/components/schemas/locations.LocationHierarchyResponse'
+                    description: OK
                 "400":
                     content:
                         application/json:
@@ -1681,6 +1873,7 @@ paths:
     /api/v1/locations/current:
         get:
             description: Snapshot of each asset's most recent location, filterable by natural key.
+            operationId: locations.current
             parameters:
                 - description: max 200
                   in: query
@@ -1712,8 +1905,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
+                                $ref: '#/components/schemas/reports.ListCurrentLocationsResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:
@@ -1740,6 +1932,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Forbidden
                 "429":
                     content:
                         application/json:
@@ -1772,9 +1970,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: []apikey.APIKeyListItem'
+                                $ref: '#/components/schemas/orgs.ListAPIKeysResponse'
+                    description: OK
                 "400":
                     content:
                         application/json:
@@ -1801,6 +1998,8 @@ paths:
                     description: Internal Server Error
             security:
                 - BearerAuth: []
+                - APIKey:
+                    - keys:admin
             summary: List active API keys for an organization
             tags:
                 - api-keys
@@ -1827,9 +2026,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: apikey.APIKeyCreateResponse'
+                                $ref: '#/components/schemas/orgs.CreateAPIKeyResponse'
+                    description: Created
                 "400":
                     content:
                         application/json:
@@ -1862,10 +2060,12 @@ paths:
                     description: Internal Server Error
             security:
                 - BearerAuth: []
+                - APIKey:
+                    - keys:admin
             summary: Create a new API key for an organization
             tags:
                 - api-keys
-    /api/v1/orgs/{id}/api-keys/{keyID}:
+    /api/v1/orgs/{id}/api-keys/{key_id}:
         delete:
             operationId: api_keys.revoke
             parameters:
@@ -1877,7 +2077,7 @@ paths:
                     type: integer
                 - description: API key id
                   in: path
-                  name: keyID
+                  name: key_id
                   required: true
                   schema:
                     type: integer
@@ -1916,6 +2116,8 @@ paths:
                     description: Internal Server Error
             security:
                 - BearerAuth: []
+                - APIKey:
+                    - keys:admin
             summary: Revoke an API key
             tags:
                 - api-keys
@@ -1928,9 +2130,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: {id, name}'
+                                $ref: '#/components/schemas/orgs.GetOrgMeResponse'
+                    description: OK
                 "401":
                     content:
                         application/json:

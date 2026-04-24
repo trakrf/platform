@@ -178,5 +178,10 @@ tmp/
 # Git worktrees
 .worktrees/
 
+# openapi-generator-cli: auto-created on `pnpm dlx openapi-generator-cli` runs
+# (e.g. local spec validation). CI doesn't need it — it downloads the CLI's
+# default version fresh each run. See .github/workflows/api-spec.yml.
+openapitools.json
+
 # Superpowers brainstorm / visual companion session data
 .superpowers/

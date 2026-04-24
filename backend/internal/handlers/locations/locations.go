@@ -352,6 +352,13 @@ type UpdateLocationResponse struct {
 	Data location.PublicLocationView `json:"data"`
 }
 
+// LocationHierarchyResponse is the typed envelope returned by the hierarchy
+// endpoints (GET /api/v1/locations/{identifier}/{ancestors,descendants,children}).
+// Each returns a flat list of views in the same shape as GET /locations/{identifier}.
+type LocationHierarchyResponse struct {
+	Data []location.PublicLocationView `json:"data"`
+}
+
 // @Summary List locations
 // @Tags locations,public
 // @ID locations.list
@@ -365,6 +372,9 @@ type UpdateLocationResponse struct {
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit"
+// @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
+// @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
+// @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security APIKey[locations:read]
@@ -529,7 +539,7 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  map[string]any                "data: []location.PublicLocationView"
+// @Success      200  {object}  locations.LocationHierarchyResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -578,7 +588,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  map[string]any                "data: []location.PublicLocationView"
+// @Success      200  {object}  locations.LocationHierarchyResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -627,7 +637,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  map[string]any                "data: []location.PublicLocationView"
+// @Success      200  {object}  locations.LocationHierarchyResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"

@@ -15,6 +15,19 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
+// CreateAPIKeyResponse is the typed envelope returned by
+// POST /api/v1/orgs/{id}/api-keys. The embedded apikey.APIKeyCreateResponse
+// carries the freshly minted JWT — returned exactly once, never persisted.
+type CreateAPIKeyResponse struct {
+	Data apikey.APIKeyCreateResponse `json:"data"`
+}
+
+// ListAPIKeysResponse is the typed envelope returned by
+// GET /api/v1/orgs/{id}/api-keys.
+type ListAPIKeysResponse struct {
+	Data []apikey.APIKeyListItem `json:"data"`
+}
+
 // @Summary Create a new API key for an organization
 // @Description Mints an API-key JWT scoped to the target org. Accepts either session-admin or an API key with the keys:admin scope.
 // @Tags api-keys,public
@@ -23,13 +36,14 @@ import (
 // @Produce json
 // @Param id path int true "Organization id"
 // @Param request body apikey.CreateAPIKeyRequest true "Key creation payload"
-// @Success 201 {object} map[string]any "data: apikey.APIKeyCreateResponse"
+// @Success 201 {object} orgs.CreateAPIKeyResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 409 {object} modelerrors.ErrorResponse "Active-key cap reached"
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
+// @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys [post]
 // CreateAPIKey handles POST /api/v1/orgs/{id}/api-keys.
 func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
@@ -132,12 +146,13 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Organization id"
-// @Success 200 {object} map[string]any "data: []apikey.APIKeyListItem"
+// @Success 200 {object} orgs.ListAPIKeysResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
+// @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys [get]
 // ListAPIKeys handles GET /api/v1/orgs/{id}/api-keys.
 func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +194,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Organization id"
-// @Param keyID path int true "API key id"
+// @Param key_id path int true "API key id"
 // @Success 204 "No Content"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -187,8 +202,9 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
-// @Router /api/v1/orgs/{id}/api-keys/{keyID} [delete]
-// RevokeAPIKey handles DELETE /api/v1/orgs/{id}/api-keys/{keyID}.
+// @Security APIKey[keys:admin]
+// @Router /api/v1/orgs/{id}/api-keys/{key_id} [delete]
+// RevokeAPIKey handles DELETE /api/v1/orgs/{id}/api-keys/{key_id}.
 func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -197,7 +213,7 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 			"Invalid org id", "", reqID)
 		return
 	}
-	keyID, err := strconv.Atoi(chi.URLParam(r, "keyID"))
+	keyID, err := strconv.Atoi(chi.URLParam(r, "key_id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			"Invalid key id", "", reqID)

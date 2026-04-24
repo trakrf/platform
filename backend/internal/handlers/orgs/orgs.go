@@ -292,6 +292,6 @@ func (h *Handler) RegisterAPIKeyRoutes(r chi.Router, store middleware.OrgRoleSto
 		r.Use(middleware.RequireOrgAdminOrKeysAdmin(store))
 		r.Post("/", h.CreateAPIKey)
 		r.Get("/", h.ListAPIKeys)
-		r.Delete("/{keyID}", h.RevokeAPIKey)
+		r.Delete("/{key_id}", h.RevokeAPIKey)
 	})
 }
