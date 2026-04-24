@@ -56,8 +56,10 @@ test.describe('Locations Mobile Expandable Cards', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, testEmail, testPassword);
 
-    // Navigate to Locations tab
-    await page.click('text="Locations"');
+    // On mobile the sidebar is collapsed behind the hamburger — open it first
+    await page.click('[data-testid="hamburger-button"]');
+    await page.waitForSelector('[data-testid="hamburger-dropdown"]');
+    await page.click('[data-testid="hamburger-dropdown"] [data-testid="menu-item-locations"]');
     await page.waitForTimeout(500);
   });
 
