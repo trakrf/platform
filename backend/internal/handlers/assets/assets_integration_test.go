@@ -734,7 +734,10 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 		data := assertNoLeaks(t, w.Body.Bytes())
-		assert.NotContains(t, data, "current_location", "current_location must be omitted entirely when no parent")
+		// TRA-477: current_location is always present in the response; null when
+		// the asset has no explicit parent and no scan-inferred location.
+		assert.Contains(t, data, "current_location", "current_location must always be present")
+		assert.Nil(t, data["current_location"], "current_location should be null when no parent and no scans")
 	})
 
 	t.Run("POST_WithParent", func(t *testing.T) {
