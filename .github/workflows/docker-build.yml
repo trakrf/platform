@@ -69,6 +69,9 @@ jobs:
           # the deployed commit. BUILD_TAG uses the primary ref tag produced
           # by metadata-action (sha-xxxx on commits, latest on default branch).
           # Dockerfile propagates these to the frontend stage as VITE_* env.
+          # VITE_ENVIRONMENT bakes the env-banner label into the bundle:
+          # semver tags ship empty (prod, no banner), everything else is "preview".
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             BUILD_TAG=${{ steps.meta.outputs.version }}
+            VITE_ENVIRONMENT=${{ startsWith(github.ref, 'refs/tags/v') && '' || 'preview' }}

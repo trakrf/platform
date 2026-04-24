@@ -6,7 +6,8 @@
     "dockerBuildArgs": {
       "VITE_SENTRY_DSN": "${{ VITE_SENTRY_DSN }}",
       "COMMIT_SHA": "${{ RAILWAY_GIT_COMMIT_SHA }}",
-      "BUILD_TAG": "${{ RAILWAY_GIT_BRANCH }}"
+      "BUILD_TAG": "${{ RAILWAY_GIT_BRANCH }}",
+      "VITE_ENVIRONMENT": "${{ RAILWAY_ENVIRONMENT_NAME }}"
     }
   },
   "deploy": {
