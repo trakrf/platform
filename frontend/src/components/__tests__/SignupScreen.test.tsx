@@ -75,16 +75,18 @@ describe('SignupScreen', () => {
       });
     });
 
-    it('should show org name error on blur with empty name', async () => {
+    it('should not show required error on blur with empty org name', async () => {
+      // Required errors on blur of untouched fields cause layout shifts that
+      // break click targets on nearby elements (TRA-490). Required is only
+      // enforced on submit.
       render(<SignupScreen />);
 
       const orgNameInput = screen.getByLabelText(/organization name/i);
       fireEvent.change(orgNameInput, { target: { value: '' } });
       fireEvent.blur(orgNameInput);
 
-      await waitFor(() => {
-        expect(screen.getByText(/organization name is required/i)).toBeInTheDocument();
-      });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByText(/organization name is required/i)).not.toBeInTheDocument();
     });
 
     it('should show org name error on blur with name too short', async () => {

@@ -107,6 +107,7 @@ export default function LoginScreen() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onBlur={() => {
+                if (!email) return;
                 const error = validateEmail(email);
                 if (error) setErrors(prev => ({ ...prev, email: error }));
               }}
@@ -131,6 +132,7 @@ export default function LoginScreen() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => {
+                  if (!password) return;
                   const error = validatePassword(password);
                   if (error) setErrors(prev => ({ ...prev, password: error }));
                 }}

@@ -59,15 +59,17 @@ describe('LoginScreen', () => {
       });
     });
 
-    it('should show password error on blur with empty password', async () => {
+    it('should not show required error on blur with empty password', async () => {
+      // Required errors on blur of untouched fields cause layout shifts that
+      // break click targets on nearby elements (TRA-490). Required is only
+      // enforced on submit.
       render(<LoginScreen />);
 
       const passwordInput = screen.getByLabelText(/password/i);
       fireEvent.blur(passwordInput);
 
-      await waitFor(() => {
-        expect(screen.getByText(/password is required/i)).toBeInTheDocument();
-      });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByText(/password is required/i)).not.toBeInTheDocument();
     });
 
     it('should not submit with validation errors', async () => {

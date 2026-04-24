@@ -169,7 +169,7 @@ test.describe('Authentication', () => {
       await page.locator('button[type="submit"]').click();
 
       // Should show loading state
-      await expect(page.locator('button[type="submit"]')).toContainText('Signing up...');
+      await expect(page.locator('button[type="submit"]')).toContainText('Creating account...');
 
       // Wait for error (backend should return RFC 7807 error)
       // The error should be displayed as text, not as an object
