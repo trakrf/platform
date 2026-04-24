@@ -24,8 +24,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
+	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/cmd/migrate"
 	"github.com/trakrf/platform/backend/internal/cmd/serve"
 	"github.com/trakrf/platform/backend/internal/logger"
@@ -34,7 +36,16 @@ import (
 //go:embed frontend/dist
 var frontendFS embed.FS
 
-var version = "dev"
+// Build-time metadata. All four vars are ldflags targets populated by the
+// Dockerfile / justfile / CI workflow; defaults apply to ad-hoc `go run .`.
+// See TRA-481 for why this lives in /health rather than a dedicated
+// /api/v1/version endpoint.
+var (
+	version   = "dev"
+	commit    = "unknown"
+	tag       = "dev"
+	buildTime = "unknown"
+)
 
 type command int
 
@@ -87,24 +98,32 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	runErr := run(ctx, cmd)
+	info := buildinfo.Info{
+		Version:   version,
+		Commit:    commit,
+		Tag:       tag,
+		BuildTime: buildTime,
+		GoVersion: runtime.Version(),
+	}
+
+	runErr := run(ctx, cmd, info)
 	if runErr != nil {
 		log.Error().Err(runErr).Msg("Command failed")
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, cmd command) error {
+func run(ctx context.Context, cmd command, info buildinfo.Info) error {
 	switch cmd {
 	case cmdMigrate:
-		return migrate.Run(ctx, version)
+		return migrate.Run(ctx, info)
 	case cmdServe:
-		return serve.Run(ctx, version, frontendFS)
+		return serve.Run(ctx, info, frontendFS)
 	case cmdCombined:
-		if err := migrate.Run(ctx, version); err != nil {
+		if err := migrate.Run(ctx, info); err != nil {
 			return err
 		}
-		return serve.Run(ctx, version, frontendFS)
+		return serve.Run(ctx, info, frontendFS)
 	}
 	return fmt.Errorf("unreachable command: %v", cmd)
 }

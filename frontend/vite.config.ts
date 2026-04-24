@@ -12,6 +12,29 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Check if local certificates exist
 const certExists = fs.existsSync('./.cert/localhost.pem') && fs.existsSync('./.cert/localhost-key.pem');
 
+// Emit dist/version.json at build time so `curl app.trakrf.id/version.json`
+// reports the deployed SPA commit. Mirrors the backend /health payload —
+// see TRA-481. Values come from the VITE_COMMIT_SHA / VITE_BUILD_TAG build
+// args wired through the Dockerfile.
+function emitVersionJsonPlugin(env: Record<string, string>) {
+  return {
+    name: 'emit-version-json',
+    apply: 'build' as const,
+    generateBundle(this: { emitFile: (opts: { type: 'asset'; fileName: string; source: string }) => void }) {
+      const payload = {
+        commit: env.VITE_COMMIT_SHA || 'unknown',
+        tag: env.VITE_BUILD_TAG || 'dev',
+        build_time: new Date().toISOString()
+      };
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify(payload, null, 2) + '\n'
+      });
+    }
+  };
+}
+
 // BLE Bridge Plugin - injects Web BLE → bridge server redirection
 function injectBleBridgePlugin(env: Record<string, string>) {
   const bridgeEnabled = env.VITE_BLE_BRIDGE_ENABLED === 'true';
@@ -82,7 +105,9 @@ export default defineConfig(({ mode }) => {
       react(),
       comlink(), // Add vite-plugin-comlink for worker proxying
       // Inject BLE bridge when running in bridge mode
-      injectBleBridgePlugin(env)
+      injectBleBridgePlugin(env),
+      // Emit dist/version.json for build-SHA drift detection (TRA-481)
+      emitVersionJsonPlugin(env)
     ],
     worker: {
       format: 'es', // Ensure ES modules for workers

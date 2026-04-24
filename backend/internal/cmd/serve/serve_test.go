@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trakrf/platform/backend/internal/buildinfo"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -40,7 +41,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	inventoryHandler := inventoryhandler.NewHandler(store)
 	reportsHandler := reportshandler.NewHandler(store)
 	lookupHandler := lookuphandler.NewHandler(store)
-	healthHandler := healthhandler.NewHandler(nil, "test", time.Now())
+	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist")
 	testHandler := testhandler.NewHandler(store)
 
@@ -91,6 +92,7 @@ func TestRouterRegistration(t *testing.T) {
 		{"GET", "/api/v1/users"},
 		{"GET", "/assets/index.js"},
 		{"GET", "/favicon.ico"},
+		{"GET", "/version.json"},
 		{"GET", "/"},
 		{"GET", "/api/v1/openapi.json"},
 		{"GET", "/api/v1/openapi.yaml"},

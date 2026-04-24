@@ -65,3 +65,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # Inject build metadata so /health and frontend /version.json report
+          # the deployed commit. BUILD_TAG uses the primary ref tag produced
+          # by metadata-action (sha-xxxx on commits, latest on default branch).
+          # Dockerfile propagates these to the frontend stage as VITE_* env.
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_TAG=${{ steps.meta.outputs.version }}
