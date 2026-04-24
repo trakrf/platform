@@ -232,16 +232,9 @@ func TestLocationsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	assert.Equal(t, "conflict", resp.Error.Type)
 }
 
-// TRA-407 item 1 — POST /locations/{id}/identifiers with duplicate value → 409, not 500.
-//
-// Schema note: location identifiers table has UNIQUE(org_id, type, value, valid_from). The
-// AddIdentifierToLocation INSERT uses DEFAULT CURRENT_TIMESTAMP, so two sequential HTTP calls
-// at different microseconds produce different valid_from values and do NOT collide at the DB
-// level. To confirm the constraint exists, we seed a row via raw SQL with a fixed valid_from
-// and verify the DB rejects a duplicate with the same key. The handler happy-path test confirms
-// 201 is returned when no collision occurs (value re-use at a new timestamp is allowed).
-// The error-mapping branch (strings.Contains "already exist" → 409) is verified by the
-// DB-level seed test and the handler's conflict check code path.
+// TRA-482: POST /api/v1/locations/{identifier}/identifiers with a tag value
+// already attached to a different location must return 409 Conflict.
+// Mirror of the assets test. See the assets-side comment for schema context.
 func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -251,59 +244,41 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	defer testutil.CleanupTestAccounts(t, pool)
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "tra407-ident-host",
-		Name:       "Host",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra482-loc-host", Name: "Host",
+		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
 
-	loc2, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "tra407-ident-host2",
-		Name:       "Host2",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra482-loc-host2", Name: "Host2",
+		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
 
-	// Seed identifier on loc2 with fixed valid_from.
-	fixedFrom := "2000-01-01T00:00:00Z"
-	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active, valid_from)
-         VALUES ($1, 'rfid', 'TRA-407-LOC-IDENT-DUP', $2, true, $3::timestamptz)`,
-		orgID, loc2.ID, fixedFrom,
-	)
-	require.NoError(t, err, "seed first identifier row")
-
-	// Confirm the DB constraint fires for identical (org_id, type, value, valid_from).
-	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active, valid_from)
-         VALUES ($1, 'rfid', 'TRA-407-LOC-IDENT-DUP', $2, true, $3::timestamptz)`,
-		orgID, loc.ID, fixedFrom,
-	)
-	require.Error(t, err, "same (org_id,type,value,valid_from) must fail the DB unique constraint")
-	require.Contains(t, err.Error(), "duplicate key", "SQLSTATE 23505 expected")
-
-	// Act: call AddIdentifier via the handler with the same value. The handler INSERT uses
-	// DEFAULT CURRENT_TIMESTAMP (not fixedFrom), so no collision fires here → 201.
-	// This verifies the happy-path is intact and the value can be re-assigned at a new time.
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	body := `{"type":"rfid","value":"TRA-407-LOC-IDENT-DUP"}`
-	url := "/api/v1/locations/tra407-ident-host/identifiers"
-	req := httptest.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = withOrgContext(req, orgID)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	// Attach an identifier to loc host2 via the handler.
+	body := `{"type":"rfid","value":"TRA-482-LOC-IDENT-DUP"}`
+	reqHost2 := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host2/identifiers", bytes.NewBufferString(body))
+	reqHost2.Header.Set("Content-Type", "application/json")
+	reqHost2 = withOrgContext(reqHost2, orgID)
+	wHost2 := httptest.NewRecorder()
+	router.ServeHTTP(wHost2, reqHost2)
+	require.Equal(t, http.StatusCreated, wHost2.Code, wHost2.Body.String())
 
-	// 201 because temporal schema allows value re-use at a new valid_from.
-	require.Equal(t, http.StatusCreated, w.Code,
-		"AddIdentifier with a previously-used value at a new timestamp should succeed: "+w.Body.String())
+	// Act: attach same value to the first location.
+	reqHost := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host/identifiers", bytes.NewBufferString(body))
+	reqHost.Header.Set("Content-Type", "application/json")
+	reqHost = withOrgContext(reqHost, orgID)
+	wHost := httptest.NewRecorder()
+	router.ServeHTTP(wHost, reqHost)
+
+	require.Equal(t, http.StatusConflict, wHost.Code, wHost.Body.String())
+	var resp map[string]map[string]any
+	require.NoError(t, json.Unmarshal(wHost.Body.Bytes(), &resp))
+	assert.Equal(t, "conflict", resp["error"]["type"])
 }
 
 // TRA-407 item 2 — POST /locations with bad body returns fields[] envelope.

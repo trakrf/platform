@@ -441,16 +441,13 @@ func TestAssetsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	assert.Equal(t, "conflict", resp["error"]["type"])
 }
 
-// Bug reproduction: TRA-407 item 1 — POST /assets/{id}/identifiers on duplicate value should be 409, not 500.
+// TRA-482: POST /api/v1/assets/{identifier}/identifiers with a tag value
+// already attached to a different asset must return 409 Conflict.
 //
-// Schema note: identifiers has UNIQUE(org_id, type, value, valid_from). The AddIdentifier
-// INSERT uses DEFAULT CURRENT_TIMESTAMP, so two sequential HTTP calls at different
-// microseconds produce different valid_from values and do NOT collide. To reliably trigger
-// SQLSTATE 23505, we insert the seed row via raw SQL with a fixed valid_from='2000-01-01'
-// and verify the DB raises the constraint. Then we confirm the handler's error-mapping path
-// is wired correctly: a storage error containing "already exists" must produce 409, not 500.
-// The final HTTP call uses the same value at CURRENT_TIMESTAMP (a different valid_from),
-// which succeeds (201) — demonstrating the temporal schema allows value re-use over time.
+// Before the 000032 migration this path silently created duplicate rows:
+// the legacy UNIQUE(org_id, type, value, valid_from) constraint never fired
+// because every insert used DEFAULT CURRENT_TIMESTAMP. The partial unique
+// index UNIQUE(org_id, type, value) WHERE deleted_at IS NULL fixes that.
 func TestAssetsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -465,49 +462,38 @@ func TestAssetsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	router := setupTestRouter(handler)
 
 	// Arrange: two assets.
-	assetA, err := store.CreateAsset(context.Background(), asset.Asset{
+	_, err := store.CreateAsset(context.Background(), asset.Asset{
 		OrgID: accountID, Identifier: "SN-A-dup-host", Name: "Asset A", Type: "asset",
 		ValidFrom: time.Time{}, IsActive: true,
 	})
 	require.NoError(t, err)
-	assetB, err := store.CreateAsset(context.Background(), asset.Asset{
+	_, err = store.CreateAsset(context.Background(), asset.Asset{
 		OrgID: accountID, Identifier: "SN-B-dup-host", Name: "Asset B", Type: "asset",
 		ValidFrom: time.Time{}, IsActive: true,
 	})
 	require.NoError(t, err)
 
-	// Seed identifier on assetB with fixed valid_from.
-	fixedFrom := "2000-01-01T00:00:00Z"
-	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active, valid_from)
-         VALUES ($1, 'rfid', 'TRA-407-IDENT-DUP', $2, true, $3::timestamptz)`,
-		accountID, assetB.ID, fixedFrom,
-	)
-	require.NoError(t, err, "seed first identifier row")
+	// Attach an identifier to asset B via the handler.
+	body := `{"type":"rfid","value":"TRA-482-IDENT-DUP"}`
+	reqB := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-B-dup-host/identifiers", bytes.NewBufferString(body))
+	reqB.Header.Set("Content-Type", "application/json")
+	reqB = withOrgContext(reqB, accountID)
+	wB := httptest.NewRecorder()
+	router.ServeHTTP(wB, reqB)
+	require.Equal(t, http.StatusCreated, wB.Code, wB.Body.String())
 
-	// Confirm the DB constraint fires for identical (org_id, type, value, valid_from).
-	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active, valid_from)
-         VALUES ($1, 'rfid', 'TRA-407-IDENT-DUP', $2, true, $3::timestamptz)`,
-		accountID, assetA.ID, fixedFrom,
-	)
-	require.Error(t, err, "same (org_id,type,value,valid_from) must fail the DB unique constraint")
-	require.Contains(t, err.Error(), "duplicate key", "SQLSTATE 23505 expected")
+	// Act: attach the same value to asset A.
+	reqA := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-A-dup-host/identifiers", bytes.NewBufferString(body))
+	reqA.Header.Set("Content-Type", "application/json")
+	reqA = withOrgContext(reqA, accountID)
+	wA := httptest.NewRecorder()
+	router.ServeHTTP(wA, reqA)
 
-	// Act: call AddIdentifier via the handler with the same value. The handler INSERT uses
-	// DEFAULT CURRENT_TIMESTAMP (not fixedFrom), so no collision fires here → 201.
-	// This verifies the happy-path is intact and the value can be re-assigned at a new time.
-	body := `{"type":"rfid","value":"TRA-407-IDENT-DUP"}`
-	url := "/api/v1/assets/SN-A-dup-host/identifiers"
-	req := httptest.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = withOrgContext(req, accountID)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// 201 because temporal schema allows value re-use at a new valid_from.
-	require.Equal(t, http.StatusCreated, w.Code,
-		"AddIdentifier with a previously-used value at a new timestamp should succeed: "+w.Body.String())
+	// Assert: 409 Conflict, body.error.type == "conflict".
+	require.Equal(t, http.StatusConflict, wA.Code, wA.Body.String())
+	var resp map[string]map[string]any
+	require.NoError(t, json.Unmarshal(wA.Body.Bytes(), &resp))
+	assert.Equal(t, "conflict", resp["error"]["type"])
 }
 
 // Bug reproduction: TRA-407 item 2 — POST /assets with bad body returns fields[] envelope.
