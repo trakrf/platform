@@ -506,3 +506,57 @@ func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	router.ServeHTTP(wReadd, reqReadd)
 	require.Equal(t, http.StatusCreated, wReadd.Code, wReadd.Body.String())
 }
+
+// TRA-482: A tag value attached to an asset blocks the same value on a
+// location in the same org — correct for physical RFID/BLE tags that
+// can't occupy two places at once. Locks in the cross-table enforcement
+// of the partial unique index on (org_id, type, value).
+func TestLocationsAddIdentifier_CollidesWithAssetIdentifier_Returns409(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	// Seed an asset in the same org and attach the tag to it via raw SQL.
+	// identifiers has a permuted-id trigger and an FK to assets(id).
+	var assetID int
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.assets (org_id, identifier, name, type, valid_from, is_active)
+		 VALUES ($1, 'cross-asset', 'Cross Asset', 'asset', NOW(), true)
+		 RETURNING id`, orgID,
+	).Scan(&assetID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(),
+		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
+		 VALUES ($1, 'rfid', 'TRA-482-CROSS', $2, true)`,
+		orgID, assetID,
+	)
+	require.NoError(t, err, "seed asset-side identifier")
+
+	// Now create a location in the same org and try to attach the same tag.
+	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "cross-loc", Name: "Cross Loc",
+		ValidFrom: validFrom, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	body := `{"type":"rfid","value":"TRA-482-CROSS"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/cross-loc/identifiers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	var resp map[string]map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "conflict", resp["error"]["type"])
+}
