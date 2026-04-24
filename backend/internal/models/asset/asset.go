@@ -32,7 +32,7 @@ type CreateAssetRequest struct {
 	Type              string               `json:"type,omitempty" validate:"omitempty,oneof=asset person inventory" enums:"asset,person,inventory" example:"asset"`
 	Description       string               `json:"description,omitempty" validate:"omitempty,max=1024"`
 	CurrentLocationID *int                 `json:"current_location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
-	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255"`
+	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
 	Metadata          any                  `json:"metadata,omitempty"`
@@ -45,7 +45,7 @@ type UpdateAssetRequest struct {
 	Type              *string              `json:"type,omitempty" validate:"omitempty,oneof=asset person inventory" enums:"asset,person,inventory"`
 	Description       *string              `json:"description" validate:"omitempty,max=1024"`
 	CurrentLocationID *int                 `json:"current_location_id" swaggerignore:"true"`
-	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255"`
+	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
 	// Set by the PUT handler when the body had `"valid_to": null`, to request

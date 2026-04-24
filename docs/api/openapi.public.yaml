@@ -19,9 +19,11 @@ components:
             type: object
         asset.CreateAssetWithIdentifiersRequest:
             properties:
-                current_location_id:
-                    minimum: 1
-                    type: integer
+                current_location:
+                    example: WHS-01
+                    maxLength: 255
+                    minLength: 1
+                    type: string
                 description:
                     maxLength: 1024
                     type: string
@@ -88,8 +90,11 @@ components:
             type: object
         asset.UpdateAssetRequest:
             properties:
-                current_location_id:
-                    type: integer
+                current_location:
+                    example: WHS-01
+                    maxLength: 255
+                    minLength: 1
+                    type: string
                 description:
                     maxLength: 1024
                     type: string
