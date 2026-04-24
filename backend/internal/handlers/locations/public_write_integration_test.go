@@ -21,8 +21,8 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/handlers/locations"
 	"github.com/trakrf/platform/backend/internal/middleware"
-	locmodel "github.com/trakrf/platform/backend/internal/models/location"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
+	locmodel "github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
