@@ -94,6 +94,8 @@ func TestRouterRegistration(t *testing.T) {
 		{"GET", "/favicon.ico"},
 		{"GET", "/version.json"},
 		{"GET", "/"},
+		{"GET", "/api/openapi.json"},
+		{"GET", "/api/openapi.yaml"},
 		{"GET", "/api/v1/openapi.json"},
 		{"GET", "/api/v1/openapi.yaml"},
 	}
@@ -124,6 +126,45 @@ func TestPublicOpenAPISpec_ServedAt_V1Path(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"openapi"`) {
 		t.Fatalf("body does not contain \"openapi\" key: %s", rec.Body.String()[:min(200, len(rec.Body.String()))])
+	}
+}
+
+// TRA-479: the documented integrator URL is /api/openapi.{json,yaml} (no v1
+// segment). Must serve the spec directly, not redirect — external codegen
+// tools like openapi-generator-cli plug this URL in as-is.
+func TestPublicOpenAPISpec_ServedAt_UnversionedPath_JSON(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/openapi.json", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/openapi.json = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	if !strings.Contains(rec.Body.String(), `"openapi"`) {
+		t.Fatalf("body does not contain \"openapi\" key: %s", rec.Body.String()[:min(200, len(rec.Body.String()))])
+	}
+}
+
+func TestPublicOpenAPISpec_ServedAt_UnversionedPath_YAML(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/openapi.yaml", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/openapi.yaml = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/yaml" {
+		t.Fatalf("Content-Type = %q, want application/yaml", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "openapi:") {
+		t.Fatalf("body does not contain \"openapi:\" key: %s", rec.Body.String()[:min(200, len(rec.Body.String()))])
 	}
 }
 
@@ -158,8 +199,8 @@ func TestOpenAPISpec_RootRedirect_JSON(t *testing.T) {
 	if rec.Code != http.StatusFound {
 		t.Fatalf("GET /openapi.json = %d, want 302; body: %s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); loc != "/api/v1/openapi.json" {
-		t.Fatalf("Location = %q, want /api/v1/openapi.json", loc)
+	if loc := rec.Header().Get("Location"); loc != "/api/openapi.json" {
+		t.Fatalf("Location = %q, want /api/openapi.json", loc)
 	}
 }
 
@@ -173,8 +214,8 @@ func TestOpenAPISpec_RootRedirect_YAML(t *testing.T) {
 	if rec.Code != http.StatusFound {
 		t.Fatalf("GET /openapi.yaml = %d, want 302; body: %s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); loc != "/api/v1/openapi.yaml" {
-		t.Fatalf("Location = %q, want /api/v1/openapi.yaml", loc)
+	if loc := rec.Header().Get("Location"); loc != "/api/openapi.yaml" {
+		t.Fatalf("Location = %q, want /api/openapi.yaml", loc)
 	}
 }
 
