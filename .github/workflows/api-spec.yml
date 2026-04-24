@@ -69,6 +69,13 @@ jobs:
       - name: Redocly lint
         run: pnpm --package=@redocly/cli dlx redocly lint docs/api/openapi.public.yaml --extends=recommended
 
+      - name: openapi-generator-cli validate — structural contract check for codegen consumers
+        # Redocly catches style/semantic issues; openapi-generator-cli catches the
+        # specific constraints SDK generators enforce (referenced schemas resolve,
+        # security-scheme names match types, path params are declared, etc.).
+        # Running both keeps TRA-480-class contract gaps from landing again.
+        run: pnpm --package=@openapitools/openapi-generator-cli dlx openapi-generator-cli validate -i docs/api/openapi.public.yaml
+
       - name: Upload specs as artifact
         if: always()
         uses: actions/upload-artifact@v4

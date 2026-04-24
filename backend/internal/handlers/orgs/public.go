@@ -8,13 +8,26 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
+// OrgMeView is the minimal org identity returned by GET /api/v1/orgs/me.
+// Customer-facing: just the fields integrators need to confirm the key is
+// bound to the right org.
+type OrgMeView struct {
+	ID   int    `json:"id"   example:"42"`
+	Name string `json:"name" example:"Acme Logistics"`
+}
+
+// GetOrgMeResponse is the typed envelope returned by GET /api/v1/orgs/me.
+type GetOrgMeResponse struct {
+	Data OrgMeView `json:"data"`
+}
+
 // @Summary Get the org associated with the authenticated API key
 // @Description Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.
 // @Tags orgs,public
 // @ID orgs.me
 // @Accept json
 // @Produce json
-// @Success 200 {object} map[string]any "data: {id, name}"
+// @Success 200 {object} orgs.GetOrgMeResponse
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security APIKey

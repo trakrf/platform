@@ -33,6 +33,15 @@ func respondInvalidTimestamp(w http.ResponseWriter, r *http.Request, field, reqI
 		}})
 }
 
+// AssetHistoryResponse is the typed envelope returned by
+// GET /api/v1/assets/{identifier}/history and its surrogate-ID sibling.
+type AssetHistoryResponse struct {
+	Data       []report.PublicAssetHistoryItem `json:"data"`
+	Limit      int                             `json:"limit"       example:"50"`
+	Offset     int                             `json:"offset"      example:"0"`
+	TotalCount int                             `json:"total_count" example:"100"`
+}
+
 // @Summary Asset movement history
 // @Description Location history for an asset identified by its natural key.
 // @Tags reports,public
@@ -42,15 +51,17 @@ func respondInvalidTimestamp(w http.ResponseWriter, r *http.Request, field, reqI
 // @Param offset query int false "pagination offset"
 // @Param from query string false "RFC 3339 start timestamp"
 // @Param to query string false "RFC 3339 end timestamp"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} reports.AssetHistoryResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
 // @Header  200 {integer} X-RateLimit-Reset     "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
+// @Failure 500 {object} modelerrors.ErrorResponse
 // @Security APIKey[scans:read]
 // @Router /api/v1/assets/{identifier}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +147,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 // @Param offset query int false "pagination offset"
 // @Param from query string false "RFC 3339 start timestamp"
 // @Param to query string false "RFC 3339 end timestamp"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} reports.AssetHistoryResponse
 // @Security BearerAuth
 // @Router /api/v1/assets/by-id/{id}/history [get]
 func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {

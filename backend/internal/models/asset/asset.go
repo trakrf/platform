@@ -33,8 +33,8 @@ type CreateAssetRequest struct {
 	Description       string               `json:"description,omitempty" validate:"omitempty,max=1024"`
 	CurrentLocationID *int                 `json:"current_location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
 	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
-	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`
-	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
+	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
+	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
 	Metadata          any                  `json:"metadata,omitempty"`
 	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
 }
@@ -46,8 +46,8 @@ type UpdateAssetRequest struct {
 	Description       *string              `json:"description" validate:"omitempty,max=1024"`
 	CurrentLocationID *int                 `json:"current_location_id" swaggerignore:"true"`
 	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
-	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`
-	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
+	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
+	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
 	// Set by the PUT handler when the body had `"valid_to": null`, to request
 	// an SQL NULL write. Not decoded from JSON directly.
 	ClearValidTo bool  `json:"-" swaggerignore:"true"`

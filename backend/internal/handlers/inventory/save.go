@@ -67,6 +67,7 @@ type SaveResponse struct {
 // @Summary Save inventory scans
 // @Description Persist scanned RFID assets to the asset_scans hypertable
 // @Tags inventory,public
+// @ID inventory.save
 // @Accept json
 // @Produce json
 // @Param request body SaveRequest true "Save request with location and asset IDs"
@@ -74,6 +75,8 @@ type SaveResponse struct {
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "Location or assets not owned by org"
+// @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
+// @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security APIKey[scans:write]
 // @Router /api/v1/inventory/save [post]

@@ -40,8 +40,8 @@ type CreateLocationRequest struct {
 	ParentLocationID *int                 `json:"parent_location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
 	ParentIdentifier *string              `json:"parent_identifier,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
 	Description      string               `json:"description,omitempty" validate:"omitempty,max=1024" example:"Main warehouse location"`
-	ValidFrom        *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14"`
-	ValidTo          *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14"`
+	ValidFrom        *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
+	ValidTo          *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	IsActive         *bool                `json:"is_active,omitempty" example:"true"`
 }
 
@@ -51,8 +51,8 @@ type UpdateLocationRequest struct {
 	ParentLocationID *int                 `json:"parent_location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
 	ParentIdentifier *string              `json:"parent_identifier,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
 	Description      *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
-	ValidFrom        *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14"`
-	ValidTo          *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14"`
+	ValidFrom        *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
+	ValidTo          *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	// Set by the PUT handler when the body had `"valid_to": null`, to request
 	// an SQL NULL write. Not decoded from JSON directly.
 	ClearValidTo bool  `json:"-" swaggerignore:"true"`
