@@ -1220,3 +1220,81 @@ func TestUpdateLocation_RenameToExistingIdentifier_Returns409(t *testing.T) {
 
 	require.Equal(t, http.StatusConflict, upW.Code, upW.Body.String())
 }
+
+// TRA-476: PUT with explicit `valid_to: null` must clear the field (SQL NULL),
+// matching the TRA-468 convention that null = "no constraint". Regression
+// coverage for the same bug pattern seen on the assets endpoint in black-box
+// eval #6.
+func TestUpdateLocation_ValidToNull_ClearsField(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra476-loc-null-valid-to")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	validTo := time.Now().UTC().AddDate(1, 0, 0)
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra476-loc-null-vt", Name: "expires",
+		Path: "tra476-loc-null-vt", ValidFrom: time.Now().UTC(), ValidTo: &validTo, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	body := `{"valid_to": null}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/tra476-loc-null-vt",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	_, hasValidTo := data["valid_to"]
+	assert.False(t, hasValidTo, "valid_to key must be absent after clear: %#v", data["valid_to"])
+}
+
+// TRA-476: PUT with explicit `valid_from: null` must return 400. valid_from is
+// NOT NULL in the database (TRA-468 convention).
+func TestUpdateLocation_ValidFromNull_Returns400(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra476-loc-null-valid-from")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
+	r := buildLocationsPublicWriteRouter(store)
+
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra476-loc-null-vf", Name: "has-valid-from",
+		Path: "tra476-loc-null-vf", ValidFrom: time.Now().UTC(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	body := `{"valid_from": null}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/tra476-loc-null-vf",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	errObj, ok := envelope["error"].(map[string]any)
+	require.True(t, ok, "expected error envelope: %s", w.Body.String())
+	assert.Equal(t, string(modelerrors.ErrValidation), errObj["type"],
+		"expected validation_error type, got %v", errObj["type"])
+
+	fields, ok := errObj["fields"].([]any)
+	require.True(t, ok, "expected fields[] in error envelope: %s", w.Body.String())
+	require.Len(t, fields, 1)
+	first := fields[0].(map[string]any)
+	assert.Equal(t, "valid_from", first["field"])
+}

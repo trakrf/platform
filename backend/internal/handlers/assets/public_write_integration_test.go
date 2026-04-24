@@ -869,3 +869,81 @@ func TestUpdateAsset_RenameToExistingIdentifier_Returns409(t *testing.T) {
 
 	require.Equal(t, http.StatusConflict, upW.Code, upW.Body.String())
 }
+
+// TRA-476: PUT with explicit `valid_to: null` must clear the field (SQL NULL),
+// matching the TRA-468 convention that null = "no constraint". Regression
+// coverage for black-box eval #6, which hit a 500 on this predictable input.
+func TestUpdateAsset_ValidToNull_ClearsField(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra476-asset-null-valid-to")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	validTo := time.Now().UTC().AddDate(1, 0, 0)
+	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "tra476-null-vt", Name: "expires",
+		Type: "asset", ValidFrom: time.Now().UTC(), ValidTo: &validTo, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	body := `{"valid_to": null}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/tra476-null-vt",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	_, hasValidTo := data["valid_to"]
+	assert.False(t, hasValidTo, "valid_to key must be absent after clear: %#v", data["valid_to"])
+}
+
+// TRA-476: PUT with explicit `valid_from: null` must return 400. valid_from is
+// NOT NULL in the database (TRA-468 convention: it must be a real effective
+// moment), so an explicit null is invalid input rather than intent to unset.
+func TestUpdateAsset_ValidFromNull_Returns400(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra476-asset-null-valid-from")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "tra476-null-vf", Name: "has-valid-from",
+		Type: "asset", ValidFrom: time.Now().UTC(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	body := `{"valid_from": null}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/assets/tra476-null-vf",
+		bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	errObj, ok := envelope["error"].(map[string]any)
+	require.True(t, ok, "expected error envelope: %s", w.Body.String())
+	assert.Equal(t, string(modelerrors.ErrValidation), errObj["type"],
+		"expected validation_error type, got %v", errObj["type"])
+
+	fields, ok := errObj["fields"].([]any)
+	require.True(t, ok, "expected fields[] in error envelope: %s", w.Body.String())
+	require.Len(t, fields, 1)
+	first := fields[0].(map[string]any)
+	assert.Equal(t, "valid_from", first["field"])
+}

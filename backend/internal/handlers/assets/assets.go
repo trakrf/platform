@@ -160,9 +160,26 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 	reqID := middleware.GetRequestID(req.Context())
 
 	var request asset.UpdateAssetRequest
-	if err := httputil.DecodeJSONStrict(req, &request); err != nil {
+	explicitNulls, err := httputil.DecodeJSONStrictWithNulls(req, &request)
+	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
+	}
+
+	// valid_from is NOT NULL in the DB; explicit null is invalid. Explicit
+	// valid_to null requests a clear (SQL NULL), per TRA-468 wire convention.
+	if _, ok := explicitNulls["valid_from"]; ok {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			apierrors.AssetUpdateFailed, "validation failed", reqID,
+			[]modelerrors.FieldError{{
+				Field:   "valid_from",
+				Code:    "invalid_value",
+				Message: "valid_from cannot be null; omit the field to leave unchanged, or provide a date",
+			}})
+		return
+	}
+	if _, ok := explicitNulls["valid_to"]; ok {
+		request.ClearValidTo = true
 	}
 
 	if err := validate.Struct(request); err != nil {
