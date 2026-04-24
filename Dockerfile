@@ -4,10 +4,9 @@ WORKDIR /app
 
 # Build-time args for Vite (must be available when frontend builds)
 ARG VITE_SENTRY_DSN
-ARG APP_ENV
+ARG VITE_ENVIRONMENT=""
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
-# Derive VITE_ENVIRONMENT from APP_ENV (single source of truth)
-ENV VITE_ENVIRONMENT=$APP_ENV
+ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
 
 # Build metadata — same values passed to the backend stage. Exposed as VITE_*
 # so the Vite plugin can emit dist/version.json for curl-able drift detection.
