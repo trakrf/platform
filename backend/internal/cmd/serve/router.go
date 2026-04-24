@@ -71,18 +71,21 @@ func setupRouter(
 	r.Handle("/metrics", promhttp.Handler())
 
 	// Public OpenAPI spec — served unauthenticated so codegen tools and
-	// integrators can fetch it directly from the API host. Root-path aliases
-	// (/openapi.{json,yaml}) are added below.
+	// integrators can fetch it directly from the API host. The /api/ and
+	// /api/v1/ paths both serve the spec directly; the root-path aliases
+	// below redirect for codegen tools that probe /openapi.{json,yaml}.
+	r.Get("/api/openapi.json", swaggerspec.ServePublicJSON)
+	r.Get("/api/openapi.yaml", swaggerspec.ServePublicYAML)
 	r.Get("/api/v1/openapi.json", swaggerspec.ServePublicJSON)
 	r.Get("/api/v1/openapi.yaml", swaggerspec.ServePublicYAML)
 
 	// Root-path aliases for codegen tools that probe /openapi.{json,yaml}.
 	// Registered before any SPA catchall so the redirect wins.
 	r.Get("/openapi.json", func(w http.ResponseWriter, req *http.Request) {
-		http.Redirect(w, req, "/api/v1/openapi.json", http.StatusFound)
+		http.Redirect(w, req, "/api/openapi.json", http.StatusFound)
 	})
 	r.Get("/openapi.yaml", func(w http.ResponseWriter, req *http.Request) {
-		http.Redirect(w, req, "/api/v1/openapi.yaml", http.StatusFound)
+		http.Redirect(w, req, "/api/openapi.yaml", http.StatusFound)
 	})
 
 	healthHandler.RegisterRoutes(r)
