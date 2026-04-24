@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -453,4 +454,55 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 		data := assertNoLeaks(t, w.Body.Bytes())
 		assert.Equal(t, "After", data["name"])
 	})
+}
+
+// TRA-482: After soft-deleting a location identifier, the same tag value
+// may be attached again. Mirror of the assets-side reuse test.
+func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra482-loc-reuse", Name: "Reuse",
+		ValidFrom: validFrom, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	body := `{"type":"rfid","value":"TRA-482-LOC-REUSE"}`
+	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/identifiers", bytes.NewBufferString(body))
+	reqAdd.Header.Set("Content-Type", "application/json")
+	reqAdd = withOrgContext(reqAdd, orgID)
+	wAdd := httptest.NewRecorder()
+	router.ServeHTTP(wAdd, reqAdd)
+	require.Equal(t, http.StatusCreated, wAdd.Code, wAdd.Body.String())
+
+	var addResp map[string]any
+	require.NoError(t, json.Unmarshal(wAdd.Body.Bytes(), &addResp))
+	data, ok := addResp["data"].(map[string]any)
+	require.True(t, ok, "response missing data object: %s", wAdd.Body.String())
+	rawID, ok := data["id"]
+	require.True(t, ok, "response data missing id: %s", wAdd.Body.String())
+	identifierID := int(rawID.(float64))
+
+	delURL := fmt.Sprintf("/api/v1/locations/tra482-loc-reuse/identifiers/%d", identifierID)
+	reqDel := httptest.NewRequest(http.MethodDelete, delURL, nil)
+	reqDel = withOrgContext(reqDel, orgID)
+	wDel := httptest.NewRecorder()
+	router.ServeHTTP(wDel, reqDel)
+	require.Equal(t, http.StatusNoContent, wDel.Code, wDel.Body.String())
+
+	reqReadd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/identifiers", bytes.NewBufferString(body))
+	reqReadd.Header.Set("Content-Type", "application/json")
+	reqReadd = withOrgContext(reqReadd, orgID)
+	wReadd := httptest.NewRecorder()
+	router.ServeHTTP(wReadd, reqReadd)
+	require.Equal(t, http.StatusCreated, wReadd.Code, wReadd.Body.String())
 }

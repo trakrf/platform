@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -1118,4 +1119,62 @@ func TestCreateAsset_IncludesValidToWhenSet(t *testing.T) {
 	require.NoError(t, json.Unmarshal(wG.Body.Bytes(), &getEnvelope))
 	getData := getEnvelope["data"].(map[string]any)
 	assert.Equal(t, vt, getData["valid_to"], "GET valid_to differs from POST")
+}
+
+// TRA-482: After soft-deleting an identifier, the same tag value may be
+// attached again (on the same or a different asset). Exercises the partial
+// unique index's WHERE deleted_at IS NULL clause.
+func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+
+	accountID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	_, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: accountID, Identifier: "SN-reuse-host", Name: "Host", Type: "asset",
+		ValidFrom: time.Time{}, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Attach.
+	body := `{"type":"rfid","value":"TRA-482-REUSE"}`
+	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-reuse-host/identifiers", bytes.NewBufferString(body))
+	reqAdd.Header.Set("Content-Type", "application/json")
+	reqAdd = withOrgContext(reqAdd, accountID)
+	wAdd := httptest.NewRecorder()
+	router.ServeHTTP(wAdd, reqAdd)
+	require.Equal(t, http.StatusCreated, wAdd.Code, wAdd.Body.String())
+
+	// Extract the identifier id from the 201 response.
+	var addResp map[string]any
+	require.NoError(t, json.Unmarshal(wAdd.Body.Bytes(), &addResp))
+	data, ok := addResp["data"].(map[string]any)
+	require.True(t, ok, "response missing data object: %s", wAdd.Body.String())
+	rawID, ok := data["id"]
+	require.True(t, ok, "response data missing id: %s", wAdd.Body.String())
+	// JSON numbers decode as float64; the DELETE route expects an int-shaped path segment.
+	identifierID := int(rawID.(float64))
+
+	// Soft-delete.
+	delURL := fmt.Sprintf("/api/v1/assets/SN-reuse-host/identifiers/%d", identifierID)
+	reqDel := httptest.NewRequest(http.MethodDelete, delURL, nil)
+	reqDel = withOrgContext(reqDel, accountID)
+	wDel := httptest.NewRecorder()
+	router.ServeHTTP(wDel, reqDel)
+	require.Equal(t, http.StatusNoContent, wDel.Code, wDel.Body.String())
+
+	// Re-attach the same value.
+	reqReadd := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-reuse-host/identifiers", bytes.NewBufferString(body))
+	reqReadd.Header.Set("Content-Type", "application/json")
+	reqReadd = withOrgContext(reqReadd, accountID)
+	wReadd := httptest.NewRecorder()
+	router.ServeHTTP(wReadd, reqReadd)
+	require.Equal(t, http.StatusCreated, wReadd.Code, wReadd.Body.String())
 }
