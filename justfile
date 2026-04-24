@@ -91,3 +91,48 @@ dev-stop:
 
 dev-logs:
     docker compose logs -f
+
+# ============================================================================
+# Worktree Support
+# ============================================================================
+
+# Copy gitignored build artifacts (openapi.internal/public specs, frontend/dist)
+# from the main worktree so `go run . migrate` and friends work without
+# regenerating them. Safe to run repeatedly; no-op if already in the main
+# worktree.
+worktree-bootstrap:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    main_dir=$(git worktree list --porcelain | awk '/^worktree /{path=$2} /^branch refs\/heads\/main$/{print path; exit}')
+    if [ -z "$main_dir" ]; then
+        echo "❌ Cannot locate main worktree (no branch refs/heads/main in git worktree list)" >&2
+        exit 1
+    fi
+    here=$(git rev-parse --show-toplevel)
+    if [ "$main_dir" = "$here" ]; then
+        echo "ℹ️  Already in main worktree — nothing to bootstrap"
+        exit 0
+    fi
+    echo "📋 Source: $main_dir"
+    echo "📋 Target: $here"
+    specs_dir="backend/internal/handlers/swaggerspec"
+    for f in openapi.internal.json openapi.internal.yaml openapi.public.json openapi.public.yaml; do
+        src="$main_dir/$specs_dir/$f"
+        if [ -f "$src" ]; then
+            cp "$src" "$here/$specs_dir/$f"
+            echo "  ✓ $specs_dir/$f"
+        else
+            echo "  ⚠ $specs_dir/$f not found in main — run \`just backend api-spec\` there first" >&2
+        fi
+    done
+    dist_src="$main_dir/backend/frontend/dist"
+    dist_dst="$here/backend/frontend/dist"
+    if [ -d "$dist_src" ]; then
+        mkdir -p "$here/backend/frontend"
+        rm -rf "$dist_dst"
+        cp -r "$dist_src" "$dist_dst"
+        echo "  ✓ backend/frontend/dist/"
+    else
+        echo "  ⚠ backend/frontend/dist not found in main — run \`just frontend build\` there first" >&2
+    fi
+    echo "✅ Worktree bootstrap complete"
