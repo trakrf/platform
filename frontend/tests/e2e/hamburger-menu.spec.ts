@@ -211,13 +211,13 @@ test.describe('Hamburger Menu (Mobile)', () => {
       // Set desktop viewport
       await sharedPage.setViewportSize({ width: 1280, height: 800 });
       await sharedPage.goto('/');
-      
+
       // Hamburger button should not be visible
       const hamburgerButton = sharedPage.locator('[data-testid="hamburger-button"]');
       await expect(hamburgerButton).not.toBeVisible();
-      
-      // Desktop sidebar should be visible (hidden lg:flex)
-      const sidebar = sharedPage.locator('.hidden.lg\\:flex').first();
+
+      // Desktop sidebar should be visible at xl breakpoint and above
+      const sidebar = sharedPage.locator('[data-testid="desktop-sidebar"]');
       await expect(sidebar).toBeVisible();
       
       // Navigation tabs should be directly accessible

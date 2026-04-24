@@ -264,7 +264,7 @@ export default function App() {
         }}
       />
 
-      <div className="hidden xl:flex w-64 h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col fixed left-0 top-0 z-30">
+      <div className="hidden xl:flex w-64 h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col fixed left-0 top-0 z-30" data-testid="desktop-sidebar">
         <ErrorBoundary name="TabNavigation">
           <TabNavigation />
         </ErrorBoundary>
