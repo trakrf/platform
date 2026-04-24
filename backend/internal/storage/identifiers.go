@@ -221,7 +221,7 @@ func (s *Storage) GetIdentifierByID(ctx context.Context, orgID, identifierID int
 func parseIdentifierError(err error, identifierType, value string) error {
 	if pgErr, ok := err.(*pgconn.PgError); ok {
 		switch pgErr.ConstraintName {
-		case "identifiers_org_id_type_value_valid_from_key":
+		case "identifiers_org_id_type_value_unique":
 			return fmt.Errorf("identifier %s:%s already exists", identifierType, value)
 		case "identifier_target":
 			return fmt.Errorf("identifier must be linked to exactly one asset or location")
