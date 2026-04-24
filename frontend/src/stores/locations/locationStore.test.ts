@@ -50,6 +50,40 @@ describe('LocationStore - Cache Operations', () => {
     expect(cache.rootIds.has(2)).toBe(false);
   });
 
+  // TRA-484: public API responses (POST /locations) omit parent_location_id and
+  // include only the natural-key `parent` field. addLocation must treat such
+  // a payload as a root if `parent` is absent, otherwise resolve `parent` →
+  // surrogate id from cache. Without this, new locations never enter rootIds
+  // and the tree/card-list selectors don't see them until a full refetch.
+  it('should add a root location when parent_location_id is absent (public API shape)', () => {
+    const fromCreateResponse = createMockLocation(42, {
+      parent_location_id: undefined,
+      parent: undefined,
+    });
+
+    useLocationStore.getState().addLocation(fromCreateResponse);
+
+    const { cache } = useLocationStore.getState();
+    expect(cache.rootIds.has(42)).toBe(true);
+    expect(cache.byParentId.has(undefined as unknown as null)).toBe(false);
+  });
+
+  it('should resolve parent_location_id from natural-key parent on add', () => {
+    const parent = createMockLocation(1, { identifier: 'warehouse' });
+    useLocationStore.getState().addLocation(parent);
+
+    const childFromCreateResponse = createMockLocation(2, {
+      parent_location_id: undefined,
+      parent: 'warehouse',
+    });
+    useLocationStore.getState().addLocation(childFromCreateResponse);
+
+    const { cache } = useLocationStore.getState();
+    expect(cache.byParentId.get(1)?.has(2)).toBe(true);
+    expect(cache.rootIds.has(2)).toBe(false);
+    expect(cache.byId.get(2)?.parent_location_id).toBe(1);
+  });
+
   it('should update location identifier correctly', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().addLocation(location);
