@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -232,16 +233,9 @@ func TestLocationsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	assert.Equal(t, "conflict", resp.Error.Type)
 }
 
-// TRA-407 item 1 — POST /locations/{id}/identifiers with duplicate value → 409, not 500.
-//
-// Schema note: location identifiers table has UNIQUE(org_id, type, value, valid_from). The
-// AddIdentifierToLocation INSERT uses DEFAULT CURRENT_TIMESTAMP, so two sequential HTTP calls
-// at different microseconds produce different valid_from values and do NOT collide at the DB
-// level. To confirm the constraint exists, we seed a row via raw SQL with a fixed valid_from
-// and verify the DB rejects a duplicate with the same key. The handler happy-path test confirms
-// 201 is returned when no collision occurs (value re-use at a new timestamp is allowed).
-// The error-mapping branch (strings.Contains "already exist" → 409) is verified by the
-// DB-level seed test and the handler's conflict check code path.
+// TRA-482: POST /api/v1/locations/{identifier}/identifiers with a tag value
+// already attached to a different location must return 409 Conflict.
+// Mirror of the assets test. See the assets-side comment for schema context.
 func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -251,59 +245,41 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	defer testutil.CleanupTestAccounts(t, pool)
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "tra407-ident-host",
-		Name:       "Host",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra482-loc-host", Name: "Host",
+		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
 
-	loc2, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "tra407-ident-host2",
-		Name:       "Host2",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra482-loc-host2", Name: "Host2",
+		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
 
-	// Seed identifier on loc2 with fixed valid_from.
-	fixedFrom := "2000-01-01T00:00:00Z"
-	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active, valid_from)
-         VALUES ($1, 'rfid', 'TRA-407-LOC-IDENT-DUP', $2, true, $3::timestamptz)`,
-		orgID, loc2.ID, fixedFrom,
-	)
-	require.NoError(t, err, "seed first identifier row")
-
-	// Confirm the DB constraint fires for identical (org_id, type, value, valid_from).
-	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active, valid_from)
-         VALUES ($1, 'rfid', 'TRA-407-LOC-IDENT-DUP', $2, true, $3::timestamptz)`,
-		orgID, loc.ID, fixedFrom,
-	)
-	require.Error(t, err, "same (org_id,type,value,valid_from) must fail the DB unique constraint")
-	require.Contains(t, err.Error(), "duplicate key", "SQLSTATE 23505 expected")
-
-	// Act: call AddIdentifier via the handler with the same value. The handler INSERT uses
-	// DEFAULT CURRENT_TIMESTAMP (not fixedFrom), so no collision fires here → 201.
-	// This verifies the happy-path is intact and the value can be re-assigned at a new time.
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	body := `{"type":"rfid","value":"TRA-407-LOC-IDENT-DUP"}`
-	url := "/api/v1/locations/tra407-ident-host/identifiers"
-	req := httptest.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = withOrgContext(req, orgID)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	// Attach an identifier to loc host2 via the handler.
+	body := `{"type":"rfid","value":"TRA-482-LOC-IDENT-DUP"}`
+	reqHost2 := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host2/identifiers", bytes.NewBufferString(body))
+	reqHost2.Header.Set("Content-Type", "application/json")
+	reqHost2 = withOrgContext(reqHost2, orgID)
+	wHost2 := httptest.NewRecorder()
+	router.ServeHTTP(wHost2, reqHost2)
+	require.Equal(t, http.StatusCreated, wHost2.Code, wHost2.Body.String())
 
-	// 201 because temporal schema allows value re-use at a new valid_from.
-	require.Equal(t, http.StatusCreated, w.Code,
-		"AddIdentifier with a previously-used value at a new timestamp should succeed: "+w.Body.String())
+	// Act: attach same value to the first location.
+	reqHost := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host/identifiers", bytes.NewBufferString(body))
+	reqHost.Header.Set("Content-Type", "application/json")
+	reqHost = withOrgContext(reqHost, orgID)
+	wHost := httptest.NewRecorder()
+	router.ServeHTTP(wHost, reqHost)
+
+	require.Equal(t, http.StatusConflict, wHost.Code, wHost.Body.String())
+	var resp map[string]map[string]any
+	require.NoError(t, json.Unmarshal(wHost.Body.Bytes(), &resp))
+	assert.Equal(t, "conflict", resp["error"]["type"])
 }
 
 // TRA-407 item 2 — POST /locations with bad body returns fields[] envelope.
@@ -478,4 +454,109 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 		data := assertNoLeaks(t, w.Body.Bytes())
 		assert.Equal(t, "After", data["name"])
 	})
+}
+
+// TRA-482: After soft-deleting a location identifier, the same tag value
+// may be attached again. Mirror of the assets-side reuse test.
+func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "tra482-loc-reuse", Name: "Reuse",
+		ValidFrom: validFrom, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	body := `{"type":"rfid","value":"TRA-482-LOC-REUSE"}`
+	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/identifiers", bytes.NewBufferString(body))
+	reqAdd.Header.Set("Content-Type", "application/json")
+	reqAdd = withOrgContext(reqAdd, orgID)
+	wAdd := httptest.NewRecorder()
+	router.ServeHTTP(wAdd, reqAdd)
+	require.Equal(t, http.StatusCreated, wAdd.Code, wAdd.Body.String())
+
+	var addResp map[string]any
+	require.NoError(t, json.Unmarshal(wAdd.Body.Bytes(), &addResp))
+	data, ok := addResp["data"].(map[string]any)
+	require.True(t, ok, "response missing data object: %s", wAdd.Body.String())
+	rawID, ok := data["id"]
+	require.True(t, ok, "response data missing id: %s", wAdd.Body.String())
+	identifierID := int(rawID.(float64))
+
+	delURL := fmt.Sprintf("/api/v1/locations/tra482-loc-reuse/identifiers/%d", identifierID)
+	reqDel := httptest.NewRequest(http.MethodDelete, delURL, nil)
+	reqDel = withOrgContext(reqDel, orgID)
+	wDel := httptest.NewRecorder()
+	router.ServeHTTP(wDel, reqDel)
+	require.Equal(t, http.StatusNoContent, wDel.Code, wDel.Body.String())
+
+	reqReadd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/identifiers", bytes.NewBufferString(body))
+	reqReadd.Header.Set("Content-Type", "application/json")
+	reqReadd = withOrgContext(reqReadd, orgID)
+	wReadd := httptest.NewRecorder()
+	router.ServeHTTP(wReadd, reqReadd)
+	require.Equal(t, http.StatusCreated, wReadd.Code, wReadd.Body.String())
+}
+
+// TRA-482: A tag value attached to an asset blocks the same value on a
+// location in the same org — correct for physical RFID/BLE tags that
+// can't occupy two places at once. Locks in the cross-table enforcement
+// of the partial unique index on (org_id, type, value).
+func TestLocationsAddIdentifier_CollidesWithAssetIdentifier_Returns409(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	defer testutil.CleanupAssets(t, pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	// Seed an asset in the same org and attach the tag to it via raw SQL.
+	// identifiers has a permuted-id trigger and an FK to assets(id).
+	var assetID int
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.assets (org_id, identifier, name, type, valid_from, is_active)
+		 VALUES ($1, 'cross-asset', 'Cross Asset', 'asset', NOW(), true)
+		 RETURNING id`, orgID,
+	).Scan(&assetID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(context.Background(),
+		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
+		 VALUES ($1, 'rfid', 'TRA-482-CROSS', $2, true)`,
+		orgID, assetID,
+	)
+	require.NoError(t, err, "seed asset-side identifier")
+
+	// Now create a location in the same org and try to attach the same tag.
+	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "cross-loc", Name: "Cross Loc",
+		ValidFrom: validFrom, IsActive: true,
+	})
+	require.NoError(t, err)
+
+	handler := NewHandler(store)
+	router := setupTestRouter(handler)
+
+	body := `{"type":"rfid","value":"TRA-482-CROSS"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/cross-loc/identifiers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	var resp map[string]map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "conflict", resp["error"]["type"])
 }
