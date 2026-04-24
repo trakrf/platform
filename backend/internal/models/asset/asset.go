@@ -46,8 +46,11 @@ type UpdateAssetRequest struct {
 	CurrentLocationID *int                 `json:"current_location_id"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01"`
-	Metadata          *any                 `json:"metadata"`
-	IsActive          *bool                `json:"is_active"`
+	// Set by the PUT handler when the body had `"valid_to": null`, to request
+	// an SQL NULL write. Not decoded from JSON directly.
+	ClearValidTo bool  `json:"-" swaggerignore:"true"`
+	Metadata     *any  `json:"metadata"`
+	IsActive     *bool `json:"is_active"`
 }
 
 type AssetListResponse struct {

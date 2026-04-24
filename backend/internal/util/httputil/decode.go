@@ -1,8 +1,10 @@
 package httputil
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 
@@ -41,6 +43,37 @@ func DecodeJSONStrict(r *http.Request, dst any) error {
 		return &JSONDecodeError{Cause: err}
 	}
 	return nil
+}
+
+// DecodeJSONStrictWithNulls is DecodeJSONStrict that additionally reports
+// which top-level JSON keys held the explicit literal `null`. Use on
+// PATCH / PUT endpoints where `null` has semantic meaning distinct from
+// "field omitted" (e.g., clear the field in the database).
+//
+// A non-object body (array, string, number) yields the usual strict-decode
+// failure and an empty null set.
+func DecodeJSONStrictWithNulls(r *http.Request, dst any) (map[string]struct{}, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, &JSONDecodeError{Cause: err}
+	}
+
+	explicitNulls := map[string]struct{}{}
+	var raw map[string]json.RawMessage
+	if jsonErr := json.Unmarshal(body, &raw); jsonErr == nil {
+		for k, v := range raw {
+			if bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+				explicitNulls[k] = struct{}{}
+			}
+		}
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if decErr := dec.Decode(dst); decErr != nil {
+		return nil, &JSONDecodeError{Cause: decErr}
+	}
+	return explicitNulls, nil
 }
 
 // RespondDecodeError writes a 400 with a stable, human-safe detail string.

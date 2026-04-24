@@ -53,12 +53,11 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		return nil, err
 	}
 
+	// Nil entries (only from ClearValidTo) pass through as SQL NULL.
 	for key, value := range fields {
-		if value != nil {
-			updates = append(updates, fmt.Sprintf("%s = $%d", key, argPos))
-			args = append(args, value)
-			argPos++
-		}
+		updates = append(updates, fmt.Sprintf("%s = $%d", key, argPos))
+		args = append(args, value)
+		argPos++
 	}
 
 	if len(updates) == 0 {
@@ -844,7 +843,9 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {
 		fields["valid_from"] = req.ValidFrom.ToTime()
 	}
-	if req.ValidTo != nil && !req.ValidTo.IsZero() {
+	if req.ClearValidTo {
+		fields["valid_to"] = nil
+	} else if req.ValidTo != nil && !req.ValidTo.IsZero() {
 		fields["valid_to"] = req.ValidTo.ToTime()
 	}
 	if req.IsActive != nil {

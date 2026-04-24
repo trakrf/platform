@@ -53,7 +53,10 @@ type UpdateLocationRequest struct {
 	Description      *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
 	ValidFrom        *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14"`
 	ValidTo          *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14"`
-	IsActive         *bool                `json:"is_active,omitempty" example:"true"`
+	// Set by the PUT handler when the body had `"valid_to": null`, to request
+	// an SQL NULL write. Not decoded from JSON directly.
+	ClearValidTo bool  `json:"-" swaggerignore:"true"`
+	IsActive     *bool `json:"is_active,omitempty" example:"true"`
 }
 
 type LocationListResponse struct {
