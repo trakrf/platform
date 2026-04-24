@@ -30,6 +30,11 @@ test:
 test-e2e:
     pnpm test:e2e
 
+# Run E2E tests against a remote deployment (skips local webServer)
+# Example: just frontend test-e2e-remote https://gke.trakrf.app
+test-e2e-remote base_url:
+    PLAYWRIGHT_BASE_URL={{base_url}} pnpm test:e2e
+
 # Build frontend for production
 build:
     pnpm run build

@@ -127,6 +127,66 @@ BLE_MCP_HOST=localhost
 BLE_MCP_WS_PORT=8080
 ```
 
+## Running Against a Remote Deployment
+
+The suite can be run against any deployed environment (preview, gke, staging,
+etc.) without booting a local Vite server. Useful for smoke-testing a
+deployment after a release or cluster change.
+
+```bash
+# From project root
+just frontend test-e2e-remote https://gke.trakrf.app
+
+# Or directly
+cd frontend && PLAYWRIGHT_BASE_URL=https://gke.trakrf.app pnpm test:e2e
+
+# Single spec
+PLAYWRIGHT_BASE_URL=https://gke.trakrf.app pnpm exec playwright test auth.spec.ts
+```
+
+When `PLAYWRIGHT_BASE_URL` is set, the config skips the local `webServer`
+launch — the remote deployment is treated as the server.
+
+### Skipping hardware-dependent specs
+
+Specs tagged `@hardware` require a physical CS108 reader on the same machine
+as the test runner, which isn't available when pointing at a remote URL.
+Exclude them:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://gke.trakrf.app \
+  pnpm exec playwright test --grep-invert "@hardware"
+```
+
+Or pass an explicit file list of non-hardware specs.
+
+### Provisioning a remote test user
+
+Fixtures perform signup per test with unique timestamped emails, so remote
+runs don't require pre-seeded accounts. For a one-off check:
+
+```bash
+ts=$(date +%s)
+curl -sS -X POST https://gke.trakrf.app/api/v1/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"mike-remotetest-${ts}@trakrf.id\",\"password\":\"Passw0rd!123\",\"org_name\":\"remote-test-${ts}\"}"
+```
+
+A 201 with a JWT confirms auth + DB + JWT signing are healthy.
+
+### Verifying deployed commit vs local
+
+Until `/api/v1/version` exists (see `TRA-481`), check the tag pinned in the
+infra repo:
+
+```bash
+grep -E '^\s+tag:' /home/mike/trakrf-infra/helm/trakrf-backend/values-gke.yaml
+# → tag: sha-<shortsha>
+```
+
+Compare against `git log --oneline <shortsha>..HEAD` in this repo to gauge
+drift before attributing test failures to real bugs.
+
 ## Test Coverage Areas
 
 ### Core Functionality

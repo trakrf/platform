@@ -4,15 +4,18 @@ import dotenv from 'dotenv';
 // Load environment variables from .env.local
 dotenv.config({ path: '.env.local' });
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
+const isRemote = !!process.env.PLAYWRIGHT_BASE_URL;
+
 export default defineConfig({
   testDir: './tests/e2e',
   testIgnore: '**/to-fix/**',  // Skip all tests in to-fix directory
   // globalSetup: './tests/e2e/global-setup.ts',  // Disabled - was killing servers
-  
+
   // IMPORTANT: 30 second timeout per test - fail fast instead of hanging!
   // If a test needs more time, it should be split into smaller tests
   timeout: 30 * 1000,
-  
+
   // Assertions should also fail fast
   expect: {
     timeout: 5000
@@ -24,7 +27,7 @@ export default defineConfig({
   // TEMPORARY: Single worker + rate limiting in e2e.setup.ts to work around Noble.js listener leak
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -38,7 +41,9 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: process.env.CI ? {
+  // When PLAYWRIGHT_BASE_URL is set, tests run against a remote deployment
+  // and no local webServer is needed.
+  webServer: isRemote ? undefined : (process.env.CI ? {
     // In CI, always start fresh server
     command: process.env.USE_BRIDGE ? 'pnpm dev:bridge' : 'pnpm vite',
     port: 5173,
@@ -54,5 +59,5 @@ export default defineConfig({
     reuseExistingServer: true,  // Always reuse if available
     stdout: 'pipe',
     stderr: 'pipe',
-  },
+  }),
 });
