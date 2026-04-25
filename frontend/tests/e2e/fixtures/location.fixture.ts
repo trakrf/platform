@@ -9,25 +9,29 @@ import type { Page } from '@playwright/test';
 import { getAuthToken } from './org.fixture';
 
 /**
- * Location creation data
+ * Location creation data (public-API write shape per TRA-447).
+ * Parent is referenced by natural identifier, not surrogate ID.
  */
 export interface CreateLocationData {
   identifier: string;
   name: string;
   description?: string;
-  parent_location_id?: number | null;
+  parent_identifier?: string | null;
   is_active?: boolean;
 }
 
 /**
- * Created location response
+ * Trimmed view of the public PublicLocationView response (TRA-447).
+ * Surrogate IDs are intentionally omitted — fixtures use natural identifiers
+ * end-to-end so e2e tests exercise the same contract external SDK consumers see.
  */
 export interface CreatedLocation {
-  id: number;
   identifier: string;
   name: string;
   description: string;
-  parent_location_id: number | null;
+  parent: string | null;
+  path: string;
+  depth: number;
   is_active: boolean;
 }
 
@@ -60,7 +64,7 @@ export async function createLocationViaAPI(
       identifier: data.identifier,
       name: data.name,
       description: data.description || '',
-      parent_location_id: data.parent_location_id ?? null,
+      parent_identifier: data.parent_identifier ?? null,
       is_active: data.is_active ?? true,
     },
   });
@@ -75,17 +79,24 @@ export async function createLocationViaAPI(
 }
 
 /**
- * Delete a location via API
+ * Delete a location via the public API (DELETE /locations/{identifier}).
+ * Uses the natural-key route so fixtures don't depend on internal surrogate IDs.
  */
-export async function deleteLocationViaAPI(page: Page, id: number): Promise<void> {
+export async function deleteLocationByIdentifierViaAPI(
+  page: Page,
+  identifier: string
+): Promise<void> {
   const baseUrl = getApiBaseUrl();
   const token = await getAuthToken(page);
 
-  const response = await page.request.delete(`${baseUrl}/locations/by-id/${id}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = await page.request.delete(
+    `${baseUrl}/locations/${encodeURIComponent(identifier)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
 
   if (!response.ok()) {
     const text = await response.text();
@@ -116,25 +127,21 @@ export async function getLocationsViaAPI(page: Page): Promise<CreatedLocation[]>
 }
 
 /**
- * Delete all locations for clean test state
- * Deletes in reverse order (children first) to avoid parent constraint issues
+ * Delete all locations for clean test state.
+ * Sorts by depth descending (deepest first) so children are deleted before
+ * their parents, avoiding FK constraint failures.
  */
 export async function deleteAllLocationsViaAPI(page: Page): Promise<void> {
   const locations = await getLocationsViaAPI(page);
 
-  // Sort by depth (deepest first) to delete children before parents
-  // Locations without parent_location_id are root (depth 0)
-  const sortedByDepth = locations.sort((a, b) => {
-    const depthA = a.parent_location_id ? 1 : 0;
-    const depthB = b.parent_location_id ? 1 : 0;
-    return depthB - depthA;
-  });
+  const sortedByDepth = [...locations].sort((a, b) => b.depth - a.depth);
 
   for (const location of sortedByDepth) {
     try {
-      await deleteLocationViaAPI(page, location.id);
+      await deleteLocationByIdentifierViaAPI(page, location.identifier);
     } catch {
-      // Ignore errors (may already be deleted via cascade)
+      // Cascade may have removed children already; teardown errors are
+      // intentionally swallowed so they don't mask real test failures.
     }
   }
 }
@@ -164,11 +171,12 @@ export interface TestHierarchy {
 }
 
 /**
- * Create a complete test hierarchy
- * Returns all created locations for use in tests
+ * Create a complete test hierarchy.
+ * Parent linkage uses parent_identifier (TRA-447 natural-key contract);
+ * the parent's identifier is a string literal already in scope, so we
+ * never need to read back a surrogate ID from a previous response.
  */
 export async function createTestHierarchy(page: Page): Promise<TestHierarchy> {
-  // Create root locations
   const warehouseA = await createLocationViaAPI(page, {
     identifier: 'warehouse-a',
     name: 'Warehouse A',
@@ -181,49 +189,46 @@ export async function createTestHierarchy(page: Page): Promise<TestHierarchy> {
     description: 'Secondary warehouse',
   });
 
-  // Create Floor 1 and Floor 2 under Warehouse A
   const floor1 = await createLocationViaAPI(page, {
     identifier: 'floor-1',
     name: 'Floor 1',
     description: 'First floor',
-    parent_location_id: warehouseA.id,
+    parent_identifier: 'warehouse-a',
   });
 
   const floor2 = await createLocationViaAPI(page, {
     identifier: 'floor-2',
     name: 'Floor 2',
     description: 'Second floor',
-    parent_location_id: warehouseA.id,
+    parent_identifier: 'warehouse-a',
   });
 
-  // Create sections under floors
   const sectionA = await createLocationViaAPI(page, {
     identifier: 'section-a',
     name: 'Section A',
     description: 'Storage section A',
-    parent_location_id: floor1.id,
+    parent_identifier: 'floor-1',
   });
 
   const sectionB = await createLocationViaAPI(page, {
     identifier: 'section-b',
     name: 'Section B',
     description: 'Storage section B',
-    parent_location_id: floor1.id,
+    parent_identifier: 'floor-1',
   });
 
   const sectionC = await createLocationViaAPI(page, {
     identifier: 'section-c',
     name: 'Section C',
     description: 'Storage section C',
-    parent_location_id: floor2.id,
+    parent_identifier: 'floor-2',
   });
 
-  // Create storage area under Warehouse B
   const storageArea = await createLocationViaAPI(page, {
     identifier: 'storage-area',
     name: 'Storage Area',
     description: 'General storage',
-    parent_location_id: warehouseB.id,
+    parent_identifier: 'warehouse-b',
   });
 
   return {
