@@ -73,6 +73,10 @@ build: api-spec
 
 # Generate OpenAPI 3.0 specs (public → docs/api/ + embedded; internal → embedded only)
 api-spec:
+    @# swag's --parseDependency walks main.go, which has //go:embed frontend/dist.
+    @# Without a real or stub file there, swag falls back to fully-qualified Go
+    @# package names in schema definitions (~700 lines of churn). See TRA-505.
+    @[ -e frontend/dist/index.html ] || (mkdir -p frontend/dist && touch frontend/dist/index.html)
     @echo "📚 Generating OpenAPI 3.0 specs..."
     swag init -g main.go --parseDependency --parseInternal -o docs
     @mkdir -p internal/handlers/swaggerspec ../docs/api
