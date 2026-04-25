@@ -25,7 +25,7 @@ import {
 const API_BASE = 'http://localhost:8080/api/v1';
 
 interface TestLocation {
-  id: number;
+  identifier: string;
   name: string;
 }
 
@@ -55,7 +55,7 @@ async function createTestLocation(page: Page, name: string): Promise<TestLocatio
 
   const data = await response.json();
   return {
-    id: data.data.id,
+    identifier: data.data.identifier,
     name: data.data.name,
   };
 }
@@ -136,7 +136,7 @@ test.describe('Locations After Login (TRA-318)', () => {
     for (let i = 1; i <= 3; i++) {
       const location = await createTestLocation(sharedPage, `Test Location ${i} - ${testId}`);
       testLocations.push(location);
-      console.log(`[LocationsAfterLogin] Created location: ${location.name} (ID: ${location.id})`);
+      console.log(`[LocationsAfterLogin] Created location: ${location.name} (identifier: ${location.identifier})`);
     }
 
     console.log(`[LocationsAfterLogin] Setup complete: ${testLocations.length} locations created`);
