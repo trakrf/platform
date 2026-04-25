@@ -73,6 +73,39 @@ func (s *Storage) ListActiveAPIKeys(ctx context.Context, orgID int) ([]apikey.AP
 	return out, rows.Err()
 }
 
+// ListActiveAPIKeysPaginated returns non-revoked keys for the given org
+// ordered by creation time descending (newest first) with LIMIT/OFFSET
+// applied. The id ASC tiebreaker keeps paging deterministic for keys
+// created in the same instant.
+func (s *Storage) ListActiveAPIKeysPaginated(ctx context.Context, orgID, limit, offset int) ([]apikey.APIKey, error) {
+	rows, err := s.pool.Query(ctx, `
+        SELECT id, jti, org_id, name, scopes, created_by, created_by_key_id,
+               created_at, expires_at, last_used_at, revoked_at
+        FROM trakrf.api_keys
+        WHERE org_id = $1 AND revoked_at IS NULL
+        ORDER BY created_at DESC, id ASC
+        LIMIT $2 OFFSET $3
+    `, orgID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("list api_keys paginated: %w", err)
+	}
+	defer rows.Close()
+
+	out := []apikey.APIKey{}
+	for rows.Next() {
+		var k apikey.APIKey
+		if err := rows.Scan(
+			&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
+			&k.CreatedBy, &k.CreatedByKeyID,
+			&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan api_key row: %w", err)
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
 // CountActiveAPIKeys returns the active-key count for enforcing the per-org cap.
 func (s *Storage) CountActiveAPIKeys(ctx context.Context, orgID int) (int, error) {
 	var n int

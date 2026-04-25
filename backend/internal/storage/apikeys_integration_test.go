@@ -180,6 +180,37 @@ func TestCreateAPIKey_WithCreatedByKeyID(t *testing.T) {
 	assert.Equal(t, parent.ID, *byJTI.CreatedByKeyID)
 }
 
+func TestAPIKeyStorage_ListActivePaginated(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID := createTestUser(t, pool)
+	ctx := context.Background()
+
+	// Seed three keys at distinct timestamps so created_at DESC ordering is observable.
+	k1, err := store.CreateAPIKey(ctx, orgID, "first", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Millisecond)
+	k2, err := store.CreateAPIKey(ctx, orgID, "second", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Millisecond)
+	k3, err := store.CreateAPIKey(ctx, orgID, "third", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+
+	page1, err := store.ListActiveAPIKeysPaginated(ctx, orgID, 2, 0)
+	require.NoError(t, err)
+	require.Len(t, page1, 2)
+	assert.Equal(t, k3.ID, page1[0].ID, "newest first")
+	assert.Equal(t, k2.ID, page1[1].ID)
+
+	page2, err := store.ListActiveAPIKeysPaginated(ctx, orgID, 2, 2)
+	require.NoError(t, err)
+	require.Len(t, page2, 1)
+	assert.Equal(t, k1.ID, page2[0].ID)
+}
+
 // Direct SQL insert with both creator columns must violate the CHECK constraint.
 func TestAPIKeys_CreatorExactlyOneCheck(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
