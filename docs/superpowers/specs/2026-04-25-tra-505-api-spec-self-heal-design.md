@@ -102,3 +102,7 @@ Manual verification during implementation. No automated tests added (see Non-goa
 - Single PR on `worktree-tra-505` (Linear's canonical branch name `miks2u/tra-505-...` was not used — branch name is cosmetic, the PR will link to the ticket via title/body).
 - No preview-deployment behavior change expected.
 - Per the user's batched black-box verification preference, no per-ticket preview check; folds into the next batch.
+
+## Discovered during verification
+
+Verification revealed one residual fully-qualified Go package name in the (gitignored) internal spec: `github_com_trakrf_platform_backend_internal_models_user.User`. Root cause is unrelated to the missing-embed bug — it's a name collision between `internal/handlers/users` (plural) and `internal/models/user` (singular), which swag disambiguates via FQN. The public spec served to API consumers is unaffected; the internal spec routes are inside the session-auth middleware group. Tracked separately as [TRA-507](https://linear.app/trakrf/issue/TRA-507) (post-v1); not blocking this ticket.
