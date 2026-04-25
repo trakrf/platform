@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/apikey"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
@@ -135,6 +136,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	resp := apikey.APIKeyCreateResponse{
 		Key:       signed,
 		ID:        key.ID,
+		JTI:       key.JTI,
 		Name:      key.Name,
 		Scopes:    key.Scopes,
 		CreatedAt: key.CreatedAt,
@@ -218,7 +220,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Organization id"
-// @Param key_id path int true "API key id"
+// @Param key_id path string true "Either the integer surrogate id or the UUID jti"
 // @Success 204 "No Content"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -237,15 +239,23 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 			"Invalid org id", "", reqID)
 		return
 	}
-	keyID, err := strconv.Atoi(chi.URLParam(r, "key_id"))
-	if err != nil {
+	rawKeyID := chi.URLParam(r, "key_id")
+	// Dispatch by format: UUID first (stricter parser), then integer.
+	// jti.String() canonicalizes the URL-supplied value to lowercase
+	// hyphenated form, matching what the DB stores.
+	var revokeErr error
+	if jti, parseErr := uuid.Parse(rawKeyID); parseErr == nil {
+		revokeErr = h.storage.RevokeAPIKeyByJTI(r.Context(), orgID, jti.String())
+	} else if intID, parseErr := strconv.Atoi(rawKeyID); parseErr == nil {
+		revokeErr = h.storage.RevokeAPIKey(r.Context(), orgID, intID)
+	} else {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			"Invalid key id", "", reqID)
 		return
 	}
 
-	if err := h.storage.RevokeAPIKey(r.Context(), orgID, keyID); err != nil {
-		if stderrors.Is(err, storage.ErrAPIKeyNotFound) {
+	if revokeErr != nil {
+		if stderrors.Is(revokeErr, storage.ErrAPIKeyNotFound) {
 			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
 				"Not found", "API key not found", reqID)
 			return

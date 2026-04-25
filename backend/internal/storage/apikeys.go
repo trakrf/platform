@@ -162,6 +162,27 @@ func (s *Storage) RevokeAPIKey(ctx context.Context, orgID, id int) error {
 	return nil
 }
 
+// RevokeAPIKeyByJTI marks a key revoked, looked up by its UUID jti.
+// Returns ErrAPIKeyNotFound if the jti is not in the given org or the key is
+// already revoked (no rows updated). Mirrors RevokeAPIKey's semantics so the
+// handler dispatch is symmetric.
+func (s *Storage) RevokeAPIKeyByJTI(ctx context.Context, orgID int, jti string) error {
+	var revokedID int
+	err := s.pool.QueryRow(ctx, `
+        UPDATE trakrf.api_keys
+        SET revoked_at = NOW()
+        WHERE jti = $1 AND org_id = $2 AND revoked_at IS NULL
+        RETURNING id
+    `, jti, orgID).Scan(&revokedID)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return ErrAPIKeyNotFound
+		}
+		return fmt.Errorf("revoke api_key by jti: %w", err)
+	}
+	return nil
+}
+
 // UpdateAPIKeyLastUsed bumps last_used_at. Fire-and-forget semantics at the
 // middleware layer — callers log but do not fail the request on error.
 func (s *Storage) UpdateAPIKeyLastUsed(ctx context.Context, jti string) error {

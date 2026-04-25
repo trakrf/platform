@@ -211,6 +211,71 @@ func TestAPIKeyStorage_ListActivePaginated(t *testing.T) {
 	assert.Equal(t, k1.ID, page2[0].ID)
 }
 
+func TestAPIKeyStorage_RevokeByJTI(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID := createTestUser(t, pool)
+	ctx := context.Background()
+
+	key, err := store.CreateAPIKey(ctx, orgID, "to-revoke",
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, key.JTI)
+
+	err = store.RevokeAPIKeyByJTI(ctx, orgID, key.JTI)
+	require.NoError(t, err)
+
+	// Verify revoked: GetAPIKeyByJTI returns the row but RevokedAt is set.
+	got, err := store.GetAPIKeyByJTI(ctx, key.JTI)
+	require.NoError(t, err)
+	require.NotNil(t, got.RevokedAt)
+}
+
+func TestAPIKeyStorage_RevokeByJTIReturnsNotFoundForCrossOrg(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	org1 := testutil.CreateTestAccount(t, pool)
+	var org2 int
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.organizations (name, identifier, is_active) VALUES ('Org 2', 'org-2-jti', true) RETURNING id`,
+	).Scan(&org2)
+	require.NoError(t, err)
+
+	userID := createTestUser(t, pool)
+	ctx := context.Background()
+
+	key, err := store.CreateAPIKey(ctx, org1, "org1-key", []string{"assets:read"},
+		apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+
+	err = store.RevokeAPIKeyByJTI(ctx, org2, key.JTI)
+	assert.ErrorIs(t, err, storage.ErrAPIKeyNotFound)
+}
+
+func TestAPIKeyStorage_RevokeByJTIAlreadyRevoked(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID := createTestUser(t, pool)
+	ctx := context.Background()
+
+	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"},
+		apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, store.RevokeAPIKeyByJTI(ctx, orgID, key.JTI))
+
+	err = store.RevokeAPIKeyByJTI(ctx, orgID, key.JTI)
+	assert.ErrorIs(t, err, storage.ErrAPIKeyNotFound)
+}
+
 // Direct SQL insert with both creator columns must violate the CHECK constraint.
 func TestAPIKeys_CreatorExactlyOneCheck(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)

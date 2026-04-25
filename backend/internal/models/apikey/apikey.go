@@ -40,6 +40,7 @@ type CreateAPIKeyRequest struct {
 type APIKeyCreateResponse struct {
 	Key       string     `json:"key"`
 	ID        int        `json:"id"`
+	JTI       string     `json:"jti"`
 	Name      string     `json:"name"`
 	Scopes    []string   `json:"scopes"`
 	CreatedAt time.Time  `json:"created_at"`
