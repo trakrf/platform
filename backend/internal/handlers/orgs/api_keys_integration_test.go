@@ -538,6 +538,33 @@ func TestRevokeAPIKey_ByAPIKeyPrincipal(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 }
 
+// Mirror of TestRevokeAPIKey_ByAPIKeyPrincipal but using the target key's JTI
+// instead of its integer id.
+func TestRevokeAPIKey_ByJTI_ByAPIKeyPrincipal(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-revoke-jti-keys-admin")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, _ := seedAdminUser(t, pool, orgID)
+	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
+
+	// Create a separate data key to revoke.
+	dataKey, err := store.CreateAPIKey(context.Background(), orgID, "target",
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+
+	r := newAdminRouter(t, store)
+
+	req := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, dataKey.JTI), nil)
+	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+}
+
 func TestCreateAPIKey_ResponseIncludesJTI(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-create-jti")
 	store, cleanup := testutil.SetupTestDB(t)
