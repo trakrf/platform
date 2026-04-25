@@ -1316,6 +1316,9 @@ func TestUpdateLocation_ValidFromNull_Returns400(t *testing.T) {
 //   - GET /api/v1/locations?is_active=false  → not surfaced (is_active is an
 //     independent business-state flag,
 //     not a soft-delete view)
+//
+// The record is created with is_active=false so the ?is_active=false assertion
+// genuinely defends against deleted records leaking through that filter.
 func TestSoftDeleteVisibility_Location(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations-soft-delete-visibility")
 	store, cleanup := testutil.SetupTestDB(t)
@@ -1331,9 +1334,10 @@ func TestSoftDeleteVisibility_Location(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	// 1. Create location.
+	// 1. Create location with is_active=false so the post-delete ?is_active=false
+	// assertion is not trivially passing on the is_active filter alone.
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/locations",
-		bytes.NewBufferString(`{"identifier":"tra499-vis-1","name":"v"}`))
+		bytes.NewBufferString(`{"identifier":"tra499-vis-1","name":"v","is_active":false}`))
 	auth(createReq)
 	createW := httptest.NewRecorder()
 	writeRouter.ServeHTTP(createW, createReq)
@@ -1345,6 +1349,16 @@ func TestSoftDeleteVisibility_Location(t *testing.T) {
 	getLiveW := httptest.NewRecorder()
 	readRouter.ServeHTTP(getLiveW, getLiveReq)
 	require.Equal(t, http.StatusOK, getLiveW.Code, getLiveW.Body.String())
+
+	// Sanity: pre-delete, ?is_active=false surfaces the record (is_active is false).
+	listInactivePreReq := httptest.NewRequest(http.MethodGet, "/api/v1/locations?is_active=false", nil)
+	auth(listInactivePreReq)
+	listInactivePreW := httptest.NewRecorder()
+	readRouter.ServeHTTP(listInactivePreW, listInactivePreReq)
+	require.Equal(t, http.StatusOK, listInactivePreW.Code, listInactivePreW.Body.String())
+	var listInactivePreBody map[string]any
+	require.NoError(t, json.Unmarshal(listInactivePreW.Body.Bytes(), &listInactivePreBody))
+	require.EqualValues(t, 1, listInactivePreBody["total_count"], "pre-delete: ?is_active=false must surface the live is_active=false record")
 
 	// 3. Soft-delete the location.
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/tra499-vis-1", nil)
