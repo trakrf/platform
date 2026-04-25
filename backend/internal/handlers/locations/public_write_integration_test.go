@@ -1439,3 +1439,43 @@ func TestSoftDeleteVisibility_Location(t *testing.T) {
 	assert.EqualValues(t, 0, listInactiveBody["total_count"],
 		"is_active=false must NOT surface soft-deleted records — is_active is a business-state flag, not a soft-delete view")
 }
+
+func TestLocationsGetChildren_PaginationEnvelope(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra503-loc-children-paginate")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-ch-parent", Name: "Parent", Path: "p503-ch-parent",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	for _, name := range []string{"alpha", "bravo", "charlie"} {
+		_, err := store.CreateLocation(context.Background(), locmodel.Location{
+			OrgID: orgID, Identifier: "p503-ch-" + name, Name: name,
+			Path:             "p503-ch-parent.p503-ch-" + name,
+			ParentLocationID: &parent.ID,
+			ValidFrom:        time.Now(), IsActive: true,
+		})
+		require.NoError(t, err)
+	}
+
+	r := buildLocationsPublicReadRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/p503-ch-parent/children?limit=2&offset=0", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 2, body["limit"])
+	assert.EqualValues(t, 0, body["offset"])
+	assert.EqualValues(t, 3, body["total_count"])
+	data := body["data"].([]any)
+	require.Len(t, data, 2)
+	assert.Equal(t, "alpha", data[0].(map[string]any)["name"], "alphabetical order, page 1")
+	assert.Equal(t, "bravo", data[1].(map[string]any)["name"])
+}
