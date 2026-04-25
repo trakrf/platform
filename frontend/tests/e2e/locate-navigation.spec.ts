@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 import { connectToDevice } from './helpers/connection';
 import { setupConsoleMonitoring } from './helpers/console-utils';
 
-test.describe('Locate Navigation Tests', () => {
+test.describe('Locate Navigation Tests @hardware', () => {
   test.beforeEach(async ({ page }) => {
     // Set up console monitoring
     const logs: string[] = [];

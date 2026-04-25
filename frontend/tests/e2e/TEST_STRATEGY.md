@@ -72,3 +72,40 @@ To avoid killing the bridge server:
 2. Run individual tests: `pnpm test:e2e tests/e2e/[specific].spec.ts`
 3. Only run full suite after all individual tests pass
 4. Consider adding delays between test suites if bridge instability persists
+
+## Tagging Convention
+
+E2E tests use `@`-prefixed tokens in test/describe titles so Playwright's
+`--grep` / `--grep-invert` can filter them. **Only title text is matched** —
+JSDoc comments do not count.
+
+### Tags in use
+
+- **`@hardware`** — requires a physical CS108 reader reachable via the
+  bridge server (`pnpm test:hardware` baseline). Cannot run against any
+  remote deploy (preview, GKE, prod).
+- **`@critical`** — must pass before merging; small, fast, high-signal.
+
+### Where to put `@hardware`
+
+Default: **describe-level**, when every test in the file needs hardware
+(typical when the suite shares a `beforeAll` / `beforeEach` that calls
+`connectToDevice`).
+
+```ts
+test.describe('Locate Functionality Tests @hardware', () => { … })
+```
+
+Use **per-test** tags only when a single file mixes hardware-required tests
+with pure-UI tests. If you find yourself adding `@hardware` to every test in
+a file, move it up to the describe.
+
+### Filter command
+
+The `just frontend test-e2e-remote <url>` recipe applies
+`--grep-invert "@hardware"` automatically. For ad-hoc runs against a
+deployment:
+
+```
+PLAYWRIGHT_BASE_URL=https://gke.trakrf.app pnpm exec playwright test --grep-invert "@hardware"
+```
