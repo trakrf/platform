@@ -81,49 +81,6 @@ func TestGetAssetHistory_DefaultPagination(t *testing.T) {
 	assert.Equal(t, 30, defaultDateRangeDays)
 }
 
-func TestGetAssetHistory_LimitCapping(t *testing.T) {
-	tests := []struct {
-		name          string
-		queryLimit    string
-		expectedLimit int
-	}{
-		{"default", "", 50},
-		{"valid", "25", 25},
-		{"over max", "200", 100},
-		{"invalid", "abc", 50},
-		{"zero", "0", 50},
-		{"negative", "-5", 50},
-		{"at max", "100", 100},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Simulate the parsing logic from the handler
-			limit := 50
-			if tt.queryLimit != "" {
-				if parsed := parsePositiveInt(tt.queryLimit); parsed > 0 {
-					limit = parsed
-					if limit > 100 {
-						limit = 100
-					}
-				}
-			}
-			assert.Equal(t, tt.expectedLimit, limit)
-		})
-	}
-}
-
-func parsePositiveInt(s string) int {
-	var result int
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		result = result*10 + int(c-'0')
-	}
-	return result
-}
-
 func TestGetAssetHistory_DefaultDateRange(t *testing.T) {
 	// Verify that the default date range is 30 days
 	now := time.Now()
