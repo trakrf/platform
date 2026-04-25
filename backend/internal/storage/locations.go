@@ -340,6 +340,44 @@ func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.L
 	return s.scanHierarchyRows(ctx, query, "ancestor", orgID, orgID, id)
 }
 
+// ListAncestorsPaginated returns the ancestors of a location ordered by depth
+// (root first), with LIMIT/OFFSET applied. The id ASC tiebreaker ensures
+// fully-deterministic paging across requests with the same offset.
+func (s *Storage) ListAncestorsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
+	query := `
+		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.org_id = $1
+		  AND l.path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND l.id != $2
+		  AND l.deleted_at IS NULL
+		ORDER BY l.depth ASC, l.id ASC
+		LIMIT $3 OFFSET $4
+	`
+	return s.scanHierarchyRows(ctx, query, "ancestor", orgID, orgID, id, limit, offset)
+}
+
+// CountAncestors returns the total number of ancestors of the given location,
+// matching the WHERE clause used by ListAncestorsPaginated.
+func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM trakrf.locations
+		WHERE org_id = $1
+		  AND path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND id != $2
+		  AND deleted_at IS NULL
+	`
+	var n int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, id).Scan(&n)
+	})
+	return n, err
+}
+
 // GetDescendants returns all descendant locations of a given location (children at all levels),
 // projected through LocationWithParent so every entry carries its parent's natural key
 // and its tag identifiers — same shape as GET /locations/{identifier}.

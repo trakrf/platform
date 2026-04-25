@@ -649,6 +649,73 @@ func TestGetAncestors_RootLocation(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestListAncestorsPaginated(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+
+	now := time.Now()
+	orgID := 1
+	locationID := 3
+	limit := 1
+	offset := 1
+
+	parent1 := 1
+	usaIdent := "usa"
+	rows := pgxmock.NewRows([]string{
+		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
+		"description", "valid_from", "valid_to", "is_active",
+		"created_at", "updated_at", "deleted_at",
+		"parent_identifier",
+	}).
+		AddRow(2, 1, "California", "california", &parent1, "usa.california", 2, "California State", now, nil, true, now, &now, nil, &usaIdent)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
+	mock.ExpectQuery(`ORDER BY l.depth ASC, l.id ASC\s+LIMIT \$3 OFFSET \$4`).
+		WithArgs(orgID, locationID, limit, offset).
+		WillReturnRows(rows)
+	mock.ExpectCommit()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
+	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+		WithArgs([]int{2}, orgID).
+		WillReturnRows(pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
+
+	results, err := storage.ListAncestorsPaginated(context.Background(), orgID, locationID, limit, offset)
+
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "usa.california", results[0].Path)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCountAncestors(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	storage := &Storage{pool: mock}
+	orgID := 1
+	locationID := 3
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM trakrf\.locations`).
+		WithArgs(orgID, locationID).
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(2))
+	mock.ExpectCommit()
+
+	n, err := storage.CountAncestors(context.Background(), orgID, locationID)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, n)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetDescendants(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
