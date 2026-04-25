@@ -359,6 +359,15 @@ type LocationHierarchyResponse struct {
 	Data []location.PublicLocationView `json:"data"`
 }
 
+// ListAncestorsResponse is the typed envelope returned by
+// GET /api/v1/locations/{identifier}/ancestors.
+type ListAncestorsResponse struct {
+	Data       []location.PublicLocationView `json:"data"`
+	Limit      int                           `json:"limit"       example:"50"`
+	Offset     int                           `json:"offset"      example:"0"`
+	TotalCount int                           `json:"total_count" example:"100"`
+}
+
 // @Summary List locations
 // @Tags locations,public
 // @ID locations.list
@@ -540,7 +549,9 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  locations.LocationHierarchyResponse
+// @Param        limit       query int     false "max 200"
+// @Param        offset      query int     false "pagination offset"
+// @Success      200  {object}  locations.ListAncestorsResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -572,14 +583,32 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	}
 	id := loc.ID
 
-	results, err := handler.storage.GetAncestors(req.Context(), orgID, id)
+	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{})
+	if err != nil {
+		httputil.RespondListParamError(w, req, err, ctx)
+		return
+	}
+
+	results, err := handler.storage.ListAncestorsPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
+	total, err := handler.storage.CountAncestors(req.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, ListAncestorsResponse{
+		Data:       toPublicLocationViews(results),
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
+	})
 }
 
 // @Summary      List location descendants

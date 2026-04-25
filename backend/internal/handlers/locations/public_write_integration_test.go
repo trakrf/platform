@@ -553,6 +553,50 @@ func TestLocationsGetAncestors_UnknownIdentifier_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 }
 
+func TestLocationsGetAncestors_PaginationEnvelope(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra503-loc-ancestors-paginate")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	root, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-root", Name: "Root", Path: "p503-root",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	mid, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-mid", Name: "Mid", Path: "p503-root.p503-mid",
+		ParentLocationID: &root.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-leaf", Name: "Leaf", Path: "p503-root.p503-mid.p503-leaf",
+		ParentLocationID: &mid.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicReadRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/p503-leaf/ancestors?limit=1&offset=1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 1, body["limit"])
+	assert.EqualValues(t, 1, body["offset"])
+	assert.EqualValues(t, 2, body["total_count"], "two ancestors of leaf: root and mid")
+	data := body["data"].([]any)
+	require.Len(t, data, 1)
+	first := data[0].(map[string]any)
+	assert.Equal(t, "p503-mid", first["identifier"], "depth-asc + offset=1 skips root, returns mid")
+}
+
 func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
 	t.Setenv("JWT_SECRET", "tra407-loc-children-by-ident")
 	store, cleanup := testutil.SetupTestDB(t)
