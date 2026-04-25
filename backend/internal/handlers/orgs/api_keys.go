@@ -149,8 +149,8 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Organization id"
-// @Param limit query int false "max 200"
-// @Param offset query int false "pagination offset"
+// @Param limit query int false "max 200"   default(50)
+// @Param offset query int false "min 0"    default(0)
 // @Success 200 {object} orgs.ListAPIKeysResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse

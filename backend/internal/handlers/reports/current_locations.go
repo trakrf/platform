@@ -35,8 +35,8 @@ type ListCurrentLocationsResponse struct {
 // @Description Snapshot of each asset's most recent location, filterable by natural key.
 // @Tags reports,public
 // @ID locations.current
-// @Param limit query int false "max 200"
-// @Param offset query int false "pagination offset"
+// @Param limit query int false "max 200"   default(50)
+// @Param offset query int false "min 0"    default(0)
 // @Param location query string false "filter by location identifier (may repeat)"
 // @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active identifier values"
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"

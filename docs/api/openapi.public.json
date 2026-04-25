@@ -1489,14 +1489,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           },
@@ -1953,14 +1955,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           },
@@ -2199,14 +2203,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           },
@@ -2676,14 +2682,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           }
@@ -2782,14 +2790,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           }
@@ -2888,14 +2898,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           }
@@ -3255,14 +3267,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           }

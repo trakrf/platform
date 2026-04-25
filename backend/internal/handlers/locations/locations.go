@@ -382,8 +382,8 @@ type ListDescendantsResponse struct {
 // @Summary List locations
 // @Tags locations,public
 // @ID locations.list
-// @Param limit    query int    false "max 200"
-// @Param offset   query int    false "pagination offset"
+// @Param limit    query int    false "max 200"   default(50)
+// @Param offset   query int    false "min 0"    default(0)
 // @Param parent   query string false "filter by parent identifier (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
 // @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active identifier values"
@@ -560,8 +560,8 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Param        limit       query int     false "max 200"
-// @Param        offset      query int     false "pagination offset"
+// @Param        limit       query int     false "max 200"   default(50)
+// @Param        offset      query int     false "min 0"    default(0)
 // @Success      200  {object}  locations.ListAncestorsResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -629,8 +629,8 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Param        limit       query int     false "max 200"
-// @Param        offset      query int     false "pagination offset"
+// @Param        limit       query int     false "max 200"   default(50)
+// @Param        offset      query int     false "min 0"    default(0)
 // @Success      200  {object}  locations.ListDescendantsResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -698,8 +698,8 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Param        limit       query int     false "max 200"
-// @Param        offset      query int     false "pagination offset"
+// @Param        limit       query int     false "max 200"   default(50)
+// @Param        offset      query int     false "min 0"    default(0)
 // @Success      200  {object}  locations.ListChildrenResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"

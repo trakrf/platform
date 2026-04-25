@@ -1000,11 +1000,13 @@ paths:
                   in: query
                   name: limit
                   schema:
+                    default: 50
                     type: integer
-                - description: pagination offset
+                - description: min 0
                   in: query
                   name: offset
                   schema:
+                    default: 0
                     type: integer
                 - description: RFC 3339 start timestamp
                   in: query
@@ -1284,11 +1286,13 @@ paths:
                   in: query
                   name: limit
                   schema:
+                    default: 50
                     type: integer
-                - description: pagination offset
+                - description: min 0
                   in: query
                   name: offset
                   schema:
+                    default: 0
                     type: integer
                 - description: filter by parent identifier (may repeat)
                   in: query
@@ -1642,11 +1646,13 @@ paths:
                   in: query
                   name: limit
                   schema:
+                    default: 50
                     type: integer
-                - description: pagination offset
+                - description: min 0
                   in: query
                   name: offset
                   schema:
+                    default: 0
                     type: integer
             responses:
                 "200":
@@ -1706,11 +1712,13 @@ paths:
                   in: query
                   name: limit
                   schema:
+                    default: 50
                     type: integer
-                - description: pagination offset
+                - description: min 0
                   in: query
                   name: offset
                   schema:
+                    default: 0
                     type: integer
             responses:
                 "200":
@@ -1770,11 +1778,13 @@ paths:
                   in: query
                   name: limit
                   schema:
+                    default: 50
                     type: integer
-                - description: pagination offset
+                - description: min 0
                   in: query
                   name: offset
                   schema:
+                    default: 0
                     type: integer
             responses:
                 "200":
@@ -1961,11 +1971,13 @@ paths:
                   in: query
                   name: limit
                   schema:
+                    default: 50
                     type: integer
-                - description: pagination offset
+                - description: min 0
                   in: query
                   name: offset
                   schema:
+                    default: 0
                     type: integer
                 - description: filter by location identifier (may repeat)
                   in: query
@@ -2051,11 +2063,13 @@ paths:
                   in: query
                   name: limit
                   schema:
+                    default: 50
                     type: integer
-                - description: pagination offset
+                - description: min 0
                   in: query
                   name: offset
                   schema:
+                    default: 0
                     type: integer
             responses:
                 "200":
