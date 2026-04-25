@@ -10,6 +10,8 @@ components:
                     type: string
                 id:
                     type: integer
+                jti:
+                    type: string
                 key:
                     type: string
                 name:
@@ -2181,12 +2183,12 @@ paths:
                   required: true
                   schema:
                     type: integer
-                - description: API key id
+                - description: Either the integer surrogate id or the UUID jti
                   in: path
                   name: key_id
                   required: true
                   schema:
-                    type: integer
+                    type: string
             responses:
                 "204":
                     description: No Content
