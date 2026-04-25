@@ -33,11 +33,9 @@ func TestListCurrentLocations_MissingOrgContext(t *testing.T) {
 }
 
 func TestListCurrentLocations_DefaultPagination(t *testing.T) {
-	// Verify default limit and offset constants
+	// Verify handler can be constructed; limit/offset defaults are enforced by httputil.ParseListParams
 	handler := NewHandler(nil)
 	assert.NotNil(t, handler)
-	assert.Equal(t, 50, defaultLimit)
-	assert.Equal(t, 100, maxLimit)
 }
 
 func TestListCurrentLocations_LimitCapping(t *testing.T) {
@@ -57,12 +55,12 @@ func TestListCurrentLocations_LimitCapping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Simulate the parsing logic from the handler
-			limit := defaultLimit
+			limit := 50
 			if tt.queryLimit != "" {
 				if parsed := parseLimit(tt.queryLimit); parsed > 0 {
 					limit = parsed
-					if limit > maxLimit {
-						limit = maxLimit
+					if limit > 100 {
+						limit = 100
 					}
 				}
 			}

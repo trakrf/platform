@@ -12,11 +12,6 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
-const (
-	defaultLimit = 50
-	maxLimit     = 100
-)
-
 // Handler handles report-related API requests
 type Handler struct {
 	storage *storage.Storage
@@ -102,11 +97,11 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 		out = append(out, report.ToPublicCurrentLocationItem(it))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data":        out,
-		"limit":       params.Limit,
-		"offset":      params.Offset,
-		"total_count": total,
+	httputil.WriteJSON(w, http.StatusOK, ListCurrentLocationsResponse{
+		Data:       out,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
 	})
 }
 
