@@ -847,7 +847,7 @@
             }
           },
           {
-            "description": "filter by the active flag",
+            "description": "filter by active flag",
             "in": "query",
             "name": "is_active",
             "schema": {

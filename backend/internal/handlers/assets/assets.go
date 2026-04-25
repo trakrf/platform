@@ -416,7 +416,7 @@ type UpdateAssetResponse struct {
 // @Param limit    query int    false "max 200"   default(50)
 // @Param offset   query int    false "min 0"    default(0)
 // @Param location query string false "filter by location natural key (may repeat)"
-// @Param is_active query bool  false "filter by the active flag"
+// @Param is_active query bool  false "filter by active flag"
 // @Param type     query string false "filter by type"
 // @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active identifier values"
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"

@@ -272,29 +272,19 @@ Find this line (currently around line 324):
 Replace with:
 
 ```go
-// @Description  Soft-delete an asset by its natural identifier. The record is removed from all subsequent queries and its identifier becomes immediately available for reuse. Soft-deleted records are retained internally for audit purposes but are not retrievable via this API. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
+// @Description  Delete an asset by its natural identifier. The asset is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
 ```
 
-- [ ] **Step 2: Update the list `is_active` param annotation**
+- [ ] **Step 2: Leave the list `is_active` param annotation as-is**
 
-Find this line (currently around line 419, inside the `ListAssets` swag block):
-
-```go
-// @Param is_active query bool  false "filter by active flag"
-```
-
-Replace with:
-
-```go
-// @Param is_active query bool  false "filter by the active business-state flag. Independent of soft-delete: soft-deleted records are excluded regardless of is_active value."
-```
+The current line `// @Param is_active query bool  false "filter by active flag"` does NOT need to change. Earlier drafts of this plan proposed adding a "soft-delete is independent" disambiguation, but since we drop soft-delete terminology from public docs entirely, there is nothing to disambiguate from. Keep the existing terse form.
 
 - [ ] **Step 3: Update the GET-by-identifier annotation**
 
 Find the swag block above `func (handler *Handler) GetAssetByIdentifier` (currently around line 505). The block has a `@Summary` and a `@Description`. The current `@Description` (look at the file to find it; it precedes the `@Tags` line) needs to mention the 404 behavior on soft-delete. If the existing `@Description` is missing or uninformative, add or replace it with:
 
 ```go
-// @Description Retrieve an asset by its natural identifier. Returns 404 if the asset does not exist or has been soft-deleted.
+// @Description Retrieve an asset by its natural identifier. Returns 404 if the asset does not exist.
 ```
 
 If the block already has a `@Description` line, replace just that line. If it does not, insert this line immediately after the existing `@Summary` line.
