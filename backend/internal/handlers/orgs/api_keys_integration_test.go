@@ -538,6 +538,44 @@ func TestRevokeAPIKey_ByAPIKeyPrincipal(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 }
 
+func TestCreateAPIKey_ResponseIncludesJTI(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-create-jti")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	_, sessionToken := seedAdminUser(t, pool, orgID)
+
+	r := newAdminRouter(t, store)
+
+	body := map[string]any{
+		"name":   "needs-jti",
+		"scopes": []string{"assets:read"},
+	}
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID), bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var envelope struct {
+		Data apikey.APIKeyCreateResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	resp := envelope.Data
+
+	require.NotEmpty(t, resp.JTI, "create response must include jti")
+
+	// The UUID jti is encoded in the JWT's `sub` claim (see GenerateAPIKey
+	// in backend/internal/util/jwt/apikey.go) — assert they match.
+	claims, err := jwt.ValidateAPIKey(resp.Key)
+	require.NoError(t, err)
+	assert.Equal(t, claims.Subject, resp.JTI, "jti in response must match JWT sub claim")
+}
+
 // A keys:admin key is allowed to revoke its own JTI; the subsequent request with
 // that key should 401 because the token is now revoked.
 func TestRevokeAPIKey_KeyRevokesItself(t *testing.T) {
