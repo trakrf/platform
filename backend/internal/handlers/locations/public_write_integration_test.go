@@ -1314,8 +1314,8 @@ func TestUpdateLocation_ValidFromNull_Returns400(t *testing.T) {
 //   - GET /api/v1/locations/{identifier}     → 404
 //   - GET /api/v1/locations                  → not in default list
 //   - GET /api/v1/locations?is_active=false  → not surfaced (is_active is an
-//                                               independent business-state flag,
-//                                               not a soft-delete view)
+//     independent business-state flag,
+//     not a soft-delete view)
 func TestSoftDeleteVisibility_Location(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations-soft-delete-visibility")
 	store, cleanup := testutil.SetupTestDB(t)
