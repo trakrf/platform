@@ -49,17 +49,21 @@ Resulting OpenAPI spec must be regenerated via the existing toolchain (`swag` + 
 
 #### New annotation copy
 
+Customer-facing copy describes the customer-observable contract only. Soft-delete is an internal implementation detail and is not mentioned in public docs — this avoids implying any retention SLA or hinting at "undelete" capabilities the platform does not offer.
+
 **DELETE endpoint description (both resources):**
 
-> Soft-delete a {resource}. The record is removed from all subsequent queries and its identifier becomes immediately available for reuse. Soft-deleted records are retained internally for audit purposes but are not retrievable via this API. Returns 204 on success, 404 if the {resource} does not exist or has already been deleted.
+> Delete a {resource} by its natural identifier. The {resource} is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the {resource} does not exist or has already been deleted.
 
 **GET-by-identifier description (both resources):**
 
-> Retrieve a {resource} by its natural identifier. Returns 404 if the {resource} does not exist or has been soft-deleted.
+> Retrieve a {resource} by its natural identifier. Returns 404 if the {resource} does not exist.
 
 **`is_active` query param description (both resources):**
 
-> Filter by the active business-state flag. Independent of soft-delete: soft-deleted records are excluded from results regardless of `is_active` value.
+> filter by the active flag
+
+(Reverted to the original terse form. The disambiguation language we initially considered was only meaningful if "soft-delete" terminology appeared elsewhere in the public contract; once it's gone everywhere, there is nothing to disambiguate from.)
 
 ### Handler / storage changes
 

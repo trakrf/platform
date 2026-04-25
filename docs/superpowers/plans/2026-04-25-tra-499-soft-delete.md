@@ -340,29 +340,19 @@ Find this line (currently around line 269):
 Replace with:
 
 ```go
-// @Description Soft-delete a location by its natural identifier. The record is removed from all subsequent queries and its identifier becomes immediately available for reuse. Soft-deleted records are retained internally for audit purposes but are not retrievable via this API. Returns 204 on success, 404 if the location does not exist or has already been deleted.
+// @Description Delete a location by its natural identifier. The location is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the location does not exist or has already been deleted.
 ```
 
-- [ ] **Step 2: Update the list `is_active` param annotation**
+- [ ] **Step 2: Leave the list `is_active` param annotation as-is**
 
-Find this line (currently around line 368, inside the `ListLocations` swag block):
-
-```go
-// @Param is_active query bool  false "filter by active flag"
-```
-
-Replace with:
-
-```go
-// @Param is_active query bool  false "filter by the active business-state flag. Independent of soft-delete: soft-deleted records are excluded regardless of is_active value."
-```
+The param description (currently `// @Param is_active query bool  false "filter by active flag"`) does NOT need to change. Earlier versions of this plan proposed adding a "soft-delete is independent" disambiguation, but since we are dropping soft-delete terminology from public docs entirely, there is nothing to disambiguate from. Keep the existing terse form.
 
 - [ ] **Step 3: Update the GET-by-identifier annotation**
 
-Find the swag block above `func (handler *Handler) GetLocationByIdentifier` (currently around line 461). Apply the same logic as Task 3 Step 3: if there is an existing `@Description`, replace it; if there is none, insert immediately after `@Summary`. Use:
+Find the swag block above `func (handler *Handler) GetLocationByIdentifier` (currently around line 461). If an existing `@Description` line is present, replace it; if none, insert immediately after `@Summary`. Use:
 
 ```go
-// @Description Retrieve a location by its natural identifier. Returns 404 if the location does not exist or has been soft-deleted.
+// @Description Retrieve a location by its natural identifier. Returns 404 if the location does not exist.
 ```
 
 - [ ] **Step 4: Build the backend to verify the file still compiles**
