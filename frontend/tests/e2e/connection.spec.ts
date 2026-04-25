@@ -2,7 +2,7 @@
 /**
  * Connection E2E Tests
  * Tests BLE connection management with real CS108 hardware
- * @hardware Requires physical CS108 device via bridge server
+ * Requires physical CS108 device via bridge server
  *
  * IMPORTANT: Connection tests must NOT navigate to Inventory, Locate, or Barcode tabs
  * These tabs trigger mode changes which are heavyweight operations.
@@ -24,7 +24,7 @@ import {
 // SKIP: Post-refactor - re-enabling tests one by one
 const config = getE2EConfig();
 
-test.describe('Connection Operations', () => {
+test.describe('Connection Operations @hardware', () => {
   // Shared page instance for all tests in this suite
   let sharedPage: Page;
   let consoleMonitor: ReturnType<typeof setupConsoleMonitoring>;
@@ -127,7 +127,7 @@ test.describe('Connection Operations', () => {
     expect(homeState.readerState).toBe('Connected');
   });
 
-  test('should update trigger state in store on press and release @hardware @critical', async () => {
+  test('should update trigger state in store on press and release @critical', async () => {
     /**
      * Core verification: Trigger press/release updates triggerState in store
      * Stay on Home tab to avoid mode switches

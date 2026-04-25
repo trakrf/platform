@@ -13,7 +13,7 @@ import { simulateTriggerPress, simulateTriggerRelease } from './helpers/trigger-
 import type { WindowWithStores } from './types';
 import { ReaderMode, ReaderState } from '@/worker/types/reader';
 
-test.describe('Barcode Operations', () => {
+test.describe('Barcode Operations @hardware', () => {
   // Shared page instance and connection for all tests in this suite
   let sharedPage: Page;
 

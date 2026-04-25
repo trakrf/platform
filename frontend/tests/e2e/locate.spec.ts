@@ -2,8 +2,8 @@
 /**
  * Locate E2E Tests
  * Tests RFID tag location functionality with RSSI proximity feedback
- * @hardware Requires physical CS108 device via bridge server
- * 
+ * Requires physical CS108 device via bridge server
+ *
  * Pattern follows inventory.spec.ts which is 100% stable:
  * - Serial execution with shared connection
  * - Connect once in beforeAll, disconnect in afterAll
@@ -21,7 +21,7 @@ import { PRIMARY_TEST_TAG, INVALID_TEST_TAG, NON_EXISTENT_TAG } from '@test-util
 const LOCATE_TEST_TAG = PRIMARY_TEST_TAG;
 
 // Locate mode tests - EPC filtering integration with CS108 hardware
-test.describe('Locate Functionality Tests', () => {
+test.describe('Locate Functionality Tests @hardware', () => {
   /**
    * CONNECTION SHARING STRATEGY (from inventory tests)
    * 
