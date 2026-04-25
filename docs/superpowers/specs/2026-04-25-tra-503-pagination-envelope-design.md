@@ -78,11 +78,12 @@ Add new paginated methods alongside the existing ones rather than mutating signa
 
 Existing `GetAncestors` / `GetChildren` / `GetDescendants` remain available for any internal caller that genuinely wants the full subtree.
 
-**`backend/internal/storage/api_keys.go`** — new methods:
+**`backend/internal/storage/apikeys.go`** — new method:
 
-- `ListActiveAPIKeysPaginated(ctx, orgID, limit, offset) ([]apikey.APIKeyListItem, error)`
-  — `ORDER BY created_at DESC, id ASC LIMIT $N OFFSET $M`.
-- `CountActiveAPIKeys(ctx, orgID) (int, error)`.
+- `ListActiveAPIKeysPaginated(ctx, orgID, limit, offset) ([]apikey.APIKey, error)`
+  — `ORDER BY created_at DESC, id ASC LIMIT $N OFFSET $M`. Returns the storage row type; the handler maps to `apikey.APIKeyListItem` as it does today.
+
+`CountActiveAPIKeys(ctx, orgID) (int, error)` already exists at `backend/internal/storage/apikeys.go:77` (used by the active-key cap check in `CreateAPIKey`); the new handler reuses it.
 
 Existing `ListActiveAPIKeys` remains for non-handler callers.
 
@@ -182,7 +183,7 @@ If any existing test asserts `limit > 100` is rejected on `current_locations` or
 
 ## Risks
 
-- **Storage signature evolution.** Mitigated by adding new paginated methods (`ListXPaginated`, `CountX`) alongside the existing ones rather than changing existing signatures. Internal non-handler callers stay on the unbounded methods. Slight method proliferation (~8 new methods) for zero risk to internal flows.
+- **Storage signature evolution.** Mitigated by adding new paginated methods (`ListXPaginated`, `CountX`) alongside the existing ones rather than changing existing signatures. Internal non-handler callers stay on the unbounded methods. Slight method proliferation (7 new methods: 3 paginated hierarchy lists, 3 hierarchy counts, 1 paginated api-keys list — `CountActiveAPIKeys` already exists) for zero risk to internal flows.
 - **API keys ordering switch.** The current `ListActiveAPIKeys` has no explicit `ORDER BY`. Switching to `created_at DESC, id ASC` is a behavior change for any caller that happened to depend on the (unspecified) prior order. Mitigation: `git grep` during implementation; expectation is no internal caller cares.
 - **swaggo regeneration noise.** `just backend api-spec` regenerates `openapi.json` — the diff will include the new `ListAncestorsResponse`/`ListChildrenResponse`/`ListDescendantsResponse` schemas plus the renamed `ListAPIKeysResponse` shape. Reviewers should expect a sizeable but mechanical OpenAPI diff.
 
