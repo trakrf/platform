@@ -576,6 +576,91 @@ func TestCreateAPIKey_ResponseIncludesJTI(t *testing.T) {
 	assert.Equal(t, claims.Subject, resp.JTI, "jti in response must match JWT sub claim")
 }
 
+func TestRevokeAPIKey_ByJTI(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-revoke-jti")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, sessionToken := seedAdminUser(t, pool, orgID)
+
+	key, err := store.CreateAPIKey(context.Background(), orgID, "to-revoke-jti",
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, key.JTI)
+
+	r := newAdminRouter(t, store)
+
+	req := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, key.JTI), nil)
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+
+	// Second delete on same jti → 404
+	req2 := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, key.JTI), nil)
+	req2.Header.Set("Authorization", "Bearer "+sessionToken)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	assert.Equal(t, http.StatusNotFound, w2.Code)
+}
+
+func TestRevokeAPIKey_ByJTI_CrossOrgReturns404(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-revoke-jti-cross-org")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	org1 := testutil.CreateTestAccount(t, pool)
+	var org2 int
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.organizations (name, identifier, is_active) VALUES ('Org 2', 'org-2-jti-handler', true) RETURNING id`,
+	).Scan(&org2)
+	require.NoError(t, err)
+
+	userID, _ := seedAdminUser(t, pool, org1)
+	_, sessionToken2 := seedAdminUser2(t, pool, org2)
+
+	// Create the target key in org1.
+	key, err := store.CreateAPIKey(context.Background(), org1, "org1-target",
+		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	require.NoError(t, err)
+
+	r := newAdminRouter(t, store)
+
+	// org2 admin tries to revoke an org1 key by jti.
+	req := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", org2, key.JTI), nil)
+	req.Header.Set("Authorization", "Bearer "+sessionToken2)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// seedAdminUser2 mirrors seedAdminUser but with a distinct email so two admins
+// can coexist in the same test database.
+func seedAdminUser2(t *testing.T, pool *pgxpool.Pool, orgID int) (int, string) {
+	t.Helper()
+	var userID int
+	err := pool.QueryRow(context.Background(), `
+        INSERT INTO trakrf.users (name, email, password_hash)
+        VALUES ('admin2', 'admin2@example.com', 'stub') RETURNING id`,
+	).Scan(&userID)
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(), `
+        INSERT INTO trakrf.org_users (org_id, user_id, role)
+        VALUES ($1, $2, 'admin')`, orgID, userID)
+	require.NoError(t, err)
+
+	token, err := jwt.Generate(userID, "admin2@example.com", &orgID)
+	require.NoError(t, err)
+	return userID, token
+}
+
 // A keys:admin key is allowed to revoke its own JTI; the subsequent request with
 // that key should 401 because the token is now revoked.
 func TestRevokeAPIKey_KeyRevokesItself(t *testing.T) {
@@ -592,6 +677,66 @@ func TestRevokeAPIKey_KeyRevokesItself(t *testing.T) {
 	// 1. Revoke self — should succeed.
 	req := httptest.NewRequest(http.MethodDelete,
 		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%d", orgID, adminKeyID), nil)
+	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+
+	// 2. Next call with the same (now-revoked) token — should 401.
+	req2 := httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID), nil)
+	req2.Header.Set("Authorization", "Bearer "+adminKeyJWT)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	assert.Equal(t, http.StatusUnauthorized, w2.Code)
+}
+
+func TestRevokeAPIKey_InvalidFormat(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-revoke-bad-format")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	_, sessionToken := seedAdminUser(t, pool, orgID)
+
+	r := newAdminRouter(t, store)
+
+	cases := []string{"foo", "12-not-a-uuid", "abc123", "123.456"}
+	for _, badID := range cases {
+		t.Run(badID, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodDelete,
+				fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, badID), nil)
+			req.Header.Set("Authorization", "Bearer "+sessionToken)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "Invalid key id")
+		})
+	}
+}
+
+// Mirror of TestRevokeAPIKey_KeyRevokesItself but using the JWT's jti instead
+// of the integer id. The middleware authenticates BEFORE the handler runs, so
+// this should behave identically.
+func TestRevokeAPIKey_KeyRevokesItself_ByJTI(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-self-revoke-jti")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, _ := seedAdminUser(t, pool, orgID)
+	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
+
+	// Pull the jti out of the JWT we just minted. The UUID is in `sub`.
+	claims, err := jwt.ValidateAPIKey(adminKeyJWT)
+	require.NoError(t, err)
+	require.NotEmpty(t, claims.Subject)
+
+	r := newAdminRouter(t, store)
+
+	// 1. Revoke self by jti — should succeed.
+	req := httptest.NewRequest(http.MethodDelete,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, claims.Subject), nil)
 	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
