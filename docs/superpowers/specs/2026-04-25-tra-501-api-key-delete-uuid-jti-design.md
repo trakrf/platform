@@ -85,18 +85,32 @@ JTI string `json:"jti"`
 New function:
 
 ```go
-func (s *Storage) RevokeAPIKeyByJTI(ctx context.Context, orgID int, jti uuid.UUID) error
+func (s *Storage) RevokeAPIKeyByJTI(ctx context.Context, orgID int, jti string) error
 ```
+
+Takes `string` for symmetry with the existing `GetAPIKeyByJTI(ctx, jti string)`. The handler validates format with `uuid.Parse` before calling, then passes the parsed UUID's canonical `.String()` form so storage receives a normalized value.
 
 Same shape as existing `RevokeAPIKey`, just `WHERE org_id = $1 AND jti = $2 AND revoked_at IS NULL`. Returns `ErrAPIKeyNotFound` on no rows.
 
 The existing un-scoped `GetAPIKeyByJTI` (used by JWT middleware before org context exists) is **not** reused. We want the org filter for authorization, and a new function keeps the read-vs-revoke responsibilities cleanly split.
 
-### OpenAPI — `backend/internal/handlers/swaggerspec/openapi.public.yaml`
+### OpenAPI — generated from swag annotations
 
-- DELETE `key_id` path param: `type: integer` → `type: string`, with description `"Either the integer surrogate id or the UUID jti."`.
-- `APIKeyCreateResponse` schema: add `jti` property (`type: string`).
-- `APIKeyListItem` schema: no change (already documents `jti`).
+The committed spec at `docs/api/openapi.public.{json,yaml}` is **generated** from swag annotations on the handlers and from struct tags on the model. We do not hand-edit the YAML.
+
+Changes:
+
+- `RevokeAPIKey` swag annotation: `@Param key_id path int true "API key id"` → `@Param key_id path string true "Either the integer surrogate id or the UUID jti"`.
+- `APIKeyCreateResponse` struct gains `JTI string` (already covered in the Model section); swag picks up the new field automatically.
+- `APIKeyListItem` schema: no change.
+
+Regenerate after edits:
+
+```bash
+just backend api-spec
+```
+
+This rewrites `docs/api/openapi.public.{json,yaml}` (committed) and the gitignored embedded copies in `internal/handlers/swaggerspec/`. Per `backend/justfile`, `api-spec` is **not** part of `validate` — drift is checked only in CI (`api-spec.yml`). The committed YAML must be regenerated and committed alongside the code change.
 
 ## Data flow
 
