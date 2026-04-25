@@ -14,9 +14,7 @@ import (
 )
 
 const (
-	assetHistoryDefaultLimit = 50
-	assetHistoryMaxLimit     = 100
-	defaultDateRangeDays     = 30
+	defaultDateRangeDays = 30
 )
 
 // respondInvalidTimestamp writes a 400 validation_error envelope naming the
@@ -132,11 +130,11 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		out = append(out, report.ToPublicAssetHistoryItem(it))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data":        out,
-		"limit":       params.Limit,
-		"offset":      params.Offset,
-		"total_count": total,
+	httputil.WriteJSON(w, http.StatusOK, AssetHistoryResponse{
+		Data:       out,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
 	})
 }
 
@@ -220,10 +218,10 @@ func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 		out = append(out, report.ToPublicAssetHistoryItem(it))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data":        out,
-		"limit":       params.Limit,
-		"offset":      params.Offset,
-		"total_count": total,
+	httputil.WriteJSON(w, http.StatusOK, AssetHistoryResponse{
+		Data:       out,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
 	})
 }

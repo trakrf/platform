@@ -75,11 +75,9 @@ func parseAssetID(s string) (int, error) {
 }
 
 func TestGetAssetHistory_DefaultPagination(t *testing.T) {
-	// Verify default limit and max limit constants
+	// Verify handler can be constructed; limit/offset defaults are enforced by httputil.ParseListParams
 	handler := NewHandler(nil)
 	assert.NotNil(t, handler)
-	assert.Equal(t, 50, assetHistoryDefaultLimit)
-	assert.Equal(t, 100, assetHistoryMaxLimit)
 	assert.Equal(t, 30, defaultDateRangeDays)
 }
 
@@ -101,12 +99,12 @@ func TestGetAssetHistory_LimitCapping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Simulate the parsing logic from the handler
-			limit := assetHistoryDefaultLimit
+			limit := 50
 			if tt.queryLimit != "" {
 				if parsed := parsePositiveInt(tt.queryLimit); parsed > 0 {
 					limit = parsed
-					if limit > assetHistoryMaxLimit {
-						limit = assetHistoryMaxLimit
+					if limit > 100 {
+						limit = 100
 					}
 				}
 			}
