@@ -14,9 +14,7 @@ import (
 )
 
 const (
-	assetHistoryDefaultLimit = 50
-	assetHistoryMaxLimit     = 100
-	defaultDateRangeDays     = 30
+	defaultDateRangeDays = 30
 )
 
 // respondInvalidTimestamp writes a 400 validation_error envelope naming the
@@ -47,8 +45,8 @@ type AssetHistoryResponse struct {
 // @Tags reports,public
 // @ID assets.history
 // @Param identifier path string true "Asset identifier (natural key)"
-// @Param limit query int false "max 200"
-// @Param offset query int false "pagination offset"
+// @Param limit query int false "max 200"   default(50)
+// @Param offset query int false "min 0"    default(0)
 // @Param from query string false "RFC 3339 start timestamp"
 // @Param to query string false "RFC 3339 end timestamp"
 // @Success 200 {object} reports.AssetHistoryResponse
@@ -132,19 +130,19 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		out = append(out, report.ToPublicAssetHistoryItem(it))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data":        out,
-		"limit":       params.Limit,
-		"offset":      params.Offset,
-		"total_count": total,
+	httputil.WriteJSON(w, http.StatusOK, AssetHistoryResponse{
+		Data:       out,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
 	})
 }
 
 // @Summary Asset movement history by surrogate ID (internal)
 // @Tags reports,internal
 // @Param id path int true "Asset surrogate ID"
-// @Param limit query int false "max 200"
-// @Param offset query int false "pagination offset"
+// @Param limit query int false "max 200"   default(50)
+// @Param offset query int false "min 0"    default(0)
 // @Param from query string false "RFC 3339 start timestamp"
 // @Param to query string false "RFC 3339 end timestamp"
 // @Success 200 {object} reports.AssetHistoryResponse
@@ -220,10 +218,10 @@ func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 		out = append(out, report.ToPublicAssetHistoryItem(it))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data":        out,
-		"limit":       params.Limit,
-		"offset":      params.Offset,
-		"total_count": total,
+	httputil.WriteJSON(w, http.StatusOK, AssetHistoryResponse{
+		Data:       out,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
 	})
 }

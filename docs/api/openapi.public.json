@@ -555,7 +555,7 @@
         },
         "type": "object"
       },
-      "locations.ListLocationsResponse": {
+      "locations.ListAncestorsResponse": {
         "properties": {
           "data": {
             "items": {
@@ -578,13 +578,71 @@
         },
         "type": "object"
       },
-      "locations.LocationHierarchyResponse": {
+      "locations.ListChildrenResponse": {
         "properties": {
           "data": {
             "items": {
               "$ref": "#/components/schemas/location.PublicLocationView"
             },
             "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "locations.ListDescendantsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/location.PublicLocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "locations.ListLocationsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/location.PublicLocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -620,6 +678,18 @@
               "$ref": "#/components/schemas/apikey.APIKeyListItem"
             },
             "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1419,14 +1489,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           },
@@ -1883,14 +1955,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           },
@@ -2129,14 +2203,16 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
               "type": "integer"
             }
           },
           {
-            "description": "pagination offset",
+            "description": "min 0",
             "in": "query",
             "name": "offset",
             "schema": {
+              "default": 0,
               "type": "integer"
             }
           },
@@ -2600,6 +2676,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "max 200",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "min 0",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -2607,7 +2701,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.LocationHierarchyResponse"
+                  "$ref": "#/components/schemas/locations.ListAncestorsResponse"
                 }
               }
             },
@@ -2690,6 +2784,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "max 200",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "min 0",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -2697,7 +2809,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.LocationHierarchyResponse"
+                  "$ref": "#/components/schemas/locations.ListChildrenResponse"
                 }
               }
             },
@@ -2780,6 +2892,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "max 200",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "min 0",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -2787,7 +2917,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.LocationHierarchyResponse"
+                  "$ref": "#/components/schemas/locations.ListDescendantsResponse"
                 }
               }
             },
@@ -3129,6 +3259,24 @@
             "name": "id",
             "required": true,
             "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "max 200",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "min 0",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
               "type": "integer"
             }
           }

@@ -340,6 +340,44 @@ func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.L
 	return s.scanHierarchyRows(ctx, query, "ancestor", orgID, orgID, id)
 }
 
+// ListAncestorsPaginated returns the ancestors of a location ordered by depth
+// (root first), with LIMIT/OFFSET applied. The id ASC tiebreaker ensures
+// fully-deterministic paging across requests with the same offset.
+func (s *Storage) ListAncestorsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
+	query := `
+		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.org_id = $1
+		  AND l.path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND l.id != $2
+		  AND l.deleted_at IS NULL
+		ORDER BY l.depth ASC, l.id ASC
+		LIMIT $3 OFFSET $4
+	`
+	return s.scanHierarchyRows(ctx, query, "ancestor", orgID, orgID, id, limit, offset)
+}
+
+// CountAncestors returns the total number of ancestors of the given location,
+// matching the WHERE clause used by ListAncestorsPaginated.
+func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM trakrf.locations
+		WHERE org_id = $1
+		  AND path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND id != $2
+		  AND deleted_at IS NULL
+	`
+	var n int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, id).Scan(&n)
+	})
+	return n, err
+}
+
 // GetDescendants returns all descendant locations of a given location (children at all levels),
 // projected through LocationWithParent so every entry carries its parent's natural key
 // and its tag identifiers — same shape as GET /locations/{identifier}.
@@ -364,6 +402,44 @@ func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location
 	return s.scanHierarchyRows(ctx, query, "descendant", orgID, orgID, id)
 }
 
+// ListDescendantsPaginated returns all descendants of a location ordered
+// depth-first by ltree path, with LIMIT/OFFSET applied. The id ASC tiebreaker
+// keeps paging deterministic across calls.
+func (s *Storage) ListDescendantsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
+	query := `
+		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.org_id = $1
+		  AND l.path <@ (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND l.id != $2
+		  AND l.deleted_at IS NULL
+		ORDER BY l.path ASC, l.id ASC
+		LIMIT $3 OFFSET $4
+	`
+	return s.scanHierarchyRows(ctx, query, "descendant", orgID, orgID, id, limit, offset)
+}
+
+// CountDescendants returns the total number of descendants of the given
+// location, matching the WHERE clause used by ListDescendantsPaginated.
+func (s *Storage) CountDescendants(ctx context.Context, orgID, id int) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM trakrf.locations
+		WHERE org_id = $1
+		  AND path <@ (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
+		  AND id != $2
+		  AND deleted_at IS NULL
+	`
+	var n int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, id).Scan(&n)
+	})
+	return n, err
+}
+
 // GetChildren returns immediate children of a given location (depth = parent_depth + 1),
 // projected through LocationWithParent for parent-identifier and tag-identifier parity
 // with GET /locations/{identifier}.
@@ -384,6 +460,42 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 		ORDER BY l.name
 	`
 	return s.scanHierarchyRows(ctx, query, "child", orgID, orgID, id)
+}
+
+// ListChildrenPaginated returns immediate children (depth = parent_depth + 1)
+// of a location ordered alphabetically by name, with LIMIT/OFFSET applied.
+// The id ASC tiebreaker keeps paging deterministic when sibling names collide.
+func (s *Storage) ListChildrenPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
+	query := `
+		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.org_id = $1
+		  AND l.parent_location_id = $2
+		  AND l.deleted_at IS NULL
+		ORDER BY l.name ASC, l.id ASC
+		LIMIT $3 OFFSET $4
+	`
+	return s.scanHierarchyRows(ctx, query, "child", orgID, orgID, id, limit, offset)
+}
+
+// CountChildren returns the total number of immediate children of the given
+// location, matching the WHERE clause used by ListChildrenPaginated.
+func (s *Storage) CountChildren(ctx context.Context, orgID, id int) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM trakrf.locations
+		WHERE org_id = $1
+		  AND parent_location_id = $2
+		  AND deleted_at IS NULL
+	`
+	var n int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, id).Scan(&n)
+	})
+	return n, err
 }
 
 // scanHierarchyRows runs a hierarchy query whose projection ends in p.identifier

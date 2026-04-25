@@ -553,6 +553,50 @@ func TestLocationsGetAncestors_UnknownIdentifier_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 }
 
+func TestLocationsGetAncestors_PaginationEnvelope(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra503-loc-ancestors-paginate")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	root, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-root", Name: "Root", Path: "p503-root",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	mid, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-mid", Name: "Mid", Path: "p503-root.p503-mid",
+		ParentLocationID: &root.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-leaf", Name: "Leaf", Path: "p503-root.p503-mid.p503-leaf",
+		ParentLocationID: &mid.ID,
+		ValidFrom:        time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicReadRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/p503-leaf/ancestors?limit=1&offset=1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 1, body["limit"])
+	assert.EqualValues(t, 1, body["offset"])
+	assert.EqualValues(t, 2, body["total_count"], "two ancestors of leaf: root and mid")
+	data := body["data"].([]any)
+	require.Len(t, data, 1)
+	first := data[0].(map[string]any)
+	assert.Equal(t, "p503-mid", first["identifier"], "depth-asc + offset=1 skips root, returns mid")
+}
+
 func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
 	t.Setenv("JWT_SECRET", "tra407-loc-children-by-ident")
 	store, cleanup := testutil.SetupTestDB(t)
@@ -1394,4 +1438,104 @@ func TestSoftDeleteVisibility_Location(t *testing.T) {
 	require.NoError(t, json.Unmarshal(listInactiveW.Body.Bytes(), &listInactiveBody))
 	assert.EqualValues(t, 0, listInactiveBody["total_count"],
 		"is_active=false must NOT surface soft-deleted records — is_active is a business-state flag, not a soft-delete view")
+}
+
+func TestLocationsGetChildren_PaginationEnvelope(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra503-loc-children-paginate")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-ch-parent", Name: "Parent", Path: "p503-ch-parent",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	for _, name := range []string{"alpha", "bravo", "charlie"} {
+		_, err := store.CreateLocation(context.Background(), locmodel.Location{
+			OrgID: orgID, Identifier: "p503-ch-" + name, Name: name,
+			Path:             "p503-ch-parent.p503-ch-" + name,
+			ParentLocationID: &parent.ID,
+			ValidFrom:        time.Now(), IsActive: true,
+		})
+		require.NoError(t, err)
+	}
+
+	r := buildLocationsPublicReadRouter(store)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/p503-ch-parent/children?limit=2&offset=0", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 2, body["limit"])
+	assert.EqualValues(t, 0, body["offset"])
+	assert.EqualValues(t, 3, body["total_count"])
+	data := body["data"].([]any)
+	require.Len(t, data, 2)
+	assert.Equal(t, "alpha", data[0].(map[string]any)["name"], "alphabetical order, page 1")
+	assert.Equal(t, "bravo", data[1].(map[string]any)["name"])
+}
+
+func TestLocationsGetDescendants_PaginationEnvelope(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra503-loc-descendants-paginate")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
+	root, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-d-root", Name: "Root", Path: "p503-d-root",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	a, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-d-a", Name: "A", Path: "p503-d-root.p503-d-a",
+		ParentLocationID: &root.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-d-a-1", Name: "A.1",
+		Path:             "p503-d-root.p503-d-a.p503-d-a-1",
+		ParentLocationID: &a.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	_, err = store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "p503-d-b", Name: "B", Path: "p503-d-root.p503-d-b",
+		ParentLocationID: &root.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildLocationsPublicReadRouter(store)
+
+	// Page 1: limit=2, offset=0
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/p503-d-root/descendants?limit=2&offset=0", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 3, body["total_count"])
+	page1 := body["data"].([]any)
+	require.Len(t, page1, 2)
+	assert.Equal(t, "p503-d-a", page1[0].(map[string]any)["identifier"], "path-asc: p503-d-a comes first")
+	assert.Equal(t, "p503-d-a-1", page1[1].(map[string]any)["identifier"], "path-asc: p503-d-a.p503-d-a-1 next")
+
+	// Page 2: limit=2, offset=2
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/locations/p503-d-root/descendants?limit=2&offset=2", nil)
+	req2.Header.Set("Authorization", "Bearer "+token)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	require.Equal(t, http.StatusOK, w2.Code, w2.Body.String())
+
+	var body2 map[string]any
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &body2))
+	page2 := body2["data"].([]any)
+	require.Len(t, page2, 1)
+	assert.Equal(t, "p503-d-b", page2[0].(map[string]any)["identifier"], "path-asc: p503-d-b last")
 }

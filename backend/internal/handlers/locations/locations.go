@@ -352,18 +352,38 @@ type UpdateLocationResponse struct {
 	Data location.PublicLocationView `json:"data"`
 }
 
-// LocationHierarchyResponse is the typed envelope returned by the hierarchy
-// endpoints (GET /api/v1/locations/{identifier}/{ancestors,descendants,children}).
-// Each returns a flat list of views in the same shape as GET /locations/{identifier}.
-type LocationHierarchyResponse struct {
-	Data []location.PublicLocationView `json:"data"`
+// ListAncestorsResponse is the typed envelope returned by
+// GET /api/v1/locations/{identifier}/ancestors.
+type ListAncestorsResponse struct {
+	Data       []location.PublicLocationView `json:"data"`
+	Limit      int                           `json:"limit"       example:"50"`
+	Offset     int                           `json:"offset"      example:"0"`
+	TotalCount int                           `json:"total_count" example:"100"`
+}
+
+// ListChildrenResponse is the typed envelope returned by
+// GET /api/v1/locations/{identifier}/children.
+type ListChildrenResponse struct {
+	Data       []location.PublicLocationView `json:"data"`
+	Limit      int                           `json:"limit"       example:"50"`
+	Offset     int                           `json:"offset"      example:"0"`
+	TotalCount int                           `json:"total_count" example:"100"`
+}
+
+// ListDescendantsResponse is the typed envelope returned by
+// GET /api/v1/locations/{identifier}/descendants.
+type ListDescendantsResponse struct {
+	Data       []location.PublicLocationView `json:"data"`
+	Limit      int                           `json:"limit"       example:"50"`
+	Offset     int                           `json:"offset"      example:"0"`
+	TotalCount int                           `json:"total_count" example:"100"`
 }
 
 // @Summary List locations
 // @Tags locations,public
 // @ID locations.list
-// @Param limit    query int    false "max 200"
-// @Param offset   query int    false "pagination offset"
+// @Param limit    query int    false "max 200"   default(50)
+// @Param offset   query int    false "min 0"    default(0)
 // @Param parent   query string false "filter by parent identifier (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
 // @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active identifier values"
@@ -434,11 +454,11 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		out = append(out, location.ToPublicLocationView(l))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data":        out,
-		"limit":       params.Limit,
-		"offset":      params.Offset,
-		"total_count": total,
+	httputil.WriteJSON(w, http.StatusOK, ListLocationsResponse{
+		Data:       out,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
 	})
 }
 
@@ -540,7 +560,9 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  locations.LocationHierarchyResponse
+// @Param        limit       query int     false "max 200"   default(50)
+// @Param        offset      query int     false "min 0"    default(0)
+// @Success      200  {object}  locations.ListAncestorsResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -572,14 +594,32 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	}
 	id := loc.ID
 
-	results, err := handler.storage.GetAncestors(req.Context(), orgID, id)
+	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{})
+	if err != nil {
+		httputil.RespondListParamError(w, req, err, ctx)
+		return
+	}
+
+	results, err := handler.storage.ListAncestorsPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
+	total, err := handler.storage.CountAncestors(req.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, ListAncestorsResponse{
+		Data:       toPublicLocationViews(results),
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
+	})
 }
 
 // @Summary      List location descendants
@@ -589,7 +629,9 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  locations.LocationHierarchyResponse
+// @Param        limit       query int     false "max 200"   default(50)
+// @Param        offset      query int     false "min 0"    default(0)
+// @Success      200  {object}  locations.ListDescendantsResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -621,14 +663,32 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 	}
 	id := loc.ID
 
-	results, err := handler.storage.GetDescendants(req.Context(), orgID, id)
+	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{})
+	if err != nil {
+		httputil.RespondListParamError(w, req, err, ctx)
+		return
+	}
+
+	results, err := handler.storage.ListDescendantsPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
+	total, err := handler.storage.CountDescendants(req.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, ListDescendantsResponse{
+		Data:       toPublicLocationViews(results),
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
+	})
 }
 
 // @Summary      List location children
@@ -638,7 +698,9 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string  true  "Location identifier"
-// @Success      200  {object}  locations.LocationHierarchyResponse
+// @Param        limit       query int     false "max 200"   default(50)
+// @Param        offset      query int     false "min 0"    default(0)
+// @Success      200  {object}  locations.ListChildrenResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -670,14 +732,32 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	}
 	id := loc.ID
 
-	results, err := handler.storage.GetChildren(req.Context(), orgID, id)
+	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{})
+	if err != nil {
+		httputil.RespondListParamError(w, req, err, ctx)
+		return
+	}
+
+	results, err := handler.storage.ListChildrenPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			apierrors.LocationGetFailed, err.Error(), ctx)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": toPublicLocationViews(results)})
+	total, err := handler.storage.CountChildren(req.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			apierrors.LocationGetFailed, err.Error(), ctx)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, ListChildrenResponse{
+		Data:       toPublicLocationViews(results),
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
+	})
 }
 
 // toPublicLocationViews is the hierarchy-endpoint response adapter. Each input carries
