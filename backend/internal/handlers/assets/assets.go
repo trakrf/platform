@@ -321,7 +321,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary      Delete an asset
-// @Description  Soft-delete an asset by its natural identifier. The record is removed from all subsequent queries and its identifier becomes immediately available for reuse. Soft-deleted records are retained internally for audit purposes but are not retrievable via this API. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
+// @Description  Delete an asset by its natural identifier. The asset is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
 // @Tags         assets,public
 // @ID           assets.delete
 // @Accept       json
@@ -416,7 +416,7 @@ type UpdateAssetResponse struct {
 // @Param limit    query int    false "max 200"   default(50)
 // @Param offset   query int    false "min 0"    default(0)
 // @Param location query string false "filter by location natural key (may repeat)"
-// @Param is_active query bool  false "filter by the active business-state flag. Independent of soft-delete: soft-deleted records are excluded regardless of is_active value."
+// @Param is_active query bool  false "filter by the active flag"
 // @Param type     query string false "filter by type"
 // @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active identifier values"
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"
@@ -499,7 +499,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary Get asset by natural identifier
-// @Description Retrieve an asset by its natural identifier. Returns 404 if the asset does not exist or has been soft-deleted.
+// @Description Retrieve an asset by its natural identifier. Returns 404 if the asset does not exist.
 // @Tags assets,public
 // @ID assets.get
 // @Param identifier path string true "Asset identifier (natural key)"
