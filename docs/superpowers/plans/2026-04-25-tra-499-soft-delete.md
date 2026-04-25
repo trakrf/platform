@@ -311,13 +311,15 @@ Expected: clean (no `go vet` errors). The swag comments are just comments — th
 
 ```bash
 git add backend/internal/handlers/assets/assets.go
-git commit -m "docs(tra-499): correct swagger copy on asset DELETE/GET/list
+git commit -m "docs(tra-499): drop soft-delete terminology from public asset annotations
 
-DELETE description now describes the deleted_at-based soft-delete semantic
-(record removed from all subsequent queries; identifier reusable; 404 on
-re-delete). GET-by-identifier explicitly notes 404 for soft-deleted. List
-is_active param now clarifies it filters business-state and is independent
-of soft-delete. OpenAPI regeneration follows in a later commit."
+DELETE description rewritten to describe the customer-observable contract
+only (record removed from all subsequent queries; identifier reusable; 204
+on success, 404 if not found or already deleted). GET-by-identifier notes
+404 for non-existent records. is_active param left in its original terse
+form. Stripe-style: public docs describe what the caller can observe and
+do not leak implementation detail. OpenAPI regeneration follows in a later
+commit."
 ```
 
 ---
@@ -367,11 +369,13 @@ Expected: clean.
 
 ```bash
 git add backend/internal/handlers/locations/locations.go
-git commit -m "docs(tra-499): correct swagger copy on location DELETE/GET/list
+git commit -m "docs(tra-499): drop soft-delete terminology from public location annotations
 
-Mirror of the assets annotation cleanup — DELETE describes deleted_at-based
-soft-delete, GET-by-identifier notes 404 for soft-deleted, list is_active
-param disambiguated from soft-delete."
+Mirror of the assets cleanup. DELETE description rewritten to describe the
+customer-observable contract only (record removed from queries; identifier
+reusable; 404 on re-delete). GET-by-identifier description added with the
+same Stripe-style framing. is_active param left unchanged. OpenAPI
+regeneration follows in a later commit."
 ```
 
 ---
