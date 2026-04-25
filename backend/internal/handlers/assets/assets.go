@@ -490,11 +490,11 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		out = append(out, asset.ToPublicAssetView(a))
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data":        out,
-		"limit":       params.Limit,
-		"offset":      params.Offset,
-		"total_count": total,
+	httputil.WriteJSON(w, http.StatusOK, ListAssetsResponse{
+		Data:       out,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
 	})
 }
 
