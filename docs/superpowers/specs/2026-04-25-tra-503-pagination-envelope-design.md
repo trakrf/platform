@@ -46,10 +46,12 @@ The existing `LocationHierarchyResponse` (currently shared across all three hier
 
 **Limit standardization (folded into this PR):**
 
-- `backend/internal/handlers/reports/current_locations.go` — drop file-scoped `maxLimit=100`; use the global `httputil.maxListLimit=200`.
-- `backend/internal/handlers/reports/asset_history.go` — drop package-scoped `assetHistoryMaxLimit=100`; use the global 200.
+- `backend/internal/handlers/reports/current_locations.go` — drop unused `defaultLimit=50, maxLimit=100` constants.
+- `backend/internal/handlers/reports/asset_history.go` — drop unused `assetHistoryDefaultLimit=50, assetHistoryMaxLimit=100` constants.
 
-After this PR, every list endpoint on the public API uses `default=50, max=200` with no per-endpoint overrides.
+These constants are declared but never referenced — both handlers already call `httputil.ParseListParams` with the global 50/200 limits. The BB9 finding's claim that these endpoints capped at 100 was incorrect; they cap at 200 today. Removing the dead code closes the documentation gap so a future reader doesn't see the constants and assume they're load-bearing.
+
+After this PR, every list endpoint on the public API uses `default=50, max=200` with no per-endpoint overrides (already true at runtime; this just removes misleading code).
 
 ### Out of scope
 
@@ -179,7 +181,7 @@ No new tests. Existing tests must pass unchanged — that *is* the regression ch
 
 ### Limit standardization
 
-If any existing test asserts `limit > 100` is rejected on `current_locations` or `asset_history`, update to `limit > 200`. Otherwise no change.
+No test changes expected — the constants were never wired into the runtime, so no test ever exercised a 100-cap. If grep finds any reference to the deleted symbols, fix the call site.
 
 ## Risks
 
