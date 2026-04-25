@@ -639,6 +639,12 @@ func TestRevokeAPIKey_ByJTI_CrossOrgReturns404(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Victim key in org1 must still be active.
+	list, err := store.ListActiveAPIKeys(context.Background(), org1)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, key.ID, list[0].ID)
 }
 
 // seedAdminUser2 mirrors seedAdminUser but with a distinct email so two admins
@@ -713,6 +719,17 @@ func TestRevokeAPIKey_InvalidFormat(t *testing.T) {
 			assert.Contains(t, w.Body.String(), "Invalid key id")
 		})
 	}
+
+	// Negative integer parses but is not a valid id — dispatched to integer
+	// path, hits storage, returns 404. Documents the behavior.
+	t.Run("negative_int", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete,
+			fmt.Sprintf("/api/v1/orgs/%d/api-keys/-1", orgID), nil)
+		req.Header.Set("Authorization", "Bearer "+sessionToken)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+	})
 }
 
 // Mirror of TestRevokeAPIKey_KeyRevokesItself but using the JWT's jti instead

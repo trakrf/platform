@@ -240,6 +240,9 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rawKeyID := chi.URLParam(r, "key_id")
+	// Dispatch by format: UUID first (stricter parser), then integer.
+	// jti.String() canonicalizes the URL-supplied value to lowercase
+	// hyphenated form, matching what the DB stores.
 	var revokeErr error
 	if jti, parseErr := uuid.Parse(rawKeyID); parseErr == nil {
 		revokeErr = h.storage.RevokeAPIKeyByJTI(r.Context(), orgID, jti.String())
