@@ -64,6 +64,8 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
       <Menu.Button
         disabled={isLoading}
         data-testid="org-switcher"
+        data-current-org-id={currentOrg?.id ?? ''}
+        data-current-org-name={currentOrg?.name ?? ''}
         className="flex items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
       >
         {avatarLetter ? (

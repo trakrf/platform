@@ -98,20 +98,23 @@ export async function openOrgSwitcher(page: Page): Promise<void> {
 }
 
 /**
- * Switch to a specific org via the org switcher dropdown
- * Waits for the switcher to update to show the new org name
+ * Switch to a specific org via the org switcher dropdown.
+ * Waits for the switcher button's data-current-org-name attribute to
+ * reflect the new org — this is model truth from the zustand store, not
+ * rendered button text (the button only shows the user's email initial).
  */
 export async function switchToOrg(page: Page, orgName: string): Promise<void> {
   await openOrgSwitcher(page);
   // Click the org in the dropdown menu
-  await page.locator(`button:has-text("${orgName}")`).click();
-  // Wait for dropdown to close (menu items disappear)
-  await page.waitForSelector('[role="menu"]', { state: 'hidden', timeout: 5000 });
+  await page.getByRole('menuitem', { name: orgName }).click();
 
-  // Wait for UI to reflect the new org - the switcher button should show the org name
-  await page.waitForSelector(`[data-testid="org-switcher"]:has-text("${orgName}")`, {
-    timeout: 10000,
-  });
+  // Wait for the switcher to reflect the new current org.
+  // Headless UI unmounts the menu on click; the attribute settle implicitly
+  // proves both that the dropdown closed and the switch resolved.
+  await page.waitForSelector(
+    `[data-testid="org-switcher"][data-current-org-name="${orgName}"]`,
+    { timeout: 10000 }
+  );
 }
 
 // =============================================================================

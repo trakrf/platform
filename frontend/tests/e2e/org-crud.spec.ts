@@ -44,7 +44,7 @@ test.describe('Organization CRUD', () => {
     await page.goto('/');
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
-    await signupTestUser(page, testEmail, testPassword);
+    await signupTestUser(page, testEmail, testPassword, testOrgName);
     await page.close();
   });
 
@@ -111,8 +111,8 @@ test.describe('Organization CRUD', () => {
       // Should see the "Organizations" header in dropdown
       await expect(page.locator('text=Organizations')).toBeVisible();
 
-      // Should see the personal org from signup (named after email)
-      await expect(page.getByRole('menuitem', { name: testEmail })).toBeVisible();
+      // Should see the org from signup
+      await expect(page.getByRole('menuitem', { name: testOrgName })).toBeVisible();
     });
 
     test('should show newly created org in list', async ({ page }) => {
