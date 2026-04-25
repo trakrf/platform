@@ -1308,3 +1308,76 @@ func TestUpdateLocation_ValidFromNull_Returns400(t *testing.T) {
 	first := fields[0].(map[string]any)
 	assert.Equal(t, "valid_from", first["field"])
 }
+
+// TRA-499: lock in the read-side visibility contract for soft-deleted locations.
+// After DELETE, the record must be unreachable via:
+//   - GET /api/v1/locations/{identifier}     → 404
+//   - GET /api/v1/locations                  → not in default list
+//   - GET /api/v1/locations?is_active=false  → not surfaced (is_active is an
+//                                               independent business-state flag,
+//                                               not a soft-delete view)
+func TestSoftDeleteVisibility_Location(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-locations-soft-delete-visibility")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read", "locations:write"})
+	writeRouter := buildLocationsPublicWriteRouter(store)
+	readRouter := buildLocationsPublicReadRouter(store)
+
+	auth := func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	// 1. Create location.
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/locations",
+		bytes.NewBufferString(`{"identifier":"tra499-vis-1","name":"v"}`))
+	auth(createReq)
+	createW := httptest.NewRecorder()
+	writeRouter.ServeHTTP(createW, createReq)
+	require.Equal(t, http.StatusCreated, createW.Code, createW.Body.String())
+
+	// 2. Sanity: live record is visible by identifier.
+	getLiveReq := httptest.NewRequest(http.MethodGet, "/api/v1/locations/tra499-vis-1", nil)
+	auth(getLiveReq)
+	getLiveW := httptest.NewRecorder()
+	readRouter.ServeHTTP(getLiveW, getLiveReq)
+	require.Equal(t, http.StatusOK, getLiveW.Code, getLiveW.Body.String())
+
+	// 3. Soft-delete the location.
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/tra499-vis-1", nil)
+	auth(delReq)
+	delW := httptest.NewRecorder()
+	writeRouter.ServeHTTP(delW, delReq)
+	require.Equal(t, http.StatusNoContent, delW.Code, delW.Body.String())
+
+	// 4. GET-by-identifier of soft-deleted record → 404.
+	getDelReq := httptest.NewRequest(http.MethodGet, "/api/v1/locations/tra499-vis-1", nil)
+	auth(getDelReq)
+	getDelW := httptest.NewRecorder()
+	readRouter.ServeHTTP(getDelW, getDelReq)
+	assert.Equal(t, http.StatusNotFound, getDelW.Code, getDelW.Body.String())
+
+	// 5. Default list excludes soft-deleted record.
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/locations", nil)
+	auth(listReq)
+	listW := httptest.NewRecorder()
+	readRouter.ServeHTTP(listW, listReq)
+	require.Equal(t, http.StatusOK, listW.Code, listW.Body.String())
+	var listBody map[string]any
+	require.NoError(t, json.Unmarshal(listW.Body.Bytes(), &listBody))
+	assert.EqualValues(t, 0, listBody["total_count"], "default list must exclude soft-deleted location")
+
+	// 6. ?is_active=false also excludes soft-deleted record.
+	listInactiveReq := httptest.NewRequest(http.MethodGet, "/api/v1/locations?is_active=false", nil)
+	auth(listInactiveReq)
+	listInactiveW := httptest.NewRecorder()
+	readRouter.ServeHTTP(listInactiveW, listInactiveReq)
+	require.Equal(t, http.StatusOK, listInactiveW.Code, listInactiveW.Body.String())
+	var listInactiveBody map[string]any
+	require.NoError(t, json.Unmarshal(listInactiveW.Body.Bytes(), &listInactiveBody))
+	assert.EqualValues(t, 0, listInactiveBody["total_count"],
+		"is_active=false must NOT surface soft-deleted records — is_active is a business-state flag, not a soft-delete view")
+}
