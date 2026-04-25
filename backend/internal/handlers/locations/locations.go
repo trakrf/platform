@@ -352,13 +352,6 @@ type UpdateLocationResponse struct {
 	Data location.PublicLocationView `json:"data"`
 }
 
-// LocationHierarchyResponse is the typed envelope returned by the hierarchy
-// endpoints (GET /api/v1/locations/{identifier}/{ancestors,descendants,children}).
-// Each returns a flat list of views in the same shape as GET /locations/{identifier}.
-type LocationHierarchyResponse struct {
-	Data []location.PublicLocationView `json:"data"`
-}
-
 // ListAncestorsResponse is the typed envelope returned by
 // GET /api/v1/locations/{identifier}/ancestors.
 type ListAncestorsResponse struct {
