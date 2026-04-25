@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -295,6 +296,41 @@ func TestRevokeAPIKey_CrossOrgReturns404(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	assert.Equal(t, victimKey.ID, list[0].ID)
+}
+
+func TestListAPIKeys_PaginationEnvelope(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra503-apikeys-paginate")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	userID, sessionToken := seedAdminUser(t, pool, orgID)
+
+	for i := 0; i < 3; i++ {
+		_, err := store.CreateAPIKey(context.Background(), orgID,
+			fmt.Sprintf("p503-k%d", i),
+			[]string{"assets:read"},
+			apikey.Creator{UserID: &userID},
+			nil)
+		require.NoError(t, err)
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	r := newAdminRouter(t, store)
+	url := fmt.Sprintf("/api/v1/orgs/%d/api-keys?limit=2&offset=0", orgID)
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 2, body["limit"])
+	assert.EqualValues(t, 0, body["offset"])
+	assert.EqualValues(t, 3, body["total_count"])
+	data := body["data"].([]any)
+	require.Len(t, data, 2)
 }
 
 func TestCreateAPIKey_EmptyBody_CleanMessage(t *testing.T) {

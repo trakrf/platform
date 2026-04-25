@@ -25,7 +25,10 @@ type CreateAPIKeyResponse struct {
 // ListAPIKeysResponse is the typed envelope returned by
 // GET /api/v1/orgs/{id}/api-keys.
 type ListAPIKeysResponse struct {
-	Data []apikey.APIKeyListItem `json:"data"`
+	Data       []apikey.APIKeyListItem `json:"data"`
+	Limit      int                     `json:"limit"       example:"50"`
+	Offset     int                     `json:"offset"      example:"0"`
+	TotalCount int                     `json:"total_count" example:"100"`
 }
 
 // @Summary Create a new API key for an organization
@@ -164,10 +167,23 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keys, err := h.storage.ListActiveAPIKeys(r.Context(), orgID)
+	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{})
+	if err != nil {
+		httputil.RespondListParamError(w, r, err, reqID)
+		return
+	}
+
+	keys, err := h.storage.ListActiveAPIKeysPaginated(r.Context(), orgID, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			"Failed to list api keys", "", reqID)
+		return
+	}
+
+	total, err := h.storage.CountActiveAPIKeys(r.Context(), orgID)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			"Failed to count api keys", "", reqID)
 		return
 	}
 
@@ -185,7 +201,13 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 			LastUsedAt:     k.LastUsedAt,
 		})
 	}
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": items})
+
+	httputil.WriteJSON(w, http.StatusOK, ListAPIKeysResponse{
+		Data:       items,
+		Limit:      params.Limit,
+		Offset:     params.Offset,
+		TotalCount: total,
+	})
 }
 
 // @Summary Revoke an API key
