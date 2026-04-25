@@ -424,6 +424,42 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 	return s.scanHierarchyRows(ctx, query, "child", orgID, orgID, id)
 }
 
+// ListChildrenPaginated returns immediate children (depth = parent_depth + 1)
+// of a location ordered alphabetically by name, with LIMIT/OFFSET applied.
+// The id ASC tiebreaker keeps paging deterministic when sibling names collide.
+func (s *Storage) ListChildrenPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
+	query := `
+		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       p.identifier
+		FROM trakrf.locations l
+		LEFT JOIN trakrf.locations p
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		WHERE l.org_id = $1
+		  AND l.parent_location_id = $2
+		  AND l.deleted_at IS NULL
+		ORDER BY l.name ASC, l.id ASC
+		LIMIT $3 OFFSET $4
+	`
+	return s.scanHierarchyRows(ctx, query, "child", orgID, orgID, id, limit, offset)
+}
+
+// CountChildren returns the total number of immediate children of the given
+// location, matching the WHERE clause used by ListChildrenPaginated.
+func (s *Storage) CountChildren(ctx context.Context, orgID, id int) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM trakrf.locations
+		WHERE org_id = $1
+		  AND parent_location_id = $2
+		  AND deleted_at IS NULL
+	`
+	var n int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, id).Scan(&n)
+	})
+	return n, err
+}
+
 // scanHierarchyRows runs a hierarchy query whose projection ends in p.identifier
 // (LEFT JOIN parent) and then bulk-fetches tag identifiers for the returned locations.
 // kind ("ancestor"/"descendant"/"child") is interpolated into error messages.
