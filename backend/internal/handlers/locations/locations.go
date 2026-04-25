@@ -266,7 +266,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 }
 
 // @Summary Delete location
-// @Description Soft-delete a location by its natural identifier. The location is marked inactive and removed from future list results.
+// @Description Delete a location by its natural identifier. The location is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the location does not exist or has already been deleted.
 // @Tags locations,public
 // @ID locations.delete
 // @Accept json
@@ -443,6 +443,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 }
 
 // @Summary Get location by natural identifier
+// @Description Retrieve a location by its natural identifier. Returns 404 if the location does not exist.
 // @Tags locations,public
 // @ID locations.get
 // @Param identifier path string true "Location identifier (natural key)"

@@ -321,7 +321,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary      Delete an asset
-// @Description  Soft-delete an asset by its natural identifier. The asset is marked inactive and removed from future list results.
+// @Description  Delete an asset by its natural identifier. The asset is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
 // @Tags         assets,public
 // @ID           assets.delete
 // @Accept       json
@@ -499,6 +499,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary Get asset by natural identifier
+// @Description Retrieve an asset by its natural identifier. Returns 404 if the asset does not exist.
 // @Tags assets,public
 // @ID assets.get
 // @Param identifier path string true "Asset identifier (natural key)"

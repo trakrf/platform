@@ -1083,7 +1083,7 @@
     },
     "/api/v1/assets/{identifier}": {
       "delete": {
-        "description": "Soft-delete an asset by its natural identifier. The asset is marked inactive and removed from future list results.",
+        "description": "Delete an asset by its natural identifier. The asset is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.",
         "operationId": "assets.delete",
         "parameters": [
           {
@@ -1164,6 +1164,7 @@
         ]
       },
       "get": {
+        "description": "Retrieve an asset by its natural identifier. Returns 404 if the asset does not exist.",
         "operationId": "assets.get",
         "parameters": [
           {
@@ -2259,7 +2260,7 @@
     },
     "/api/v1/locations/{identifier}": {
       "delete": {
-        "description": "Soft-delete a location by its natural identifier. The location is marked inactive and removed from future list results.",
+        "description": "Delete a location by its natural identifier. The location is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the location does not exist or has already been deleted.",
         "operationId": "locations.delete",
         "parameters": [
           {
@@ -2350,6 +2351,7 @@
         ]
       },
       "get": {
+        "description": "Retrieve a location by its natural identifier. Returns 404 if the location does not exist.",
         "operationId": "locations.get",
         "parameters": [
           {

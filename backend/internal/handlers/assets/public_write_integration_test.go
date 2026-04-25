@@ -951,3 +951,90 @@ func TestUpdateAsset_ValidFromNull_Returns400(t *testing.T) {
 	first := fields[0].(map[string]any)
 	assert.Equal(t, "valid_from", first["field"])
 }
+
+// TRA-499: lock in the read-side visibility contract for soft-deleted assets.
+// After DELETE, the record must be unreachable via:
+//   - GET /api/v1/assets/{identifier}     → 404
+//   - GET /api/v1/assets                  → not in default list
+//   - GET /api/v1/assets?is_active=false  → not surfaced (is_active is an
+//     independent business-state flag,
+//     not a soft-delete view)
+//
+// The record is created with is_active=false so the ?is_active=false assertion
+// genuinely defends against deleted records leaking through that filter.
+func TestSoftDeleteVisibility_Asset(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-soft-delete-visibility")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:read", "assets:write"})
+	writeRouter := buildAssetsPublicWriteRouter(store)
+	readRouter := buildAssetsPublicRouter(store)
+
+	auth := func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	// 1. Create asset with is_active=false so the post-delete ?is_active=false
+	// assertion is not trivially passing on the is_active filter alone.
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/assets",
+		bytes.NewBufferString(`{"identifier":"tra499-vis-1","name":"v","type":"asset","is_active":false}`))
+	auth(createReq)
+	createW := httptest.NewRecorder()
+	writeRouter.ServeHTTP(createW, createReq)
+	require.Equal(t, http.StatusCreated, createW.Code, createW.Body.String())
+
+	// 2. Sanity: live record is visible by identifier.
+	getLiveReq := httptest.NewRequest(http.MethodGet, "/api/v1/assets/tra499-vis-1", nil)
+	auth(getLiveReq)
+	getLiveW := httptest.NewRecorder()
+	readRouter.ServeHTTP(getLiveW, getLiveReq)
+	require.Equal(t, http.StatusOK, getLiveW.Code, getLiveW.Body.String())
+
+	// Sanity: pre-delete, ?is_active=false surfaces the record (is_active is false).
+	listInactivePreReq := httptest.NewRequest(http.MethodGet, "/api/v1/assets?is_active=false", nil)
+	auth(listInactivePreReq)
+	listInactivePreW := httptest.NewRecorder()
+	readRouter.ServeHTTP(listInactivePreW, listInactivePreReq)
+	require.Equal(t, http.StatusOK, listInactivePreW.Code, listInactivePreW.Body.String())
+	var listInactivePreBody map[string]any
+	require.NoError(t, json.Unmarshal(listInactivePreW.Body.Bytes(), &listInactivePreBody))
+	require.EqualValues(t, 1, listInactivePreBody["total_count"], "pre-delete: ?is_active=false must surface the live is_active=false record")
+
+	// 3. Soft-delete the asset.
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/tra499-vis-1", nil)
+	auth(delReq)
+	delW := httptest.NewRecorder()
+	writeRouter.ServeHTTP(delW, delReq)
+	require.Equal(t, http.StatusNoContent, delW.Code, delW.Body.String())
+
+	// 4. GET-by-identifier of soft-deleted record → 404.
+	getDelReq := httptest.NewRequest(http.MethodGet, "/api/v1/assets/tra499-vis-1", nil)
+	auth(getDelReq)
+	getDelW := httptest.NewRecorder()
+	readRouter.ServeHTTP(getDelW, getDelReq)
+	assert.Equal(t, http.StatusNotFound, getDelW.Code, getDelW.Body.String())
+
+	// 5. Default list excludes soft-deleted record.
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
+	auth(listReq)
+	listW := httptest.NewRecorder()
+	readRouter.ServeHTTP(listW, listReq)
+	require.Equal(t, http.StatusOK, listW.Code, listW.Body.String())
+	var listBody map[string]any
+	require.NoError(t, json.Unmarshal(listW.Body.Bytes(), &listBody))
+	assert.EqualValues(t, 0, listBody["total_count"], "default list must exclude soft-deleted asset")
+
+	// 6. ?is_active=false also excludes soft-deleted record (is_active is independent of soft-delete).
+	listInactiveReq := httptest.NewRequest(http.MethodGet, "/api/v1/assets?is_active=false", nil)
+	auth(listInactiveReq)
+	listInactiveW := httptest.NewRecorder()
+	readRouter.ServeHTTP(listInactiveW, listInactiveReq)
+	require.Equal(t, http.StatusOK, listInactiveW.Code, listInactiveW.Body.String())
+	var listInactiveBody map[string]any
+	require.NoError(t, json.Unmarshal(listInactiveW.Body.Bytes(), &listInactiveBody))
+	assert.EqualValues(t, 0, listInactiveBody["total_count"],
+		"is_active=false must NOT surface soft-deleted records — is_active is a business-state flag, not a soft-delete view")
+}
