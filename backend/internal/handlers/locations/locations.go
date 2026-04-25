@@ -646,7 +646,6 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:read]
 // @Router       /api/v1/locations/{identifier}/descendants [get]
-// @Success 200 {object} locations.ListDescendantsResponse
 func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request) {
 	ctx := middleware.GetRequestID(req.Context())
 	identifier := chi.URLParam(req, "identifier")
