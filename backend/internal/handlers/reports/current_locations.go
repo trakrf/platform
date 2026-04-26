@@ -62,8 +62,9 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
-		Filters: []string{"location", "q"},
-		Sorts:   []string{"last_seen", "asset", "location"},
+		Filters:     []string{"location", "q", "include_deleted"},
+		BoolFilters: []string{"include_deleted"},
+		Sorts:       []string{"last_seen", "asset", "location"},
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, r, err, reqID)
@@ -77,6 +78,9 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
 		filter.Q = &vs[0]
+	}
+	if vs, ok := params.Filters["include_deleted"]; ok && len(vs) > 0 {
+		filter.IncludeDeleted = vs[0] == "true"
 	}
 
 	items, err := h.storage.ListCurrentLocations(r.Context(), orgID, filter)
