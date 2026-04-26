@@ -155,7 +155,7 @@ describe('LocationDetailsPanel', () => {
     expect(screen.getByTestId('location-breadcrumb')).toBeInTheDocument();
   });
 
-  it('should show Sub-locations section with count when children exist', () => {
+  it('should show Direct Children section with count when children exist', () => {
     const root = createMockLocation(1);
     const child1 = createMockLocation(2, { parent_location_id: 1 });
     const child2 = createMockLocation(3, { parent_location_id: 1 });
@@ -170,7 +170,8 @@ describe('LocationDetailsPanel', () => {
       />
     );
 
-    expect(screen.getByText('Sub-locations (2)')).toBeInTheDocument();
+    expect(screen.getByTestId('direct-children-label')).toHaveTextContent('Direct Children');
+    expect(screen.getByTestId('direct-children-count')).toHaveTextContent('2');
   });
 
   it('should NOT show Hierarchy Information heading', () => {
@@ -188,7 +189,7 @@ describe('LocationDetailsPanel', () => {
     );
 
     expect(screen.queryByText('Hierarchy Information')).not.toBeInTheDocument();
-    expect(screen.queryByText('Direct Children')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('direct-children-label')).toBeInTheDocument();
     expect(screen.queryByText('Total Descendants')).not.toBeInTheDocument();
   });
 

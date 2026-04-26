@@ -99,6 +99,12 @@ export function LocationDetailsPanel({
                 {location.identifier}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">{location.name}</p>
+              <p
+                data-testid="location-type"
+                className="text-xs text-gray-500 dark:text-gray-400 mt-0.5"
+              >
+                {isRoot ? 'Root Location' : 'Subsidiary Location'}
+              </p>
             </div>
           </div>
           <span
@@ -178,7 +184,10 @@ export function LocationDetailsPanel({
         {children.length > 0 && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-              Sub-locations ({children.length})
+              <span data-testid="direct-children-label">Direct Children</span>
+              {' ('}
+              <span data-testid="direct-children-count">{children.length}</span>
+              {')'}
             </h3>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {children.map((child) => (
