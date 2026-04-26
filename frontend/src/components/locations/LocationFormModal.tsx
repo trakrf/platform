@@ -6,6 +6,7 @@ import { LocationForm } from './LocationForm';
 import { locationsApi } from '@/lib/api/locations';
 import { normalizeLocation } from '@/lib/location/normalize';
 import { useLocationStore } from '@/stores/locations/locationStore';
+import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 
 interface LocationFormModalProps {
   isOpen: boolean;
@@ -21,6 +22,8 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
   const addLocation = useLocationStore((state) => state.addLocation);
   const updateLocation = useLocationStore((state) => state.updateLocation);
+
+  useEscapeToClose(isOpen, onClose, loading);
 
   const handleSubmit = async (data: CreateLocationRequest | UpdateLocationRequest) => {
     setLoading(true);

@@ -3,6 +3,7 @@ import { X, MapPin, Building2, Calendar, CheckCircle, XCircle } from 'lucide-rea
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
 import { TagIdentifierList } from '@/components/assets';
+import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import type { Location } from '@/types/locations';
 import type { TagIdentifier } from '@/types/shared';
 
@@ -34,6 +35,8 @@ export function LocationDetailsModal({
   useEffect(() => {
     setLocalIdentifiers(location.identifiers || []);
   }, [location.identifiers]);
+
+  useEscapeToClose(isOpen, onClose);
 
   const handleIdentifierRemoved = (identifierId: number) => {
     const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
