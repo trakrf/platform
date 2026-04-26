@@ -179,6 +179,16 @@ export function LocationExpandableCard({
               <LocationBreadcrumb locationId={location.id} />
             </div>
 
+            {/* Type */}
+            <div>
+              <p
+                data-testid="location-type"
+                className="text-xs text-gray-500 dark:text-gray-400"
+              >
+                {isRoot ? 'Root Location' : 'Subsidiary Location'}
+              </p>
+            </div>
+
             {/* Description */}
             {location.description && (
               <div>

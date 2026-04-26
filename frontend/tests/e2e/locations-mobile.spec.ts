@@ -97,12 +97,16 @@ test.describe('Locations Mobile Expandable Cards', () => {
     });
 
     test('should show identifier, name, and status in collapsed card', async ({ page }) => {
+      // Scope to the warehouse-a card so the assertions don't match warehouse-b's siblings
+      const warehouseACard = page.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'warehouse-a' })
+        .first();
       // Each card should show identifier
-      await expect(page.locator('text=warehouse-a')).toBeVisible();
+      await expect(warehouseACard.getByText('warehouse-a')).toBeVisible();
       // Each card should show name
-      await expect(page.locator('text=Warehouse A')).toBeVisible();
+      await expect(warehouseACard.getByText('Warehouse A')).toBeVisible();
       // Each card should show status badge
-      await expect(page.locator('text=Active').first()).toBeVisible();
+      await expect(warehouseACard.getByText('Active')).toBeVisible();
     });
 
     test('should expand card on header tap', async ({ page }) => {
@@ -164,30 +168,27 @@ test.describe('Locations Mobile Expandable Cards', () => {
 
     test('should show Root Location type in expanded card', async ({ page }) => {
       // Expand warehouse-a card (root location)
-      const cardHeader = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'warehouse-a' })
-        .locator('button').first();
-      await cardHeader.click();
+      const warehouseCard = page.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'warehouse-a' });
+      await warehouseCard.locator('button').first().click();
 
-      // Should show Root Location type
-      await expect(page.locator('text=Root Location')).toBeVisible();
+      // Should show Root Location type via testid scoped to this card
+      await expect(warehouseCard.getByTestId('location-type')).toContainText('Root');
     });
 
     test('should show Subsidiary type for child location', async ({ page }) => {
       // First expand warehouse-a to see children
       const warehouseCard = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'warehouse-a' })
-        .locator('button').first();
-      await warehouseCard.click();
+        .filter({ hasText: 'warehouse-a' });
+      await warehouseCard.locator('button').first().click();
 
-      // Now expand floor-1 card
-      const floor1Card = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'floor-1' })
-        .locator('button').first();
-      await floor1Card.click();
+      // Now expand floor-1 card (scoped within warehouse-a)
+      const floor1Card = warehouseCard.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'floor-1' });
+      await floor1Card.locator('button').first().click();
 
-      // Should show Subsidiary type
-      await expect(page.locator('text=Subsidiary')).toBeVisible();
+      // Should show Subsidiary type via testid scoped to this card
+      await expect(floor1Card.getByTestId('location-type').first()).toContainText('Subsidiary');
     });
   });
 
@@ -267,7 +268,7 @@ test.describe('Locations Mobile Expandable Cards', () => {
       await moveButton.click();
 
       // Move modal should open
-      await expect(page.locator('text=Move Location')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('heading', { name: 'Move Location' })).toBeVisible({ timeout: 5000 });
     });
 
     test('should open delete confirmation from expanded card', async ({ page }) => {
@@ -318,7 +319,9 @@ test.describe('Locations Mobile - Fresh State', () => {
     await loginTestUser(page, testEmail, testPassword);
 
     // Navigate to Locations tab
-    await page.click('text="Locations"');
+    await page.click('[data-testid="hamburger-button"]');
+    await page.waitForSelector('[data-testid="hamburger-dropdown"]');
+    await page.click('[data-testid="hamburger-dropdown"] [data-testid="menu-item-locations"]');
     await page.waitForTimeout(500);
   });
 
@@ -390,7 +393,9 @@ test.describe('Locations Mobile - Tablet Viewport', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, testEmail, testPassword);
 
-    await page.click('text="Locations"');
+    await page.click('[data-testid="hamburger-button"]');
+    await page.waitForSelector('[data-testid="hamburger-dropdown"]');
+    await page.click('[data-testid="hamburger-dropdown"] [data-testid="menu-item-locations"]');
     await page.waitForTimeout(500);
   });
 

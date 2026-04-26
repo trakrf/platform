@@ -259,8 +259,8 @@ test.describe('Locations Accessibility - Desktop', () => {
       const detailsPanel = page.locator('[data-testid="location-details-panel"]');
       await expect(detailsPanel).toBeVisible();
 
-      // Active badge should be visible (status)
-      await expect(page.locator('text=Active')).toBeVisible();
+      // Active badge should be visible (status) — scope to panel so it doesn't match list/tree badges
+      await expect(detailsPanel.getByText('Active')).toBeVisible();
     });
   });
 });
@@ -289,7 +289,9 @@ test.describe('Locations Accessibility - Mobile', () => {
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, testEmail, testPassword);
-    await page.click('text="Locations"');
+    await page.click('[data-testid="hamburger-button"]');
+    await page.waitForSelector('[data-testid="hamburger-dropdown"]');
+    await page.click('[data-testid="hamburger-dropdown"] [data-testid="menu-item-locations"]');
     await page.waitForTimeout(500);
   });
 
@@ -360,17 +362,19 @@ test.describe('Locations Accessibility - Mobile', () => {
     });
 
     test('should have proper text contrast', async ({ page }) => {
+      // Scope to the warehouse-a card so identifier/name don't accidentally match siblings
+      const warehouseACard = page.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'warehouse-a' })
+        .first();
+
       // Check that location identifiers are visible
-      const identifier = page.locator('text=warehouse-a');
-      await expect(identifier).toBeVisible();
+      await expect(warehouseACard.getByText('warehouse-a')).toBeVisible();
 
       // Check that names are visible
-      const name = page.locator('text=Warehouse A');
-      await expect(name).toBeVisible();
+      await expect(warehouseACard.getByText('Warehouse A')).toBeVisible();
 
       // Check that status badges are visible
-      const badge = page.locator('text=Active').first();
-      await expect(badge).toBeVisible();
+      await expect(warehouseACard.getByText('Active')).toBeVisible();
     });
   });
 

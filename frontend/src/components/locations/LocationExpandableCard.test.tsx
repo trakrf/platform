@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { LocationExpandableCard } from './LocationExpandableCard';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import type { Location } from '@/types/locations';
@@ -208,7 +209,7 @@ describe('LocationExpandableCard', () => {
     expect(screen.getByText('child')).toBeInTheDocument();
   });
 
-  it('should NOT show Type or Children info grid', () => {
+  it('should show Root Location type for root location when expanded', () => {
     const root = createMockLocation(1);
     const child = createMockLocation(2, { parent_location_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
@@ -223,9 +224,29 @@ describe('LocationExpandableCard', () => {
       />
     );
 
-    expect(screen.queryByText('Root Location')).not.toBeInTheDocument();
-    expect(screen.queryByText('Subsidiary')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location-type')).toHaveTextContent('Root Location');
+    // No legacy "direct / total" stats grid
     expect(screen.queryByText(/direct \/ .* total/i)).not.toBeInTheDocument();
+  });
+
+  it('should show Subsidiary Location type for child location when expanded', () => {
+    const child = createMockLocation(2, { parent_location_id: 1 });
+    useLocationStore.getState().setLocations([
+      createMockLocation(1),
+      child,
+    ]);
+    useLocationStore.getState().toggleCardExpanded(2);
+
+    render(
+      <LocationExpandableCard
+        location={child}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('location-type')).toHaveTextContent('Subsidiary Location');
   });
 
   it('should render Add button when onAddChild provided', () => {
