@@ -341,11 +341,14 @@ test.describe('Locations Desktop Split Pane', () => {
 
   test.describe('Keyboard Navigation', () => {
     test('should select on Enter key', async ({ page }) => {
-      // Focus on the tree
-      const treePanel = page.locator('[data-testid="location-tree-panel"]');
-      await treePanel.focus();
+      // Click a tree item to establish keyboard focus context.
+      // The role="tree" container itself has no tabIndex, so calling
+      // treePanel.focus() is a no-op and key events would never reach
+      // the tree's onKeyDown handler.
+      const warehouseA = page.locator('[data-location-id]').filter({ hasText: 'warehouse-a' }).first();
+      await warehouseA.click();
 
-      // Press ArrowDown to navigate to first location
+      // Press ArrowDown to navigate to next location
       await page.keyboard.press('ArrowDown');
 
       // Press Enter to select

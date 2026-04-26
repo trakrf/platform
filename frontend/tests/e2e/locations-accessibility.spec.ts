@@ -74,14 +74,21 @@ test.describe('Locations Accessibility - Desktop', () => {
       const warehouseA = page.locator('[data-location-id]').filter({ hasText: 'warehouse-a' }).first();
       await warehouseA.click();
 
-      // Initially, children should not be visible
-      await expect(page.locator('text=floor-1')).not.toBeVisible();
+      // Scope assertion to the tree panel — selecting a location also surfaces
+      // its children's identifiers in the details panel, which would otherwise
+      // make text=floor-1 visible regardless of tree expansion state.
+      const treeFloor1 = page
+        .locator('[data-testid="location-tree-panel"]')
+        .locator('text=floor-1');
+
+      // Initially, tree children should not be visible
+      await expect(treeFloor1).not.toBeVisible();
 
       // Press ArrowRight to expand
       await page.keyboard.press('ArrowRight');
 
-      // Children should now be visible
-      await expect(page.locator('text=floor-1')).toBeVisible();
+      // Tree children should now be visible
+      await expect(treeFloor1).toBeVisible();
     });
 
     test('should collapse tree item with ArrowLeft', async ({ page }) => {
@@ -89,8 +96,13 @@ test.describe('Locations Accessibility - Desktop', () => {
       const expandButton = page.locator('button[aria-label="Expand"]').first();
       await expandButton.click();
 
+      // Scope assertion to the tree panel — see expand test for rationale.
+      const treeFloor1 = page
+        .locator('[data-testid="location-tree-panel"]')
+        .locator('text=floor-1');
+
       // Verify expanded
-      await expect(page.locator('text=floor-1')).toBeVisible();
+      await expect(treeFloor1).toBeVisible();
 
       // Click on warehouse-a to focus
       const warehouseA = page.locator('[data-location-id]').filter({ hasText: 'warehouse-a' }).first();
@@ -99,21 +111,23 @@ test.describe('Locations Accessibility - Desktop', () => {
       // Press ArrowLeft to collapse
       await page.keyboard.press('ArrowLeft');
 
-      // Children should be hidden
-      await expect(page.locator('text=floor-1')).not.toBeVisible();
+      // Tree children should be hidden
+      await expect(treeFloor1).not.toBeVisible();
     });
 
     test('should have visible focus indicator on tree items', async ({ page }) => {
-      // Tab to the tree area
-      const treePanel = page.locator('[data-testid="location-tree-panel"]');
-      await treePanel.focus();
+      // Click a tree item to establish keyboard focus context
+      // (the role="tree" container itself has no tabIndex, so calling
+      // treePanel.focus() is a no-op; subsequent key events would never
+      // reach the tree's onKeyDown handler.)
+      const warehouseA = page.locator('[data-location-id]').filter({ hasText: 'warehouse-a' }).first();
+      await warehouseA.click();
 
       // Navigate with arrow keys
       await page.keyboard.press('ArrowDown');
 
       // The focused item should have focus-visible styling
       // This is a visual check - just verify focus moves without errors
-      await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
 
       // Verify an action happened (selection)
