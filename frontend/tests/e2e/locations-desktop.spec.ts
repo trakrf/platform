@@ -187,8 +187,8 @@ test.describe('Locations Desktop Split Pane', () => {
       // Should show identifier
       await expect(detailsPanel.locator('text=warehouse-a').first()).toBeVisible();
 
-      // Should show name
-      await expect(detailsPanel.locator('text=Warehouse A')).toBeVisible();
+      // Should show name (appears in both header subtitle and Name field — first match is sufficient)
+      await expect(detailsPanel.getByText('Warehouse A').first()).toBeVisible();
     });
 
     test('should show description when available', async ({ page }) => {
@@ -291,7 +291,7 @@ test.describe('Locations Desktop Split Pane', () => {
       await page.click('button:has-text("Move")');
 
       // Move modal should open
-      await expect(page.locator('text=Move Location')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('heading', { name: 'Move Location' })).toBeVisible({ timeout: 5000 });
     });
 
     test('should open delete confirmation when Delete clicked', async ({ page }) => {
@@ -436,6 +436,7 @@ test.describe('Locations Desktop - Fresh State', () => {
     await expect(page.locator('text=Create Location')).not.toBeVisible({ timeout: 5000 });
 
     // Verify location appears in tree
-    await expect(page.locator('text=test-location')).toBeVisible();
+    const treePanel = page.locator('[data-testid="location-tree-panel"]');
+    await expect(treePanel.getByText('test-location')).toBeVisible();
   });
 });

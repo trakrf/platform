@@ -97,12 +97,16 @@ test.describe('Locations Mobile Expandable Cards', () => {
     });
 
     test('should show identifier, name, and status in collapsed card', async ({ page }) => {
+      // Scope to the warehouse-a card so the assertions don't match warehouse-b's siblings
+      const warehouseACard = page.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'warehouse-a' })
+        .first();
       // Each card should show identifier
-      await expect(page.locator('text=warehouse-a')).toBeVisible();
+      await expect(warehouseACard.getByText('warehouse-a')).toBeVisible();
       // Each card should show name
-      await expect(page.locator('text=Warehouse A')).toBeVisible();
+      await expect(warehouseACard.getByText('Warehouse A')).toBeVisible();
       // Each card should show status badge
-      await expect(page.locator('text=Active').first()).toBeVisible();
+      await expect(warehouseACard.getByText('Active')).toBeVisible();
     });
 
     test('should expand card on header tap', async ({ page }) => {
@@ -264,7 +268,7 @@ test.describe('Locations Mobile Expandable Cards', () => {
       await moveButton.click();
 
       // Move modal should open
-      await expect(page.locator('text=Move Location')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('heading', { name: 'Move Location' })).toBeVisible({ timeout: 5000 });
     });
 
     test('should open delete confirmation from expanded card', async ({ page }) => {
