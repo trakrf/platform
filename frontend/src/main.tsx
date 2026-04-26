@@ -42,8 +42,9 @@ function initializeApp() {
   }
 }
 
-// Expose stores for testing in development
-if (import.meta.env.DEV) {
+// Expose test hooks in dev and in non-production deployed envs (preview, gke).
+// Mirrors backend testhandler's "APP_ENV != production" gate.
+if (import.meta.env.DEV || import.meta.env.VITE_ENVIRONMENT === 'preview') {
   import('./stores').then((stores) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as unknown as { __ZUSTAND_STORES__: any }).__ZUSTAND_STORES__ = {
