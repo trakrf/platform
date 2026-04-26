@@ -67,8 +67,8 @@ This renames the heading from `Sub-locations (N)` → `Direct Children (N)` to a
 Add the matching testids to existing markup — no structural change:
 
 - `data-testid="location-type"` on the `<p>{isRoot ? 'Root Location' : 'Subsidiary Location'}</p>` (around line 156–158)
-- `data-testid="direct-children-label"` on the `Direct Children:` `<p>` (around line 174–176). Trailing colon stays — the testid is the contract.
-- `data-testid="direct-children-count"` on the children-count `<p>` (around line 162–164)
+- `data-testid="direct-children-label"` on the **section-header** `<p>Direct Children:</p>` above the children list (around line 174–176). Trailing colon stays — the testid is the contract. NOT the stat-box label at ~line 162; that one stays untouched.
+- `data-testid="direct-children-count"` on the stat-box children-count `<p>{children.length}</p>` (around line 162–164)
 
 Out of scope for this ticket: redesigning either component, adding a "Hierarchy Information" stat block to the Panel, or removing the "Total Descendants" stat from the Modal.
 
