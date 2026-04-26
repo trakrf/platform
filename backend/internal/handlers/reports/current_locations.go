@@ -32,13 +32,14 @@ type ListCurrentLocationsResponse struct {
 }
 
 // @Summary List current asset locations
-// @Description Snapshot of each asset's most recent location, filterable by natural key.
+// @Description Snapshot of each asset's most recent location, filterable by natural key. Because this view is derived from immutable scan history, it can resolve identifiers for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 // @Tags reports,public
 // @ID locations.current
 // @Param limit query int false "max 200"   default(50)
 // @Param offset query int false "min 0"    default(0)
 // @Param location query string false "filter by location identifier (may repeat)"
 // @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active identifier values"
+// @Param include_deleted query bool false "include rows for soft-deleted assets" default(false)
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
 // @Success 200 {object} reports.ListCurrentLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
@@ -62,8 +63,9 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
-		Filters: []string{"location", "q"},
-		Sorts:   []string{"last_seen", "asset", "location"},
+		Filters:     []string{"location", "q", "include_deleted"},
+		BoolFilters: []string{"include_deleted"},
+		Sorts:       []string{"last_seen", "asset", "location"},
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, r, err, reqID)
@@ -77,6 +79,9 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
 		filter.Q = &vs[0]
+	}
+	if vs, ok := params.Filters["include_deleted"]; ok && len(vs) > 0 {
+		filter.IncludeDeleted = vs[0] == "true"
 	}
 
 	items, err := h.storage.ListCurrentLocations(r.Context(), orgID, filter)

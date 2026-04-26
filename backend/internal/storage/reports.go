@@ -49,7 +49,7 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 
 	items := []report.CurrentLocationItem{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, orgID, locIdentsArg, qArg, filter.Limit, filter.Offset)
+		rows, err := tx.Query(ctx, query, orgID, locIdentsArg, qArg, filter.Limit, filter.Offset, filter.IncludeDeleted)
 		if err != nil {
 			return fmt.Errorf("failed to list current locations: %w", err)
 		}
@@ -65,6 +65,7 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 				&item.LocationName,
 				&item.LocationIdentifier,
 				&item.LastSeen,
+				&item.AssetDeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan current location: %w", err)
 			}
@@ -104,6 +105,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 				   SELECT 1 FROM trakrf.identifiers ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
+		  AND (a.deleted_at IS NULL OR $4::bool)
 	`
 
 	var locIdentsArg any
@@ -118,7 +120,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, locIdentsArg, qArg).Scan(&count)
+		return tx.QueryRow(ctx, query, orgID, locIdentsArg, qArg, filter.IncludeDeleted).Scan(&count)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count current locations: %w", err)
@@ -145,7 +147,8 @@ func buildCurrentLocationsQueryDistinctOn() string {
 			ls.location_id,
 			l.name AS location_name,
 			l.identifier AS location_identifier,
-			ls.last_seen
+			ls.last_seen,
+			a.deleted_at AS asset_deleted_at
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
@@ -155,6 +158,7 @@ func buildCurrentLocationsQueryDistinctOn() string {
 				   SELECT 1 FROM trakrf.identifiers ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
+		  AND (a.deleted_at IS NULL OR $6::bool)
 		ORDER BY a.name
 		LIMIT $4 OFFSET $5
 	`
@@ -178,7 +182,8 @@ func buildCurrentLocationsQueryTimescale() string {
 			ls.location_id,
 			l.name AS location_name,
 			l.identifier AS location_identifier,
-			ls.last_seen
+			ls.last_seen,
+			a.deleted_at AS asset_deleted_at
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
@@ -188,6 +193,7 @@ func buildCurrentLocationsQueryTimescale() string {
 				   SELECT 1 FROM trakrf.identifiers ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
+		  AND (a.deleted_at IS NULL OR $6::bool)
 		ORDER BY a.name
 		LIMIT $4 OFFSET $5
 	`

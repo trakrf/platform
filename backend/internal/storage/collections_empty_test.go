@@ -297,10 +297,11 @@ func TestListCurrentLocations_EmptyReturnsNonNil(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`FROM trakrf.asset_scans`).
-		WithArgs(1, nil, nil, 10, 0).
+		WithArgs(1, nil, nil, 10, 0, false).
 		WillReturnRows(pgxmock.NewRows([]string{
 			"asset_id", "asset_name", "asset_identifier",
-			"location_id", "location_name", "location_identifier", "last_seen",
+			"location_id", "location_name", "location_identifier",
+			"last_seen", "asset_deleted_at",
 		}))
 	mock.ExpectCommit()
 

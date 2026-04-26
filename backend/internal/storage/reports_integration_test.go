@@ -127,3 +127,105 @@ func TestCurrentLocations_CountExcludesSoftDeletedIdentifier(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }
+
+func TestCurrentLocations_DefaultElidesDeletedAsset(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+
+	loc, err := store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, Identifier: "wh-elide", Name: "Elide WH", Path: "wh-elide",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	liveAsset, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "asset-live-elide", Name: "LiveElide", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	deletedAsset, err := store.CreateAsset(context.Background(), asset.Asset{
+		OrgID: orgID, Identifier: "asset-deleted-elide", Name: "DeletedElide", Type: "asset",
+		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	// Both assets have scans so both would appear without elision.
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id)
+		VALUES (NOW(), $1, $2, $3), (NOW(), $1, $4, $3)
+	`, orgID, liveAsset.ID, loc.ID, deletedAsset.ID)
+	require.NoError(t, err)
+
+	// Soft-delete the second asset.
+	_, err = pool.Exec(context.Background(), `
+		UPDATE trakrf.assets SET deleted_at = NOW() WHERE id = $1
+	`, deletedAsset.ID)
+	require.NoError(t, err)
+
+	t.Run("default elides deleted asset", func(t *testing.T) {
+		items, err := store.ListCurrentLocations(context.Background(), orgID, report.CurrentLocationFilter{
+			Limit: 50,
+		})
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		assert.Equal(t, "asset-live-elide", items[0].AssetIdentifier)
+		assert.Nil(t, items[0].AssetDeletedAt)
+
+		count, err := store.CountCurrentLocations(context.Background(), orgID, report.CurrentLocationFilter{
+			Limit: 50,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("include_deleted=true returns deleted asset with timestamp", func(t *testing.T) {
+		items, err := store.ListCurrentLocations(context.Background(), orgID, report.CurrentLocationFilter{
+			IncludeDeleted: true,
+			Limit:          50,
+		})
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+
+		byIdent := map[string]report.CurrentLocationItem{}
+		for _, it := range items {
+			byIdent[it.AssetIdentifier] = it
+		}
+		assert.Nil(t, byIdent["asset-live-elide"].AssetDeletedAt)
+		require.NotNil(t, byIdent["asset-deleted-elide"].AssetDeletedAt)
+		assert.WithinDuration(t, time.Now(), *byIdent["asset-deleted-elide"].AssetDeletedAt, time.Minute)
+
+		count, err := store.CountCurrentLocations(context.Background(), orgID, report.CurrentLocationFilter{
+			IncludeDeleted: true,
+			Limit:          50,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 2, count)
+	})
+
+	t.Run("q-search default skips deleted asset by name", func(t *testing.T) {
+		q := "DeletedElide"
+		items, err := store.ListCurrentLocations(context.Background(), orgID, report.CurrentLocationFilter{
+			Q:     &q,
+			Limit: 50,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, items, "default q-search must not surface deleted assets")
+	})
+
+	t.Run("q-search with include_deleted=true surfaces deleted asset by name", func(t *testing.T) {
+		q := "DeletedElide"
+		items, err := store.ListCurrentLocations(context.Background(), orgID, report.CurrentLocationFilter{
+			Q:              &q,
+			IncludeDeleted: true,
+			Limit:          50,
+		})
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		assert.Equal(t, "asset-deleted-elide", items[0].AssetIdentifier)
+		require.NotNil(t, items[0].AssetDeletedAt)
+	})
+}

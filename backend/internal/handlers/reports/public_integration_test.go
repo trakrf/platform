@@ -267,3 +267,147 @@ func TestSessionJWT_PassesThroughRequireScope(t *testing.T) {
 		"session JWT must pass through RequireScope on /assets/{identifier}/history; got %d %s",
 		w.Code, w.Body.String())
 }
+
+// seedDeletedAssetFixture creates one live + one soft-deleted asset under the
+// same location, both with asset_scans, and returns the org id + API token.
+func seedDeletedAssetFixture(t *testing.T, store *storage.Storage, pool *pgxpool.Pool) (int, string) {
+	t.Helper()
+
+	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"scans:read"})
+
+	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID:      orgID,
+		Identifier: "del-loc",
+		Name:       "Del Loc",
+		Path:       "del-loc",
+		ValidFrom:  time.Now(),
+		IsActive:   true,
+	})
+	require.NoError(t, err)
+
+	live, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID:      orgID,
+		Identifier: "del-asset-live",
+		Name:       "LiveDel",
+		Type:       "asset",
+		ValidFrom:  time.Now(),
+		IsActive:   true,
+	})
+	require.NoError(t, err)
+
+	dead, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID:      orgID,
+		Identifier: "del-asset-dead",
+		Name:       "DeadDel",
+		Type:       "asset",
+		ValidFrom:  time.Now(),
+		IsActive:   true,
+	})
+	require.NoError(t, err)
+
+	now := time.Now()
+	insertAssetScan(t, pool, orgID, live.ID, loc.ID, now)
+	insertAssetScan(t, pool, orgID, dead.ID, loc.ID, now)
+
+	_, err = pool.Exec(context.Background(),
+		`UPDATE trakrf.assets SET deleted_at = NOW() WHERE id = $1`, dead.ID,
+	)
+	require.NoError(t, err)
+
+	return orgID, token
+}
+
+func TestListCurrentLocations_DefaultElidesDeleted(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-reports")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedDeletedAssetFixture(t, store, pool)
+	r := buildReportsPublicRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/current", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 1, body["total_count"])
+
+	data := body["data"].([]any)
+	require.Len(t, data, 1)
+	row := data[0].(map[string]any)
+	assert.Equal(t, "del-asset-live", row["asset"])
+	_, present := row["asset_deleted_at"]
+	assert.False(t, present, "live row must omit asset_deleted_at")
+}
+
+func TestListCurrentLocations_IncludeDeletedTrue(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-reports")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedDeletedAssetFixture(t, store, pool)
+	r := buildReportsPublicRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/current?include_deleted=true", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.EqualValues(t, 2, body["total_count"])
+
+	data := body["data"].([]any)
+	require.Len(t, data, 2)
+
+	byAsset := map[string]map[string]any{}
+	for _, raw := range data {
+		row := raw.(map[string]any)
+		byAsset[row["asset"].(string)] = row
+	}
+
+	require.Contains(t, byAsset, "del-asset-live")
+	require.Contains(t, byAsset, "del-asset-dead")
+
+	_, livePresent := byAsset["del-asset-live"]["asset_deleted_at"]
+	assert.False(t, livePresent, "live row must omit asset_deleted_at")
+
+	deadDeletedAt, deadPresent := byAsset["del-asset-dead"]["asset_deleted_at"]
+	require.True(t, deadPresent, "deleted row must include asset_deleted_at")
+	deadStr, ok := deadDeletedAt.(string)
+	require.True(t, ok, "asset_deleted_at must be a string (RFC3339 timestamp)")
+	assert.NotEmpty(t, deadStr)
+}
+
+func TestListCurrentLocations_IncludeDeletedInvalidValue(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-reports")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedReportsOrgAndKey(t, pool, store, "", []string{"scans:read"})
+	r := buildReportsPublicRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/current?include_deleted=banana", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	errObj, ok := body["error"].(map[string]any)
+	require.True(t, ok, "expected error envelope: %s", w.Body.String())
+	detail, _ := errObj["detail"].(string)
+	assert.Contains(t, detail, "include_deleted")
+	assert.Contains(t, detail, "'true' or 'false'")
+}
