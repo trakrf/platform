@@ -73,9 +73,9 @@ export default function MembersScreen() {
       toast.success('Member role updated');
     } catch (err: unknown) {
       const errorMessage = extractErrorMessage(err, 'Failed to update role');
-      setError(errorMessage);
-      // Refresh to get correct state
+      // Refresh first so members state matches server (fetchMembers clears error)
       await fetchMembers();
+      setError(errorMessage);
     } finally {
       setUpdatingUserId(null);
     }

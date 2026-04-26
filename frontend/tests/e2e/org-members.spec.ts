@@ -125,17 +125,15 @@ test.describe('Member Management', () => {
       await expect(updatedRow.locator('select')).toHaveValue('operator');
     });
 
-    test.skip('cannot demote last admin - shows error', async ({ page }) => {
-      // SKIP: TRA-213 - Error message doesn't appear in UI
-      // Backend returns 400 correctly, but error div doesn't populate
+    test('cannot demote last admin - shows error', async ({ page }) => {
       await goToMembersPage(page);
 
       // Admin's own row - try to change role to viewer
       const adminRow = page.locator(`tr:has-text("${adminEmail}")`);
       await adminRow.locator('select').selectOption('viewer');
 
-      // Should show error in the red error div: "Cannot remove or demote the last admin"
-      await expect(page.locator('.text-red-400')).toContainText('last admin', {
+      // Backend rejects with 400 + title "Cannot remove or demote the last admin"
+      await expect(page.getByText(/last admin/i)).toBeVisible({
         timeout: 5000,
       });
     });
