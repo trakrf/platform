@@ -32,13 +32,14 @@ type ListCurrentLocationsResponse struct {
 }
 
 // @Summary List current asset locations
-// @Description Snapshot of each asset's most recent location, filterable by natural key.
+// @Description Snapshot of each asset's most recent location, filterable by natural key. Because this view is derived from immutable scan history, it can resolve identifiers for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 // @Tags reports,public
 // @ID locations.current
 // @Param limit query int false "max 200"   default(50)
 // @Param offset query int false "min 0"    default(0)
 // @Param location query string false "filter by location identifier (may repeat)"
 // @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active identifier values"
+// @Param include_deleted query bool false "include rows for soft-deleted assets" default(false)
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
 // @Success 200 {object} reports.ListCurrentLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"

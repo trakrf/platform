@@ -516,6 +516,9 @@ components:
             properties:
                 asset:
                     type: string
+                asset_deleted_at:
+                    format: date-time
+                    type: string
                 last_seen:
                     format: date-time
                     type: string
@@ -1966,7 +1969,7 @@ paths:
                 - locations
     /api/v1/locations/current:
         get:
-            description: Snapshot of each asset's most recent location, filterable by natural key.
+            description: Snapshot of each asset's most recent location, filterable by natural key. Because this view is derived from immutable scan history, it can resolve identifiers for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
             operationId: locations.current
             parameters:
                 - description: max 200
@@ -1991,6 +1994,12 @@ paths:
                   name: q
                   schema:
                     type: string
+                - description: include rows for soft-deleted assets
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    type: boolean
                 - description: comma-separated sort fields; prefix '-' for DESC
                   in: query
                   name: sort
