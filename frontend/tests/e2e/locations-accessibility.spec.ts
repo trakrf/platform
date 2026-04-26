@@ -74,14 +74,21 @@ test.describe('Locations Accessibility - Desktop', () => {
       const warehouseA = page.locator('[data-location-id]').filter({ hasText: 'warehouse-a' }).first();
       await warehouseA.click();
 
-      // Initially, children should not be visible
-      await expect(page.locator('text=floor-1')).not.toBeVisible();
+      // Scope assertion to the tree panel — selecting a location also surfaces
+      // its children's identifiers in the details panel, which would otherwise
+      // make text=floor-1 visible regardless of tree expansion state.
+      const treeFloor1 = page
+        .locator('[data-testid="location-tree-panel"]')
+        .locator('text=floor-1');
+
+      // Initially, tree children should not be visible
+      await expect(treeFloor1).not.toBeVisible();
 
       // Press ArrowRight to expand
       await page.keyboard.press('ArrowRight');
 
-      // Children should now be visible
-      await expect(page.locator('text=floor-1')).toBeVisible();
+      // Tree children should now be visible
+      await expect(treeFloor1).toBeVisible();
     });
 
     test('should collapse tree item with ArrowLeft', async ({ page }) => {
@@ -89,8 +96,13 @@ test.describe('Locations Accessibility - Desktop', () => {
       const expandButton = page.locator('button[aria-label="Expand"]').first();
       await expandButton.click();
 
+      // Scope assertion to the tree panel — see expand test for rationale.
+      const treeFloor1 = page
+        .locator('[data-testid="location-tree-panel"]')
+        .locator('text=floor-1');
+
       // Verify expanded
-      await expect(page.locator('text=floor-1')).toBeVisible();
+      await expect(treeFloor1).toBeVisible();
 
       // Click on warehouse-a to focus
       const warehouseA = page.locator('[data-location-id]').filter({ hasText: 'warehouse-a' }).first();
@@ -99,21 +111,23 @@ test.describe('Locations Accessibility - Desktop', () => {
       // Press ArrowLeft to collapse
       await page.keyboard.press('ArrowLeft');
 
-      // Children should be hidden
-      await expect(page.locator('text=floor-1')).not.toBeVisible();
+      // Tree children should be hidden
+      await expect(treeFloor1).not.toBeVisible();
     });
 
     test('should have visible focus indicator on tree items', async ({ page }) => {
-      // Tab to the tree area
-      const treePanel = page.locator('[data-testid="location-tree-panel"]');
-      await treePanel.focus();
+      // Click a tree item to establish keyboard focus context
+      // (the role="tree" container itself has no tabIndex, so calling
+      // treePanel.focus() is a no-op; subsequent key events would never
+      // reach the tree's onKeyDown handler.)
+      const warehouseA = page.locator('[data-location-id]').filter({ hasText: 'warehouse-a' }).first();
+      await warehouseA.click();
 
       // Navigate with arrow keys
       await page.keyboard.press('ArrowDown');
 
       // The focused item should have focus-visible styling
       // This is a visual check - just verify focus moves without errors
-      await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
 
       // Verify an action happened (selection)
@@ -259,8 +273,8 @@ test.describe('Locations Accessibility - Desktop', () => {
       const detailsPanel = page.locator('[data-testid="location-details-panel"]');
       await expect(detailsPanel).toBeVisible();
 
-      // Active badge should be visible (status)
-      await expect(page.locator('text=Active')).toBeVisible();
+      // Active badge should be visible (status) — scope to panel so it doesn't match list/tree badges
+      await expect(detailsPanel.getByText('Active')).toBeVisible();
     });
   });
 });
@@ -289,7 +303,9 @@ test.describe('Locations Accessibility - Mobile', () => {
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, testEmail, testPassword);
-    await page.click('text="Locations"');
+    await page.click('[data-testid="hamburger-button"]');
+    await page.waitForSelector('[data-testid="hamburger-dropdown"]');
+    await page.click('[data-testid="hamburger-dropdown"] [data-testid="menu-item-locations"]');
     await page.waitForTimeout(500);
   });
 
@@ -360,17 +376,19 @@ test.describe('Locations Accessibility - Mobile', () => {
     });
 
     test('should have proper text contrast', async ({ page }) => {
+      // Scope to the warehouse-a card so identifier/name don't accidentally match siblings
+      const warehouseACard = page.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'warehouse-a' })
+        .first();
+
       // Check that location identifiers are visible
-      const identifier = page.locator('text=warehouse-a');
-      await expect(identifier).toBeVisible();
+      await expect(warehouseACard.getByText('warehouse-a')).toBeVisible();
 
       // Check that names are visible
-      const name = page.locator('text=Warehouse A');
-      await expect(name).toBeVisible();
+      await expect(warehouseACard.getByText('Warehouse A')).toBeVisible();
 
       // Check that status badges are visible
-      const badge = page.locator('text=Active').first();
-      await expect(badge).toBeVisible();
+      await expect(warehouseACard.getByText('Active')).toBeVisible();
     });
   });
 
