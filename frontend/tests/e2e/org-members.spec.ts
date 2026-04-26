@@ -132,8 +132,8 @@ test.describe('Member Management', () => {
       const adminRow = page.locator(`tr:has-text("${adminEmail}")`);
       await adminRow.locator('select').selectOption('viewer');
 
-      // Should show error in the red error div: "Cannot remove or demote the last admin"
-      await expect(page.locator('.text-red-400')).toContainText('last admin', {
+      // Backend rejects with 400 + title "Cannot remove or demote the last admin"
+      await expect(page.getByText(/last admin/i)).toBeVisible({
         timeout: 5000,
       });
     });
