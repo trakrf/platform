@@ -53,7 +53,9 @@ if (import.meta.env.DEV || import.meta.env.VITE_ENVIRONMENT === 'preview') {
       uiStore: stores.useUIStore,
       settingsStore: stores.useSettingsStore,
       packetStore: stores.usePacketStore,
-      barcodeStore: stores.useBarcodeStore
+      barcodeStore: stores.useBarcodeStore,
+      orgStore: stores.useOrgStore,
+      authStore: stores.useAuthStore
     };
   });
 

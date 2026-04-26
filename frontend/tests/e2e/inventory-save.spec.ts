@@ -22,9 +22,6 @@ import {
   signupTestUser,
   loginTestUser,
   getAuthToken,
-  createOrgViaAPI,
-  switchOrgViaAPI,
-  listOrgsViaAPI,
 } from './fixtures/org.fixture';
 
 /**
@@ -387,213 +384,86 @@ test.describe('Inventory Save Flow', () => {
     console.log(`[Test] Clear button has pulse: ${hasPulse}`);
   });
 
-  test('3. switching orgs clears asset mappings and re-enriches', async () => {
-    // This test verifies that when a user switches orgs, the asset/location
-    // mappings are cleared (since they're org-specific) and re-enrichment happens
+  test('3. switching orgs clears tag store entirely', async () => {
+    // Per TRA-318, central invalidation clears all org-scoped data on org switch.
+    // We never carry tag context across orgs — verify the store goes to zero.
 
-    // First, ensure we're logged in
     console.log('[Test] Logging in for org switch test...');
     await loginTestUser(sharedPage, testEmail, testPassword);
 
-    // Navigate to inventory and verify we have enriched tags
     await sharedPage.goto('/#inventory');
     await sharedPage.waitForTimeout(1000);
 
-    // Add some tags with mock enrichment data directly to store
+    // Inject mock tags directly into the store
     await sharedPage.evaluate(() => {
       const stores = (window as any).__ZUSTAND_STORES__;
       const tagStore = stores?.tagStore;
-      if (tagStore) {
-        // Clear existing tags first
-        tagStore.getState().clearTags();
-
-        // Add tags with fake enrichment (simulating tags from old org)
-        tagStore.getState().setTags([
-          {
-            epc: 'ORG_TEST_0000000000001',
-            displayEpc: 'ORG_TEST_0000000000001',
-            count: 1,
-            source: 'rfid',
-            type: 'asset',
-            assetId: 99999,
-            assetName: 'Old Org Asset',
-            timestamp: Date.now(),
-          },
-          {
-            epc: 'ORG_TEST_0000000000002',
-            displayEpc: 'ORG_TEST_0000000000002',
-            count: 1,
-            source: 'rfid',
-            type: 'location',
-            locationId: 88888,
-            locationName: 'Old Org Location',
-            timestamp: Date.now(),
-          },
-        ]);
-      }
-    });
-
-    // Verify tags have enrichment data
-    const beforeSwitch = await sharedPage.evaluate(() => {
-      const stores = (window as any).__ZUSTAND_STORES__;
-      const tags = stores?.tagStore?.getState().tags || [];
-      return {
-        count: tags.length,
-        enriched: tags.filter((t: any) => t.assetId !== undefined || t.locationId !== undefined).length,
-        tags: tags.map((t: any) => ({
-          epc: t.epc,
-          type: t.type,
-          assetId: t.assetId,
-          locationId: t.locationId,
-        })),
-      };
-    });
-
-    console.log('[Test] Before org switch:', beforeSwitch);
-    expect(beforeSwitch.enriched).toBe(2);
-
-    // Create a new org
-    console.log('[Test] Creating new org...');
-    const newOrg = await createOrgViaAPI(sharedPage, `New Org ${testId}`);
-    console.log(`[Test] Created org: ${newOrg.name} (ID: ${newOrg.id})`);
-
-    // Switch to the new org via API (updates token in localStorage)
-    console.log('[Test] Switching to new org via API...');
-    await switchOrgViaAPI(sharedPage, newOrg.id);
-
-    // Reload the page to pick up the new token and trigger the org change subscription
-    await sharedPage.reload({ waitUntil: 'networkidle' });
-
-    // Navigate to inventory to see the effect
-    await sharedPage.goto('/#inventory');
-    await sharedPage.waitForTimeout(1000);
-
-    // Verify tags have been cleared of enrichment data
-    const afterSwitch = await sharedPage.evaluate(() => {
-      const stores = (window as any).__ZUSTAND_STORES__;
-      const tags = stores?.tagStore?.getState().tags || [];
-      return {
-        count: tags.length,
-        enriched: tags.filter((t: any) => t.assetId !== undefined || t.locationId !== undefined).length,
-        unknownType: tags.filter((t: any) => t.type === 'unknown').length,
-        tags: tags.map((t: any) => ({
-          epc: t.epc,
-          type: t.type,
-          assetId: t.assetId,
-          locationId: t.locationId,
-        })),
-      };
-    });
-
-    console.log('[Test] After org switch:', afterSwitch);
-
-    // Tags should still exist but with cleared enrichment
-    expect(afterSwitch.count).toBe(beforeSwitch.count);
-    // Enrichment should be cleared (assetId/locationId undefined)
-    expect(afterSwitch.enriched).toBe(0);
-    // Type should be reset to 'unknown'
-    expect(afterSwitch.unknownType).toBe(afterSwitch.count);
-
-    console.log('[Test] Org switch correctly cleared asset/location mappings');
-  });
-
-  test('4. switching back to original org re-enriches with original mappings', async () => {
-    // This test verifies that when switching back to the original org,
-    // tags get re-enriched with that org's asset/location mappings
-
-    // First, add tags with EPCs that match our test assets (created in test 2)
-    // These are the real EPCs from the hardware scan
-    if (scannedEpcs.length === 0) {
-      console.log('[Test] No scanned EPCs available, using mock data');
-      scannedEpcs = ['MOCK_EPC_001', 'MOCK_EPC_002', 'MOCK_EPC_003'];
-    }
-
-    console.log('[Test] Setting up tags with original EPCs:', scannedEpcs.slice(0, 3));
-
-    await sharedPage.evaluate((epcs: string[]) => {
-      const stores = (window as any).__ZUSTAND_STORES__;
-      const tagStore = stores?.tagStore;
-      if (tagStore) {
-        tagStore.getState().clearTags();
-        // Add tags with EPCs that should match assets in the original org
-        tagStore.getState().setTags(epcs.slice(0, 3).map((epc: string) => ({
-          epc,
-          displayEpc: epc,
+      if (!tagStore) throw new Error('tagStore not exposed; build flag VITE_ENVIRONMENT=preview required');
+      tagStore.getState().clearTags();
+      tagStore.getState().setTags([
+        {
+          epc: 'ORG_TEST_0000000000001',
+          displayEpc: 'ORG_TEST_0000000000001',
           count: 1,
           source: 'rfid',
-          type: 'unknown', // Not enriched yet
+          type: 'asset',
+          assetId: 99999,
+          assetName: 'Old Org Asset',
           timestamp: Date.now(),
-        })));
-      }
-    }, scannedEpcs);
-
-    // Verify tags are unenriched
-    const beforeSwitch = await sharedPage.evaluate(() => {
-      const stores = (window as any).__ZUSTAND_STORES__;
-      const tags = stores?.tagStore?.getState().tags || [];
-      return {
-        count: tags.length,
-        enriched: tags.filter((t: any) => t.assetId !== undefined).length,
-      };
+        },
+        {
+          epc: 'ORG_TEST_0000000000002',
+          displayEpc: 'ORG_TEST_0000000000002',
+          count: 1,
+          source: 'rfid',
+          type: 'location',
+          locationId: 88888,
+          locationName: 'Old Org Location',
+          timestamp: Date.now(),
+        },
+      ]);
     });
 
-    console.log('[Test] Before switch back:', beforeSwitch);
-    expect(beforeSwitch.enriched).toBe(0);
+    const beforeSwitch = await sharedPage.evaluate(() => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      return { count: stores?.tagStore?.getState().tags.length ?? 0 };
+    });
+    console.log('[Test] Before org switch:', beforeSwitch);
+    expect(beforeSwitch.count).toBe(2);
 
-    // Get the original org by finding it in the list
-    const orgs = await listOrgsViaAPI(sharedPage);
-    const originalOrg = orgs.find((o) => o.name === testOrgName);
+    // Drive the real org-switch path — orgStore.createOrg + switchOrg fire
+    // central invalidation (`invalidateAllOrgScopedData`) which clears every
+    // org-scoped store, including tags.
+    const newOrgId = await sharedPage.evaluate(async (name: string) => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      const orgStore = stores?.orgStore;
+      if (!orgStore) throw new Error('orgStore not exposed');
+      const newOrg = await orgStore.getState().createOrg(name);
+      await orgStore.getState().switchOrg(newOrg.id);
+      return newOrg.id;
+    }, `New Org ${testId}`);
+    console.log('[Test] Created + switched to new org:', newOrgId);
 
-    console.log('[Test] Available orgs:', orgs.map((o) => o.name));
-    console.log('[Test] Looking for original org:', testOrgName);
-    console.log('[Test] Found original org:', originalOrg?.name, originalOrg?.id);
+    // Allow any post-switch state settling (profile refetch, derived sync)
+    await sharedPage.waitForTimeout(500);
 
-    if (originalOrg?.id) {
-      await switchOrgViaAPI(sharedPage, originalOrg.id);
+    const afterSwitch = await sharedPage.evaluate(() => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      return { count: stores?.tagStore?.getState().tags.length ?? 0 };
+    });
+    console.log('[Test] After org switch:', afterSwitch);
 
-      // Reload and navigate to inventory
-      await sharedPage.reload({ waitUntil: 'networkidle' });
-      await sharedPage.goto('/#inventory');
-      await sharedPage.waitForTimeout(1000);
-
-      // Wait for enrichment to happen
-      try {
-        await waitForEnrichment(sharedPage, 10000);
-        console.log('[Test] Re-enrichment detected!');
-      } catch (e) {
-        console.log('[Test] Re-enrichment did not complete in time');
-      }
-
-      // Check if tags got re-enriched
-      const afterSwitch = await sharedPage.evaluate(() => {
-        const stores = (window as any).__ZUSTAND_STORES__;
-        const tags = stores?.tagStore?.getState().tags || [];
-        return {
-          count: tags.length,
-          enriched: tags.filter((t: any) => t.assetId !== undefined).length,
-          tags: tags.map((t: any) => ({
-            epc: t.epc,
-            type: t.type,
-            assetId: t.assetId,
-            assetName: t.assetName,
-          })),
-        };
-      });
-
-      console.log('[Test] After switch back:', afterSwitch);
-
-      // Tags should be re-enriched with original org's assets
-      // We created 3 test assets, so at least those should be enriched
-      if (testAssets.length > 0) {
-        expect(afterSwitch.enriched).toBeGreaterThan(0);
-        console.log(`[Test] Re-enriched ${afterSwitch.enriched} tags after switching back`);
-      }
-    } else {
-      console.log('[Test] Could not find original org, skipping switch-back verification');
-    }
+    expect(afterSwitch.count).toBe(0);
+    console.log('[Test] Org switch correctly cleared tag store');
   });
 
-  test('5. anonymous user clicking Save redirects to login', async () => {
+  // Per TRA-318/TRA-527: we explicitly never carry tag context across org
+  // switches. A "switch back and re-enrich the original org's tags" test was
+  // dropped here because that flow doesn't exist in the product — central
+  // invalidation wipes the tag store on every switch. Real users rescan after
+  // switching; there is nothing to verify in a "carry-over" path.
+
+  test('4. anonymous user clicking Save redirects to login', async () => {
     // Clear auth state
     await clearAuthState(sharedPage);
     await sharedPage.reload({ waitUntil: 'networkidle' });
