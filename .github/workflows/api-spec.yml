@@ -58,8 +58,9 @@ jobs:
         # Only the OpenAPI JSON/YAML are checked for drift. The Postman collection
         # is not committed to this repo — openapi-to-postmanv2 regenerates UUIDs
         # on every run, so the collection is always "drifted" by design. It is
-        # generated fresh in .github/workflows/publish-api-docs.yml and shipped
-        # to trakrf/docs on main-merge.
+        # generated downstream by trakrf/docs's scripts/refresh-openapi.sh, which
+        # pulls openapi.public.{json,yaml} from this repo and regenerates the
+        # Postman collection there.
         run: |
           if ! git diff --exit-code docs/api/openapi.public.json docs/api/openapi.public.yaml; then
             echo "::error::docs/api/openapi.public.{json,yaml} is stale. Run 'just backend api-spec' locally and commit the result."
