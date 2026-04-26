@@ -10,7 +10,11 @@ import { useAuthStore } from './authStore';
 import { useOrgStore } from './orgStore';
 import { createStoreWithTracking } from './createStore';
 import { lookupApi } from '@/lib/api/lookup';
-import { ensureOrgContext, getTokenOrgId } from '@/lib/auth/orgContext';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
+
+// Module-level canary: track which org enrichment data belongs to
+// Used to detect if central invalidation was bypassed (fail loudly)
+let lastEnrichmentOrgId: number | null = null;
 
 // Tag classification type
 export type TagType = 'asset' | 'location' | 'unknown';
@@ -55,10 +59,6 @@ interface TagState {
   tags: TagInfo[];
   selectedTag: TagInfo | null;
   displayFormat: 'hex' | 'decimal';
-
-  // Org id whose enrichment data is currently in `tags`. Persisted so reload
-  // can detect a token swap and clear stale per-org enrichment.
-  enrichedOrgId: number | null;
 
   // Sorting state
   sortColumn: string | null;
@@ -117,7 +117,6 @@ export const useTagStore = create<TagState>()(
   tags: [],
   selectedTag: null,
   displayFormat: 'decimal', // Default to decimal format
-  enrichedOrgId: null,
 
   // Sorting initial state - default to timestamp descending
   sortColumn: 'timestamp',
@@ -423,8 +422,7 @@ export const useTagStore = create<TagState>()(
       const currentOrgId = useOrgStore.getState().currentOrg?.id ?? null;
 
       // Canary: detect if central invalidation was bypassed
-      const previousEnrichedOrgId = get().enrichedOrgId;
-      if (previousEnrichedOrgId !== null && previousEnrichedOrgId !== currentOrgId) {
+      if (lastEnrichmentOrgId !== null && lastEnrichmentOrgId !== currentOrgId) {
         console.warn('[tagStore] Stale enrichment detected - central invalidation may have been bypassed');
       }
 
@@ -456,7 +454,7 @@ export const useTagStore = create<TagState>()(
       // Track which org this enrichment belongs to (for canary detection)
       const hasResults = Object.values(results).some((r: any) => r?.asset || r?.location);
       if (hasResults) {
-        set({ enrichedOrgId: currentOrgId });
+        lastEnrichmentOrgId = currentOrgId;
       }
     } catch (error) {
       console.error('[TagStore] _flushLookupQueue: API error', error);
@@ -481,44 +479,8 @@ export const useTagStore = create<TagState>()(
       tags: state.tags,
       currentPage: state.currentPage,
       sortColumn: state.sortColumn,
-      sortDirection: state.sortDirection,
-      enrichedOrgId: state.enrichedOrgId,
-    }),
-    onRehydrateStorage: () => (rehydrated, error) => {
-      if (error || !rehydrated) return;
-      // Compare canary against current token's org. Mismatch (including a
-      // null canary alongside enriched tags from an earlier session) means
-      // the org-scoped enrichment is no longer valid.
-      const tokenOrgId = getTokenOrgId();
-      if (rehydrated.enrichedOrgId === tokenOrgId) return;
-
-      const hasEnrichment = rehydrated.tags.some(
-        (t) => t.assetId !== undefined || t.locationId !== undefined,
-      );
-      if (!hasEnrichment) {
-        if (rehydrated.enrichedOrgId !== null) {
-          useTagStore.setState({ enrichedOrgId: null });
-        }
-        return;
-      }
-
-      console.log('[tagStore] Hydration: org context mismatch, clearing stale enrichment', {
-        stored: rehydrated.enrichedOrgId,
-        current: tokenOrgId,
-      });
-      useTagStore.setState({
-        tags: rehydrated.tags.map((tag) => ({
-          ...tag,
-          type: 'unknown' as TagType,
-          assetId: undefined,
-          assetName: undefined,
-          assetIdentifier: undefined,
-          locationId: undefined,
-          locationName: undefined,
-        })),
-        enrichedOrgId: null,
-      });
-    },
+      sortDirection: state.sortDirection
+    })
   }
   )
 );
