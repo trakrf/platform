@@ -22,7 +22,15 @@ import {
   getAuthToken,
 } from './fixtures/org.fixture';
 
-const API_BASE = 'http://localhost:8080/api/v1';
+/**
+ * Resolve the API base URL from PLAYWRIGHT_BASE_URL when running against a
+ * remote deployment (preview, gke, staging). Falls back to localhost:8080 for
+ * local runs. Mirrors the pattern in location.fixture.ts.
+ */
+function getApiBaseUrl(): string {
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+  return `${base.replace(/\/$/, '')}/api/v1`;
+}
 
 interface TestLocation {
   identifier: string;
@@ -34,8 +42,9 @@ interface TestLocation {
  */
 async function createTestLocation(page: Page, name: string): Promise<TestLocation> {
   const token = await getAuthToken(page);
+  const apiBase = getApiBaseUrl();
 
-  const response = await page.request.post(`${API_BASE}/locations`, {
+  const response = await page.request.post(`${apiBase}/locations`, {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -268,7 +277,8 @@ test.describe('Locations After Fresh Browser Session (TRA-318)', () => {
 
     // Create a location
     const token = await getAuthToken(page);
-    const response = await page.request.post(`${API_BASE}/locations`, {
+    const apiBase = getApiBaseUrl();
+    const response = await page.request.post(`${apiBase}/locations`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',

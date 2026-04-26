@@ -27,7 +27,15 @@ import {
   listOrgsViaAPI,
 } from './fixtures/org.fixture';
 
-const API_BASE = 'http://localhost:8080/api/v1';
+/**
+ * Resolve the API base URL from PLAYWRIGHT_BASE_URL when running against a
+ * remote deployment (preview, gke, staging). Falls back to localhost:8080 for
+ * local runs. Mirrors the pattern in location.fixture.ts.
+ */
+function getApiBaseUrl(): string {
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+  return `${base.replace(/\/$/, '')}/api/v1`;
+}
 
 interface TestAsset {
   id: number;
@@ -53,7 +61,7 @@ async function createTestLocation(
 
   const identifiers = rfidTag ? [{ type: 'rfid', value: rfidTag }] : [];
 
-  const response = await page.request.post(`${API_BASE}/locations`, {
+  const response = await page.request.post(`${getApiBaseUrl()}/locations`, {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -91,7 +99,7 @@ async function createTestAsset(
 ): Promise<TestAsset> {
   const token = await getAuthToken(page);
 
-  const response = await page.request.post(`${API_BASE}/assets`, {
+  const response = await page.request.post(`${getApiBaseUrl()}/assets`, {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
