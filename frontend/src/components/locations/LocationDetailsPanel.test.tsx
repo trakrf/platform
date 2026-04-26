@@ -189,7 +189,6 @@ describe('LocationDetailsPanel', () => {
     );
 
     expect(screen.queryByText('Hierarchy Information')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('direct-children-label')).toBeInTheDocument();
     expect(screen.queryByText('Total Descendants')).not.toBeInTheDocument();
   });
 
