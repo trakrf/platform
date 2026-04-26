@@ -4,13 +4,14 @@ import "time"
 
 // CurrentLocationItem represents a single asset's current location
 type CurrentLocationItem struct {
-	AssetID            int       `json:"asset_id"`
-	AssetName          string    `json:"asset_name"`
-	AssetIdentifier    string    `json:"asset_identifier"`
-	LocationID         *int      `json:"location_id"`         // nullable
-	LocationName       *string   `json:"location_name"`       // nullable
-	LocationIdentifier *string   `json:"location_identifier"` // nullable
-	LastSeen           time.Time `json:"last_seen"`
+	AssetID            int        `json:"asset_id"`
+	AssetName          string     `json:"asset_name"`
+	AssetIdentifier    string     `json:"asset_identifier"`
+	LocationID         *int       `json:"location_id"`         // nullable
+	LocationName       *string    `json:"location_name"`       // nullable
+	LocationIdentifier *string    `json:"location_identifier"` // nullable
+	LastSeen           time.Time  `json:"last_seen"`
+	AssetDeletedAt     *time.Time `json:"asset_deleted_at,omitempty"` // populated when include_deleted=true
 }
 
 // CurrentLocationsResponse is the paginated response for current locations
@@ -25,6 +26,7 @@ type CurrentLocationsResponse struct {
 type CurrentLocationFilter struct {
 	LocationIdentifiers []string // filter by location natural key(s)
 	Q                   *string  // substring match (case-insensitive) on asset name, identifier, and active identifier values
+	IncludeDeleted      bool     // when true, includes rows for soft-deleted assets (default false)
 	Limit               int
 	Offset              int
 }

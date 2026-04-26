@@ -4,16 +4,18 @@ import "time"
 
 // PublicCurrentLocationItem is the public shape for /api/v1/locations/current items.
 type PublicCurrentLocationItem struct {
-	Asset    string    `json:"asset"`
-	Location string    `json:"location"`
-	LastSeen time.Time `json:"last_seen"`
+	Asset          string     `json:"asset"`
+	Location       string     `json:"location"`
+	LastSeen       time.Time  `json:"last_seen"`
+	AssetDeletedAt *time.Time `json:"asset_deleted_at,omitempty"`
 }
 
 func ToPublicCurrentLocationItem(it CurrentLocationItem) PublicCurrentLocationItem {
 	return PublicCurrentLocationItem{
-		Asset:    it.AssetIdentifier,
-		Location: derefString(it.LocationIdentifier),
-		LastSeen: it.LastSeen,
+		Asset:          it.AssetIdentifier,
+		Location:       derefString(it.LocationIdentifier),
+		LastSeen:       it.LastSeen,
+		AssetDeletedAt: it.AssetDeletedAt,
 	}
 }
 
