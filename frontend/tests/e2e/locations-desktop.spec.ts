@@ -174,7 +174,7 @@ test.describe('Locations Desktop Split Pane', () => {
       await expect(detailsPanel.locator('h2:has-text("warehouse-a")')).toBeVisible();
 
       // Should show it's a Root Location
-      await expect(detailsPanel.locator('text=Root Location')).toBeVisible();
+      await expect(detailsPanel.getByTestId('location-type')).toHaveText('Root Location');
     });
 
     test('should show location identifier and name', async ({ page }) => {
@@ -214,7 +214,7 @@ test.describe('Locations Desktop Split Pane', () => {
       const detailsPanel = page.locator('[data-testid="location-details-panel"]');
 
       // Should show direct children count
-      await expect(detailsPanel.locator('text=Direct Children')).toBeVisible();
+      await expect(detailsPanel.getByTestId('direct-children-label')).toBeVisible();
     });
 
     test('should show children list with navigation', async ({ page }) => {
@@ -250,7 +250,7 @@ test.describe('Locations Desktop Split Pane', () => {
       await expect(detailsPanel.locator('h2:has-text("floor-1")')).toBeVisible();
 
       // Should show it's a Subsidiary Location
-      await expect(detailsPanel.locator('text=Subsidiary Location')).toBeVisible();
+      await expect(detailsPanel.getByTestId('location-type')).toHaveText('Subsidiary Location');
     });
 
     test('should show Edit, Move, Delete buttons', async ({ page }) => {
