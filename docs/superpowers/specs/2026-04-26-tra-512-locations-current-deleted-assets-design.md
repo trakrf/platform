@@ -35,7 +35,7 @@ Same as default.
 
 ### Invalid value (e.g. `?include_deleted=banana`)
 
-400 Bad Request via the existing list-param error envelope. Parsed with `strconv.ParseBool` off `r.URL.Query()`.
+400 Bad Request via the existing list-param error envelope. Use `httputil.ListAllowlist.BoolFilters` (strict `true`/`false` only — `1`/`0`/`TRUE` are rejected, matching project convention).
 
 ### Edge cases
 
@@ -57,16 +57,12 @@ Same as default.
 
 ### Response item shape
 
-`PublicCurrentLocationItem` JSON example:
+`PublicCurrentLocationItem` is a lean projection (just natural-key identifiers, no surrogates). After change:
 
 ```json
 {
-  "asset_id": 123,
-  "asset_name": "Forklift 7",
-  "asset_identifier": "FORK-007",
-  "location_id": 4,
-  "location_name": "Bay 3",
-  "location_identifier": "BAY-3",
+  "asset": "FORK-007",
+  "location": "BAY-3",
   "last_seen": "2026-04-25T18:33:00Z",
   "asset_deleted_at": "2026-04-20T14:00:00Z"
 }
@@ -81,7 +77,7 @@ Live rows omit `asset_deleted_at` entirely.
 | `backend/internal/models/report/current_location.go` | Add `IncludeDeleted bool` to `CurrentLocationFilter`; add `AssetDeletedAt *time.Time` to `CurrentLocationItem`. |
 | `backend/internal/models/report/public.go` | Add `AssetDeletedAt *time.Time` (`json:"asset_deleted_at,omitempty"`) to `PublicCurrentLocationItem`; update `ToPublicCurrentLocationItem`. |
 | `backend/internal/storage/reports.go` | Both query builders (`buildCurrentLocationsQueryDistinctOn`, `buildCurrentLocationsQueryTimescale`) and `CountCurrentLocations`: add `a.deleted_at` to projection, add `(a.deleted_at IS NULL OR $N::bool)` predicate (param appended at end). |
-| `backend/internal/handlers/reports/current_locations.go` | Parse `include_deleted` via `strconv.ParseBool`; on error → 400. Update `@Description` and add `@Param include_deleted`. |
+| `backend/internal/handlers/reports/current_locations.go` | Add `include_deleted` to `httputil.ListAllowlist.Filters` and `BoolFilters`; read `params.Filters["include_deleted"]` and set `filter.IncludeDeleted = vs[0] == "true"`. Update `@Description` and add `@Param include_deleted`. |
 | `docs/api/openapi.public.{yaml,json}` | Regenerated via `just backend api-spec`. |
 | Storage integration tests | Default elides deleted; opt-in returns deleted with populated `AssetDeletedAt`; q-search consistent with default. Cover both query engines. |
 | Handler tests | Param parsing happy paths + invalid value → 400. |
@@ -102,7 +98,6 @@ AND (a.deleted_at IS NULL OR $N::bool)
 
 - **Frontend / internal UI.** The web app consumes a different code path (`CurrentLocationItem` directly, not `PublicCurrentLocationItem`). No frontend change in this PR.
 - **Other endpoints with similar deleted-asset semantics.** Ticket scopes to `/locations/current`.
-- **Surrogate ID exposure.** `asset_id` / `location_id` are INT surrogates currently exposed in the public response. Memory says these should stay internal. Pre-existing — not touched here. File a follow-up if not already tracked.
 - **Redocusaurus / docs-site sync.** Separate PR in `trakrf-docs` after this one merges/deploys, per "ship docs behind backend reality."
 
 ## Verification
@@ -117,4 +112,3 @@ Before claiming done:
 ## Linear follow-ups
 
 - AC2 decision: option 3 (elision by default), shipping in this PR. Comment on TRA-512 noting that AC2 is no longer deferred to post-v1.
-- (Maybe) new ticket for surrogate-ID exposure on `/locations/current` response, if not already tracked.
