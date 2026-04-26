@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { X, AlertCircle, MapPin } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationParentSelector } from './LocationParentSelector';
+import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import type { Location } from '@/types/locations';
 
 interface LocationMoveModalProps {
@@ -26,6 +27,8 @@ export function LocationMoveModal({
   const getAncestors = useLocationStore((state) => state.getAncestors);
 
   const descendants = useMemo(() => getDescendants(location.id), [location.id, getDescendants]);
+
+  useEscapeToClose(isOpen, onClose, loading);
 
   const hasChanges = newParentId !== location.parent_location_id;
   const willAffectDescendants = descendants.length > 0;
