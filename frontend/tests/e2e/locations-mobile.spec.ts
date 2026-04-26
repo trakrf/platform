@@ -164,30 +164,27 @@ test.describe('Locations Mobile Expandable Cards', () => {
 
     test('should show Root Location type in expanded card', async ({ page }) => {
       // Expand warehouse-a card (root location)
-      const cardHeader = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'warehouse-a' })
-        .locator('button').first();
-      await cardHeader.click();
+      const warehouseCard = page.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'warehouse-a' });
+      await warehouseCard.locator('button').first().click();
 
-      // Should show Root Location type
-      await expect(page.locator('text=Root Location')).toBeVisible();
+      // Should show Root Location type via testid scoped to this card
+      await expect(warehouseCard.getByTestId('location-type')).toContainText('Root');
     });
 
     test('should show Subsidiary type for child location', async ({ page }) => {
       // First expand warehouse-a to see children
       const warehouseCard = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'warehouse-a' })
-        .locator('button').first();
-      await warehouseCard.click();
+        .filter({ hasText: 'warehouse-a' });
+      await warehouseCard.locator('button').first().click();
 
-      // Now expand floor-1 card
-      const floor1Card = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'floor-1' })
-        .locator('button').first();
-      await floor1Card.click();
+      // Now expand floor-1 card (scoped within warehouse-a)
+      const floor1Card = warehouseCard.locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'floor-1' });
+      await floor1Card.locator('button').first().click();
 
-      // Should show Subsidiary type
-      await expect(page.locator('text=Subsidiary')).toBeVisible();
+      // Should show Subsidiary type via testid scoped to this card
+      await expect(floor1Card.getByTestId('location-type').first()).toContainText('Subsidiary');
     });
   });
 
