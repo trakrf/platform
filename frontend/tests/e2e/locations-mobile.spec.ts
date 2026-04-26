@@ -318,7 +318,9 @@ test.describe('Locations Mobile - Fresh State', () => {
     await loginTestUser(page, testEmail, testPassword);
 
     // Navigate to Locations tab
-    await page.click('text="Locations"');
+    await page.click('[data-testid="hamburger-button"]');
+    await page.waitForSelector('[data-testid="hamburger-dropdown"]');
+    await page.click('[data-testid="hamburger-dropdown"] [data-testid="menu-item-locations"]');
     await page.waitForTimeout(500);
   });
 
@@ -390,7 +392,9 @@ test.describe('Locations Mobile - Tablet Viewport', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await loginTestUser(page, testEmail, testPassword);
 
-    await page.click('text="Locations"');
+    await page.click('[data-testid="hamburger-button"]');
+    await page.waitForSelector('[data-testid="hamburger-dropdown"]');
+    await page.click('[data-testid="hamburger-dropdown"] [data-testid="menu-item-locations"]');
     await page.waitForTimeout(500);
   });
 
