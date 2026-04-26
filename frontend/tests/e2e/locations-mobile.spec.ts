@@ -251,21 +251,18 @@ test.describe('Locations Mobile Expandable Cards', () => {
     test('should open move modal from expanded card', async ({ page }) => {
       // First expand warehouse-a to see children
       const warehouseCard = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'warehouse-a' })
-        .locator('button').first();
-      await warehouseCard.click();
+        .filter({ hasText: 'warehouse-a' });
+      await warehouseCard.locator('button').first().click();
 
-      // Now expand floor-1 card to access its Move button
-      const floor1Card = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'floor-1' })
-        .locator('button').first();
-      await floor1Card.click();
+      // Now expand floor-1 card (scoped within warehouse-a so we don't also
+      // match warehouse-a, which now contains 'floor-1' in its expanded children)
+      const floor1Card = warehouseCard
+        .locator('[data-testid="location-expandable-card"]')
+        .filter({ hasText: 'floor-1' });
+      await floor1Card.locator('button').first().click();
 
       // Click Move button on floor-1
-      const moveButton = page.locator('[data-testid="location-expandable-card"]')
-        .filter({ hasText: 'floor-1' })
-        .locator('button:has-text("Move")');
-      await moveButton.click();
+      await floor1Card.locator('button:has-text("Move")').click();
 
       // Move modal should open
       await expect(page.getByRole('heading', { name: 'Move Location' })).toBeVisible({ timeout: 5000 });
@@ -351,9 +348,12 @@ test.describe('Locations Mobile - Fresh State', () => {
     // Wait for modal to close
     await expect(page.locator('text=Create Location')).not.toBeVisible({ timeout: 5000 });
 
-    // Verify location appears as a card
-    await expect(page.locator('text=mobile-test-loc')).toBeVisible();
-    await expect(page.locator('text=Mobile Test Location')).toBeVisible();
+    // Verify location appears as a card (scoped to card to avoid matching toast)
+    const newCard = page
+      .locator('[data-testid="location-expandable-card"]')
+      .filter({ hasText: 'mobile-test-loc' });
+    await expect(newCard).toBeVisible();
+    await expect(newCard).toContainText('Mobile Test Location');
   });
 
   test('should show FAB on mobile', async ({ page }) => {
