@@ -374,7 +374,7 @@ describe('Header - Auth Integration', () => {
     render(<Header />);
 
     // Open dropdown
-    const menuButton = screen.getByRole('button', { name: /test@example.com/i });
+    const menuButton = screen.getByRole('button', { name: /account menu/i });
     fireEvent.click(menuButton);
 
     // Wait for dropdown to appear
