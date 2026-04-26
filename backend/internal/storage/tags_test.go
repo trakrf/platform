@@ -11,7 +11,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
-func TestGetIdentifiersByAssetID(t *testing.T) {
+func TestGetTagsByAssetID(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -32,7 +32,7 @@ func TestGetIdentifiersByAssetID(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByAssetID(context.Background(), orgID, assetID)
+	results, err := storage.GetTagsByAssetID(context.Background(), orgID, assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -44,7 +44,7 @@ func TestGetIdentifiersByAssetID(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifiersByAssetID_Empty(t *testing.T) {
+func TestGetTagsByAssetID_Empty(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -63,7 +63,7 @@ func TestGetIdentifiersByAssetID_Empty(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByAssetID(context.Background(), orgID, assetID)
+	results, err := storage.GetTagsByAssetID(context.Background(), orgID, assetID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -71,7 +71,7 @@ func TestGetIdentifiersByAssetID_Empty(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifiersByAssetID_DatabaseError(t *testing.T) {
+func TestGetTagsByAssetID_DatabaseError(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -88,15 +88,15 @@ func TestGetIdentifiersByAssetID_DatabaseError(t *testing.T) {
 		WillReturnError(errors.New("connection lost"))
 	mock.ExpectRollback()
 
-	results, err := storage.GetIdentifiersByAssetID(context.Background(), orgID, assetID)
+	results, err := storage.GetTagsByAssetID(context.Background(), orgID, assetID)
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
-	assert.Contains(t, err.Error(), "failed to get identifiers for asset")
+	assert.Contains(t, err.Error(), "failed to get tags for asset")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifiersByLocationID(t *testing.T) {
+func TestGetTagsByLocationID(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -116,7 +116,7 @@ func TestGetIdentifiersByLocationID(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByLocationID(context.Background(), orgID, locationID)
+	results, err := storage.GetTagsByLocationID(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -126,7 +126,7 @@ func TestGetIdentifiersByLocationID(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifiersByLocationID_Empty(t *testing.T) {
+func TestGetTagsByLocationID_Empty(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -145,7 +145,7 @@ func TestGetIdentifiersByLocationID_Empty(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	results, err := storage.GetIdentifiersByLocationID(context.Background(), orgID, locationID)
+	results, err := storage.GetTagsByLocationID(context.Background(), orgID, locationID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, results)
@@ -153,7 +153,7 @@ func TestGetIdentifiersByLocationID_Empty(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestAddIdentifierToAsset(t *testing.T) {
+func TestAddTagToAsset(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -173,12 +173,12 @@ func TestAddIdentifierToAsset(t *testing.T) {
 	// Expect transaction flow for RLS context
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`INSERT INTO trakrf.identifiers`).
+	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
 		WithArgs(orgID, req.Type, req.Value, assetID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	result, err := storage.AddIdentifierToAsset(context.Background(), orgID, assetID, req)
+	result, err := storage.AddTagToAsset(context.Background(), orgID, assetID, req)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -189,7 +189,7 @@ func TestAddIdentifierToAsset(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestAddIdentifierToAsset_Duplicate(t *testing.T) {
+func TestAddTagToAsset_Duplicate(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -206,12 +206,12 @@ func TestAddIdentifierToAsset_Duplicate(t *testing.T) {
 	// Expect transaction flow for RLS context - with rollback on error
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`INSERT INTO trakrf.identifiers`).
+	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
 		WithArgs(orgID, req.Type, req.Value, assetID).
 		WillReturnError(errors.New("duplicate key value violates unique constraint"))
 	mock.ExpectRollback()
 
-	result, err := storage.AddIdentifierToAsset(context.Background(), orgID, assetID, req)
+	result, err := storage.AddTagToAsset(context.Background(), orgID, assetID, req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -219,7 +219,7 @@ func TestAddIdentifierToAsset_Duplicate(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestAddIdentifierToLocation(t *testing.T) {
+func TestAddTagToLocation(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -239,12 +239,12 @@ func TestAddIdentifierToLocation(t *testing.T) {
 	// Expect transaction flow for RLS context
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`INSERT INTO trakrf.identifiers`).
+	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
 		WithArgs(orgID, req.Type, req.Value, locationID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	result, err := storage.AddIdentifierToLocation(context.Background(), orgID, locationID, req)
+	result, err := storage.AddTagToLocation(context.Background(), orgID, locationID, req)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -255,7 +255,7 @@ func TestAddIdentifierToLocation(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveAssetIdentifier(t *testing.T) {
+func TestRemoveAssetTag(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -264,23 +264,23 @@ func TestRemoveAssetIdentifier(t *testing.T) {
 
 	orgID := 1
 	assetID := 42
-	identifierID := 101
+	tagID := 101
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, assetID, orgID).
+	mock.ExpectExec(`UPDATE trakrf.tags\s+SET deleted_at = NOW\(\)`).
+		WithArgs(tagID, assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectCommit()
 
-	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
+	result, err := storage.RemoveAssetTag(context.Background(), orgID, assetID, tagID)
 
 	assert.NoError(t, err)
 	assert.True(t, result)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveAssetIdentifier_NotFound(t *testing.T) {
+func TestRemoveAssetTag_NotFound(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -289,23 +289,23 @@ func TestRemoveAssetIdentifier_NotFound(t *testing.T) {
 
 	orgID := 1
 	assetID := 42
-	identifierID := 99999
+	tagID := 99999
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, assetID, orgID).
+	mock.ExpectExec(`UPDATE trakrf.tags\s+SET deleted_at = NOW\(\)`).
+		WithArgs(tagID, assetID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	mock.ExpectCommit()
 
-	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
+	result, err := storage.RemoveAssetTag(context.Background(), orgID, assetID, tagID)
 
 	assert.NoError(t, err)
 	assert.False(t, result)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveAssetIdentifier_DatabaseError(t *testing.T) {
+func TestRemoveAssetTag_DatabaseError(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -314,24 +314,24 @@ func TestRemoveAssetIdentifier_DatabaseError(t *testing.T) {
 
 	orgID := 1
 	assetID := 42
-	identifierID := 101
+	tagID := 101
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, assetID, orgID).
+	mock.ExpectExec(`UPDATE trakrf.tags\s+SET deleted_at = NOW\(\)`).
+		WithArgs(tagID, assetID, orgID).
 		WillReturnError(errors.New("database error"))
 	mock.ExpectRollback()
 
-	result, err := storage.RemoveAssetIdentifier(context.Background(), orgID, assetID, identifierID)
+	result, err := storage.RemoveAssetTag(context.Background(), orgID, assetID, tagID)
 
 	assert.Error(t, err)
 	assert.False(t, result)
-	assert.Contains(t, err.Error(), "failed to remove asset identifier")
+	assert.Contains(t, err.Error(), "failed to remove asset tag")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveLocationIdentifier(t *testing.T) {
+func TestRemoveLocationTag(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -340,23 +340,23 @@ func TestRemoveLocationIdentifier(t *testing.T) {
 
 	orgID := 1
 	locationID := 77
-	identifierID := 201
+	tagID := 201
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, locationID, orgID).
+	mock.ExpectExec(`UPDATE trakrf.tags\s+SET deleted_at = NOW\(\)`).
+		WithArgs(tagID, locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectCommit()
 
-	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
+	result, err := storage.RemoveLocationTag(context.Background(), orgID, locationID, tagID)
 
 	assert.NoError(t, err)
 	assert.True(t, result)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveLocationIdentifier_NotFound(t *testing.T) {
+func TestRemoveLocationTag_NotFound(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -365,23 +365,23 @@ func TestRemoveLocationIdentifier_NotFound(t *testing.T) {
 
 	orgID := 1
 	locationID := 77
-	identifierID := 99999
+	tagID := 99999
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, locationID, orgID).
+	mock.ExpectExec(`UPDATE trakrf.tags\s+SET deleted_at = NOW\(\)`).
+		WithArgs(tagID, locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	mock.ExpectCommit()
 
-	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
+	result, err := storage.RemoveLocationTag(context.Background(), orgID, locationID, tagID)
 
 	assert.NoError(t, err)
 	assert.False(t, result)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRemoveLocationIdentifier_DatabaseError(t *testing.T) {
+func TestRemoveLocationTag_DatabaseError(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -390,24 +390,24 @@ func TestRemoveLocationIdentifier_DatabaseError(t *testing.T) {
 
 	orgID := 1
 	locationID := 77
-	identifierID := 201
+	tagID := 201
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectExec(`UPDATE trakrf.identifiers\s+SET deleted_at = NOW\(\)`).
-		WithArgs(identifierID, locationID, orgID).
+	mock.ExpectExec(`UPDATE trakrf.tags\s+SET deleted_at = NOW\(\)`).
+		WithArgs(tagID, locationID, orgID).
 		WillReturnError(errors.New("database error"))
 	mock.ExpectRollback()
 
-	result, err := storage.RemoveLocationIdentifier(context.Background(), orgID, locationID, identifierID)
+	result, err := storage.RemoveLocationTag(context.Background(), orgID, locationID, tagID)
 
 	assert.Error(t, err)
 	assert.False(t, result)
-	assert.Contains(t, err.Error(), "failed to remove location identifier")
+	assert.Contains(t, err.Error(), "failed to remove location tag")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifierByID(t *testing.T) {
+func TestGetTagByID(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -415,7 +415,7 @@ func TestGetIdentifierByID(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	orgID := 1
-	identifierID := 101
+	tagID := 101
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
 		AddRow(101, "rfid", "E20000001234", true)
@@ -423,11 +423,11 @@ func TestGetIdentifierByID(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(identifierID, orgID).
+		WithArgs(tagID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	result, err := storage.GetIdentifierByID(context.Background(), orgID, identifierID)
+	result, err := storage.GetTagByID(context.Background(), orgID, tagID)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
@@ -438,7 +438,7 @@ func TestGetIdentifierByID(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifierByID_NotFound(t *testing.T) {
+func TestGetTagByID_NotFound(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -446,23 +446,23 @@ func TestGetIdentifierByID_NotFound(t *testing.T) {
 	storage := &Storage{pool: mock}
 
 	orgID := 1
-	identifierID := 99999
+	tagID := 99999
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT id, type, value, is_active`).
-		WithArgs(identifierID, orgID).
+		WithArgs(tagID, orgID).
 		WillReturnError(errors.New("no rows in result set"))
 	mock.ExpectCommit()
 
-	result, err := storage.GetIdentifierByID(context.Background(), orgID, identifierID)
+	result, err := storage.GetTagByID(context.Background(), orgID, tagID)
 
 	assert.NoError(t, err) // Not found is not an error, returns nil
 	assert.Nil(t, result)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifiersForAssets_Batch(t *testing.T) {
+func TestGetTagsForAssets_Batch(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -476,7 +476,7 @@ func TestGetIdentifiersForAssets_Batch(t *testing.T) {
 		AddRow(1, 101, "rfid", "E20000001111", true).
 		AddRow(1, 102, "ble", "AA:AA:AA:AA:AA:AA", true).
 		AddRow(2, 201, "barcode", "BC-002", true)
-	// Note: asset 3 has no identifiers
+	// Note: asset 3 has no tags
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
@@ -485,17 +485,17 @@ func TestGetIdentifiersForAssets_Batch(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	result, err := storage.getIdentifiersForAssets(context.Background(), orgID, assetIDs)
+	result, err := storage.getTagsForAssets(context.Background(), orgID, assetIDs)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Asset 1 has 2 identifiers
+	// Asset 1 has 2 tags
 	assert.Len(t, result[1], 2)
 	assert.Equal(t, "rfid", result[1][0].Type)
 	assert.Equal(t, "ble", result[1][1].Type)
 
-	// Asset 2 has 1 identifier
+	// Asset 2 has 1 tag
 	assert.Len(t, result[2], 1)
 	assert.Equal(t, "barcode", result[2][0].Type)
 
@@ -506,7 +506,7 @@ func TestGetIdentifiersForAssets_Batch(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetIdentifiersForLocations_Batch(t *testing.T) {
+func TestGetTagsForLocations_Batch(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -528,16 +528,16 @@ func TestGetIdentifiersForLocations_Batch(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	result, err := storage.getIdentifiersForLocations(context.Background(), orgID, locationIDs)
+	result, err := storage.getTagsForLocations(context.Background(), orgID, locationIDs)
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Location 10 has 1 identifier
+	// Location 10 has 1 tag
 	assert.Len(t, result[10], 1)
 	assert.Equal(t, "barcode", result[10][0].Type)
 
-	// Location 20 has 2 identifiers
+	// Location 20 has 2 tags
 	assert.Len(t, result[20], 2)
 	assert.Equal(t, "rfid", result[20][0].Type)
 	assert.Equal(t, "barcode", result[20][1].Type)
@@ -545,34 +545,34 @@ func TestGetIdentifiersForLocations_Batch(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestIdentifiersToJSON(t *testing.T) {
+func TestTagsToJSON(t *testing.T) {
 	t.Run("empty slice returns empty array", func(t *testing.T) {
-		result, err := identifiersToJSON([]shared.TagIdentifierRequest{})
+		result, err := tagsToJSON([]shared.TagIdentifierRequest{})
 		assert.NoError(t, err)
 		assert.Equal(t, "[]", string(result))
 	})
 
 	t.Run("nil slice returns empty array", func(t *testing.T) {
-		result, err := identifiersToJSON(nil)
+		result, err := tagsToJSON(nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "[]", string(result))
 	})
 
-	t.Run("single identifier", func(t *testing.T) {
+	t.Run("single tag", func(t *testing.T) {
 		input := []shared.TagIdentifierRequest{
 			{Type: "rfid", Value: "E20000001234"},
 		}
-		result, err := identifiersToJSON(input)
+		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
 		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"}]`, string(result))
 	})
 
-	t.Run("multiple identifiers", func(t *testing.T) {
+	t.Run("multiple tags", func(t *testing.T) {
 		input := []shared.TagIdentifierRequest{
 			{Type: "rfid", Value: "E20000001234"},
 			{Type: "ble", Value: "AA:BB:CC:DD:EE:FF"},
 		}
-		result, err := identifiersToJSON(input)
+		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
 		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"},{"type":"ble","value":"AA:BB:CC:DD:EE:FF"}]`, string(result))
 	})
@@ -581,7 +581,7 @@ func TestIdentifiersToJSON(t *testing.T) {
 		input := []shared.TagIdentifierRequest{
 			{Value: "E20000001234"}, // no type specified
 		}
-		result, err := identifiersToJSON(input)
+		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
 		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"}]`, string(result)) // defaults to rfid
 	})
@@ -591,7 +591,7 @@ func TestIdentifiersToJSON(t *testing.T) {
 			{Type: "ble", Value: "AA:BB:CC:DD:EE:FF"},
 			{Value: "E20000001234"}, // no type, defaults to rfid
 		}
-		result, err := identifiersToJSON(input)
+		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
 		assert.JSONEq(t, `[{"type":"ble","value":"AA:BB:CC:DD:EE:FF"},{"type":"rfid","value":"E20000001234"}]`, string(result))
 	})
@@ -609,15 +609,15 @@ func TestTagIdentifierRequestGetType(t *testing.T) {
 	})
 }
 
-func TestParseIdentifierError(t *testing.T) {
+func TestParseTagError(t *testing.T) {
 	t.Run("duplicate key error", func(t *testing.T) {
-		err := parseIdentifierError(errors.New("duplicate key value violates unique constraint"), "rfid", "E20000001234")
+		err := parseTagError(errors.New("duplicate key value violates unique constraint"), "rfid", "E20000001234")
 		assert.Contains(t, err.Error(), "rfid:E20000001234 already exists")
 	})
 
 	t.Run("generic error", func(t *testing.T) {
-		err := parseIdentifierError(errors.New("connection lost"), "rfid", "E20000001234")
-		assert.Contains(t, err.Error(), "failed to create identifier")
+		err := parseTagError(errors.New("connection lost"), "rfid", "E20000001234")
+		assert.Contains(t, err.Error(), "failed to create tag")
 		assert.Contains(t, err.Error(), "connection lost")
 	})
 }

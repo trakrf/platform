@@ -163,7 +163,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.
 
 // GetAssetsByIDs fetches multiple assets by their IDs (batch fetch), scoped
 // to the caller's organization. The org_id fence is required because
-// identifiers.asset_id is a plain FK that does not enforce same-org — see
+// tags.asset_id is a plain FK that does not enforce same-org — see
 // TRA-431 for the cross-tenant leak this prevents.
 func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*asset.Asset, error) {
 	if len(ids) == 0 {
@@ -421,7 +421,7 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	return fields, nil
 }
 
-func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.CreateAssetWithIdentifiersRequest) (*asset.AssetWithLocation, error) {
+func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateAssetWithTagsRequest) (*asset.AssetWithLocation, error) {
 	// Auto-generate identifier if empty
 	if strings.TrimSpace(request.Identifier) == "" {
 		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
@@ -431,9 +431,9 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		request.Identifier = GenerateAssetIdentifier(seq)
 	}
 
-	identifiersJSON, err := identifiersToJSON(request.Identifiers)
+	tagsJSON, err := tagsToJSON(request.Tags)
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
+		return nil, fmt.Errorf("failed to serialize tags: %w", err)
 	}
 
 	// Handler normally applies defaults; storage re-applies as a safety net
@@ -458,10 +458,10 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 		assetType = "asset"
 	}
 
-	query := `SELECT * FROM trakrf.create_asset_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	query := `SELECT * FROM trakrf.create_asset_with_tags($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 	var assetID int
-	var identifierIDs []int
+	var tagIDs []int
 
 	err = s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
@@ -475,12 +475,12 @@ func (s *Storage) CreateAssetWithIdentifiers(ctx context.Context, request asset.
 			validTo,
 			isActive,
 			request.Metadata,
-			identifiersJSON,
-		).Scan(&assetID, &identifierIDs)
+			tagsJSON,
+		).Scan(&assetID, &tagIDs)
 	})
 
 	if err != nil {
-		return nil, parseAssetWithIdentifiersError(err, request.Identifier)
+		return nil, parseAssetWithTagsError(err, request.Identifier)
 	}
 
 	return s.getAssetWithLocationByID(ctx, request.OrgID, assetID)
@@ -495,20 +495,20 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, orgID, id int) (*asset.A
 		return nil, nil
 	}
 
-	identifiers, err := s.GetIdentifiersByAssetID(ctx, orgID, id)
+	tags, err := s.GetTagsByAssetID(ctx, orgID, id)
 	if err != nil {
 		return nil, err
 	}
 
 	return &asset.AssetView{
-		Asset:       *baseAsset,
-		Identifiers: identifiers,
+		Asset: *baseAsset,
+		Tags:  tags,
 	}, nil
 }
 
 // getAssetWithLocationByID returns an AssetWithLocation by surrogate id,
 // performing the LEFT JOIN on parent location and fetching identifiers.
-// Used by CreateAssetWithIdentifiers and UpdateAsset to emit the public
+// Used by CreateAssetWithTags and UpdateAsset to emit the public
 // write-response shape. Returns (nil, nil) if the asset doesn't exist
 // or is soft-deleted.
 func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
@@ -555,15 +555,15 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 		return nil, fmt.Errorf("get asset with location by id: %w", err)
 	}
 
-	identifiers, err := s.GetIdentifiersByAssetID(ctx, orgID, a.ID)
+	tags, err := s.GetTagsByAssetID(ctx, orgID, a.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &asset.AssetWithLocation{
 		AssetView: asset.AssetView{
-			Asset:       a,
-			Identifiers: identifiers,
+			Asset: a,
+			Tags:  tags,
 		},
 		CurrentLocationIdentifier: locIdt,
 	}, nil
@@ -584,20 +584,20 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 		assetIDs[i] = a.ID
 	}
 
-	identifierMap, err := s.getIdentifiersForAssets(ctx, orgID, assetIDs)
+	tagMap, err := s.getTagsForAssets(ctx, orgID, assetIDs)
 	if err != nil {
 		return nil, err
 	}
 
 	views := make([]asset.AssetView, len(assets))
 	for i, a := range assets {
-		ids := identifierMap[a.ID]
+		ids := tagMap[a.ID]
 		if ids == nil {
 			ids = []shared.TagIdentifier{}
 		}
 		views[i] = asset.AssetView{
-			Asset:       a,
-			Identifiers: ids,
+			Asset: a,
+			Tags:  ids,
 		}
 	}
 
@@ -657,15 +657,15 @@ func (s *Storage) GetAssetByIdentifier(
 		return nil, fmt.Errorf("get asset by identifier: %w", err)
 	}
 
-	identifiers, err := s.GetIdentifiersByAssetID(ctx, orgID, a.ID)
+	tags, err := s.GetTagsByAssetID(ctx, orgID, a.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &asset.AssetWithLocation{
 		AssetView: asset.AssetView{
-			Asset:       a,
-			Identifiers: identifiers,
+			Asset: a,
+			Tags:  tags,
 		},
 		CurrentLocationIdentifier: locIdt,
 	}, nil
@@ -780,7 +780,7 @@ func (s *Storage) ListAssetsFiltered(
 				return fmt.Errorf("scan asset: %w", err)
 			}
 			out = append(out, asset.AssetWithLocation{
-				AssetView:                 asset.AssetView{Asset: a, Identifiers: nil},
+				AssetView:                 asset.AssetView{Asset: a, Tags: nil},
 				CurrentLocationIdentifier: locIdt,
 			})
 		}
@@ -796,14 +796,14 @@ func (s *Storage) ListAssetsFiltered(
 		for i, a := range out {
 			ids[i] = a.ID
 		}
-		idMap, err := s.getIdentifiersForAssets(ctx, orgID, ids)
+		idMap, err := s.getTagsForAssets(ctx, orgID, ids)
 		if err != nil {
 			return nil, err
 		}
 		for i := range out {
-			out[i].Identifiers = idMap[out[i].ID]
-			if out[i].Identifiers == nil {
-				out[i].Identifiers = []shared.TagIdentifier{}
+			out[i].Tags = idMap[out[i].ID]
+			if out[i].Tags == nil {
+				out[i].Tags = []shared.TagIdentifier{}
 			}
 		}
 	}
@@ -865,7 +865,7 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 		idx := len(args)
 		clauses = append(clauses, fmt.Sprintf(
 			"(a.name ILIKE $%d OR a.identifier ILIKE $%d OR a.description ILIKE $%d "+
-				"OR EXISTS (SELECT 1 FROM trakrf.identifiers i "+
+				"OR EXISTS (SELECT 1 FROM trakrf.tags i "+
 				"WHERE i.asset_id = a.id AND i.is_active = true "+
 				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
 			idx, idx, idx, idx))
@@ -898,7 +898,7 @@ func clampAssetListLimit(n int) int {
 	return n
 }
 
-func parseAssetWithIdentifiersError(err error, identifier string) error {
+func parseAssetWithTagsError(err error, identifier string) error {
 	errStr := err.Error()
 
 	if strings.Contains(errStr, "assets_org_id_identifier") ||
@@ -906,9 +906,9 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 		return fmt.Errorf("asset with identifier %s already exists", identifier)
 	}
 
-	if strings.Contains(errStr, "identifiers_org_id_type_value") ||
-		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "identifiers")) {
-		return fmt.Errorf("one or more tag identifiers already exist")
+	if strings.Contains(errStr, "tags_org_id_type_value") ||
+		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "tags")) {
+		return fmt.Errorf("one or more tags already exist")
 	}
 
 	if strings.Contains(errStr, "current_location_id_fkey") {
@@ -919,12 +919,12 @@ func parseAssetWithIdentifiersError(err error, identifier string) error {
 		return fmt.Errorf("invalid asset type: type must be 'asset'")
 	}
 
-	return fmt.Errorf("failed to create asset with identifiers: %w", err)
+	return fmt.Errorf("failed to create asset with tags: %w", err)
 }
 
 // GetAssetWithLocationByIDForTest exposes getAssetWithLocationByID to integration
 // tests in the same package. Production code must use GetAssetByIdentifier or
-// the CreateAssetWithIdentifiers / UpdateAsset return values.
+// the CreateAssetWithTags / UpdateAsset return values.
 func (s *Storage) GetAssetWithLocationByIDForTest(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
 	return s.getAssetWithLocationByID(ctx, orgID, id)
 }

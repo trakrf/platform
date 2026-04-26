@@ -22,7 +22,7 @@ type PublicAssetView struct {
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
 	SurrogateID     int                    `json:"surrogate_id"`
-	Identifiers     []shared.TagIdentifier `json:"identifiers"`
+	Tags            []shared.TagIdentifier `json:"tags"`
 }
 
 // ToPublicAssetView projects an AssetWithLocation to the public HTTP shape.
@@ -40,6 +40,6 @@ func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
 		CreatedAt:       a.CreatedAt,
 		UpdatedAt:       a.UpdatedAt,
 		SurrogateID:     a.ID,
-		Identifiers:     a.Identifiers,
+		Tags:            a.Tags,
 	}
 }

@@ -57,13 +57,13 @@ func TestCurrentLocations_QMatchesActiveIdentifierOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, asset_id, valid_from, is_active)
 		VALUES ($1, 'rfid', 'CUR-ACTIVE-30077', $2, NOW(), true)
 	`, orgID, activeAsset.ID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active, deleted_at)
+		INSERT INTO trakrf.tags (org_id, type, value, asset_id, valid_from, is_active, deleted_at)
 		VALUES ($1, 'rfid', 'CUR-DELETED-30077', $2, NOW(), true, NOW())
 	`, orgID, deletedIDAsset.ID)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestCurrentLocations_CountExcludesSoftDeletedIdentifier(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active, deleted_at)
+		INSERT INTO trakrf.tags (org_id, type, value, asset_id, valid_from, is_active, deleted_at)
 		VALUES ($1, 'rfid', 'COUNT-DELETED-40099', $2, NOW(), true, NOW())
 	`, orgID, deletedIDAsset.ID)
 	require.NoError(t, err)

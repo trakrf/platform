@@ -38,8 +38,8 @@ func buildAssetsPublicWriteRouter(store *storage.Storage) *chi.Mux {
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", handler.Create)
 		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{identifier}", handler.UpdateAsset)
 		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}", handler.DeleteAsset)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/identifiers", handler.AddIdentifier)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/tags", handler.AddTag)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/tags/{tagId}", handler.RemoveTag)
 	})
 	return r
 }
@@ -207,7 +207,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	// TagIdentifierRequest.Type accepts only rfid/ble/barcode; use rfid.
 	body := `{"type":"rfid","value":"EPC-ABC-123"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/ident-host/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/ident-host/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -223,7 +223,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	assert.Equal(t, "EPC-ABC-123", data["value"])
 }
 
-func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
+func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-assets-write-remove-ident-happy")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -237,7 +237,7 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
 		Type:  "rfid",
 		Value: "EPC-HAPPY-1",
 	})
@@ -245,7 +245,7 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	url := "/api/v1/assets/ident-host/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/assets/ident-host/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -255,12 +255,12 @@ func TestRemoveAssetIdentifier_APIKey_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
 	require.NoError(t, err)
-	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
+	assert.Nil(t, fetched, "tag row must be soft-deleted (GetTagByID hides deleted rows)")
 }
 
-func TestRemoveAssetIdentifier_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
+func TestRemoveAssetTag_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-assets-write-remove-ident-wrong-owner")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -280,7 +280,7 @@ func TestRemoveAssetIdentifier_WrongAssetIdentifier_DoesNotDelete(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, owningAsset.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, owningAsset.ID, shared.TagIdentifierRequest{
 		Type:  "rfid",
 		Value: "EPC-WRONG-1",
 	})
@@ -289,11 +289,11 @@ func TestRemoveAssetIdentifier_WrongAssetIdentifier_DoesNotDelete(t *testing.T) 
 	r := buildAssetsPublicWriteRouter(store)
 
 	// DELETE via other-asset's {identifier} targeting ident (which belongs to owning-asset).
-	// Storage cross-asset check: identifierID's asset_id won't match other-asset's ID → no row
+	// Storage cross-asset check: tagID's asset_id won't match other-asset's ID → no row
 	// is soft-deleted, but TRA-407 changed the response to an unconditional 204. The invariant
 	// being verified here is that the identifier itself survives — not the (now gone) "deleted"
 	// flag in the response body.
-	url := "/api/v1/assets/other-asset/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/assets/other-asset/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -301,7 +301,7 @@ func TestRemoveAssetIdentifier_WrongAssetIdentifier_DoesNotDelete(t *testing.T) 
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist since the path identifier didn't match its owner")
 	assert.Equal(t, "EPC-WRONG-1", fetched.Value)
@@ -428,7 +428,7 @@ func TestAssetsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 	r := buildAssetsPublicWriteRouter(store)
 
 	body := `{"type":"rfid","value":"EPC-407B-NEW"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/TRA-407B-ADDIDENT-1/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/TRA-407B-ADDIDENT-1/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -454,7 +454,7 @@ func TestAssetsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
 	r := buildAssetsPublicWriteRouter(store)
 
 	body := `{"type":"rfid","value":"EPC-GHOST"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/DOES-NOT-EXIST/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/DOES-NOT-EXIST/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -483,7 +483,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
 		Type:  "rfid",
 		Value: "EPC-407B-REMOVE",
 	})
@@ -491,7 +491,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	url := "/api/v1/assets/TRA-407B-REMOVEIDENT-1/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/assets/TRA-407B-REMOVEIDENT-1/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -501,7 +501,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier must be soft-deleted")
 }
@@ -515,7 +515,7 @@ func TestAssetsRemoveIdentifier_UnknownParent_Returns404(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/DOES-NOT-EXIST/identifiers/999", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/assets/DOES-NOT-EXIST/tags/999", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

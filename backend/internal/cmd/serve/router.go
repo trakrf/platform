@@ -161,15 +161,15 @@ func setupRouter(
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
 		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{identifier}", assetsHandler.UpdateAsset)
 		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}", assetsHandler.DeleteAsset)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/identifiers", assetsHandler.AddIdentifier)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/identifiers/{identifierId}", assetsHandler.RemoveIdentifier)
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/tags", assetsHandler.AddTag)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/tags/{tagId}", assetsHandler.RemoveTag)
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
 		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{identifier}", locationsHandler.Update)
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}", locationsHandler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/identifiers", locationsHandler.AddIdentifier)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", locationsHandler.RemoveIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/tags", locationsHandler.AddTag)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/tags/{tagId}", locationsHandler.RemoveTag)
 
 		// Inventory (scan writes)
 		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)
@@ -186,14 +186,14 @@ func setupRouter(
 		r.Get("/api/v1/assets/by-id/{id}/history", reportsHandler.GetAssetHistoryByID)
 		r.Put("/api/v1/assets/by-id/{id}", assetsHandler.UpdateAssetByID)
 		r.Delete("/api/v1/assets/by-id/{id}", assetsHandler.DeleteAssetByID)
-		r.Post("/api/v1/assets/by-id/{id}/identifiers", assetsHandler.AddIdentifierByID)
-		r.Delete("/api/v1/assets/by-id/{id}/identifiers/{identifierId}", assetsHandler.RemoveIdentifierByID)
+		r.Post("/api/v1/assets/by-id/{id}/tags", assetsHandler.AddTagByID)
+		r.Delete("/api/v1/assets/by-id/{id}/tags/{tagId}", assetsHandler.RemoveTagByID)
 
 		r.Get("/api/v1/locations/by-id/{id}", locationsHandler.GetLocationByID)
 		r.Put("/api/v1/locations/by-id/{id}", locationsHandler.UpdateByID)
 		r.Delete("/api/v1/locations/by-id/{id}", locationsHandler.DeleteByID)
-		r.Post("/api/v1/locations/by-id/{id}/identifiers", locationsHandler.AddIdentifierByID)
-		r.Delete("/api/v1/locations/by-id/{id}/identifiers/{identifierId}", locationsHandler.RemoveIdentifierByID)
+		r.Post("/api/v1/locations/by-id/{id}/tags", locationsHandler.AddTagByID)
+		r.Delete("/api/v1/locations/by-id/{id}/tags/{tagId}", locationsHandler.RemoveTagByID)
 	})
 
 	if os.Getenv("APP_ENV") != "production" {

@@ -28,7 +28,7 @@
 //
 // This file (`rls_sentinel_raw_test.go`) covers only raw-pool and WithOrgTx-raw
 // assertions that compile and run today with current method signatures.
-// Storage-method-level assertions (calling GetAssetByID, GetIdentifiersByAssetID,
+// Storage-method-level assertions (calling GetAssetByID, GetTagsByAssetID,
 // etc. with the post-refactor orgID parameter) will be added in Task 8, after
 // migration Tasks 3-7 update the method signatures. Adding those calls now
 // would cause a compile failure that blocks the entire test binary.
@@ -59,7 +59,7 @@ const sentinelRoleName = "rls_sentinel_test_role"
 var rlsTables = []string{
 	"assets",
 	"bulk_import_jobs",
-	"identifiers",
+	"tags",
 	"locations",
 	"scan_devices",
 	"scan_points",
@@ -253,15 +253,15 @@ func TestRLS_SentinelMode(t *testing.T) {
 		})
 
 		t.Run("identifiers/read_empty", func(t *testing.T) {
-			assertReadEmpty(t, sentinelPool, "identifiers")
+			assertReadEmpty(t, sentinelPool, "tags")
 		})
 
 		t.Run("identifiers/insert_rejected", func(t *testing.T) {
 			// Identifiers require an asset or location FK; seed asset ID was
 			// created via seedTestData above — but the sentinel cannot see it.
 			// The INSERT itself will be rejected by RLS before any FK check.
-			assertInsertRejected(t, sentinelPool, "identifiers",
-				`INSERT INTO trakrf.identifiers (org_id, type, value, valid_from, is_active)
+			assertInsertRejected(t, sentinelPool, "tags",
+				`INSERT INTO trakrf.tags (org_id, type, value, valid_from, is_active)
 				 VALUES ($1, 'epc', 'rls-sentinel-tag', $2, true)`,
 				realOrgID, time.Now())
 		})
@@ -411,10 +411,10 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool, orgID int) {
 		orgID, devID, now, now)
 	require.NoError(t, err, "seed scan_point row")
 
-	// identifiers: the "identifier_target" check constraint requires exactly one
+	// tags: the "tag_target" check constraint requires exactly one
 	// of asset_id or location_id to be non-null. Use the seeded location.
 	_, err = pool.Exec(ctx, `
-		INSERT INTO trakrf.identifiers
+		INSERT INTO trakrf.tags
 		(org_id, type, value, location_id, valid_from, is_active)
 		VALUES ($1, 'epc', 'rls-seed-tag-value', $2, $3, true)
 		ON CONFLICT DO NOTHING`,

@@ -221,11 +221,11 @@ func (s *Service) processCSVAsync(
 			}
 		}
 
-		// Build CreateAssetWithIdentifiersRequest. The parsed row always has
+		// Build CreateAssetWithTagsRequest. The parsed row always has
 		// concrete ValidFrom / IsActive values; wrap them as pointers.
 		validFrom := shared.FlexibleDate{Time: pr.asset.ValidFrom}
 		isActive := pr.asset.IsActive
-		request := asset.CreateAssetWithIdentifiersRequest{
+		request := asset.CreateAssetWithTagsRequest{
 			CreateAssetRequest: asset.CreateAssetRequest{
 				OrgID:       pr.asset.OrgID,
 				Identifier:  pr.asset.Identifier,
@@ -235,14 +235,14 @@ func (s *Service) processCSVAsync(
 				ValidFrom:   &validFrom,
 				IsActive:    &isActive,
 			},
-			Identifiers: identifiers,
+			Tags: identifiers,
 		}
 		if pr.asset.ValidTo != nil {
 			validTo := shared.FlexibleDate{Time: *pr.asset.ValidTo}
 			request.ValidTo = &validTo
 		}
 
-		_, err := s.storage.CreateAssetWithIdentifiers(ctx, request)
+		_, err := s.storage.CreateAssetWithTags(ctx, request)
 		if err != nil {
 			fmt.Printf("Insert error at row %d for job %d: %v\n", pr.rowNumber, jobID, err)
 			insertErrors = append(insertErrors, bulkimport.ErrorDetail{

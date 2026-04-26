@@ -197,19 +197,19 @@ func TestListAssetsFiltered_QMatchesActiveIdentifier(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, asset_id, valid_from, is_active)
 		VALUES ($1, 'rfid', 'EPC-ACTIVE-10023', $2, NOW(), true)
 	`, orgID, activeAsset.ID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, asset_id, valid_from, is_active)
 		VALUES ($1, 'rfid', 'EPC-INACTIVE-10023', $2, NOW(), false)
 	`, orgID, inactiveIDAsset.ID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, valid_from, is_active, deleted_at)
+		INSERT INTO trakrf.tags (org_id, type, value, asset_id, valid_from, is_active, deleted_at)
 		VALUES ($1, 'rfid', 'EPC-DELETED-10023', $2, NOW(), true, NOW())
 	`, orgID, deletedIDAsset.ID)
 	require.NoError(t, err)
@@ -449,7 +449,7 @@ func TestUpdateAsset_PopulatesCurrentLocationIdentifier(t *testing.T) {
 	require.NotNil(t, result.CurrentLocationIdentifier)
 	assert.Equal(t, "wh-1", *result.CurrentLocationIdentifier)
 	assert.Equal(t, newName, result.Name)
-	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
+	assert.NotNil(t, result.Tags, "Tags slice must be non-nil (empty is OK)")
 }
 
 func TestGetAssetIDsByIdentifiers_HappyPath(t *testing.T) {

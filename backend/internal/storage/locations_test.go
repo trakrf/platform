@@ -235,10 +235,10 @@ func TestUpdateLocation(t *testing.T) {
 		))
 	mock.ExpectCommit()
 
-	// GetIdentifiersByLocationID: empty identifiers (wrapped in WithOrgTx)
+	// GetTagsByLocationID: empty tags (wrapped in WithOrgTx)
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
 		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 	mock.ExpectCommit()
@@ -293,10 +293,10 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 		))
 	mock.ExpectCommit()
 
-	// GetIdentifiersByLocationID: empty identifiers (wrapped in WithOrgTx)
+	// GetTagsByLocationID: empty tags (wrapped in WithOrgTx)
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
 		WithArgs(locationID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 	mock.ExpectCommit()
@@ -613,8 +613,8 @@ func TestGetAncestors(t *testing.T) {
 	assert.Equal(t, "usa.california", results[1].Path)
 	require.NotNil(t, results[1].ParentIdentifier)
 	assert.Equal(t, "usa", *results[1].ParentIdentifier)
-	assert.NotNil(t, results[1].Identifiers, "Identifiers must be non-nil empty slice, not nil")
-	assert.Len(t, results[1].Identifiers, 0)
+	assert.NotNil(t, results[1].Tags, "Tags must be non-nil empty slice, not nil")
+	assert.Len(t, results[1].Tags, 0)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

@@ -64,16 +64,16 @@ type LocationListResponse struct {
 	Pagination shared.Pagination `json:"pagination"`
 }
 
-// LocationView includes tag identifiers for API responses
+// LocationView includes tags for API responses
 type LocationView struct {
 	Location
-	Identifiers []shared.TagIdentifier `json:"identifiers"`
+	Tags []shared.TagIdentifier `json:"tags"`
 }
 
-// CreateLocationWithIdentifiersRequest extends CreateLocationRequest with optional tag identifiers
-type CreateLocationWithIdentifiersRequest struct {
+// CreateLocationWithTagsRequest extends CreateLocationRequest with optional tags
+type CreateLocationWithTagsRequest struct {
 	CreateLocationRequest
-	Identifiers []shared.TagIdentifierRequest `json:"identifiers,omitempty" validate:"omitempty,dive"`
+	Tags []shared.TagIdentifierRequest `json:"tags,omitempty" validate:"omitempty,dive"`
 }
 
 // LocationViewListResponse is paginated list of LocationViews

@@ -111,9 +111,9 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Insert a tag identifier so the asset field in the response is populated
+	// Insert a tag so the asset field in the response is populated
 	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
+		`INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
          VALUES ($1, 'barcode', $2, $3, true)`,
 		orgID, "CURR-TAG-001", a.ID,
 	)

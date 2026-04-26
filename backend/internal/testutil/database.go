@@ -195,8 +195,8 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 	tables := []string{
 		"trakrf.bulk_import_jobs",
 		"trakrf.asset_scans",
-		"trakrf.identifier_scans",
-		"trakrf.identifiers",
+		"trakrf.tag_scans",
+		"trakrf.tags",
 		"trakrf.assets",
 		"trakrf.scan_points",
 		"trakrf.scan_devices",

@@ -95,7 +95,7 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 	pool := store.Pool().(*pgxpool.Pool)
 	orgID := testutil.CreateTestAccount(t, pool)
 
-	// One location with no identifiers, one with a tag identifier.
+	// One location with no tags, one with a tag.
 	_, err := store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, Identifier: "loc-empty", Name: "Empty", Path: "loc-empty",
 		ValidFrom: time.Now(), IsActive: true,
@@ -108,10 +108,10 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Insert a tag identifier for withTag. Table: trakrf.identifiers,
+	// Insert a tag for withTag. Table: trakrf.tags,
 	// columns: org_id, type, value, location_id, valid_from, is_active.
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, valid_from, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, location_id, valid_from, is_active)
 		VALUES ($1, 'rfid', $2, $3, NOW(), true)
 	`, orgID, "EPC-TAGGED", withTag.ID)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 	require.Len(t, items, 2)
 
 	for _, item := range items {
-		require.NotNil(t, item.Identifiers,
+		require.NotNil(t, item.Tags,
 			"location %q Identifiers should not be nil (JSON would marshal to null)", item.Identifier)
 	}
 
@@ -139,9 +139,9 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 	}
 	require.NotNil(t, empty)
 	require.NotNil(t, tagged)
-	assert.Empty(t, empty.Identifiers, "loc-empty should have zero identifiers")
-	assert.Len(t, tagged.Identifiers, 1)
-	assert.Equal(t, "EPC-TAGGED", tagged.Identifiers[0].Value)
+	assert.Empty(t, empty.Tags, "loc-empty should have zero tags")
+	assert.Len(t, tagged.Tags, 1)
+	assert.Equal(t, "EPC-TAGGED", tagged.Tags[0].Value)
 }
 
 // TestGetLocationWithParentByID_ResolvesParent verifies that the private
@@ -298,7 +298,7 @@ func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
 	require.NotNil(t, result.ParentIdentifier)
 	assert.Equal(t, "wh-1", *result.ParentIdentifier)
 	assert.Equal(t, newName, result.Name)
-	assert.NotNil(t, result.Identifiers, "Identifiers slice must be non-nil (empty is OK)")
+	assert.NotNil(t, result.Tags, "Tags slice must be non-nil (empty is OK)")
 }
 
 func TestListLocationsFiltered_Q(t *testing.T) {
@@ -327,19 +327,19 @@ func TestListLocationsFiltered_Q(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, valid_from, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, location_id, valid_from, is_active)
 		VALUES ($1, 'rfid', 'LOC-ACTIVE-20055', $2, NOW(), true)
 	`, orgID, activeLoc.ID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, valid_from, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, location_id, valid_from, is_active)
 		VALUES ($1, 'rfid', 'LOC-INACTIVE-20055', $2, NOW(), false)
 	`, orgID, inactiveIDLoc.ID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, valid_from, is_active, deleted_at)
+		INSERT INTO trakrf.tags (org_id, type, value, location_id, valid_from, is_active, deleted_at)
 		VALUES ($1, 'rfid', 'LOC-DELETED-20055', $2, NOW(), true, NOW())
 	`, orgID, deletedIDLoc.ID)
 	require.NoError(t, err)

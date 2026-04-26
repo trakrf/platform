@@ -500,10 +500,10 @@ func TestUpdateAsset(t *testing.T) {
 		))
 	mock.ExpectCommit()
 
-	// GetIdentifiersByAssetID: empty identifiers (wrapped in WithOrgTx)
+	// GetTagsByAssetID: empty tags (wrapped in WithOrgTx)
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
 		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 	mock.ExpectCommit()
@@ -602,10 +602,10 @@ func TestUpdateAsset_PartialUpdate(t *testing.T) {
 		))
 	mock.ExpectCommit()
 
-	// GetIdentifiersByAssetID: empty identifiers (wrapped in WithOrgTx)
+	// GetTagsByAssetID: empty tags (wrapped in WithOrgTx)
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.identifiers`).
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
 		WithArgs(assetID, 1).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
 	mock.ExpectCommit()

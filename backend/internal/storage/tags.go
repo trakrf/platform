@@ -13,15 +13,15 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
-func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, orgID, assetID int) ([]shared.TagIdentifier, error) {
+func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
-		FROM trakrf.identifiers
+		FROM trakrf.tags
 		WHERE asset_id = $1 AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY created_at ASC
 	`
 
-	var identifiers []shared.TagIdentifier
+	var tags []shared.TagIdentifier
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, assetID, orgID)
 		if err != nil {
@@ -29,32 +29,32 @@ func (s *Storage) GetIdentifiersByAssetID(ctx context.Context, orgID, assetID in
 		}
 		defer rows.Close()
 
-		identifiers = []shared.TagIdentifier{}
+		tags = []shared.TagIdentifier{}
 		for rows.Next() {
-			var id shared.TagIdentifier
-			if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-				return fmt.Errorf("failed to scan identifier: %w", err)
+			var tag shared.TagIdentifier
+			if err := rows.Scan(&tag.ID, &tag.Type, &tag.Value, &tag.IsActive); err != nil {
+				return fmt.Errorf("failed to scan tag: %w", err)
 			}
-			identifiers = append(identifiers, id)
+			tags = append(tags, tag)
 		}
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get identifiers for asset: %w", err)
+		return nil, fmt.Errorf("failed to get tags for asset: %w", err)
 	}
 
-	return identifiers, nil
+	return tags, nil
 }
 
-func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, orgID, locationID int) ([]shared.TagIdentifier, error) {
+func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int) ([]shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
-		FROM trakrf.identifiers
+		FROM trakrf.tags
 		WHERE location_id = $1 AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY created_at ASC
 	`
 
-	var identifiers []shared.TagIdentifier
+	var tags []shared.TagIdentifier
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, locationID, orgID)
 		if err != nil {
@@ -62,77 +62,77 @@ func (s *Storage) GetIdentifiersByLocationID(ctx context.Context, orgID, locatio
 		}
 		defer rows.Close()
 
-		identifiers = []shared.TagIdentifier{}
+		tags = []shared.TagIdentifier{}
 		for rows.Next() {
-			var id shared.TagIdentifier
-			if err := rows.Scan(&id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-				return fmt.Errorf("failed to scan identifier: %w", err)
+			var tag shared.TagIdentifier
+			if err := rows.Scan(&tag.ID, &tag.Type, &tag.Value, &tag.IsActive); err != nil {
+				return fmt.Errorf("failed to scan tag: %w", err)
 			}
-			identifiers = append(identifiers, id)
+			tags = append(tags, tag)
 		}
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get identifiers for location: %w", err)
+		return nil, fmt.Errorf("failed to get tags for location: %w", err)
 	}
 
-	return identifiers, nil
+	return tags, nil
 }
 
-func (s *Storage) AddIdentifierToAsset(ctx context.Context, orgID, assetID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
+func (s *Storage) AddTagToAsset(ctx context.Context, orgID, assetID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
 	query := `
-		INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
 		VALUES ($1, $2, $3, $4, TRUE)
 		RETURNING id, type, value, is_active
 	`
 
-	identifierType := req.GetType()
-	var identifier shared.TagIdentifier
+	tagType := req.GetType()
+	var tag shared.TagIdentifier
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, identifierType, req.Value, assetID).Scan(
-			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		return tx.QueryRow(ctx, query, orgID, tagType, req.Value, assetID).Scan(
+			&tag.ID, &tag.Type, &tag.Value, &tag.IsActive,
 		)
 	})
 
 	if err != nil {
-		return nil, parseIdentifierError(err, identifierType, req.Value)
+		return nil, parseTagError(err, tagType, req.Value)
 	}
 
-	return &identifier, nil
+	return &tag, nil
 }
 
-func (s *Storage) AddIdentifierToLocation(ctx context.Context, orgID, locationID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
+func (s *Storage) AddTagToLocation(ctx context.Context, orgID, locationID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
 	query := `
-		INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active)
+		INSERT INTO trakrf.tags (org_id, type, value, location_id, is_active)
 		VALUES ($1, $2, $3, $4, TRUE)
 		RETURNING id, type, value, is_active
 	`
 
-	identifierType := req.GetType()
-	var identifier shared.TagIdentifier
+	tagType := req.GetType()
+	var tag shared.TagIdentifier
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, identifierType, req.Value, locationID).Scan(
-			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		return tx.QueryRow(ctx, query, orgID, tagType, req.Value, locationID).Scan(
+			&tag.ID, &tag.Type, &tag.Value, &tag.IsActive,
 		)
 	})
 
 	if err != nil {
-		return nil, parseIdentifierError(err, identifierType, req.Value)
+		return nil, parseTagError(err, tagType, req.Value)
 	}
 
-	return &identifier, nil
+	return &tag, nil
 }
 
-// RemoveAssetIdentifier soft-deletes an identifier that is attached to the
+// RemoveAssetTag soft-deletes a tag that is attached to the
 // given assetID AND is owned by an asset in the caller's org. The assetID
 // parameter is load-bearing: it guards against cross-asset path manipulation
-// (e.g. DELETE /assets/1/identifiers/42 where identifier 42 actually belongs
+// (e.g. DELETE /assets/1/tags/42 where tag 42 actually belongs
 // to asset 7).
-func (s *Storage) RemoveAssetIdentifier(ctx context.Context, orgID, assetID, identifierID int) (bool, error) {
+func (s *Storage) RemoveAssetTag(ctx context.Context, orgID, assetID, tagID int) (bool, error) {
 	query := `
-		UPDATE trakrf.identifiers
+		UPDATE trakrf.tags
 		SET deleted_at = NOW()
 		WHERE id = $1
 		  AND asset_id = $2
@@ -142,7 +142,7 @@ func (s *Storage) RemoveAssetIdentifier(ctx context.Context, orgID, assetID, ide
 
 	var affected int64
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		result, err := tx.Exec(ctx, query, identifierID, assetID, orgID)
+		result, err := tx.Exec(ctx, query, tagID, assetID, orgID)
 		if err != nil {
 			return err
 		}
@@ -150,19 +150,19 @@ func (s *Storage) RemoveAssetIdentifier(ctx context.Context, orgID, assetID, ide
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to remove asset identifier: %w", err)
+		return false, fmt.Errorf("failed to remove asset tag: %w", err)
 	}
 
 	return affected > 0, nil
 }
 
-// RemoveLocationIdentifier soft-deletes an identifier that is attached to the
+// RemoveLocationTag soft-deletes a tag that is attached to the
 // given locationID AND is owned by a location in the caller's org. The
 // locationID parameter is load-bearing: it guards against cross-location path
 // manipulation.
-func (s *Storage) RemoveLocationIdentifier(ctx context.Context, orgID, locationID, identifierID int) (bool, error) {
+func (s *Storage) RemoveLocationTag(ctx context.Context, orgID, locationID, tagID int) (bool, error) {
 	query := `
-		UPDATE trakrf.identifiers
+		UPDATE trakrf.tags
 		SET deleted_at = NOW()
 		WHERE id = $1
 		  AND location_id = $2
@@ -172,7 +172,7 @@ func (s *Storage) RemoveLocationIdentifier(ctx context.Context, orgID, locationI
 
 	var affected int64
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		result, err := tx.Exec(ctx, query, identifierID, locationID, orgID)
+		result, err := tx.Exec(ctx, query, tagID, locationID, orgID)
 		if err != nil {
 			return err
 		}
@@ -180,24 +180,24 @@ func (s *Storage) RemoveLocationIdentifier(ctx context.Context, orgID, locationI
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to remove location identifier: %w", err)
+		return false, fmt.Errorf("failed to remove location tag: %w", err)
 	}
 
 	return affected > 0, nil
 }
 
-func (s *Storage) GetIdentifierByID(ctx context.Context, orgID, identifierID int) (*shared.TagIdentifier, error) {
+func (s *Storage) GetTagByID(ctx context.Context, orgID, tagID int) (*shared.TagIdentifier, error) {
 	query := `
 		SELECT id, type, value, is_active
-		FROM trakrf.identifiers
+		FROM trakrf.tags
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	`
 
-	var identifier shared.TagIdentifier
+	var tag shared.TagIdentifier
 	found := false
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, query, identifierID, orgID).Scan(
-			&identifier.ID, &identifier.Type, &identifier.Value, &identifier.IsActive,
+		err := tx.QueryRow(ctx, query, tagID, orgID).Scan(
+			&tag.ID, &tag.Type, &tag.Value, &tag.IsActive,
 		)
 		if err != nil {
 			if err.Error() == "no rows in result set" {
@@ -209,52 +209,52 @@ func (s *Storage) GetIdentifierByID(ctx context.Context, orgID, identifierID int
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get identifier: %w", err)
+		return nil, fmt.Errorf("failed to get tag: %w", err)
 	}
 	if !found {
 		return nil, nil
 	}
 
-	return &identifier, nil
+	return &tag, nil
 }
 
-func parseIdentifierError(err error, identifierType, value string) error {
+func parseTagError(err error, tagType, value string) error {
 	if pgErr, ok := err.(*pgconn.PgError); ok {
 		switch pgErr.ConstraintName {
-		case "identifiers_org_id_type_value_unique":
-			return fmt.Errorf("identifier %s:%s already exists", identifierType, value)
-		case "identifier_target":
-			return fmt.Errorf("identifier must be linked to exactly one asset or location")
+		case "tags_org_id_type_value_unique":
+			return fmt.Errorf("identifier %s:%s already exists", tagType, value)
+		case "tag_target":
+			return fmt.Errorf("tag must be linked to exactly one asset or location")
 		}
 	}
 
 	if strings.Contains(err.Error(), "duplicate key") {
-		return fmt.Errorf("identifier %s:%s already exists", identifierType, value)
+		return fmt.Errorf("identifier %s:%s already exists", tagType, value)
 	}
 
-	return fmt.Errorf("failed to create identifier: %w", err)
+	return fmt.Errorf("failed to create tag: %w", err)
 }
 
-func identifiersToJSON(identifiers []shared.TagIdentifierRequest) ([]byte, error) {
-	if len(identifiers) == 0 {
+func tagsToJSON(tags []shared.TagIdentifierRequest) ([]byte, error) {
+	if len(tags) == 0 {
 		return []byte("[]"), nil
 	}
 
-	normalized := make([]shared.TagIdentifierRequest, len(identifiers))
-	for i, id := range identifiers {
+	normalized := make([]shared.TagIdentifierRequest, len(tags))
+	for i, t := range tags {
 		normalized[i] = shared.TagIdentifierRequest{
-			Type:  id.GetType(),
-			Value: id.Value,
+			Type:  t.GetType(),
+			Value: t.Value,
 		}
 	}
 
 	return json.Marshal(normalized)
 }
 
-func (s *Storage) getIdentifiersForAssets(ctx context.Context, orgID int, assetIDs []int) (map[int][]shared.TagIdentifier, error) {
+func (s *Storage) getTagsForAssets(ctx context.Context, orgID int, assetIDs []int) (map[int][]shared.TagIdentifier, error) {
 	query := `
 		SELECT asset_id, id, type, value, is_active
-		FROM trakrf.identifiers
+		FROM trakrf.tags
 		WHERE asset_id = ANY($1) AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY asset_id, created_at ASC
 	`
@@ -276,23 +276,23 @@ func (s *Storage) getIdentifiersForAssets(ctx context.Context, orgID int, assetI
 			var assetID int
 			var id shared.TagIdentifier
 			if err := rows.Scan(&assetID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-				return fmt.Errorf("failed to scan identifier: %w", err)
+				return fmt.Errorf("failed to scan tag: %w", err)
 			}
 			result[assetID] = append(result[assetID], id)
 		}
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to batch fetch identifiers: %w", err)
+		return nil, fmt.Errorf("failed to batch fetch tags: %w", err)
 	}
 
 	return result, nil
 }
 
-func (s *Storage) getIdentifiersForLocations(ctx context.Context, orgID int, locationIDs []int) (map[int][]shared.TagIdentifier, error) {
+func (s *Storage) getTagsForLocations(ctx context.Context, orgID int, locationIDs []int) (map[int][]shared.TagIdentifier, error) {
 	query := `
 		SELECT location_id, id, type, value, is_active
-		FROM trakrf.identifiers
+		FROM trakrf.tags
 		WHERE location_id = ANY($1) AND org_id = $2 AND deleted_at IS NULL
 		ORDER BY location_id, created_at ASC
 	`
@@ -314,14 +314,14 @@ func (s *Storage) getIdentifiersForLocations(ctx context.Context, orgID int, loc
 			var locationID int
 			var id shared.TagIdentifier
 			if err := rows.Scan(&locationID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
-				return fmt.Errorf("failed to scan identifier: %w", err)
+				return fmt.Errorf("failed to scan tag: %w", err)
 			}
 			result[locationID] = append(result[locationID], id)
 		}
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to batch fetch identifiers: %w", err)
+		return nil, fmt.Errorf("failed to batch fetch tags: %w", err)
 	}
 
 	return result, nil
@@ -364,18 +364,18 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 	// Query using LTRIM to normalize stored values for comparison
 	query := `
 		SELECT value, asset_id, location_id
-		FROM trakrf.identifiers
+		FROM trakrf.tags
 		WHERE org_id = $1 AND type = $2 AND LTRIM(value, '0') = ANY($3) AND deleted_at IS NULL
 	`
 
-	// Collect identifier data with normalized value for mapping
-	type identifierRow struct {
+	// Collect tag data with normalized value for mapping
+	type tagRow struct {
 		value      string // Original value from DB
 		normalized string // Normalized for matching back to input
 		assetID    *int
 		locationID *int
 	}
-	var identifierRows []identifierRow
+	var tagRows []tagRow
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, orgID, tagType, normalizedValues)
@@ -385,12 +385,12 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 		defer rows.Close()
 
 		for rows.Next() {
-			var row identifierRow
+			var row tagRow
 			if err := rows.Scan(&row.value, &row.assetID, &row.locationID); err != nil {
-				return fmt.Errorf("failed to scan identifier row: %w", err)
+				return fmt.Errorf("failed to scan tag row: %w", err)
 			}
 			row.normalized = normalizeEPC(row.value)
-			identifierRows = append(identifierRows, row)
+			tagRows = append(tagRows, row)
 		}
 		return rows.Err()
 	})
@@ -401,7 +401,7 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 	// Collect unique asset and location IDs for batch fetch
 	assetIDs := make([]int, 0)
 	locationIDs := make([]int, 0)
-	for _, row := range identifierRows {
+	for _, row := range tagRows {
 		if row.assetID != nil {
 			assetIDs = append(assetIDs, *row.assetID)
 		}
@@ -436,7 +436,7 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 
 	// Build result map keyed by ORIGINAL input values
 	result := make(map[string]*LookupResult)
-	for _, row := range identifierRows {
+	for _, row := range tagRows {
 		var lookupResult *LookupResult
 
 		if row.assetID != nil {
@@ -468,14 +468,14 @@ func (s *Storage) LookupByTagValues(ctx context.Context, orgID int, tagType stri
 	return result, nil
 }
 
-// LookupByTagValue finds an asset or location by its tag identifier value
+// LookupByTagValue finds an asset or location by its tag value
 // Note: Comparison is done with leading zeros stripped (normalized)
 func (s *Storage) LookupByTagValue(ctx context.Context, orgID int, tagType, value string) (*LookupResult, error) {
 	normalizedValue := normalizeEPC(value)
 
 	query := `
 		SELECT asset_id, location_id
-		FROM trakrf.identifiers
+		FROM trakrf.tags
 		WHERE org_id = $1 AND type = $2 AND LTRIM(value, '0') = $3 AND deleted_at IS NULL
 	`
 

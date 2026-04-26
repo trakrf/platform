@@ -87,7 +87,7 @@ func buildLookupRouter(store *storage.Storage) *chi.Mux {
 func forgeCrossOrgAssetIdentifier(t *testing.T, pool *pgxpool.Pool, orgID int, value string, assetID int) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
+		`INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
 		 VALUES ($1, 'rfid', $2, $3, true)`,
 		orgID, value, assetID,
 	)
@@ -97,7 +97,7 @@ func forgeCrossOrgAssetIdentifier(t *testing.T, pool *pgxpool.Pool, orgID int, v
 func forgeCrossOrgLocationIdentifier(t *testing.T, pool *pgxpool.Pool, orgID int, value string, locationID int) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, location_id, is_active)
+		`INSERT INTO trakrf.tags (org_id, type, value, location_id, is_active)
 		 VALUES ($1, 'rfid', $2, $3, true)`,
 		orgID, value, locationID,
 	)

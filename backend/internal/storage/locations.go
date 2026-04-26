@@ -121,7 +121,7 @@ func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location
 
 // GetLocationsByIDs fetches multiple locations by their IDs (batch fetch),
 // scoped to the caller's organization. The org_id fence is required because
-// identifiers.location_id is a plain FK that does not enforce same-org — see
+// tags.location_id is a plain FK that does not enforce same-org — see
 // TRA-431 for the cross-tenant leak this prevents.
 func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) ([]*location.Location, error) {
 	if len(ids) == 0 {
@@ -319,7 +319,7 @@ func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, erro
 
 // GetAncestors returns all ancestor locations of a given location (from root to parent),
 // projected through LocationWithParent so every non-root carries its parent's natural
-// key and its tag identifiers — same shape as GET /locations/{identifier}.
+// key and its tags — same shape as GET /locations/{identifier}.
 // Uses ltree @> operator: ancestor_path @> child_path.
 // Both the outer query and the path subselect are scoped to orgID so cross-tenant paths
 // that happen to share an identifier (e.g. two orgs both using "whs-01") stay isolated.
@@ -380,7 +380,7 @@ func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error
 
 // GetDescendants returns all descendant locations of a given location (children at all levels),
 // projected through LocationWithParent so every entry carries its parent's natural key
-// and its tag identifiers — same shape as GET /locations/{identifier}.
+// and its tags — same shape as GET /locations/{identifier}.
 // Uses ltree <@ operator: child_path <@ parent_path.
 // Both the outer query and the path subselect are scoped to orgID: ltree paths are derived
 // from identifier segments alone (see migration 000018), so without this fence two tenants
@@ -441,7 +441,7 @@ func (s *Storage) CountDescendants(ctx context.Context, orgID, id int) (int, err
 }
 
 // GetChildren returns immediate children of a given location (depth = parent_depth + 1),
-// projected through LocationWithParent for parent-identifier and tag-identifier parity
+// projected through LocationWithParent for parent-identifier and tag parity
 // with GET /locations/{identifier}.
 // parent_location_id references a globally unique PK so the query alone is not cross-tenant
 // reachable, but the orgID filter keeps the invariant explicit (defense in depth) and in
@@ -499,7 +499,7 @@ func (s *Storage) CountChildren(ctx context.Context, orgID, id int) (int, error)
 }
 
 // scanHierarchyRows runs a hierarchy query whose projection ends in p.identifier
-// (LEFT JOIN parent) and then bulk-fetches tag identifiers for the returned locations.
+// (LEFT JOIN parent) and then bulk-fetches tags for the returned locations.
 // kind ("ancestor"/"descendant"/"child") is interpolated into error messages.
 func (s *Storage) scanHierarchyRows(
 	ctx context.Context, query, kind string, orgID int, args ...any,
@@ -542,14 +542,14 @@ func (s *Storage) scanHierarchyRows(
 		for i, l := range out {
 			ids[i] = l.ID
 		}
-		idMap, err := s.getIdentifiersForLocations(ctx, orgID, ids)
+		idMap, err := s.getTagsForLocations(ctx, orgID, ids)
 		if err != nil {
 			return nil, err
 		}
 		for i := range out {
-			out[i].Identifiers = idMap[out[i].ID]
-			if out[i].Identifiers == nil {
-				out[i].Identifiers = []shared.TagIdentifier{}
+			out[i].Tags = idMap[out[i].ID]
+			if out[i].Tags == nil {
+				out[i].Tags = []shared.TagIdentifier{}
 			}
 		}
 	}
@@ -557,11 +557,11 @@ func (s *Storage) scanHierarchyRows(
 	return out, nil
 }
 
-// CreateLocationWithIdentifiers creates a location with tag identifiers in a single transaction
-func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, request location.CreateLocationWithIdentifiersRequest) (*location.LocationWithParent, error) {
-	identifiersJSON, err := identifiersToJSON(request.Identifiers)
+// CreateLocationWithTags creates a location with tags in a single transaction
+func (s *Storage) CreateLocationWithTags(ctx context.Context, orgID int, request location.CreateLocationWithTagsRequest) (*location.LocationWithParent, error) {
+	tagsJSON, err := tagsToJSON(request.Tags)
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize identifiers: %w", err)
+		return nil, fmt.Errorf("failed to serialize tags: %w", err)
 	}
 
 	// Handler normally applies defaults; storage re-applies as a safety net.
@@ -581,10 +581,10 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 		isActive = *request.IsActive
 	}
 
-	query := `SELECT * FROM trakrf.create_location_with_identifiers($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+	query := `SELECT * FROM trakrf.create_location_with_tags($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
 
 	var locationID int
-	var identifierIDs []int
+	var tagIDs []int
 
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
@@ -597,18 +597,18 @@ func (s *Storage) CreateLocationWithIdentifiers(ctx context.Context, orgID int, 
 			validTo,
 			isActive,
 			nil, // metadata - not used in CreateLocationRequest
-			identifiersJSON,
-		).Scan(&locationID, &identifierIDs)
+			tagsJSON,
+		).Scan(&locationID, &tagIDs)
 	})
 
 	if err != nil {
-		return nil, parseLocationWithIdentifiersError(err, request.Identifier)
+		return nil, parseLocationWithTagsError(err, request.Identifier)
 	}
 
 	return s.getLocationWithParentByID(ctx, orgID, locationID)
 }
 
-// GetLocationViewByID fetches a location with its tag identifiers
+// GetLocationViewByID fetches a location with its tags
 func (s *Storage) GetLocationViewByID(ctx context.Context, orgID, id int) (*location.LocationView, error) {
 	baseLoc, err := s.GetLocationByID(ctx, orgID, id)
 	if err != nil {
@@ -618,20 +618,20 @@ func (s *Storage) GetLocationViewByID(ctx context.Context, orgID, id int) (*loca
 		return nil, nil
 	}
 
-	identifiers, err := s.GetIdentifiersByLocationID(ctx, orgID, id)
+	tags, err := s.GetTagsByLocationID(ctx, orgID, id)
 	if err != nil {
 		return nil, err
 	}
 
 	return &location.LocationView{
-		Location:    *baseLoc,
-		Identifiers: identifiers,
+		Location: *baseLoc,
+		Tags:     tags,
 	}, nil
 }
 
 // getLocationWithParentByID returns a LocationWithParent by surrogate id,
 // performing the self-join on parent location and fetching identifiers.
-// Used by CreateLocationWithIdentifiers and UpdateLocation to emit the
+// Used by CreateLocationWithTags and UpdateLocation to emit the
 // public write-response shape. Returns (nil, nil) if the location doesn't
 // exist or is soft-deleted.
 func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) (*location.LocationWithParent, error) {
@@ -665,21 +665,21 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 		return nil, fmt.Errorf("get location with parent by id: %w", err)
 	}
 
-	identifiers, err := s.GetIdentifiersByLocationID(ctx, orgID, loc.ID)
+	tags, err := s.GetTagsByLocationID(ctx, orgID, loc.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &location.LocationWithParent{
 		LocationView: location.LocationView{
-			Location:    loc,
-			Identifiers: identifiers,
+			Location: loc,
+			Tags:     tags,
 		},
 		ParentIdentifier: parIdt,
 	}, nil
 }
 
-// ListLocationViews fetches locations with their tag identifiers for an org
+// ListLocationViews fetches locations with their tags for an org
 func (s *Storage) ListLocationViews(ctx context.Context, orgID, limit, offset int) ([]location.LocationView, error) {
 	locations, err := s.ListAllLocations(ctx, orgID, limit, offset)
 	if err != nil {
@@ -695,27 +695,27 @@ func (s *Storage) ListLocationViews(ctx context.Context, orgID, limit, offset in
 		locationIDs[i] = loc.ID
 	}
 
-	identifierMap, err := s.getIdentifiersForLocations(ctx, orgID, locationIDs)
+	tagMap, err := s.getTagsForLocations(ctx, orgID, locationIDs)
 	if err != nil {
 		return nil, err
 	}
 
 	views := make([]location.LocationView, len(locations))
 	for i, loc := range locations {
-		ids := identifierMap[loc.ID]
+		ids := tagMap[loc.ID]
 		if ids == nil {
 			ids = []shared.TagIdentifier{}
 		}
 		views[i] = location.LocationView{
-			Location:    loc,
-			Identifiers: ids,
+			Location: loc,
+			Tags:     ids,
 		}
 	}
 
 	return views, nil
 }
 
-func parseLocationWithIdentifiersError(err error, identifier string) error {
+func parseLocationWithTagsError(err error, identifier string) error {
 	errStr := err.Error()
 
 	if strings.Contains(errStr, "locations_org_id_identifier") ||
@@ -723,16 +723,16 @@ func parseLocationWithIdentifiersError(err error, identifier string) error {
 		return fmt.Errorf("location with identifier %s already exists", identifier)
 	}
 
-	if strings.Contains(errStr, "identifiers_org_id_type_value") ||
-		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "identifiers")) {
-		return fmt.Errorf("one or more tag identifiers already exist")
+	if strings.Contains(errStr, "tags_org_id_type_value") ||
+		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "tags")) {
+		return fmt.Errorf("one or more tags already exist")
 	}
 
 	if strings.Contains(errStr, "parent_location_id_fkey") {
 		return fmt.Errorf("invalid parent_location_id: parent location does not exist")
 	}
 
-	return fmt.Errorf("failed to create location with identifiers: %w", err)
+	return fmt.Errorf("failed to create location with tags: %w", err)
 }
 
 // GetLocationByIdentifier returns the live location with the given natural key
@@ -771,15 +771,15 @@ func (s *Storage) GetLocationByIdentifier(
 		return nil, fmt.Errorf("get location by identifier: %w", err)
 	}
 
-	identifiers, err := s.GetIdentifiersByLocationID(ctx, orgID, loc.ID)
+	tags, err := s.GetTagsByLocationID(ctx, orgID, loc.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &location.LocationWithParent{
 		LocationView: location.LocationView{
-			Location:    loc,
-			Identifiers: identifiers,
+			Location: loc,
+			Tags:     tags,
 		},
 		ParentIdentifier: parIdt,
 	}, nil
@@ -842,22 +842,22 @@ func (s *Storage) ListLocationsFiltered(
 		return nil, fmt.Errorf("list locations filtered: %w", err)
 	}
 
-	// Bulk-fetch identifiers for the returned locations, matching the
+	// Bulk-fetch tags for the returned locations, matching the
 	// assets-list pattern so the public list endpoint returns `[]` rather
-	// than `null` for locations without tag identifiers.
+	// than `null` for locations without tags.
 	if len(out) > 0 {
 		ids := make([]int, len(out))
 		for i, l := range out {
 			ids[i] = l.ID
 		}
-		idMap, err := s.getIdentifiersForLocations(ctx, orgID, ids)
+		idMap, err := s.getTagsForLocations(ctx, orgID, ids)
 		if err != nil {
 			return nil, err
 		}
 		for i := range out {
-			out[i].Identifiers = idMap[out[i].ID]
-			if out[i].Identifiers == nil {
-				out[i].Identifiers = []shared.TagIdentifier{}
+			out[i].Tags = idMap[out[i].ID]
+			if out[i].Tags == nil {
+				out[i].Tags = []shared.TagIdentifier{}
 			}
 		}
 	}
@@ -904,7 +904,7 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 		idx := len(args)
 		clauses = append(clauses, fmt.Sprintf(
 			"(l.name ILIKE $%d OR l.identifier ILIKE $%d OR l.description ILIKE $%d "+
-				"OR EXISTS (SELECT 1 FROM trakrf.identifiers i "+
+				"OR EXISTS (SELECT 1 FROM trakrf.tags i "+
 				"WHERE i.location_id = l.id AND i.is_active = true "+
 				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
 			idx, idx, idx, idx))
@@ -969,7 +969,7 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 
 // GetLocationWithParentByIDForTest exposes getLocationWithParentByID to
 // integration tests in the same package. Production code must use
-// GetLocationByIdentifier or the CreateLocationWithIdentifiers /
+// GetLocationByIdentifier or the CreateLocationWithTags /
 // UpdateLocation return values.
 func (s *Storage) GetLocationWithParentByIDForTest(ctx context.Context, orgID, id int) (*location.LocationWithParent, error) {
 	return s.getLocationWithParentByID(ctx, orgID, id)
