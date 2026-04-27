@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, MapPin, Building2, Calendar, CheckCircle, XCircle } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
-import { TagIdentifierList } from '@/components/assets';
+import { TagList } from '@/components/assets';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import type { Location } from '@/types/locations';
 import type { Tag } from '@/types/shared';
@@ -137,14 +137,14 @@ export function LocationDetailsModal({
               </span>
             </div>
 
-            {/* Tag Identifiers */}
-            <TagIdentifierList
-              identifiers={localTags}
+            {/* Tags */}
+            <TagList
+              tags={localTags}
               size="md"
               showHeader
               entityId={location.id}
               entityType="location"
-              onIdentifierRemoved={handleIdentifierRemoved}
+              onTagRemoved={handleIdentifierRemoved}
             />
           </div>
 

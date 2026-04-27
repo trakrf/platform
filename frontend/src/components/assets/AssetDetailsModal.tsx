@@ -3,7 +3,7 @@ import { X, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
-import { TagIdentifierList } from './TagIdentifierList';
+import { TagList } from './TagList';
 
 interface AssetDetailsModalProps {
   asset: Asset | null;
@@ -116,14 +116,14 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
                   }
                 />
               </div>
-              <TagIdentifierList
-                identifiers={localTags}
+              <TagList
+                tags={localTags}
                 size="md"
                 showHeader
                 className="border-t border-gray-200 dark:border-gray-700 pt-4"
                 entityId={asset.id}
                 entityType="asset"
-                onIdentifierRemoved={handleIdentifierRemoved}
+                onTagRemoved={handleIdentifierRemoved}
               />
               {asset.description && (
                 <div>

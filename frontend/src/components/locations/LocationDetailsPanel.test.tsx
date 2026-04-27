@@ -4,9 +4,9 @@ import { LocationDetailsPanel } from './LocationDetailsPanel';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import type { Location } from '@/types/locations';
 
-// Mock the TagIdentifierList component
+// Mock the TagList component
 vi.mock('@/components/assets', () => ({
-  TagIdentifierList: () => <div data-testid="tag-identifier-list">Tag Identifiers</div>,
+  TagList: () => <div data-testid="tag-identifier-list">Tag Identifiers</div>,
 }));
 
 // Mock the LocationBreadcrumb component

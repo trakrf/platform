@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { MapPin, Building2, Calendar, CheckCircle, XCircle, FolderTree, Plus, Pencil, ArrowRightLeft, Trash2 } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
-import { TagIdentifierList } from '@/components/assets';
+import { TagList } from '@/components/assets';
 import type { Tag } from '@/types/shared';
 
 export interface LocationDetailsPanelProps {
@@ -170,14 +170,14 @@ export function LocationDetailsPanel({
           )}
         </div>
 
-        {/* Tag Identifiers */}
-        <TagIdentifierList
-          identifiers={localTags}
+        {/* Tags */}
+        <TagList
+          tags={localTags}
           size="md"
           showHeader
           entityId={location.id}
           entityType="location"
-          onIdentifierRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleIdentifierRemoved}
         />
 
         {/* Direct children */}
