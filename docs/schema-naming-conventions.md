@@ -21,8 +21,20 @@ We use `org_*` abbreviations consistently throughout the codebase for brevity an
 
 ### Abbreviated Names (Plural)
 - `org_users` - User-organization membership junction table
-- `identifier_scans` - Raw sensor scan events (hypertable)
+- `tag_scans` - Raw sensor scan events (hypertable)
 - `asset_scans` - Derived business scan events (hypertable)
+
+---
+
+## `identifier` vs `tag`
+
+The codebase distinguishes two related but distinct concepts:
+
+- **`identifier`** — the natural-key column convention applied to entity tables (`assets`, `locations`, `scan_devices`, `scan_points`, `organizations`). It is the human-meaningful key the customer assigns to a record (e.g. `asset.identifier = "WIDGET-001"`). Universally typed `VARCHAR(255)`. Always present on the row's owning entity.
+
+- **`tag`** — a physical or logical identification device associated with an asset or location. RFID tag, BLE beacon, NFC tag, barcode sticker. Lives in its own table (`tags`) with a temporal validity window. An asset or location can have zero or more tags; a tag belongs to exactly one asset OR one location.
+
+In prose, prefer "tag" for the physical-device concept and "identifier" for the natural-key column. Avoid "tag identifier" as a phrase — it conflates the two.
 
 ---
 
@@ -36,7 +48,7 @@ Always abbreviated:
 - `location_id` - References `locations(id)`
 - `scan_device_id` - References `scan_devices(id)`
 - `scan_point_id` - References `scan_points(id)`
-- `identifier_id` - References `identifiers(id)`
+- `tag_id` - References `tags(id)`
 
 ### API Fields
 Always abbreviated:
@@ -152,7 +164,7 @@ type OrgUser struct {
 - `000002_organizations.up.sql` - Full name for main entity
 - `000004_org_users.up.sql` - Abbreviated for junction table
 - `000006_scan_devices.up.sql` - Descriptive compound name
-- `000010_identifier_scans.up.sql` - Descriptive compound name
+- `000010_tag_scans.up.sql` - Descriptive compound name
 
 ---
 

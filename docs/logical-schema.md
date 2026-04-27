@@ -33,12 +33,12 @@ The Organization is the multi-tenant identifier for data isolation. All other en
 - One-to-many → User (via Organization User)
 - One-to-many → Asset
 - One-to-many → Location
-- One-to-many → Identifier
+- One-to-many → Tag
 - One-to-many → Scan Device
 - One-to-many → Scan Point
 - One-to-many → Asset Scan
-- One-to-many → Identifier Scan
-- One-to-many → Location Identifier
+- One-to-many → Tag Scan
+- One-to-many → Location Tag
 
 ---
 
@@ -106,13 +106,13 @@ Assets are the core trackable entities in the system. Examples: equipment, inven
 **Relationships**:
 - Many-to-one → Organization
 - Many-to-one → Location (current location, nullable)
-- One-to-many → Identifier (an asset can have multiple identifiers)
+- One-to-many → Tag (an asset can have multiple tags)
 - One-to-many → Asset Scan
 
 **Notes**:
 - Current location is denormalized for query performance
 - Location can be NULL (asset location unknown)
-- Assets can have multiple identifiers (RFID tag + serial number + barcode)
+- Assets can have multiple tags (RFID tag + serial number + barcode)
 
 ---
 
@@ -136,7 +136,7 @@ Locations support hierarchy via parent location reference. Examples: warehouse, 
 - One-to-many → Location (child locations)
 - One-to-many → Asset (assets at this location)
 - One-to-many → Scan Point (scan points associated with location)
-- One-to-many → Location Identifier
+- One-to-many → Location Tag
 
 **Notes**:
 - Parent location enables tree hierarchy (Building → Floor → Room → Shelf)
@@ -145,16 +145,16 @@ Locations support hierarchy via parent location reference. Examples: warehouse, 
 
 ---
 
-### Identifier
-**Purpose**: Any physical or logical identifier that can identify an asset or location
+### Tag
+**Purpose**: Any physical or logical identification device that can identify an asset or location
 
-Identifiers are the bridge between physical tags/labels and digital assets. Examples: RFID tags, barcode labels, serial numbers, MAC addresses, part numbers, database keys.
+Tags are the bridge between physical devices/labels and digital assets. Examples: RFID tags, barcode labels, serial numbers, MAC addresses, part numbers, database keys.
 
 **Attributes**:
 - ID (primary key)
 - Organization ID (foreign key → Organization)
 - Type (enum: rfid, barcode, serial, mac, part_number, custom, etc.)
-- Value (the actual identifier string/number)
+- Value (the actual tag identifier string/number)
 - Asset ID (foreign key → Asset, nullable)
 - Location ID (foreign key → Location, nullable)
 - Created timestamp
@@ -162,13 +162,13 @@ Identifiers are the bridge between physical tags/labels and digital assets. Exam
 
 **Relationships**:
 - Many-to-one → Organization
-- Many-to-one → Asset (nullable, an identifier identifies one asset)
-- Many-to-one → Location (nullable, an identifier identifies one location)
-- One-to-many → Identifier Scan
+- Many-to-one → Asset (nullable, a tag identifies one asset)
+- Many-to-one → Location (nullable, a tag identifies one location)
+- One-to-many → Tag Scan
 
 **Notes**:
-- **One-to-one mapping**: Each identifier maps to exactly ONE asset OR one location (not both)
-- **One-to-many from asset**: One asset can have MULTIPLE identifiers
+- **One-to-one mapping**: Each tag maps to exactly ONE asset OR one location (not both)
+- **One-to-many from asset**: One asset can have MULTIPLE tags
 - Composite unique constraint: (org_id, type, value)
 - Either asset_id OR location_id must be set, but not both
 - Check constraint: `(asset_id IS NOT NULL AND location_id IS NULL) OR (asset_id IS NULL AND location_id IS NOT NULL)`
@@ -176,7 +176,7 @@ Identifiers are the bridge between physical tags/labels and digital assets. Exam
 ---
 
 ### Scan Device
-**Purpose**: Any device that can read or capture an identifier
+**Purpose**: Any device that can read or capture a tag
 
 Scan devices are physical hardware that perform scans. Examples: RFID reader, barcode scanner, mobile app.
 
@@ -219,7 +219,7 @@ Scan points are individual sensors on a scan device. Associating scan points wit
 - Many-to-one → Organization
 - Many-to-one → Scan Device
 - Many-to-one → Location (nullable)
-- One-to-many → Identifier Scan
+- One-to-many → Tag Scan
 
 **Notes**:
 - Example: RFID reader with 4 antennas = 1 device + 4 scan points
@@ -228,16 +228,16 @@ Scan points are individual sensors on a scan device. Associating scan points wit
 
 ---
 
-### Identifier Scan
-**Purpose**: Intersection of scan point, identifier, and time (raw sensor read data)
+### Tag Scan
+**Purpose**: Intersection of scan point, tag, and time (raw sensor read data)
 
-Identifier scans are the raw sensor events. Low-level technical data that forms the foundation for asset scans.
+Tag scans are the raw sensor events. Low-level technical data that forms the foundation for asset scans.
 
 **Attributes**:
 - ID (primary key)
 - Organization ID (foreign key → Organization)
 - Scan Point ID (foreign key → Scan Point)
-- Identifier ID (foreign key → Identifier)
+- Tag ID (foreign key → Tag)
 - Timestamp (when the scan occurred)
 - RSSI (signal strength, optional)
 - Read Count (number of times seen in this scan cycle, optional)
@@ -246,7 +246,7 @@ Identifier scans are the raw sensor events. Low-level technical data that forms 
 **Relationships**:
 - Many-to-one → Organization
 - Many-to-one → Scan Point
-- Many-to-one → Identifier
+- Many-to-one → Tag
 
 **Notes**:
 - Timestamp is the scan time, not the record creation time
@@ -257,9 +257,9 @@ Identifier scans are the raw sensor events. Low-level technical data that forms 
 ---
 
 ### Asset Scan
-**Purpose**: Intersection of asset, location, and time (derived from identifier scans)
+**Purpose**: Intersection of asset, location, and time (derived from tag scans)
 
-Asset scans are business-level events derived from identifier scans. High-level view for reporting and analytics.
+Asset scans are business-level events derived from tag scans. High-level view for reporting and analytics.
 
 **Attributes**:
 - ID (primary key)
@@ -268,7 +268,7 @@ Asset scans are business-level events derived from identifier scans. High-level 
 - Location ID (foreign key → Location, nullable)
 - Timestamp (when the asset was scanned)
 - Scan Point ID (foreign key → Scan Point, optional)
-- Identifier Scan ID (foreign key → Identifier Scan, optional, source reference)
+- Tag Scan ID (foreign key → Tag Scan, optional, source reference)
 - Created timestamp
 
 **Relationships**:
@@ -276,41 +276,41 @@ Asset scans are business-level events derived from identifier scans. High-level 
 - Many-to-one → Asset
 - Many-to-one → Location (nullable)
 - Many-to-one → Scan Point (optional)
-- Many-to-one → Identifier Scan (optional, for traceability)
+- Many-to-one → Tag Scan (optional, for traceability)
 
 **Notes**:
-- Derived from Identifier Scan via Identifier → Asset mapping
+- Derived from Tag Scan via Tag → Asset mapping
 - Location can be NULL if scan point has no location mapping
 - Timestamp is the scan time, not the record creation time
 - This is time-series data (consider TimescaleDB hypertable)
-- Links to Identifier Scan for traceability/audit
+- Links to Tag Scan for traceability/audit
 
 ---
 
-### Location Identifier
-**Purpose**: Identifier that can be used to map a location
+### Location Tag
+**Purpose**: Tag that can be used to identify a location
 
-Location identifiers are used with mobile devices to identify the current location. They enable syncing location data with external systems.
+Location tags are used with mobile devices to identify the current location. They enable syncing location data with external systems.
 
 **Attributes**:
 - ID (primary key)
 - Organization ID (foreign key → Organization)
 - Location ID (foreign key → Location)
-- Identifier ID (foreign key → Identifier)
-- Is Primary (boolean, for multiple identifiers per location)
+- Tag ID (foreign key → Tag)
+- Is Primary (boolean, for multiple tags per location)
 - Created timestamp
 - Updated timestamp
 
 **Relationships**:
 - Many-to-one → Organization
 - Many-to-one → Location
-- Many-to-one → Identifier
+- Many-to-one → Tag
 
 **Notes**:
 - Example: RFID tag on a door frame identifies a room
-- Mobile app scans location identifier to set current location
-- One location can have multiple identifiers
-- Is Primary flag indicates the preferred identifier
+- Mobile app scans location tag to set current location
+- One location can have multiple tags
+- Is Primary flag indicates the preferred tag
 
 ---
 
@@ -416,30 +416,30 @@ Organization (tenant root)
 │   └── Organization User (junction table with RBAC)
 ├── Asset
 │   ├── Location (current location - many-to-one, nullable)
-│   └── Identifier (one-to-many)
+│   └── Tag (one-to-many)
 ├── Location
 │   ├── Location (parent - self-referential, nullable)
 │   ├── Scan Point (one-to-many)
-│   └── Location Identifier (one-to-many)
-├── Identifier
+│   └── Location Tag (one-to-many)
+├── Tag
 │   ├── Asset (many-to-one, nullable)
 │   ├── Location (many-to-one, nullable)
-│   └── Identifier Scan (one-to-many)
+│   └── Tag Scan (one-to-many)
 ├── Scan Device
 │   └── Scan Point (one-to-many)
 ├── Scan Point
 │   ├── Scan Device (many-to-one)
 │   ├── Location (many-to-one, nullable)
-│   └── Identifier Scan (one-to-many)
-├── Identifier Scan
+│   └── Tag Scan (one-to-many)
+├── Tag Scan
 │   ├── Scan Point (many-to-one)
-│   ├── Identifier (many-to-one)
+│   ├── Tag (many-to-one)
 │   └── Asset Scan (one-to-many)
 └── Asset Scan
     ├── Asset (many-to-one)
     ├── Location (many-to-one, nullable)
     ├── Scan Point (many-to-one, optional)
-    └── Identifier Scan (many-to-one, optional)
+    └── Tag Scan (many-to-one, optional)
 ```
 
 ---
@@ -451,13 +451,13 @@ Organization (tenant root)
 - **Rationale**: Simple, performant row-level isolation
 - **Trade-off**: Slightly larger database vs schema-per-tenant complexity
 
-### 2. Asset ↔ Identifier (One-to-Many)
-- **Decision**: One asset can have multiple identifiers
-- **Rationale**: Real-world assets often have multiple ways to identify them (serial number + RFID tag + barcode)
+### 2. Asset ↔ Tag (One-to-Many)
+- **Decision**: One asset can have multiple tags
+- **Rationale**: Real-world assets often have multiple identification devices (serial number + RFID tag + barcode)
 - **Trade-off**: More complex queries vs flexible identification
 
-### 3. Identifier → Asset/Location (Mutually Exclusive)
-- **Decision**: Each identifier maps to exactly ONE asset OR one location, not both
+### 3. Tag → Asset/Location (Mutually Exclusive)
+- **Decision**: Each tag maps to exactly ONE asset OR one location, not both
 - **Rationale**: Clear semantic meaning, prevents ambiguity
 - **Trade-off**: Check constraint overhead vs data integrity
 
@@ -471,8 +471,8 @@ Organization (tenant root)
 - **Rationale**: RFID readers have multiple antennas, each can cover different zones
 - **Trade-off**: Additional entity vs simplified model
 
-### 6. Identifier Scan → Asset Scan (Derived Data)
-- **Decision**: Store both raw (Identifier Scan) and derived (Asset Scan) events
+### 6. Tag Scan → Asset Scan (Derived Data)
+- **Decision**: Store both raw (Tag Scan) and derived (Asset Scan) events
 - **Rationale**: Audit trail + performance (avoid real-time joins on time-series data)
 - **Trade-off**: Storage cost vs query performance
 
@@ -497,12 +497,12 @@ Organization (tenant root)
 | **Organization User** | User-organization membership with role |
 | **Asset** | Physical entity being tracked (equipment, inventory, etc.) |
 | **Location** | Physical place (warehouse, room, shelf, etc.) |
-| **Identifier** | Physical/logical tag (RFID, barcode, serial number, etc.) |
-| **Scan Device** | Hardware that reads identifiers (RFID reader, scanner) |
+| **Tag** | Physical/logical identification device (RFID, barcode, serial number, etc.) |
+| **Scan Device** | Hardware that reads tags (RFID reader, scanner) |
 | **Scan Point** | Individual sensor on device (antenna, camera) |
-| **Identifier Scan** | Raw sensor read event (low-level data) |
-| **Asset Scan** | Business event derived from identifier scan (high-level data) |
-| **Location Identifier** | Identifier used to mark/identify locations |
+| **Tag Scan** | Raw sensor read event (low-level data) |
+| **Asset Scan** | Business event derived from tag scan (high-level data) |
+| **Location Tag** | Tag used to mark/identify locations |
 
 ---
 
@@ -510,7 +510,7 @@ Organization (tenant root)
 
 ### TimescaleDB Hypertables
 Consider using TimescaleDB hypertables for time-series data:
-- `identifier_scans` (partitioned by timestamp)
+- `tag_scans` (partitioned by timestamp)
 - `asset_scans` (partitioned by timestamp)
 
 ### Indexes
