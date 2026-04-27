@@ -30,21 +30,21 @@ export function LocationDetailsModal({
   const getDescendants = useLocationStore((state) => state.getDescendants);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
-  const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>([]);
+  const [localTags, setLocalTags] = useState<TagIdentifier[]>([]);
 
   useEffect(() => {
-    setLocalIdentifiers(location.identifiers || []);
-  }, [location.identifiers]);
+    setLocalTags(location.tags || []);
+  }, [location.tags]);
 
   useEscapeToClose(isOpen, onClose);
 
   const handleIdentifierRemoved = (identifierId: number) => {
-    const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
-    setLocalIdentifiers(updatedIdentifiers);
+    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    setLocalTags(updatedTags);
 
     updateCachedLocation(location.id, {
       ...location,
-      identifiers: updatedIdentifiers,
+      tags: updatedTags,
     });
   };
 
@@ -139,7 +139,7 @@ export function LocationDetailsModal({
 
             {/* Tag Identifiers */}
             <TagIdentifierList
-              identifiers={localIdentifiers}
+              identifiers={localTags}
               size="md"
               showHeader
               entityId={location.id}

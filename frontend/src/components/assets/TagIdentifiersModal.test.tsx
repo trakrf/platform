@@ -8,7 +8,7 @@ import type { TagIdentifier } from '@/types/shared';
 // Mock the assets API
 vi.mock('@/lib/api/assets', () => ({
   assetsApi: {
-    removeIdentifier: vi.fn(),
+    removeTag: vi.fn(),
   },
 }));
 
@@ -217,7 +217,7 @@ describe('TagIdentifiersModal', () => {
 
     it('calls API and callback when Remove is confirmed', async () => {
       const onIdentifierRemoved = vi.fn();
-      vi.mocked(assetsApi.removeIdentifier).mockResolvedValue({
+      vi.mocked(assetsApi.removeTag).mockResolvedValue({
         data: { deleted: true },
       } as any);
 
@@ -244,14 +244,14 @@ describe('TagIdentifiersModal', () => {
       }
 
       await waitFor(() => {
-        expect(assetsApi.removeIdentifier).toHaveBeenCalledWith(5, 1);
+        expect(assetsApi.removeTag).toHaveBeenCalledWith(5, 1);
         expect(onIdentifierRemoved).toHaveBeenCalledWith(1);
       });
     });
 
     it('shows error toast when removal fails', async () => {
       const toast = await import('react-hot-toast');
-      vi.mocked(assetsApi.removeIdentifier).mockRejectedValue(
+      vi.mocked(assetsApi.removeTag).mockRejectedValue(
         new Error('Network error')
       );
 

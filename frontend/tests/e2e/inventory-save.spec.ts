@@ -56,7 +56,7 @@ async function createTestLocation(
 ): Promise<TestLocation> {
   const token = await getAuthToken(page);
 
-  const identifiers = rfidTag ? [{ type: 'rfid', value: rfidTag }] : [];
+  const tags = rfidTag ? [{ type: 'rfid', value: rfidTag }] : [];
 
   const response = await page.request.post(`${getApiBaseUrl()}/locations`, {
     headers: {
@@ -68,7 +68,7 @@ async function createTestLocation(
       identifier: `LOC-${uniqueId()}`,
       is_active: true,
       valid_from: new Date().toISOString().split('T')[0],
-      identifiers,
+      tags,
     },
   });
 
@@ -107,7 +107,7 @@ async function createTestAsset(
       type: 'asset',
       is_active: true,
       valid_from: new Date().toISOString().split('T')[0],
-      identifiers: [{ type: 'rfid', value: rfidEpc }],
+      tags: [{ type: 'rfid', value: rfidEpc }],
     },
   });
 

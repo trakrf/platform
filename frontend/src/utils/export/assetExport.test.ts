@@ -41,7 +41,7 @@ const mockAssets: Asset[] = [
     is_active: true,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    identifiers: [
+    tags: [
       { id: 1, type: 'rfid', value: 'E280001234567890', is_active: true },
       { id: 2, type: 'rfid', value: 'E280001234567891', is_active: true },
     ],
@@ -60,7 +60,7 @@ const mockAssets: Asset[] = [
     is_active: false,
     created_at: '2024-01-15T00:00:00Z',
     updated_at: '2024-01-15T00:00:00Z',
-    identifiers: [],
+    tags: [],
   },
   {
     id: 3,
@@ -76,7 +76,7 @@ const mockAssets: Asset[] = [
     is_active: true,
     created_at: '2024-02-01T00:00:00Z',
     updated_at: '2024-02-01T00:00:00Z',
-    identifiers: [{ id: 3, type: 'rfid', value: 'E280009999999999', is_active: true }],
+    tags: [{ id: 3, type: 'rfid', value: 'E280009999999999', is_active: true }],
   },
 ];
 
@@ -186,7 +186,7 @@ describe('assetExport', () => {
       // Test with asset that has no tags
       const noTagAsset: Asset = {
         ...mockAssets[1],
-        identifiers: [],
+        tags: [],
       };
       const result = generateAssetCSV([noTagAsset]);
       const content = await readBlobAsText(result.blob);

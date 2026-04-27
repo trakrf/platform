@@ -25,7 +25,7 @@ describe('deserializeCache() self-heal', () => {
     is_active: true,
     created_at: '2026-04-21T00:00:00Z',
     updated_at: '2026-04-21T00:00:00Z',
-    identifiers: [],
+    tags: [],
   };
 
   const phantom = { ...validAsset, id: undefined };

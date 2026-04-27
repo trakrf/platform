@@ -114,7 +114,7 @@ export function LocationForm({
         is_active: location.is_active,
       });
       // Initialize tag identifiers from existing location + add blank row for new entry
-      const existingTags = (location.identifiers || []).map((id) => ({
+      const existingTags = (location.tags || []).map((id) => ({
         id: id.id,
         type: 'rfid' as const,
         value: id.value,
@@ -279,7 +279,7 @@ export function LocationForm({
       ...formData,
       valid_from: formData.valid_from ? formatDateToRFC3339(formData.valid_from) : '',
       valid_to: formData.valid_to ? formatDateToRFC3339(formData.valid_to) : '',
-      identifiers: validIdentifiers,
+      tags: validIdentifiers,
     };
 
     onSubmit(submitData as LocationFormData);

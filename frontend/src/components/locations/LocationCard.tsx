@@ -28,30 +28,30 @@ export function LocationCard({
   const isRoot = location.parent_location_id === null;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
-  const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>(location.identifiers || []);
+  const [localTags, setLocalTags] = useState<TagIdentifier[]>(location.tags || []);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
-  // Sync local identifiers when location prop changes
+  // Sync local tags when location prop changes
   useEffect(() => {
-    setLocalIdentifiers(location.identifiers || []);
-  }, [location.identifiers]);
+    setLocalTags(location.tags || []);
+  }, [location.tags]);
 
   const handleOpenTagsModal = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (localIdentifiers.length > 0) {
+    if (localTags.length > 0) {
       setTagsModalOpen(true);
     }
   };
 
   const handleIdentifierRemoved = (identifierId: number) => {
     // Update local state
-    const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
-    setLocalIdentifiers(updatedIdentifiers);
+    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    setLocalTags(updatedTags);
 
     // Update the location store cache so the change persists when opening forms
     updateCachedLocation(location.id, {
       ...location,
-      identifiers: updatedIdentifiers,
+      tags: updatedTags,
     });
   };
 
@@ -113,8 +113,8 @@ export function LocationCard({
           {/* Tags */}
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <TagCountBadge
-              identifiers={localIdentifiers}
-              onClick={localIdentifiers.length ? handleOpenTagsModal : undefined}
+              identifiers={localTags}
+              onClick={localTags.length ? handleOpenTagsModal : undefined}
             />
           </td>
 
@@ -138,7 +138,7 @@ export function LocationCard({
             {showActions && (
               <div className="flex items-center gap-1 sm:gap-2">
                 <LocateTagPopover
-                  identifiers={localIdentifiers}
+                  identifiers={localTags}
                   entityIdentifier={location.identifier}
                   isActive={location.is_active}
                   variant="icon"
@@ -164,7 +164,7 @@ export function LocationCard({
 
         {/* Tag Identifiers Modal */}
         <TagIdentifiersModal
-          identifiers={localIdentifiers}
+          identifiers={localTags}
           entityId={location.id}
           entityName={location.identifier}
           entityType="location"
@@ -196,9 +196,9 @@ export function LocationCard({
               <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white truncate">
                 {location.identifier}
               </h3>
-              {localIdentifiers.length > 0 && (
+              {localTags.length > 0 && (
                 <TagCountBadge
-                  identifiers={localIdentifiers}
+                  identifiers={localTags}
                   onClick={handleOpenTagsModal}
                 />
               )}
@@ -235,7 +235,7 @@ export function LocationCard({
         {showActions && (
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
             <LocateTagPopover
-              identifiers={localIdentifiers}
+              identifiers={localTags}
               entityIdentifier={location.identifier}
               isActive={location.is_active}
               variant="button"
@@ -260,7 +260,7 @@ export function LocationCard({
 
       {/* Tag Identifiers Modal */}
       <TagIdentifiersModal
-        identifiers={localIdentifiers}
+        identifiers={localTags}
         entityId={location.id}
         entityName={location.identifier}
         entityType="location"

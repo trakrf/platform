@@ -47,7 +47,7 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
     asset.identifier,
     asset.name || '',
     asset.type,
-    asset.identifiers?.map((t) => t.value).join(', ') || '',
+    asset.tags?.map((t) => t.value).join(', ') || '',
     getLocationName(asset.current_location),
     asset.is_active ? 'Active' : 'Inactive',
     asset.description || '',
@@ -111,7 +111,7 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
     'Asset ID': asset.identifier,
     Name: asset.name || '',
     Type: asset.type,
-    'Tag ID(s)': asset.identifiers?.map((t) => t.value).join(', ') || '',
+    'Tag ID(s)': asset.tags?.map((t) => t.value).join(', ') || '',
     Location: getLocationName(asset.current_location),
     Status: asset.is_active ? 'Active' : 'Inactive',
     Description: asset.description || '',
@@ -138,8 +138,8 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
     { Metric: 'Total Assets', Value: assets.length },
     { Metric: 'Active', Value: assets.filter((a) => a.is_active).length },
     { Metric: 'Inactive', Value: assets.filter((a) => !a.is_active).length },
-    { Metric: 'With Tags', Value: assets.filter((a) => a.identifiers && a.identifiers.length > 0).length },
-    { Metric: 'Without Tags', Value: assets.filter((a) => !a.identifiers || a.identifiers.length === 0).length },
+    { Metric: 'With Tags', Value: assets.filter((a) => a.tags && a.tags.length > 0).length },
+    { Metric: 'Without Tags', Value: assets.filter((a) => !a.tags || a.tags.length === 0).length },
   ];
 
   const summaryWS = XLSX.utils.json_to_sheet(summaryData);
@@ -168,7 +168,7 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
  */
 export function generateAssetCSV(assets: Asset[]): ExportResult {
   // Calculate max tag count (minimum 1 to always have Tag ID column)
-  const maxTags = Math.max(1, ...assets.map((a) => a.identifiers?.length || 0));
+  const maxTags = Math.max(1, ...assets.map((a) => a.tags?.length || 0));
 
   // Build headers: fixed columns + repeated "Tag ID" columns
   const fixedHeaders = ['Asset ID', 'Name', 'Description', 'Status', 'Created', 'Location'];
@@ -192,7 +192,7 @@ export function generateAssetCSV(assets: Asset[]): ExportResult {
     const tagCols = Array(maxTags)
       .fill('')
       .map((_, i) => {
-        const tag = asset.identifiers?.[i]?.value || '';
+        const tag = asset.tags?.[i]?.value || '';
         return tag ? `"${tag.replace(/"/g, '""')}"` : '';
       });
 

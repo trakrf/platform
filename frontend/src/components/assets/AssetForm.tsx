@@ -98,7 +98,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         is_active: asset.is_active,
       });
       // Initialize tag identifiers from existing asset + add blank row for new entry
-      const existingTags = (asset.identifiers || []).map((id) => ({
+      const existingTags = (asset.tags || []).map((id) => ({
         id: id.id,
         type: 'rfid' as const,
         value: id.value,
@@ -265,8 +265,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       metadata: {},
     };
 
-    // Include identifiers for the modal to handle (modal extracts and processes separately)
-    await onSubmit({ ...data, identifiers: validIdentifiers } as unknown as CreateAssetRequest | UpdateAssetRequest);
+    // Include tags for the modal to handle (modal extracts and processes separately)
+    await onSubmit({ ...data, tags: validIdentifiers } as unknown as CreateAssetRequest | UpdateAssetRequest);
   };
 
   const handleChange = (field: string, value: any) => {

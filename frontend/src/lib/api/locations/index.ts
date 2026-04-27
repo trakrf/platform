@@ -134,27 +134,27 @@ export const locationsApi = {
     apiClient.put<LocationResponse>(`/locations/${id}/move`, data),
 
   /**
-   * Add a tag identifier to a location
-   * POST /api/v1/locations/by-id/:locationId/identifiers
+   * Add a tag to a location
+   * POST /api/v1/locations/by-id/:locationId/tags
    *
-   * @param locationId - Location ID to add identifier to
-   * @param identifier - Tag identifier data (type and value)
-   * @returns Promise with created identifier
+   * @param locationId - Location ID to add tag to
+   * @param tag - Tag data (type and value)
+   * @returns Promise with created tag
    */
-  addIdentifier: (locationId: number, identifier: { type: string; value: string }) =>
+  addTag: (locationId: number, tag: { type: string; value: string }) =>
     apiClient.post<{ data: { id: number; type: string; value: string; is_active: boolean } }>(
-      `/locations/by-id/${locationId}/identifiers`,
-      identifier
+      `/locations/by-id/${locationId}/tags`,
+      tag
     ),
 
   /**
-   * Remove a tag identifier from a location
-   * DELETE /api/v1/locations/by-id/:locationId/identifiers/:identifierId
+   * Remove a tag from a location
+   * DELETE /api/v1/locations/by-id/:locationId/tags/:tagId
    *
    * @param locationId - Location ID
-   * @param identifierId - Identifier ID to remove
+   * @param tagId - Tag ID to remove
    * @returns Promise<DeleteResponse> with deleted status
    */
-  removeIdentifier: (locationId: number, identifierId: number) =>
-    apiClient.delete<DeleteResponse>(`/locations/by-id/${locationId}/identifiers/${identifierId}`),
+  removeTag: (locationId: number, tagId: number) =>
+    apiClient.delete<DeleteResponse>(`/locations/by-id/${locationId}/tags/${tagId}`),
 };

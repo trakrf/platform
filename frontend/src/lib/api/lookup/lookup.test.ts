@@ -34,7 +34,7 @@ describe('lookupApi', () => {
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
         deleted_at: null,
-        identifiers: [],
+        tags: [],
       };
 
       const mockResponse = {
@@ -70,7 +70,7 @@ describe('lookupApi', () => {
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
         deleted_at: null,
-        identifiers: [],
+        tags: [],
       };
 
       const mockResponse = {
@@ -184,7 +184,7 @@ describe('lookupApi', () => {
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
         deleted_at: null,
-        identifiers: [],
+        tags: [],
       };
 
       const mockResponse = {
@@ -241,7 +241,7 @@ describe('lookupApi', () => {
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
         deleted_at: null,
-        identifiers: [],
+        tags: [],
       };
 
       const mockAsset2: Asset = {
@@ -259,7 +259,7 @@ describe('lookupApi', () => {
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
         deleted_at: null,
-        identifiers: [],
+        tags: [],
       };
 
       const mockResponse = {

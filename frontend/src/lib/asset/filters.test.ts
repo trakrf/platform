@@ -26,7 +26,7 @@ describe('Filters', () => {
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
       deleted_at: null,
-      identifiers: [
+      tags: [
         { id: 1, type: 'rfid', value: 'E200000000010018', is_active: true },
       ],
     },
@@ -45,7 +45,7 @@ describe('Filters', () => {
       created_at: '2024-01-15T00:00:00Z',
       updated_at: '2024-01-15T00:00:00Z',
       deleted_at: null,
-      identifiers: [
+      tags: [
         { id: 2, type: 'rfid', value: 'ABC12345678', is_active: true },
       ],
     },
@@ -64,7 +64,7 @@ describe('Filters', () => {
       created_at: '2024-02-01T00:00:00Z',
       updated_at: '2024-02-01T00:00:00Z',
       deleted_at: null,
-      identifiers: [],
+      tags: [],
     },
     {
       id: 4,
@@ -81,7 +81,7 @@ describe('Filters', () => {
       created_at: '2024-03-01T00:00:00Z',
       updated_at: '2024-03-01T00:00:00Z',
       deleted_at: null,
-      identifiers: [],
+      tags: [],
     },
   ];
 

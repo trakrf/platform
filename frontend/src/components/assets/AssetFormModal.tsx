@@ -54,9 +54,9 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
     try {
       if (mode === 'create') {
-        // Extract identifiers from the request (they need to be added separately after creation)
-        const identifiers = (data as CreateAssetRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
-        const { identifiers: _, ...createData } = data as CreateAssetRequest & { identifiers?: TagIdentifierInput[] };
+        // Extract tags from the request (they need to be added separately after creation)
+        const identifiers = (data as CreateAssetRequest & { tags?: TagIdentifierInput[] }).tags || [];
+        const { tags: _, ...createData } = data as CreateAssetRequest & { tags?: TagIdentifierInput[] };
 
         const response = await assetsApi.create(createData as CreateAssetRequest);
 
@@ -74,12 +74,12 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
         for (const identifier of validIdentifiers) {
           try {
-            await assetsApi.addIdentifier(newAssetId, {
+            await assetsApi.addTag(newAssetId, {
               type: identifier.type,
               value: identifier.value,
             });
           } catch (idErr: any) {
-            console.error('Failed to add identifier:', idErr);
+            console.error('Failed to add tag:', idErr);
             toast.error(`Failed to add tag "${identifier.value}": ${idErr.message || 'Unknown error'}`);
           }
         }
@@ -97,10 +97,10 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
         toast.success(`Asset "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
-        const identifiers = (data as UpdateAssetRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
+        const identifiers = (data as UpdateAssetRequest & { tags?: TagIdentifierInput[] }).tags || [];
         const newIdentifiers = identifiers.filter(id => !id.id);
 
-        const { identifiers: _, ...updateData } = data as UpdateAssetRequest & { identifiers?: TagIdentifierInput[] };
+        const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagIdentifierInput[] };
 
         const response = await assetsApi.update(asset.id, updateData);
 
@@ -115,12 +115,12 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
         for (const identifier of newIdentifiers) {
           try {
-            await assetsApi.addIdentifier(asset.id, {
+            await assetsApi.addTag(asset.id, {
               type: identifier.type,
               value: identifier.value,
             });
           } catch (idErr: any) {
-            console.error('Failed to add identifier:', idErr);
+            console.error('Failed to add tag:', idErr);
             toast.error(`Failed to add tag "${identifier.value}": ${idErr.message || 'Unknown error'}`);
           }
         }

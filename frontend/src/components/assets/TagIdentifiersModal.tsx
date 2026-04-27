@@ -48,9 +48,9 @@ export function TagIdentifiersModal({
     setRemovingId(confirmingId);
     try {
       if (entityType === 'location') {
-        await locationsApi.removeIdentifier(entityId, confirmingId);
+        await locationsApi.removeTag(entityId, confirmingId);
       } else {
-        await assetsApi.removeIdentifier(entityId, confirmingId);
+        await assetsApi.removeTag(entityId, confirmingId);
       }
       toast.success('Tag removed');
       onIdentifierRemoved?.(confirmingId);

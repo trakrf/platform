@@ -17,22 +17,22 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
   const location = asset?.current_location ? getLocationByIdentifier(asset.current_location) : null;
 
-  const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>([]);
+  const [localTags, setLocalTags] = useState<TagIdentifier[]>([]);
 
   useEffect(() => {
     if (asset) {
-      setLocalIdentifiers(asset.identifiers || []);
+      setLocalTags(asset.tags || []);
     }
   }, [asset]);
 
   const handleIdentifierRemoved = (identifierId: number) => {
-    const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
-    setLocalIdentifiers(updatedIdentifiers);
+    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    setLocalTags(updatedTags);
 
     if (asset) {
       updateCachedAsset(asset.id, {
         ...asset,
-        identifiers: updatedIdentifiers,
+        tags: updatedTags,
       });
     }
   };
@@ -117,7 +117,7 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
                 />
               </div>
               <TagIdentifierList
-                identifiers={localIdentifiers}
+                identifiers={localTags}
                 size="md"
                 showHeader
                 className="border-t border-gray-200 dark:border-gray-700 pt-4"

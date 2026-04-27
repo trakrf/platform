@@ -357,7 +357,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
     const location = createMockLocation(1, {
       identifier: 'WH-A',
       name: 'Warehouse A',
-      identifiers: [{ id: 1, type: 'rfid', value: '300833B2DDD9014000000001', is_active: true }],
+      tags: [{ id: 1, type: 'rfid', value: '300833B2DDD9014000000001', is_active: true }],
     });
     useLocationStore.getState().setLocations([location]);
 
@@ -378,7 +378,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
     const location = createMockLocation(1, {
       identifier: 'WH-B',
       name: 'Warehouse B',
-      identifiers: [{ id: 1, type: 'rfid', value: 'INACTIVE123', is_active: false }],
+      tags: [{ id: 1, type: 'rfid', value: 'INACTIVE123', is_active: false }],
     });
     useLocationStore.getState().setLocations([location]);
 
@@ -389,7 +389,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
   it('should clear byTagEpc index on cache invalidation', () => {
     const location = createMockLocation(1, {
       identifier: 'WH-C',
-      identifiers: [{ id: 1, type: 'rfid', value: 'CLEAREDTAG', is_active: true }],
+      tags: [{ id: 1, type: 'rfid', value: 'CLEAREDTAG', is_active: true }],
     });
     useLocationStore.getState().setLocations([location]);
 
@@ -407,7 +407,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
     const location = createMockLocation(1, {
       identifier: 'MULTI-TAG',
       name: 'Multi-Tag Location',
-      identifiers: [
+      tags: [
         { id: 1, type: 'rfid', value: 'TAG001', is_active: true },
         { id: 2, type: 'rfid', value: 'TAG002', is_active: true },
         { id: 3, type: 'rfid', value: 'TAG003', is_active: false }, // inactive
