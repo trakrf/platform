@@ -28,8 +28,8 @@ const mockResponse = {
 };
 
 const mockRequest = {
-  location_id: 10,
-  asset_ids: [1, 2, 3, 4, 5],
+  location_identifier: 'WH-01',
+  asset_identifiers: ['ASSET-0001', 'ASSET-0002', 'ASSET-0003', 'ASSET-0004', 'ASSET-0005'],
 };
 
 const createWrapper = () => {

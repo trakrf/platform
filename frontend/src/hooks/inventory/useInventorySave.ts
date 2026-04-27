@@ -53,8 +53,8 @@ export function useInventorySave() {
           const detail = extractDetail(error);
           console.warn('[InventorySave] 403 from inventory/save', {
             detail,
-            location_id: data.location_id,
-            asset_ids_count: data.asset_ids.length,
+            location_identifier: data.location_identifier,
+            asset_identifiers_count: data.asset_identifiers.length,
           });
 
           // Storage-path 403 ("not found or access denied") means the
