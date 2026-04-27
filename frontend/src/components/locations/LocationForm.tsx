@@ -9,7 +9,7 @@ import { lookupApi } from '@/lib/api/lookup';
 import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
 import { Plus, QrCode, Loader2, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { TagIdentifierInputRow } from '@/components/assets';
+import { TagInputRow } from '@/components/assets';
 
 interface LocationFormData {
   identifier: string;
@@ -528,7 +528,7 @@ export function LocationForm({
         ) : (
           <div className="space-y-3">
             {tagIdentifiers.map((identifier, index) => (
-              <TagIdentifierInputRow
+              <TagInputRow
                 key={identifier.id ?? `new-${index}`}
                 type={identifier.type}
                 value={identifier.value}

@@ -19,4 +19,4 @@ export { LocateTagPopover } from './LocateTagPopover';
 export { TagCountBadge } from './TagCountBadge';
 export { TagList } from './TagList';
 export { TagsModal } from './TagsModal';
-export { TagIdentifierInputRow } from './TagIdentifierInputRow';
+export { TagInputRow } from './TagInputRow';

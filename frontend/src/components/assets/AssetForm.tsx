@@ -10,7 +10,7 @@ import { lookupApi } from '@/lib/api/lookup';
 import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
 import { Plus, QrCode, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { TagIdentifierInputRow } from './TagIdentifierInputRow';
+import { TagInputRow } from './TagInputRow';
 
 interface AssetFormProps {
   mode: 'create' | 'edit';
@@ -498,7 +498,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         ) : (
           <div className="space-y-3">
             {tagIdentifiers.map((identifier, index) => (
-              <TagIdentifierInputRow
+              <TagInputRow
                 key={identifier.id ?? `new-${index}`}
                 type={identifier.type}
                 value={identifier.value}

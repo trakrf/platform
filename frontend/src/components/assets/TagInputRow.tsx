@@ -26,7 +26,7 @@ function validateEPC(data: string): string | undefined {
   return undefined;
 }
 
-interface TagIdentifierInputRowProps {
+interface TagInputRowProps {
   type: TagType;
   value: string;
   onTypeChange: (type: TagType) => void;
@@ -47,7 +47,7 @@ interface TagIdentifierInputRowProps {
 /**
  * Input row for a single RFID tag number.
  */
-export function TagIdentifierInputRow({
+export function TagInputRow({
   value,
   onValueChange,
   onRemove,
@@ -57,7 +57,7 @@ export function TagIdentifierInputRow({
   onBlur,
   isFocused = false,
   autoFocus = false,
-}: TagIdentifierInputRowProps) {
+}: TagInputRowProps) {
   const warning = ENABLE_EPC_VALIDATION ? validateEPC(value) : undefined;
 
   return (
