@@ -15,7 +15,7 @@ type PublicAssetView struct {
 	Type            string                 `json:"type,omitempty"`
 	Description     string                 `json:"description,omitempty"`
 	CurrentLocation *string                `json:"current_location"`
-	Metadata        any                    `json:"metadata,omitempty"`
+	Metadata        any                    `json:"metadata"`
 	IsActive        bool                   `json:"is_active"`
 	ValidFrom       time.Time              `json:"valid_from"`
 	ValidTo         *time.Time             `json:"valid_to,omitempty"`
@@ -27,13 +27,18 @@ type PublicAssetView struct {
 
 // ToPublicAssetView projects an AssetWithLocation to the public HTTP shape.
 func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
+	// Normalize nil metadata to {} so POST and GET emit the same shape.
+	metadata := a.Metadata
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
 	return PublicAssetView{
 		Identifier:      a.Identifier,
 		Name:            a.Name,
 		Type:            a.Type,
 		Description:     a.Description,
 		CurrentLocation: a.CurrentLocationIdentifier,
-		Metadata:        a.Metadata,
+		Metadata:        metadata,
 		IsActive:        a.IsActive,
 		ValidFrom:       a.ValidFrom,
 		ValidTo:         a.ValidTo,
