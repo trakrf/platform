@@ -33,6 +33,50 @@ func TestToPublicCurrentLocationItem_LiveAsset(t *testing.T) {
 	assert.False(t, present, "asset_deleted_at must be omitted when nil")
 }
 
+// AC11: open dwell period (most recent scan, no later scan) must serialize
+// duration_seconds as explicit null rather than being omitted, so generated
+// clients see a consistent field shape across closed and open periods.
+func TestToPublicAssetHistoryItem_OpenPeriodEmitsNullDuration(t *testing.T) {
+	loc := "BAY-3"
+	in := AssetHistoryItem{
+		Timestamp:          time.Date(2026, 4, 27, 10, 0, 0, 0, time.UTC),
+		LocationIdentifier: &loc,
+		DurationSeconds:    nil,
+	}
+
+	got := ToPublicAssetHistoryItem(in)
+
+	data, err := json.Marshal(got)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	raw, present := parsed["duration_seconds"]
+	assert.True(t, present, "duration_seconds must be present in JSON, not omitted")
+	assert.Nil(t, raw, "duration_seconds must serialize as null on open period")
+}
+
+func TestToPublicAssetHistoryItem_ClosedPeriodEmitsDuration(t *testing.T) {
+	loc := "BAY-3"
+	dur := 3600
+	in := AssetHistoryItem{
+		Timestamp:          time.Date(2026, 4, 27, 10, 0, 0, 0, time.UTC),
+		LocationIdentifier: &loc,
+		DurationSeconds:    &dur,
+	}
+
+	got := ToPublicAssetHistoryItem(in)
+
+	data, err := json.Marshal(got)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	assert.EqualValues(t, 3600, parsed["duration_seconds"])
+}
+
 func TestToPublicCurrentLocationItem_DeletedAsset(t *testing.T) {
 	loc := "BAY-3"
 	deletedAt := time.Date(2026, 4, 20, 14, 0, 0, 0, time.UTC)

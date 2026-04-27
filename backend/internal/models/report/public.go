@@ -23,7 +23,7 @@ func ToPublicCurrentLocationItem(it CurrentLocationItem) PublicCurrentLocationIt
 type PublicAssetHistoryItem struct {
 	Timestamp       time.Time `json:"timestamp"`
 	Location        string    `json:"location"`
-	DurationSeconds *int      `json:"duration_seconds,omitempty"`
+	DurationSeconds *int      `json:"duration_seconds"`
 }
 
 func ToPublicAssetHistoryItem(it AssetHistoryItem) PublicAssetHistoryItem {
