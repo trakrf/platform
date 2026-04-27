@@ -143,6 +143,52 @@ func TestRateLimit_HeaderInvariantsAcrossManyRequests(t *testing.T) {
 	}
 }
 
+func TestDefaultRateLimitHeaders_SetsHeadersOnUnauthenticatedRequest(t *testing.T) {
+	lim, clock := newTestRateLimiter(t)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/orgs/me", nil)
+	rec := httptest.NewRecorder()
+
+	DefaultRateLimitHeaders(lim)(next).ServeHTTP(rec, req)
+
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"),
+		"anonymous caller has full quota — no tokens consumed yet")
+	reset, err := strconv.ParseInt(rec.Header().Get("X-RateLimit-Reset"), 10, 64)
+	require.NoError(t, err)
+	require.Equal(t, clock.Now().Unix(), reset, "full quota → Reset is now")
+}
+
+func TestDefaultRateLimitHeaders_SurvivesDownstreamAuthFailure(t *testing.T) {
+	lim, _ := newTestRateLimiter(t)
+
+	// Mimics an auth middleware that rejects with 401 before the request reaches
+	// the per-key RateLimit middleware. Headers set upstream must remain on the
+	// response — that's the BB10/11 finding TRA-518 fixes.
+	auth := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+	}
+	final := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler must not run on auth failure")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", nil)
+	rec := httptest.NewRecorder()
+
+	DefaultRateLimitHeaders(lim)(auth(final)).ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"))
+	require.NotEmpty(t, rec.Header().Get("X-RateLimit-Reset"))
+}
+
 func TestRateLimit_TwoPrincipalsIndependent(t *testing.T) {
 	lim, _ := newTestRateLimiter(t)
 

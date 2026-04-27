@@ -12,6 +12,34 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
+// writeRateLimitHeaders emits the three IETF rate-limit headers from a Decision.
+// Used by both RateLimit (per-key, post-auth) and DefaultRateLimitHeaders
+// (anonymous, pre-auth) so header semantics live in one place.
+func writeRateLimitHeaders(w http.ResponseWriter, d ratelimit.Decision) {
+	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(d.Limit))
+	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(d.Remaining))
+	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(d.ResetAt.Unix(), 10))
+}
+
+// DefaultRateLimitHeaders returns a middleware that pre-emits steady-state
+// rate-limit headers using the limiter's configured limit. It runs before
+// authentication so every /api/v1/* response carries rate-limit headers — even
+// auth-failure 401s and unknown-route 404s where the principal is unknown and
+// the per-key bucket can't be consulted.
+//
+// When a request is later API-key-authenticated, the RateLimit middleware
+// overwrites these defaults with real bucket values. When auth fails or the
+// route 404s, the defaults remain — giving integration partners parseable
+// X-RateLimit-* on every response. (TRA-518)
+func DefaultRateLimitHeaders(lim *ratelimit.Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeRateLimitHeaders(w, lim.AnonDecision())
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RateLimit returns a middleware that enforces per-key rate limits on
 // API-key-authenticated requests. Session-authenticated requests (identified
 // by the absence of an APIKeyPrincipal on the context) pass through untouched.
@@ -29,9 +57,7 @@ func RateLimit(lim *ratelimit.Limiter) func(http.Handler) http.Handler {
 			}
 
 			d := lim.Allow(p.JTI)
-			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(d.Limit))
-			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(d.Remaining))
-			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(d.ResetAt.Unix(), 10))
+			writeRateLimitHeaders(w, d)
 
 			if !d.Allowed {
 				retrySec := int(math.Ceil(d.RetryAfter.Seconds()))

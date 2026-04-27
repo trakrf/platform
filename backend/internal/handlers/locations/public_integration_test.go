@@ -61,8 +61,9 @@ func seedLocOrgAndKey(t *testing.T, pool *pgxpool.Pool, store *storage.Storage, 
 }
 
 // buildLocationsPublicReadRouter mirrors the public-read group in
-// internal/cmd/serve/router.go. RateLimit and SentryContext are intentionally
-// omitted; all other middleware and route registrations must stay in sync.
+// internal/cmd/serve/router.go. DefaultRateLimitHeaders, RateLimit and
+// SentryContext are intentionally omitted; all other middleware and route
+// registrations must stay in sync.
 func buildLocationsPublicReadRouter(store *storage.Storage) *chi.Mux {
 	handler := locations.NewHandler(store)
 	r := chi.NewRouter()

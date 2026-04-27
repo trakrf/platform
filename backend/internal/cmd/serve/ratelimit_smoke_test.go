@@ -51,6 +51,49 @@ func TestRateLimit_MountedOnEitherAuthGroup(t *testing.T) {
 	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"))
 }
 
+// TestRateLimit_DefaultHeadersSurviveAuthFailure verifies the TRA-518 chain
+// shape: DefaultRateLimitHeaders runs before auth, so when auth rejects with
+// 401 the rate-limit headers set upstream remain on the response. Mirrors the
+// /api/v1/orgs/me and write-surface chain shapes in setupRouter.
+func TestRateLimit_DefaultHeadersSurviveAuthFailure(t *testing.T) {
+	clock := ratelimit.NewFakeClock(time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	lim := ratelimit.NewLimiter(ratelimit.Config{
+		RatePerMinute: 60,
+		Burst:         120,
+		IdleTTL:       time.Hour,
+		SweepInterval: 24 * time.Hour,
+		Clock:         clock,
+	})
+	defer lim.Close()
+
+	// auth401 stands in for APIKeyAuth/EitherAuth rejecting a request with no
+	// credentials. The real middlewares are unit-tested against a DB elsewhere.
+	auth401 := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+	}
+
+	r := chi.NewRouter()
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.DefaultRateLimitHeaders(lim))
+		r.Use(auth401)
+		r.Use(middleware.RateLimit(lim)) // never runs because auth401 short-circuits
+		r.Post("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
+			t.Fatal("handler must not run on auth failure")
+		})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"))
+	require.NotEmpty(t, rec.Header().Get("X-RateLimit-Reset"))
+}
+
 // contextWithPrincipal mirrors what APIKeyAuth does internally. Kept inline
 // rather than exported from middleware to avoid widening the package surface.
 func contextWithPrincipal(ctx context.Context, p *middleware.APIKeyPrincipal) context.Context {
