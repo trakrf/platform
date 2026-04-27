@@ -133,7 +133,7 @@ export default function InventoryScreen() {
 
   // Count of saveable assets (asset type tags only)
   const saveableCount = useMemo(() => {
-    return tags.filter(t => t.type === 'asset' && t.assetId).length;
+    return tags.filter(t => t.type === 'asset' && t.assetIdentifier).length;
   }, [tags]);
 
   const filteredTags = useMemo(() => {
