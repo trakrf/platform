@@ -65,7 +65,7 @@ components:
                 - name
                 - scopes
             type: object
-        asset.CreateAssetWithIdentifiersRequest:
+        asset.CreateAssetWithTagsRequest:
             properties:
                 current_location:
                     example: WHS-01
@@ -78,10 +78,6 @@ components:
                 identifier:
                     maxLength: 255
                     type: string
-                identifiers:
-                    items:
-                        $ref: '#/components/schemas/shared.TagIdentifierRequest'
-                    type: array
                 is_active:
                     example: true
                     type: boolean
@@ -92,6 +88,10 @@ components:
                     maxLength: 255
                     minLength: 1
                     type: string
+                tags:
+                    items:
+                        $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                    type: array
                 type:
                     enum:
                         - asset
@@ -121,10 +121,6 @@ components:
                     type: string
                 identifier:
                     type: string
-                identifiers:
-                    items:
-                        $ref: '#/components/schemas/shared.TagIdentifier'
-                    type: array
                 is_active:
                     type: boolean
                 metadata:
@@ -134,6 +130,10 @@ components:
                     type: string
                 surrogate_id:
                     type: integer
+                tags:
+                    items:
+                        $ref: '#/components/schemas/shared.TagIdentifier'
+                    type: array
                 type:
                     type: string
                 updated_at:
@@ -280,7 +280,7 @@ components:
                 data:
                     $ref: '#/components/schemas/storage.SaveInventoryResult'
             type: object
-        location.CreateLocationWithIdentifiersRequest:
+        location.CreateLocationWithTagsRequest:
             properties:
                 description:
                     example: Main warehouse location
@@ -291,10 +291,6 @@ components:
                     maxLength: 255
                     minLength: 1
                     type: string
-                identifiers:
-                    items:
-                        $ref: '#/components/schemas/shared.TagIdentifierRequest'
-                    type: array
                 is_active:
                     example: true
                     type: boolean
@@ -308,6 +304,10 @@ components:
                     maxLength: 255
                     minLength: 1
                     type: string
+                tags:
+                    items:
+                        $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                    type: array
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
                     format: date-time
@@ -331,10 +331,6 @@ components:
                     type: string
                 identifier:
                     type: string
-                identifiers:
-                    items:
-                        $ref: '#/components/schemas/shared.TagIdentifier'
-                    type: array
                 is_active:
                     type: boolean
                 name:
@@ -345,6 +341,10 @@ components:
                     type: string
                 surrogate_id:
                     type: integer
+                tags:
+                    items:
+                        $ref: '#/components/schemas/shared.TagIdentifier'
+                    type: array
                 updated_at:
                     format: date-time
                     type: string
@@ -736,15 +736,15 @@ paths:
                 - assets
         post:
             description: |-
-                Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).
-                Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
+                Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).
+                Returns the created asset with its assigned tags. The Location response header contains the canonical URL.
             operationId: assets.create
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/asset.CreateAssetWithIdentifiersRequest'
-                description: Asset to create with optional identifiers
+                            $ref: '#/components/schemas/asset.CreateAssetWithTagsRequest'
+                description: Asset to create with optional tags
                 required: true
                 x-originalParamName: request
             responses:
@@ -1090,12 +1090,12 @@ paths:
             summary: Asset movement history
             tags:
                 - reports
-    /api/v1/assets/{identifier}/identifiers:
+    /api/v1/assets/{identifier}/tags:
         post:
             description: |-
-                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
-                The identifier must be unique within the organization.
-            operationId: assets.identifiers.add
+                Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
+                The tag must be unique within the organization.
+            operationId: assets.tags.add
             parameters:
                 - description: Asset identifier
                   in: path
@@ -1108,7 +1108,7 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/shared.TagIdentifierRequest'
-                description: Tag identifier to attach
+                description: Tag to attach
                 required: true
                 x-originalParamName: request
             responses:
@@ -1158,13 +1158,13 @@ paths:
             security:
                 - APIKey:
                     - assets:write
-            summary: Add an identifier to an asset
+            summary: Add a tag to an asset
             tags:
                 - assets
-    /api/v1/assets/{identifier}/identifiers/{identifierId}:
+    /api/v1/assets/{identifier}/tags/{tagId}:
         delete:
-            description: Detach a tag identifier from an asset by its identifier record ID.
-            operationId: assets.identifiers.remove
+            description: Detach a tag from an asset by its tag record ID.
+            operationId: assets.tags.remove
             parameters:
                 - description: Asset identifier
                   in: path
@@ -1172,9 +1172,9 @@ paths:
                   required: true
                   schema:
                     type: string
-                - description: Identifier ID
+                - description: Tag ID
                   in: path
-                  name: identifierId
+                  name: tagId
                   required: true
                   schema:
                     type: integer
@@ -1220,7 +1220,7 @@ paths:
             security:
                 - APIKey:
                     - assets:write
-            summary: Remove an identifier from an asset
+            summary: Remove a tag from an asset
             tags:
                 - assets
     /api/v1/inventory/save:
@@ -1376,15 +1376,15 @@ paths:
                 - locations
         post:
             description: |-
-                Create a new location in the hierarchy, optionally with one or more tag identifiers.
+                Create a new location in the hierarchy, optionally with one or more tags.
                 Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
             operationId: locations.create
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/location.CreateLocationWithIdentifiersRequest'
-                description: Location to create with optional identifiers
+                            $ref: '#/components/schemas/location.CreateLocationWithTagsRequest'
+                description: Location to create with optional tags
                 required: true
                 x-originalParamName: request
             responses:
@@ -1834,12 +1834,12 @@ paths:
             summary: List location descendants
             tags:
                 - locations
-    /api/v1/locations/{identifier}/identifiers:
+    /api/v1/locations/{identifier}/tags:
         post:
             description: |-
-                Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
-                The identifier must be unique within the organization.
-            operationId: locations.identifiers.add
+                Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
+                The tag must be unique within the organization.
+            operationId: locations.tags.add
             parameters:
                 - description: Location identifier
                   in: path
@@ -1852,7 +1852,7 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/shared.TagIdentifierRequest'
-                description: Tag identifier to attach
+                description: Tag to attach
                 required: true
                 x-originalParamName: request
             responses:
@@ -1902,13 +1902,13 @@ paths:
             security:
                 - APIKey:
                     - locations:write
-            summary: Add an identifier to a location
+            summary: Add a tag to a location
             tags:
                 - locations
-    /api/v1/locations/{identifier}/identifiers/{identifierId}:
+    /api/v1/locations/{identifier}/tags/{tagId}:
         delete:
-            description: Detach a tag identifier from a location by its identifier record ID.
-            operationId: locations.identifiers.remove
+            description: Detach a tag from a location by its tag record ID.
+            operationId: locations.tags.remove
             parameters:
                 - description: Location identifier
                   in: path
@@ -1916,9 +1916,9 @@ paths:
                   required: true
                   schema:
                     type: string
-                - description: Identifier ID
+                - description: Tag ID
                   in: path
-                  name: identifierId
+                  name: tagId
                   required: true
                   schema:
                     type: integer
@@ -1964,7 +1964,7 @@ paths:
             security:
                 - APIKey:
                     - locations:write
-            summary: Remove an identifier from a location
+            summary: Remove a tag from a location
             tags:
                 - locations
     /api/v1/locations/current:

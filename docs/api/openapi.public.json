@@ -95,7 +95,7 @@
         ],
         "type": "object"
       },
-      "asset.CreateAssetWithIdentifiersRequest": {
+      "asset.CreateAssetWithTagsRequest": {
         "properties": {
           "current_location": {
             "example": "WHS-01",
@@ -111,12 +111,6 @@
             "maxLength": 255,
             "type": "string"
           },
-          "identifiers": {
-            "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifierRequest"
-            },
-            "type": "array"
-          },
           "is_active": {
             "example": true,
             "type": "boolean"
@@ -129,6 +123,12 @@
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/shared.TagIdentifierRequest"
+            },
+            "type": "array"
           },
           "type": {
             "enum": [
@@ -170,12 +170,6 @@
           "identifier": {
             "type": "string"
           },
-          "identifiers": {
-            "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifier"
-            },
-            "type": "array"
-          },
           "is_active": {
             "type": "boolean"
           },
@@ -188,6 +182,12 @@
           },
           "surrogate_id": {
             "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/shared.TagIdentifier"
+            },
+            "type": "array"
           },
           "type": {
             "type": "string"
@@ -397,7 +397,7 @@
         },
         "type": "object"
       },
-      "location.CreateLocationWithIdentifiersRequest": {
+      "location.CreateLocationWithTagsRequest": {
         "properties": {
           "description": {
             "example": "Main warehouse location",
@@ -409,12 +409,6 @@
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
-          },
-          "identifiers": {
-            "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifierRequest"
-            },
-            "type": "array"
           },
           "is_active": {
             "example": true,
@@ -431,6 +425,12 @@
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/shared.TagIdentifierRequest"
+            },
+            "type": "array"
           },
           "valid_from": {
             "example": "2025-12-14T00:00:00Z",
@@ -464,12 +464,6 @@
           "identifier": {
             "type": "string"
           },
-          "identifiers": {
-            "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifier"
-            },
-            "type": "array"
-          },
           "is_active": {
             "type": "boolean"
           },
@@ -484,6 +478,12 @@
           },
           "surrogate_id": {
             "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/shared.TagIdentifier"
+            },
+            "type": "array"
           },
           "updated_at": {
             "format": "date-time",
@@ -1059,17 +1059,17 @@
         ]
       },
       "post": {
-        "description": "Create a new asset record, optionally with one or more tag identifiers (RFID, BLE, barcode).\nReturns the created asset with its assigned identifiers. The Location response header contains the canonical URL.",
+        "description": "Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
         "operationId": "assets.create",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/asset.CreateAssetWithIdentifiersRequest"
+                "$ref": "#/components/schemas/asset.CreateAssetWithTagsRequest"
               }
             }
           },
-          "description": "Asset to create with optional identifiers",
+          "description": "Asset to create with optional tags",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -1639,10 +1639,10 @@
         ]
       }
     },
-    "/api/v1/assets/{identifier}/identifiers": {
+    "/api/v1/assets/{identifier}/tags": {
       "post": {
-        "description": "Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.\nThe identifier must be unique within the organization.",
-        "operationId": "assets.identifiers.add",
+        "description": "Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.\nThe tag must be unique within the organization.",
+        "operationId": "assets.tags.add",
         "parameters": [
           {
             "description": "Asset identifier",
@@ -1662,7 +1662,7 @@
               }
             }
           },
-          "description": "Tag identifier to attach",
+          "description": "Tag to attach",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -1746,16 +1746,16 @@
             ]
           }
         ],
-        "summary": "Add an identifier to an asset",
+        "summary": "Add a tag to an asset",
         "tags": [
           "assets"
         ]
       }
     },
-    "/api/v1/assets/{identifier}/identifiers/{identifierId}": {
+    "/api/v1/assets/{identifier}/tags/{tagId}": {
       "delete": {
-        "description": "Detach a tag identifier from an asset by its identifier record ID.",
-        "operationId": "assets.identifiers.remove",
+        "description": "Detach a tag from an asset by its tag record ID.",
+        "operationId": "assets.tags.remove",
         "parameters": [
           {
             "description": "Asset identifier",
@@ -1767,9 +1767,9 @@
             }
           },
           {
-            "description": "Identifier ID",
+            "description": "Tag ID",
             "in": "path",
-            "name": "identifierId",
+            "name": "tagId",
             "required": true,
             "schema": {
               "type": "integer"
@@ -1848,7 +1848,7 @@
             ]
           }
         ],
-        "summary": "Remove an identifier from an asset",
+        "summary": "Remove a tag from an asset",
         "tags": [
           "assets"
         ]
@@ -2101,17 +2101,17 @@
         ]
       },
       "post": {
-        "description": "Create a new location in the hierarchy, optionally with one or more tag identifiers.\nSet ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.",
+        "description": "Create a new location in the hierarchy, optionally with one or more tags.\nSet ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.",
         "operationId": "locations.create",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/location.CreateLocationWithIdentifiersRequest"
+                "$ref": "#/components/schemas/location.CreateLocationWithTagsRequest"
               }
             }
           },
-          "description": "Location to create with optional identifiers",
+          "description": "Location to create with optional tags",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -3003,10 +3003,10 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}/identifiers": {
+    "/api/v1/locations/{identifier}/tags": {
       "post": {
-        "description": "Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.\nThe identifier must be unique within the organization.",
-        "operationId": "locations.identifiers.add",
+        "description": "Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.\nThe tag must be unique within the organization.",
+        "operationId": "locations.tags.add",
         "parameters": [
           {
             "description": "Location identifier",
@@ -3026,7 +3026,7 @@
               }
             }
           },
-          "description": "Tag identifier to attach",
+          "description": "Tag to attach",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -3110,16 +3110,16 @@
             ]
           }
         ],
-        "summary": "Add an identifier to a location",
+        "summary": "Add a tag to a location",
         "tags": [
           "locations"
         ]
       }
     },
-    "/api/v1/locations/{identifier}/identifiers/{identifierId}": {
+    "/api/v1/locations/{identifier}/tags/{tagId}": {
       "delete": {
-        "description": "Detach a tag identifier from a location by its identifier record ID.",
-        "operationId": "locations.identifiers.remove",
+        "description": "Detach a tag from a location by its tag record ID.",
+        "operationId": "locations.tags.remove",
         "parameters": [
           {
             "description": "Location identifier",
@@ -3131,9 +3131,9 @@
             }
           },
           {
-            "description": "Identifier ID",
+            "description": "Tag ID",
             "in": "path",
-            "name": "identifierId",
+            "name": "tagId",
             "required": true,
             "schema": {
               "type": "integer"
@@ -3212,7 +3212,7 @@
             ]
           }
         ],
-        "summary": "Remove an identifier from a location",
+        "summary": "Remove a tag from a location",
         "tags": [
           "locations"
         ]

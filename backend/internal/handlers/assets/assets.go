@@ -39,7 +39,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 
 // @Summary      Create an asset
 // @Description  Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).
-// @Description  Returns the created asset with its assigned identifiers. The Location response header contains the canonical URL.
+// @Description  Returns the created asset with its assigned tags. The Location response header contains the canonical URL.
 // @Tags         assets,public
 // @ID           assets.create
 // @Accept       json
