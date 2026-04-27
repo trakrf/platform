@@ -61,6 +61,17 @@ func codeForTag(fe validator.FieldError) string {
 	return "invalid_value"
 }
 
+// isCollectionKind reports whether the validator's reported Kind is a
+// length-of-collection (vs. length-of-string) — used to pick "items" vs
+// "characters" wording for too_short/too_long messages.
+func isCollectionKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return true
+	}
+	return false
+}
+
 func isNumericKind(k reflect.Kind) bool {
 	switch k {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -79,8 +90,14 @@ func messageForField(fe validator.FieldError) string {
 	case "required":
 		return fmt.Sprintf("%s is required", fe.Field())
 	case "too_short":
+		if isCollectionKind(fe.Kind()) {
+			return fmt.Sprintf("%s must contain at least %s items", fe.Field(), fe.Param())
+		}
 		return fmt.Sprintf("%s must be at least %s characters", fe.Field(), fe.Param())
 	case "too_long":
+		if isCollectionKind(fe.Kind()) {
+			return fmt.Sprintf("%s must contain at most %s items", fe.Field(), fe.Param())
+		}
 		return fmt.Sprintf("%s must be at most %s characters", fe.Field(), fe.Param())
 	case "too_small":
 		return fmt.Sprintf("%s must be >= %s", fe.Field(), fe.Param())
