@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Radio, HelpCircle, Target, Trash2 } from 'lucide-react';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 import { assetsApi } from '@/lib/api/assets';
 import { locationsApi } from '@/lib/api/locations';
 import toast from 'react-hot-toast';
 
 interface TagIdentifierListProps {
-  identifiers: TagIdentifier[];
+  identifiers: Tag[];
   expanded?: boolean;
   size?: 'sm' | 'md';
   showHeader?: boolean;
@@ -81,7 +81,7 @@ function TagIdentifierHeader() {
 }
 
 interface TagIdentifierRowProps {
-  identifier: TagIdentifier;
+  identifier: Tag;
   size?: 'sm' | 'md';
   entityId?: number;
   entityType?: 'asset' | 'location';

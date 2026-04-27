@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Target, Radio } from 'lucide-react';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 interface LocateTagPopoverProps {
-  identifiers: TagIdentifier[];
+  identifiers: Tag[];
   entityIdentifier: string;
   isActive: boolean;
   triggerClassName?: string;

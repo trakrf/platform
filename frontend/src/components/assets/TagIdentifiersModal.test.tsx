@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import '@testing-library/jest-dom';
 import { TagIdentifiersModal } from './TagIdentifiersModal';
 import { assetsApi } from '@/lib/api/assets';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 // Mock the assets API
 vi.mock('@/lib/api/assets', () => ({
@@ -21,7 +21,7 @@ vi.mock('react-hot-toast', () => ({
 }));
 
 describe('TagIdentifiersModal', () => {
-  const mockIdentifiers: TagIdentifier[] = [
+  const mockIdentifiers: Tag[] = [
     { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
     { id: 2, type: 'rfid', value: 'TAG-002', is_active: true },
     { id: 3, type: 'rfid', value: 'TAG-003', is_active: false },

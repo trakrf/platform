@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, MapPin, Building2 } from 'lucide-react';
 import type { Location } from '@/types/locations';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 import { useLocationStore } from '@/stores';
 import { TagCountBadge, TagIdentifiersModal, LocateTagPopover } from '@/components/assets';
 
@@ -28,7 +28,7 @@ export function LocationCard({
   const isRoot = location.parent_location_id === null;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>(location.tags || []);
+  const [localTags, setLocalTags] = useState<Tag[]>(location.tags || []);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
   // Sync local tags when location prop changes

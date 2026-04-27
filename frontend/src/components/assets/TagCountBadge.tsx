@@ -1,8 +1,8 @@
 import { Radio } from 'lucide-react';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 interface TagCountBadgeProps {
-  identifiers: TagIdentifier[] | undefined;
+  identifiers: Tag[] | undefined;
   onClick?: (e: React.MouseEvent) => void;
 }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
 import { TagIdentifierList } from './TagIdentifierList';
 
@@ -17,7 +17,7 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
   const location = asset?.current_location ? getLocationByIdentifier(asset.current_location) : null;
 
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>([]);
+  const [localTags, setLocalTags] = useState<Tag[]>([]);
 
   useEffect(() => {
     if (asset) {

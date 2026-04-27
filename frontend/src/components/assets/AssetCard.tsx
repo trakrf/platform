@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
 import { TagCountBadge } from './TagCountBadge';
 import { TagIdentifiersModal } from './TagIdentifiersModal';
@@ -40,7 +40,7 @@ export function AssetCard({
   const locationName = locationData?.name ?? asset.current_location ?? undefined;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>(asset.tags || []);
+  const [localTags, setLocalTags] = useState<Tag[]>(asset.tags || []);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
   const getSearchMatch = useAssetStore((state) => state.getSearchMatch);
   const searchMatch = getSearchMatch(asset.id);

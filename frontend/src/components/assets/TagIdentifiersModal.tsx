@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Trash2, Loader2, Target } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 import { assetsApi } from '@/lib/api/assets';
 import { locationsApi } from '@/lib/api/locations';
 
@@ -11,7 +11,7 @@ const handleLocateTag = (tagValue: string) => {
 };
 
 interface TagIdentifiersModalProps {
-  identifiers: TagIdentifier[];
+  identifiers: Tag[];
   entityId?: number;
   entityName?: string;
   entityType?: 'asset' | 'location';

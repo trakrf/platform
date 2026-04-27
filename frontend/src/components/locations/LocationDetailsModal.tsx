@@ -5,7 +5,7 @@ import { LocationBreadcrumb } from './LocationBreadcrumb';
 import { TagIdentifierList } from '@/components/assets';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import type { Location } from '@/types/locations';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 interface LocationDetailsModalProps {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export function LocationDetailsModal({
   const getDescendants = useLocationStore((state) => state.getDescendants);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>([]);
+  const [localTags, setLocalTags] = useState<Tag[]>([]);
 
   useEffect(() => {
     setLocalTags(location.tags || []);

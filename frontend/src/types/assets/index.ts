@@ -5,7 +5,7 @@
  * All types match backend API responses exactly.
  */
 
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 // ============ Core Entity Types ============
 
@@ -32,7 +32,7 @@ export interface Asset {
   is_active: boolean; // Go: bool
   created_at: string; // Go: time.Time → ISO 8601 string
   updated_at: string; // Go: time.Time → ISO 8601 string
-  tags: TagIdentifier[]; // Physical tags (RFID, BLE, NFC, barcode) linked to this asset
+  tags: Tag[]; // Physical tags (RFID, BLE, NFC, barcode) linked to this asset
 }
 
 // ============ Request/Response Types ============
