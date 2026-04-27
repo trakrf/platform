@@ -64,7 +64,7 @@ type SaveResponse struct {
 // @ID inventory.save
 // @Accept json
 // @Produce json
-// @Param request body SaveRequest true "Save request with location and asset IDs"
+// @Param request body SaveRequest true "Save request with location and asset identifiers"
 // @Success 201 {object} inventory.SaveResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"

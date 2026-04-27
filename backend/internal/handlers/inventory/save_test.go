@@ -145,8 +145,11 @@ func TestSave_NeitherLocationFieldProvided(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 	assert.Equal(t, "validation_error", response.Error.Type)
 	require.Len(t, response.Error.Fields, 1)
-	assert.Equal(t, "location_identifier", response.Error.Fields[0].Field)
-	assert.Equal(t, "required", response.Error.Fields[0].Code)
+	codesByField := map[string]string{}
+	for _, f := range response.Error.Fields {
+		codesByField[f.Field] = f.Code
+	}
+	assert.Equal(t, "required", codesByField["location_identifier"])
 }
 
 func TestSave_EmptyAssetIdentifiers(t *testing.T) {
@@ -439,10 +442,12 @@ func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.Equal(t, "validation_error", body.Error.Type)
 	require.Len(t, body.Error.Fields, 2, "both required fields must be reported when absent")
-	assert.Equal(t, "location_identifier", body.Error.Fields[0].Field)
-	assert.Equal(t, "required", body.Error.Fields[0].Code)
-	assert.Equal(t, "asset_identifiers", body.Error.Fields[1].Field)
-	assert.Equal(t, "required", body.Error.Fields[1].Code)
+	codesByField := map[string]string{}
+	for _, f := range body.Error.Fields {
+		codesByField[f.Field] = f.Code
+	}
+	assert.Equal(t, "required", codesByField["location_identifier"])
+	assert.Equal(t, "required", codesByField["asset_identifiers"])
 }
 
 // --- Handler-level tests using mockInventoryStorage ---
