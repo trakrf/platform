@@ -38,6 +38,8 @@ jobs:
 
       - name: Install just
         uses: extractions/setup-just@v2
+        with:
+          just-version: '1.50.0'
 
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
