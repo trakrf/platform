@@ -940,7 +940,7 @@
             }
           },
           {
-            "description": "substring search (case-insensitive) on name, identifier, description, and active identifier values",
+            "description": "substring search (case-insensitive) on name, identifier, description, and active tag values",
             "in": "query",
             "name": "q",
             "schema": {
@@ -1992,7 +1992,7 @@
             }
           },
           {
-            "description": "substring search (case-insensitive) on name, identifier, description, and active identifier values",
+            "description": "substring search (case-insensitive) on name, identifier, description, and active tag values",
             "in": "query",
             "name": "q",
             "schema": {
@@ -2232,7 +2232,7 @@
             }
           },
           {
-            "description": "substring search (case-insensitive) on asset name, identifier, and active identifier values",
+            "description": "substring search (case-insensitive) on asset name, identifier, and active tag values",
             "in": "query",
             "name": "q",
             "schema": {
