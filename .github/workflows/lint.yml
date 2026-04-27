@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install just
-        uses: extractions/setup-just@v4
+        uses: taiki-e/install-action@just
 
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
