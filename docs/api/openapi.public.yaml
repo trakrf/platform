@@ -740,6 +740,12 @@ paths:
         post:
             description: |-
                 Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).
+
+                The `identifier` field is optional. Provide a value from your system of record
+                (ERP, WMS, asset management) for natural-key joins, or omit it to receive a
+                server-assigned identifier in the format `ASSET-NNNN` (per-organization sequence).
+                A caller-supplied identifier that collides with an existing asset returns 409.
+
                 Returns the created asset with its assigned tags. The Location response header contains the canonical URL.
             operationId: assets.create
             requestBody:
