@@ -41,7 +41,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: taiki-e/install-action@just
 
       - name: Install swag CLI
         run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
