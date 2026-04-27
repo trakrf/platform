@@ -48,6 +48,7 @@ const generateAssetTag = (id: number, rssi: number, assetId?: number): TagInfo =
   source: 'scan' as const,
   type: assetId ? 'asset' as const : 'unknown' as const,
   assetId,
+  assetIdentifier: assetId ? `ASSET-${assetId}` : undefined,
 });
 
 describe('InventoryScreen Pagination', () => {

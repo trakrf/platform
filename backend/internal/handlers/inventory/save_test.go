@@ -78,8 +78,8 @@ func TestSave_MissingOrgContext(t *testing.T) {
 	handler := NewHandler(nil)
 
 	body := SaveRequest{
-		LocationID: 1,
-		AssetIDs:   []int{100, 101},
+		LocationIdentifier: ptr("WH-01"),
+		AssetIdentifiers:   []string{"ASSET-0001", "ASSET-0002"},
 	}
 	bodyBytes, _ := json.Marshal(body)
 
@@ -129,7 +129,7 @@ func TestSave_NeitherLocationFieldProvided(t *testing.T) {
 	handler := NewHandler(&mockInventoryStorage{})
 
 	body := map[string]any{
-		"asset_ids": []int{100, 101},
+		"asset_identifiers": []string{"ASSET-0001"},
 	}
 	req := newTestRequest(t, body, 1)
 	w := httptest.NewRecorder()
@@ -138,25 +138,26 @@ func TestSave_NeitherLocationFieldProvided(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	var response struct {
 		Error struct {
-			Type   string `json:"type"`
-			Detail string `json:"detail"`
+			Type   string                   `json:"type"`
+			Fields []modelerrors.FieldError `json:"fields"`
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 	assert.Equal(t, "validation_error", response.Error.Type)
-	assert.Contains(t, response.Error.Detail, "location_identifier")
+	require.Len(t, response.Error.Fields, 1)
+	codesByField := map[string]string{}
+	for _, f := range response.Error.Fields {
+		codesByField[f.Field] = f.Code
+	}
+	assert.Equal(t, "required", codesByField["location_identifier"])
 }
 
-func TestSave_EmptyAssetIDs(t *testing.T) {
-	// JSON-marshalling SaveRequest with omitempty drops the empty slice, so the
-	// decoded request has nil AssetIDs. The cross-field check fires before the
-	// struct validator can reject the empty slice, returning a
-	// validation_error naming asset_identifiers as required.
+func TestSave_EmptyAssetIdentifiers(t *testing.T) {
 	handler := NewHandler(&mockInventoryStorage{})
 
 	body := SaveRequest{
-		LocationID: 1,
-		AssetIDs:   []int{}, // empty array — omitted by omitempty, arrives as nil
+		LocationIdentifier: ptr("WH-01"),
+		AssetIdentifiers:   []string{}, // empty array — fails validate:"required,min=1"
 	}
 	bodyBytes, _ := json.Marshal(body)
 
@@ -212,52 +213,42 @@ func TestSaveRequest_Validation(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid request",
-			request: SaveRequest{
-				LocationID: 1,
-				AssetIDs:   []int{100, 101, 102},
-			},
-			wantErr: false,
-		},
-		{
-			name: "missing location_id passes struct validator (handler enforces)",
-			request: SaveRequest{
-				LocationID: 0,
-				AssetIDs:   []int{100},
-			},
-			wantErr: false,
-		},
-		{
-			name: "empty asset_ids",
-			request: SaveRequest{
-				LocationID: 1,
-				AssetIDs:   []int{},
-			},
-			wantErr: true, // direct struct validation catches empty non-nil slice via min=1
-		},
-		{
-			name: "nil asset_ids passes struct validator (handler enforces)",
-			request: SaveRequest{
-				LocationID: 1,
-				AssetIDs:   nil,
-			},
-			wantErr: false,
-		},
-		{
-			name: "identifier-only request validates",
+			name: "valid identifier request",
 			request: SaveRequest{
 				LocationIdentifier: ptr("WH-01"),
-				AssetIdentifiers:   []string{"ASSET-0001"},
+				AssetIdentifiers:   []string{"ASSET-0001", "ASSET-0002"},
 			},
 			wantErr: false,
 		},
 		{
-			name:    "all-empty passes struct validator; cross-field lives in handler",
+			name:    "all-empty fails: location_identifier and asset_identifiers required",
 			request: SaveRequest{},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
-			name: "asset_identifiers with empty string element fails",
+			name: "missing location_identifier fails",
+			request: SaveRequest{
+				AssetIdentifiers: []string{"ASSET-0001"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing asset_identifiers fails",
+			request: SaveRequest{
+				LocationIdentifier: ptr("WH-01"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty asset_identifiers fails (min=1)",
+			request: SaveRequest{
+				LocationIdentifier: ptr("WH-01"),
+				AssetIdentifiers:   []string{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "asset_identifiers with empty string element fails (dive,min=1)",
 			request: SaveRequest{
 				LocationIdentifier: ptr("WH-01"),
 				AssetIdentifiers:   []string{""},
@@ -425,8 +416,10 @@ func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
 		"must not leak encoding/json internals")
 }
 
-// Bug reproduction: TRA-478 — cross-field errors surface as validation_error
+// Bug reproduction: TRA-478 — validation errors surface as validation_error
 // with fields[] so clients have a single branch on type + fields[].code.
+// TRA-533: both fields are now required by struct tags; {} produces 2 field
+// errors (location_identifier + asset_identifiers), both with code "required".
 func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	orgID := 1
 	claims := &jwt.Claims{UserID: 1, Email: "test@example.com", CurrentOrgID: &orgID}
@@ -443,16 +436,18 @@ func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	var body struct {
 		Error struct {
 			Type   string                   `json:"type"`
-			Detail string                   `json:"detail"`
 			Fields []modelerrors.FieldError `json:"fields"`
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.Equal(t, "validation_error", body.Error.Type)
-	assert.Contains(t, body.Error.Detail, "location_identifier")
-	require.Len(t, body.Error.Fields, 1)
-	assert.Equal(t, "location_identifier", body.Error.Fields[0].Field)
-	assert.Equal(t, "required", body.Error.Fields[0].Code)
+	require.Len(t, body.Error.Fields, 2, "both required fields must be reported when absent")
+	codesByField := map[string]string{}
+	for _, f := range body.Error.Fields {
+		codesByField[f.Field] = f.Code
+	}
+	assert.Equal(t, "required", codesByField["location_identifier"])
+	assert.Equal(t, "required", codesByField["asset_identifiers"])
 }
 
 // --- Handler-level tests using mockInventoryStorage ---
@@ -464,10 +459,18 @@ func TestSave_LocationAccessDenied(t *testing.T) {
 			OrgID:      1,
 			LocationID: 999,
 		},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-99": {LocationView: location.LocationView{Location: location.Location{ID: 999, Identifier: "WH-99"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100, "ASSET-0002": 101},
 	}
 	handler := NewHandler(mock)
 
-	req := newTestRequest(t, SaveRequest{LocationID: 999, AssetIDs: []int{100, 101}}, 1)
+	body := map[string]any{
+		"location_identifier": "WH-99",
+		"asset_identifiers":   []string{"ASSET-0001", "ASSET-0002"},
+	}
+	req := newTestRequest(t, body, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -484,10 +487,18 @@ func TestSave_AssetAccessDenied(t *testing.T) {
 			ValidCount: 2,
 			TotalCount: 3,
 		},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, Identifier: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
 	handler := NewHandler(mock)
 
-	req := newTestRequest(t, SaveRequest{LocationID: 1, AssetIDs: []int{1, 2, 3}}, 1)
+	body := map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-1", "ASSET-2", "ASSET-3"},
+	}
+	req := newTestRequest(t, body, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -498,10 +509,18 @@ func TestSave_AssetAccessDenied(t *testing.T) {
 func TestSave_InternalStorageError(t *testing.T) {
 	mock := &mockInventoryStorage{
 		saveError: errors.New("database connection failed"),
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, Identifier: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100},
 	}
 	handler := NewHandler(mock)
 
-	req := newTestRequest(t, SaveRequest{LocationID: 1, AssetIDs: []int{100}}, 1)
+	body := map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-0001"},
+	}
+	req := newTestRequest(t, body, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -519,10 +538,18 @@ func TestSave_Success(t *testing.T) {
 			LocationName: "Warehouse B",
 			Timestamp:    ts,
 		},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-B": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-B"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
 	handler := NewHandler(mock)
 
-	req := newTestRequest(t, SaveRequest{LocationID: 42, AssetIDs: []int{1, 2, 3}}, 1)
+	body := map[string]any{
+		"location_identifier": "WH-B",
+		"asset_identifiers":   []string{"ASSET-1", "ASSET-2", "ASSET-3"},
+	}
+	req := newTestRequest(t, body, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -541,7 +568,7 @@ func TestSave_Success(t *testing.T) {
 
 func TestSave_RequiresAtLeastOneLocationField(t *testing.T) {
 	handler := NewHandler(&mockInventoryStorage{})
-	req := newTestRequest(t, map[string]any{"asset_ids": []int{1}}, 1)
+	req := newTestRequest(t, map[string]any{"asset_identifiers": []string{"ASSET-0001"}}, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -551,47 +578,12 @@ func TestSave_RequiresAtLeastOneLocationField(t *testing.T) {
 
 func TestSave_RequiresAtLeastOneAssetField(t *testing.T) {
 	handler := NewHandler(&mockInventoryStorage{})
-	req := newTestRequest(t, map[string]any{"location_id": 1}, 1)
+	req := newTestRequest(t, map[string]any{"location_identifier": "WH-01"}, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	assert.Contains(t, w.Body.String(), "asset_identifiers")
-}
-
-func TestSave_BothAssetFieldsPresent_Rejected(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{})
-	body := map[string]any{
-		"location_id":       1,
-		"asset_ids":         []int{1, 2},
-		"asset_identifiers": []string{"ASSET-0001"},
-	}
-	req := newTestRequest(t, body, 1)
-	w := httptest.NewRecorder()
-	handler.Save(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), "not both")
-}
-
-func TestSave_LocationFieldsDisagree_Rejected(t *testing.T) {
-	mock := &mockInventoryStorage{
-		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-01"}}},
-		},
-	}
-	handler := NewHandler(mock)
-	body := map[string]any{
-		"location_id":         99, // doesn't match resolved 42
-		"location_identifier": "WH-01",
-		"asset_ids":           []int{1},
-	}
-	req := newTestRequest(t, body, 1)
-	w := httptest.NewRecorder()
-	handler.Save(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), "disagree")
 }
 
 func TestSave_LocationIdentifierNotFound_Rejected(t *testing.T) {
@@ -601,7 +593,7 @@ func TestSave_LocationIdentifierNotFound_Rejected(t *testing.T) {
 	handler := NewHandler(mock)
 	body := map[string]any{
 		"location_identifier": "ghost",
-		"asset_ids":           []int{1},
+		"asset_identifiers":   []string{"ASSET-0001"},
 	}
 	req := newTestRequest(t, body, 1)
 	w := httptest.NewRecorder()
@@ -664,29 +656,6 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, 2, resp.Data.Count)
 	assert.Equal(t, 42, resp.Data.LocationID)
-}
-
-func TestSave_BothLocationFieldsAgree_Succeeds(t *testing.T) {
-	ts := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
-	mock := &mockInventoryStorage{
-		saveResult: &storage.SaveInventoryResult{
-			Count: 1, LocationID: 42, LocationName: "WH-01", Timestamp: ts,
-		},
-		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-01", Name: "WH-01"}}},
-		},
-	}
-	handler := NewHandler(mock)
-	body := map[string]any{
-		"location_id":         42, // matches resolved
-		"location_identifier": "WH-01",
-		"asset_ids":           []int{7},
-	}
-	req := newTestRequest(t, body, 1)
-	w := httptest.NewRecorder()
-	handler.Save(w, req)
-
-	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 }
 
 func ptr[T any](v T) *T { return &v }

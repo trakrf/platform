@@ -116,12 +116,13 @@ export default function InventoryScreen() {
   }, [detectedLocation]);
 
   // Resolved location = manual override OR detected
+  // Includes identifier for the natural-key save API (TRA-533)
   const resolvedLocation = useMemo(() => {
-    if (manualLocationId) {
-      const location = locations.find(l => l.id === manualLocationId);
-      return location ? { id: location.id, name: location.name } : null;
-    }
-    return detectedLocation;
+    const locationId = manualLocationId ?? detectedLocation?.id ?? null;
+    if (!locationId) return null;
+    const location = locations.find(l => l.id === locationId);
+    if (!location) return null;
+    return { id: location.id, name: location.name, identifier: location.identifier };
   }, [manualLocationId, detectedLocation, locations]);
 
   // Display detection method
@@ -132,7 +133,7 @@ export default function InventoryScreen() {
 
   // Count of saveable assets (asset type tags only)
   const saveableCount = useMemo(() => {
-    return tags.filter(t => t.type === 'asset' && t.assetId).length;
+    return tags.filter(t => t.type === 'asset' && t.assetIdentifier).length;
   }, [tags]);
 
   const filteredTags = useMemo(() => {
@@ -237,17 +238,17 @@ export default function InventoryScreen() {
 
     if (!resolvedLocation) return;
 
-    // Get saveable asset IDs (asset type tags only)
-    const saveableAssets = tags
-      .filter(t => t.type === 'asset' && t.assetId)
-      .map(t => t.assetId!);
+    // Get saveable asset identifiers (asset type tags only)
+    const saveableAssetIdentifiers = tags
+      .filter(t => t.type === 'asset' && t.assetIdentifier)
+      .map(t => t.assetIdentifier!);
 
-    if (saveableAssets.length === 0) return;
+    if (saveableAssetIdentifiers.length === 0) return;
 
     try {
       await save({
-        location_id: resolvedLocation.id,
-        asset_ids: saveableAssets,
+        location_identifier: resolvedLocation.identifier,
+        asset_identifiers: saveableAssetIdentifiers,
       });
       if (autoClearOnSave) {
         // Brief delay so the success toast is readable before tags disappear

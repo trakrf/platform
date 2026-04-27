@@ -107,7 +107,7 @@ func TestInventorySave_APIKey_HappyPath(t *testing.T) {
 
 	r := buildInventoryPublicWriteRouter(store)
 
-	body := fmt.Sprintf(`{"location_id":%d,"asset_ids":[%d]}`, loc.ID, asset.ID)
+	body := fmt.Sprintf(`{"location_identifier":%q,"asset_identifiers":[%q]}`, loc.Identifier, asset.Identifier)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -121,6 +121,97 @@ func TestInventorySave_APIKey_HappyPath(t *testing.T) {
 	assert.NotNil(t, resp["data"])
 }
 
+func TestInventorySave_APIKey_MultiAsset_HappyPath(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-inv-multi-asset")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	orgID, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
+
+	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
+		OrgID: orgID, Identifier: "ma-wh", Name: "WH", Path: "ma-wh",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	asset1, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "ma-asset-1", Name: "A1", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+	asset2, err := store.CreateAsset(context.Background(), assetmodel.Asset{
+		OrgID: orgID, Identifier: "ma-asset-2", Name: "A2", Type: "asset",
+		ValidFrom: time.Now(), IsActive: true,
+	})
+	require.NoError(t, err)
+
+	r := buildInventoryPublicWriteRouter(store)
+	body := fmt.Sprintf(
+		`{"location_identifier":%q,"asset_identifiers":[%q,%q]}`,
+		loc.Identifier, asset1.Identifier, asset2.Identifier,
+	)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, float64(2), data["count"])
+
+	// Verify both rows landed in asset_scans.
+	var rowCount int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM trakrf.asset_scans WHERE org_id = $1`, orgID).Scan(&rowCount))
+	assert.Equal(t, 2, rowCount)
+}
+
+func TestInventorySave_EmptyAssetIdentifiers_Returns400(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-inv-empty-assets")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
+
+	r := buildInventoryPublicWriteRouter(store)
+	body := `{"location_identifier":"any-wh","asset_identifiers":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "asset_identifiers")
+}
+
+func TestInventorySave_LegacyShape_Returns400(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-inv-legacy-shape")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
+
+	r := buildInventoryPublicWriteRouter(store)
+	// Pre-TRA-533 shape — must be rejected post-AC2.
+	body := `{"location_id":1,"asset_ids":[1]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "location_identifier")
+}
+
 func TestInventorySave_WrongScope_Returns403(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-inv-wrong-scope")
 	store, cleanup := testutil.SetupTestDB(t)
@@ -131,7 +222,7 @@ func TestInventorySave_WrongScope_Returns403(t *testing.T) {
 
 	r := buildInventoryPublicWriteRouter(store)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save",
-		bytes.NewBufferString(`{"location_id":1,"asset_ids":[1]}`))
+		bytes.NewBufferString(`{"location_identifier":"any","asset_identifiers":["any"]}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -169,7 +260,7 @@ func TestInventorySave_SessionAuth_HappyPath(t *testing.T) {
 
 	r := buildInventoryPublicWriteRouter(store)
 
-	body := fmt.Sprintf(`{"location_id":%d,"asset_ids":[%d]}`, loc.ID, asset.ID)
+	body := fmt.Sprintf(`{"location_identifier":%q,"asset_identifiers":[%q]}`, loc.Identifier, asset.Identifier)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+sessToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -183,7 +274,7 @@ func TestInventorySave_SessionAuth_HappyPath(t *testing.T) {
 	assert.NotNil(t, resp["data"])
 }
 
-func TestInventorySave_CrossOrg_Returns403(t *testing.T) {
+func TestInventorySave_CrossOrg_Returns400(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-inv-cross-org")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -210,54 +301,20 @@ func TestInventorySave_CrossOrg_Returns403(t *testing.T) {
 	require.NoError(t, err)
 
 	r := buildInventoryPublicWriteRouter(store)
-	body := fmt.Sprintf(`{"location_id":%d,"asset_ids":[%d]}`, loc.ID, asset.ID)
+	body := fmt.Sprintf(`{"location_identifier":%q,"asset_identifiers":[%q]}`, loc.Identifier, asset.Identifier)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+tokenB)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Inventory save maps cross-org references to 403 (not 404) because the storage
-	// layer raises "not found or access denied"; see handlers/inventory/save.go.
-	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
-}
-
-func TestInventorySave_APIKey_Identifiers_HappyPath(t *testing.T) {
-	t.Setenv("JWT_SECRET", "pub-inv-ident-happy")
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-
-	orgID, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
-
-	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra448-wh", Name: "WH", Path: "tra448-wh",
-		ValidFrom: time.Now(), IsActive: true,
-	})
-	require.NoError(t, err)
-
-	_, err = store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "tra448-asset", Name: "A", Type: "asset",
-		ValidFrom: time.Now(), IsActive: true,
-	})
-	require.NoError(t, err)
-
-	r := buildInventoryPublicWriteRouter(store)
-
-	body := `{"location_identifier":"tra448-wh","asset_identifiers":["tra448-asset"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
-
-	var resp map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	data := resp["data"].(map[string]any)
-	assert.Equal(t, float64(1), data["count"])
-	assert.Equal(t, "WH", data["location_name"])
+	// With the identifier-only shape, cross-org references fail at handler-side
+	// resolution (RLS filters orgA's location out of orgB's identifier lookup),
+	// returning 400. Tenant isolation is preserved; the failure mode is just
+	// reported at the validation layer instead of the storage layer.
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "xo-wh")
+	assert.Contains(t, w.Body.String(), "not found")
 }
 
 func TestInventorySave_APIKey_LocationIdentifierNotFound(t *testing.T) {
@@ -308,55 +365,4 @@ func TestInventorySave_APIKey_AssetIdentifierNotFound(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	assert.Contains(t, w.Body.String(), "ghost-asset")
-}
-
-func TestInventorySave_APIKey_LocationFieldsDisagree(t *testing.T) {
-	t.Setenv("JWT_SECRET", "pub-inv-ident-disagree")
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-
-	orgID, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
-	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra448-wh-d", Name: "WH", Path: "tra448-wh-d",
-		ValidFrom: time.Now(), IsActive: true,
-	})
-	require.NoError(t, err)
-	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "tra448-asset-d", Name: "A", Type: "asset",
-		ValidFrom: time.Now(), IsActive: true,
-	})
-	require.NoError(t, err)
-
-	r := buildInventoryPublicWriteRouter(store)
-	bogus := loc.ID + 9999
-	body := fmt.Sprintf(`{"location_identifier":"tra448-wh-d","location_id":%d,"asset_ids":[%d]}`, bogus, asset.ID)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), "disagree")
-}
-
-func TestInventorySave_APIKey_BothAssetFields_Rejected(t *testing.T) {
-	t.Setenv("JWT_SECRET", "pub-inv-ident-both-assets")
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-
-	_, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
-
-	r := buildInventoryPublicWriteRouter(store)
-	body := `{"location_id":1,"asset_ids":[1],"asset_identifiers":["x"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), "not both")
 }

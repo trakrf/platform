@@ -387,6 +387,10 @@
             "type": "string"
           }
         },
+        "required": [
+          "asset_identifiers",
+          "location_identifier"
+        ],
         "type": "object"
       },
       "inventory.SaveResponse": {
@@ -1866,7 +1870,7 @@
               }
             }
           },
-          "description": "Save request with location and asset IDs",
+          "description": "Save request with location and asset identifiers",
           "required": true,
           "x-originalParamName": "request"
         },

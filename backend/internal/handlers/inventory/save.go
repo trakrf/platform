@@ -44,18 +44,12 @@ func NewHandler(storage InventoryStorage) *Handler {
 
 // SaveRequest is the request body for POST /api/v1/inventory/save.
 //
-// External API consumers should use location_identifier and asset_identifiers.
-// The numeric location_id / asset_ids are accepted for backward compatibility
-// with the UI (which already has surrogate IDs in client state) and are hidden
-// from the public OpenAPI spec via swaggerignore.
-//
-// At least one of (location_id, location_identifier) and one of (asset_ids,
-// asset_identifiers) must be provided. See Save handler for cross-field rules.
+// Both fields are required; the public surface has a single canonical shape
+// (TRA-533). Use natural identifiers — surrogate IDs were removed to collapse
+// the C2-class spelling proliferation flagged in TRA-532 finding F10.
 type SaveRequest struct {
-	LocationID         int      `json:"location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
-	LocationIdentifier *string  `json:"location_identifier,omitempty" validate:"omitempty,min=1,max=255" example:"WH-01"`
-	AssetIDs           []int    `json:"asset_ids,omitempty" swaggerignore:"true" validate:"omitempty,min=1,dive,min=1"`
-	AssetIdentifiers   []string `json:"asset_identifiers,omitempty" validate:"omitempty,min=1,dive,min=1,max=255" example:"ASSET-0001"`
+	LocationIdentifier *string  `json:"location_identifier" validate:"required,min=1,max=255" example:"WH-01"`
+	AssetIdentifiers   []string `json:"asset_identifiers" validate:"required,min=1,dive,min=1,max=255" example:"ASSET-0001"`
 }
 
 // SaveResponse is the typed envelope returned on success by POST /api/v1/inventory/save.
@@ -70,7 +64,7 @@ type SaveResponse struct {
 // @ID inventory.save
 // @Accept json
 // @Produce json
-// @Param request body SaveRequest true "Save request with location and asset IDs"
+// @Param request body SaveRequest true "Save request with location and asset identifiers"
 // @Success 201 {object} inventory.SaveResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
@@ -101,112 +95,53 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cross-field: at least one of (location_id, location_identifier).
-	hasLocID := request.LocationID > 0
-	hasLocIdent := request.LocationIdentifier != nil && *request.LocationIdentifier != ""
-	if !hasLocID && !hasLocIdent {
-		msg := "location_identifier or location_id is required"
+	// Resolve location_identifier → numeric.
+	loc, err := h.storage.GetLocationByIdentifier(r.Context(), orgID, *request.LocationIdentifier)
+	if err != nil {
+		httputil.RespondStorageError(w, r, err, requestID)
+		return
+	}
+	if loc == nil {
+		msg := fmt.Sprintf("location_identifier %q not found", *request.LocationIdentifier)
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 			apierrors.InventorySaveFailed, msg, requestID,
 			[]modelerrors.FieldError{{
 				Field:   "location_identifier",
-				Code:    "required",
-				Message: msg,
-			}})
-		return
-	}
-
-	// Cross-field: at least one of (asset_ids, asset_identifiers).
-	hasAssetIDs := len(request.AssetIDs) > 0
-	hasAssetIdents := len(request.AssetIdentifiers) > 0
-	if !hasAssetIDs && !hasAssetIdents {
-		msg := "asset_identifiers or asset_ids is required"
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.InventorySaveFailed, msg, requestID,
-			[]modelerrors.FieldError{{
-				Field:   "asset_identifiers",
-				Code:    "required",
-				Message: msg,
-			}})
-		return
-	}
-	if hasAssetIDs && hasAssetIdents {
-		msg := "specify either asset_identifiers or asset_ids, not both"
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.InventorySaveFailed, msg, requestID,
-			[]modelerrors.FieldError{{
-				Field:   "asset_identifiers",
 				Code:    "invalid_value",
 				Message: msg,
 			}})
 		return
 	}
-
-	// Resolve location_identifier → numeric.
-	locationID := request.LocationID
-	if hasLocIdent {
-		loc, err := h.storage.GetLocationByIdentifier(r.Context(), orgID, *request.LocationIdentifier)
-		if err != nil {
-			httputil.RespondStorageError(w, r, err, requestID)
-			return
-		}
-		if loc == nil {
-			msg := fmt.Sprintf("location_identifier %q not found", *request.LocationIdentifier)
-			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-				apierrors.InventorySaveFailed, msg, requestID,
-				[]modelerrors.FieldError{{
-					Field:   "location_identifier",
-					Code:    "invalid_value",
-					Message: msg,
-				}})
-			return
-		}
-		if hasLocID && request.LocationID != loc.ID {
-			msg := "location_identifier and location_id disagree"
-			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-				apierrors.InventorySaveFailed, msg, requestID,
-				[]modelerrors.FieldError{{
-					Field:   "location_identifier",
-					Code:    "invalid_value",
-					Message: msg,
-				}})
-			return
-		}
-		locationID = loc.ID
-	}
+	locationID := loc.ID
 
 	// Resolve asset_identifiers → numeric IDs (one query).
-	assetIDs := request.AssetIDs
-	if hasAssetIdents {
-		resolved, err := h.storage.GetAssetIDsByIdentifiers(r.Context(), orgID, request.AssetIdentifiers)
-		if err != nil {
-			httputil.RespondStorageError(w, r, err, requestID)
-			return
+	resolved, err := h.storage.GetAssetIDsByIdentifiers(r.Context(), orgID, request.AssetIdentifiers)
+	if err != nil {
+		httputil.RespondStorageError(w, r, err, requestID)
+		return
+	}
+	assetIDs := make([]int, 0, len(request.AssetIdentifiers))
+	var missing []string
+	for _, ident := range request.AssetIdentifiers {
+		if id, ok := resolved[ident]; ok {
+			assetIDs = append(assetIDs, id)
+		} else {
+			missing = append(missing, ident)
 		}
-		ids := make([]int, 0, len(request.AssetIdentifiers))
-		var missing []string
-		for _, ident := range request.AssetIdentifiers {
-			if id, ok := resolved[ident]; ok {
-				ids = append(ids, id)
-			} else {
-				missing = append(missing, ident)
-			}
+	}
+	if len(missing) > 0 {
+		msg := fmt.Sprintf("asset_identifier(s) not found: %s", strings.Join(missing, ", "))
+		fields := make([]modelerrors.FieldError, 0, len(missing))
+		for _, m := range missing {
+			fields = append(fields, modelerrors.FieldError{
+				Field:   "asset_identifiers",
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("asset_identifier %q not found", m),
+			})
 		}
-		if len(missing) > 0 {
-			msg := fmt.Sprintf("asset_identifier(s) not found: %s", strings.Join(missing, ", "))
-			fields := make([]modelerrors.FieldError, 0, len(missing))
-			for _, m := range missing {
-				fields = append(fields, modelerrors.FieldError{
-					Field:   "asset_identifiers",
-					Code:    "invalid_value",
-					Message: fmt.Sprintf("asset_identifier %q not found", m),
-				})
-			}
-			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-				apierrors.InventorySaveFailed, msg, requestID, fields)
-			return
-		}
-		assetIDs = ids
+		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			apierrors.InventorySaveFailed, msg, requestID, fields)
+		return
 	}
 
 	result, err := h.storage.SaveInventoryScans(r.Context(), orgID, storage.SaveInventoryRequest{

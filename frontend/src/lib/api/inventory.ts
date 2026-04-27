@@ -13,8 +13,8 @@ import { apiClient } from './client';
  * Request to save inventory scans
  */
 export interface SaveInventoryRequest {
-  location_id: number;
-  asset_ids: number[];
+  location_identifier: string;
+  asset_identifiers: string[];
 }
 
 /**
