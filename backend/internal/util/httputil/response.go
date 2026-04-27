@@ -9,10 +9,12 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/errors"
 )
 
-// modulePathPattern matches Go module paths (github.com/owner/repo/...) that
-// can leak into wrapped errors via fmt.Errorf("...%w", err) or stack traces.
-// Public error responses must not expose internal package structure.
-var modulePathPattern = regexp.MustCompile(`\bgithub\.com/[A-Za-z0-9._/-]+`)
+// modulePathPattern matches Go module paths (e.g. github.com/owner/repo/pkg.Func,
+// gitlab.com/..., golang.org/x/...) that can leak into wrapped errors via
+// fmt.Errorf("...%w", err) or stack traces. Public error responses must not
+// expose internal package structure. Pattern matches host/path shape rather
+// than a literal hostname so it covers any forge or vanity import path.
+var modulePathPattern = regexp.MustCompile(`\b[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/[A-Za-z0-9._/-]+`)
 
 // sanitizeDetail scrubs internal module paths from a detail string before it
 // reaches the client. The placeholder preserves message structure so callers

@@ -44,6 +44,22 @@ func TestWriteJSONError_StripsThirdPartyModulePathFromDetail(t *testing.T) {
 	assert.NotContains(t, resp.Error.Detail, "github.com/", "third-party module paths also scrubbed")
 }
 
+func TestWriteJSONError_StripsNonGithubModulePathFromDetail(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
+
+	// Sanitizer matches host/path shape, not a literal hostname, so vanity
+	// imports and other forges are scrubbed too.
+	detail := "scan failed: golang.org/x/sync/singleflight.Group: deadlock"
+	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, "Internal error", detail, "req-1")
+
+	var resp httputil.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+	assert.NotContains(t, resp.Error.Detail, "golang.org/", "vanity-host module path scrubbed")
+	assert.Contains(t, resp.Error.Detail, "deadlock", "underlying cause remains visible")
+}
+
 func TestWriteJSONError_LeavesPlainDetailUntouched(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
