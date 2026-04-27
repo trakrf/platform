@@ -1038,3 +1038,61 @@ func TestSoftDeleteVisibility_Asset(t *testing.T) {
 	assert.EqualValues(t, 0, listInactiveBody["total_count"],
 		"is_active=false must NOT surface soft-deleted records — is_active is a business-state flag, not a soft-delete view")
 }
+
+// TRA-514: identifier is optional on POST /assets. When omitted or empty, the
+// server assigns one in ASSET-NNNN format (per-org sequence).
+func TestCreateAsset_APIKey_OmittedIdentifier_AutoGenerates(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-omit-identifier")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"name":"No Identifier Asset","type":"asset"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.NotEmpty(t, w.Header().Get("Location"))
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	identifier, ok := data["identifier"].(string)
+	require.True(t, ok, "response must include assigned identifier")
+	assert.Regexp(t, `^ASSET-\d+$`, identifier,
+		"server-assigned identifier must match ASSET-NNNN pattern")
+}
+
+// TRA-514: whitespace-only identifier is invalid input — caller intent is
+// ambiguous (did they mean to omit, or did they really want literal whitespace?).
+// Reject with 400 rather than silently auto-generating.
+func TestCreateAsset_APIKey_WhitespaceIdentifier_Returns400(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pub-assets-write-whitespace-identifier")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+
+	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
+	r := buildAssetsPublicWriteRouter(store)
+
+	body := `{"identifier":"   ","name":"Whitespace Asset","type":"asset"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var errResp modelerrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errResp))
+	assert.Equal(t, "validation_error", errResp.Error.Type)
+	require.NotEmpty(t, errResp.Error.Fields, "should include field error for identifier")
+	assert.Equal(t, "identifier", errResp.Error.Fields[0].Field)
+}

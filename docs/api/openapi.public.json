@@ -1063,7 +1063,7 @@
         ]
       },
       "post": {
-        "description": "Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
+        "description": "Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).\n\nThe `identifier` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned identifier in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied identifier that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
         "operationId": "assets.create",
         "requestBody": {
           "content": {
