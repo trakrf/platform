@@ -64,7 +64,9 @@ func TestPartition_PublicAndInternalHaveIndependentInfo(t *testing.T) {
 	assert.Equal(t, "TrakRF Internal API — not for customer use", internal.Info.Title)
 	require.NotEmpty(t, public.Servers)
 	require.NotEmpty(t, internal.Servers)
-	assert.Equal(t, "https://app.trakrf.id", public.Servers[0].URL)
+	// Preview leads in the public servers list per TRA-517 AC12 — generated
+	// clients default to preview during integration testing.
+	assert.Equal(t, "https://app.preview.trakrf.id", public.Servers[0].URL)
 	assert.Equal(t, "http://localhost:8080", internal.Servers[0].URL)
 }
 

@@ -7,30 +7,42 @@ import (
 )
 
 // postprocessPublic rewrites the doc for customer-facing publication:
-// converts the BearerAuth scheme from swaggo's 2.0 "apiKey" form to 3.0
-// HTTP-Bearer (so the scheme name matches its type — TRA-480 §3.3), sets
-// the customer-facing info and server URLs, and normalizes swaggo artefacts
-// that confuse OpenAPI codegen (empty metadata schemas, stringified
-// x-extensible-enum flags, missing date-time formats on timestamp fields).
-// Production is app.trakrf.id (the TrakRF application serves both the UI
-// and /api/v1/*); trakrf.id is the marketing site and must not appear here
-// — a Bearer token sent there would hit the marketing HTML page and
-// silently succeed.
+// converts the security schemes from swaggo's 2.0 "apiKey" form to 3.0
+// HTTP-Bearer, sets the customer-facing info and server URLs, marks fields
+// nullable that swaggo can't infer from Go pointer types, and normalizes
+// swaggo artefacts that confuse OpenAPI codegen (empty metadata schemas,
+// stringified x-extensible-enum flags, missing date-time formats on
+// timestamp fields). Production is app.trakrf.id (the TrakRF application
+// serves both the UI and /api/v1/*); trakrf.id is the marketing site and
+// must not appear here — a Bearer token sent there would hit the marketing
+// HTML page and silently succeed. Servers are ordered Preview-first so
+// generated clients default to preview during integration testing
+// (TRA-517 AC12).
 func postprocessPublic(doc *openapi3.T) {
-	rewriteBearerAuthScheme(doc)
+	rewriteBearerSchemes(doc)
+	markNullableFields(doc)
+	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
-		{URL: "https://app.trakrf.id", Description: "Production"},
-		{URL: "https://app.preview.trakrf.id", Description: "Preview (per-PR deploys)"},
+		{
+			URL:         "https://app.preview.trakrf.id",
+			Description: "Preview (per-PR deploys). Preview-scoped API keys authenticate here only — they will fail with 401 against Production, and Production keys will fail here.",
+		},
+		{
+			URL:         "https://app.trakrf.id",
+			Description: "Production. Production-scoped API keys authenticate here only — they will fail with 401 against Preview, and Preview keys will fail here.",
+		},
 	}
 }
 
 // postprocessInternal is the same but labels the doc as internal and
 // uses a local development server URL.
 func postprocessInternal(doc *openapi3.T) {
-	rewriteBearerAuthScheme(doc)
+	rewriteBearerSchemes(doc)
+	markNullableFields(doc)
+	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	doc.Info.Title = "TrakRF Internal API — not for customer use"
 	doc.Info.Version = "v1"
@@ -39,25 +51,94 @@ func postprocessInternal(doc *openapi3.T) {
 	}
 }
 
-// rewriteBearerAuthScheme promotes the session-JWT scheme named "BearerAuth"
-// from swaggo's apiKey/header form to http/bearer/JWT so the scheme name
-// matches its type. The "APIKey" scheme stays as swaggo emitted it
-// (type: apiKey, in: header, name: Authorization) — the name literally says
-// "apiKey", so keeping the type aligned avoids confusing SDK codegen.
-func rewriteBearerAuthScheme(doc *openapi3.T) {
+// rewriteBearerSchemes promotes the security schemes from swaggo's
+// apiKey/header emission to http/bearer/JWT so generated SDKs send
+// "Authorization: Bearer <token>" instead of just the raw token.
+// Per TRA-517 AC1 this applies to BOTH "APIKey" (the public API key, a
+// JWT) and "BearerAuth" (the session JWT) — the platform rejects requests
+// without the Bearer prefix, so both must declare http/bearer.
+//
+// This reverses the TRA-480 §3.3 decision to keep APIKey as type=apiKey
+// for cosmetic SDK-naming alignment. Over-the-wire correctness wins.
+func rewriteBearerSchemes(doc *openapi3.T) {
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil {
 		return
 	}
-	ref := doc.Components.SecuritySchemes["BearerAuth"]
+	for _, name := range []string{"APIKey", "BearerAuth"} {
+		ref := doc.Components.SecuritySchemes[name]
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		desc := ref.Value.Description
+		ref.Value = &openapi3.SecurityScheme{
+			Type:         "http",
+			Scheme:       "bearer",
+			BearerFormat: "JWT",
+			Description:  desc,
+		}
+	}
+}
+
+// nullableFields names schema/field pairs whose response payload may be
+// null (or omitted when also non-required). swaggo doesn't emit
+// nullable:true for Go *Type pointers, so we add it here. The list is
+// curated from BB10/BB11 audit findings (TRA-517 AC2, AC9, AC11).
+var nullableFields = map[string][]string{
+	"asset.PublicAssetView":         {"current_location", "valid_to"},
+	"apikey.APIKeyListItem":         {"created_by_key_id", "expires_at", "last_used_at"},
+	"apikey.APIKeyCreateResponse":   {"expires_at"},
+	"report.PublicAssetHistoryItem": {"duration_seconds"},
+}
+
+// annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse
+// (and per-property descriptions on the title and detail fields) documenting
+// the title vs detail contract from TRA-517 AC4. swaggo doesn't propagate
+// godoc on a struct that wraps an anonymous nested struct, so the
+// description has to be applied here.
+func annotateErrorEnvelope(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+	ref := doc.Components.Schemas["errors.ErrorResponse"]
 	if ref == nil || ref.Value == nil {
 		return
 	}
-	desc := ref.Value.Description
-	ref.Value = &openapi3.SecurityScheme{
-		Type:         "http",
-		Scheme:       "bearer",
-		BearerFormat: "JWT",
-		Description:  desc,
+	ref.Value.Description = "RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. " +
+		"`error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. " +
+		"`error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition."
+
+	errProp := ref.Value.Properties["error"]
+	if errProp == nil || errProp.Value == nil {
+		return
+	}
+	if title := errProp.Value.Properties["title"]; title != nil && title.Value != nil {
+		title.Value.Description = "Stable, machine-readable summary suitable for client-side branching. Does not vary between calls for the same condition."
+	}
+	if detail := errProp.Value.Properties["detail"]; detail != nil && detail.Value != nil {
+		detail.Value.Description = "Specific, human-readable cause of this particular failure. May be empty when title alone fully describes the condition. Do not branch on this value."
+	}
+}
+
+// markNullableFields walks doc.Components.Schemas and sets nullable:true
+// on the curated (schema, field) pairs in nullableFields. Fields not
+// declared in `required` may be both omitted and emitted as null; the
+// nullable marker tells generated clients null is a legal value.
+func markNullableFields(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+	for schemaName, fields := range nullableFields {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		for _, fieldName := range fields {
+			prop := ref.Value.Properties[fieldName]
+			if prop == nil || prop.Value == nil {
+				continue
+			}
+			prop.Value.Nullable = true
+		}
 	}
 }
 

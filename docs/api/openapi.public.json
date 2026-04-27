@@ -9,6 +9,7 @@
           },
           "expires_at": {
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           },
           "id": {
@@ -42,10 +43,12 @@
             "type": "integer"
           },
           "created_by_key_id": {
+            "nullable": true,
             "type": "integer"
           },
           "expires_at": {
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           },
           "id": {
@@ -56,6 +59,7 @@
           },
           "last_used_at": {
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           },
           "name": {
@@ -162,6 +166,7 @@
             "type": "string"
           },
           "current_location": {
+            "nullable": true,
             "type": "string"
           },
           "description": {
@@ -202,6 +207,7 @@
           },
           "valid_to": {
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           }
         },
@@ -305,10 +311,12 @@
         "type": "object"
       },
       "errors.ErrorResponse": {
+        "description": "RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
         "properties": {
           "error": {
             "properties": {
               "detail": {
+                "description": "Specific, human-readable cause of this particular failure. May be empty when title alone fully describes the condition. Do not branch on this value.",
                 "type": "string"
               },
               "fields": {
@@ -327,6 +335,7 @@
                 "type": "integer"
               },
               "title": {
+                "description": "Stable, machine-readable summary suitable for client-side branching. Does not vary between calls for the same condition.",
                 "type": "string"
               },
               "type": {
@@ -717,6 +726,7 @@
       "report.PublicAssetHistoryItem": {
         "properties": {
           "duration_seconds": {
+            "nullable": true,
             "type": "integer"
           },
           "location": {
@@ -868,10 +878,10 @@
     },
     "securitySchemes": {
       "APIKey": {
+        "bearerFormat": "JWT",
         "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account.",
-        "in": "header",
-        "name": "Authorization",
-        "type": "apiKey"
+        "scheme": "bearer",
+        "type": "http"
       },
       "BearerAuth": {
         "bearerFormat": "JWT",
@@ -2757,6 +2767,16 @@
             },
             "description": "forbidden"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2865,6 +2885,16 @@
             },
             "description": "forbidden"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2972,6 +3002,16 @@
               }
             },
             "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found"
           },
           "429": {
             "content": {
@@ -3569,12 +3609,12 @@
   },
   "servers": [
     {
-      "description": "Production",
-      "url": "https://app.trakrf.id"
+      "description": "Preview (per-PR deploys). Preview-scoped API keys authenticate here only — they will fail with 401 against Production, and Production keys will fail here.",
+      "url": "https://app.preview.trakrf.id"
     },
     {
-      "description": "Preview (per-PR deploys)",
-      "url": "https://app.preview.trakrf.id"
+      "description": "Production. Production-scoped API keys authenticate here only — they will fail with 401 against Preview, and Preview keys will fail here.",
+      "url": "https://app.trakrf.id"
     }
   ]
 }

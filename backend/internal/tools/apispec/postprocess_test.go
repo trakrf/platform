@@ -30,23 +30,30 @@ func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
 	assert.Contains(t, scheme.Value.Description, "Session JWT")
 }
 
-// TestPostprocess_PreservesAPIKeyApiKeyType guards the TRA-480 §3.3 fix:
-// swaggo emits APIKey with type=apiKey, which matches the literal name. We
-// must NOT rewrite it — a prior implementation promoted APIKey to
-// http/bearer, which confused SDK generators that lifted the name into
-// identifiers implying an apiKey type.
-func TestPostprocess_PreservesAPIKeyApiKeyType(t *testing.T) {
+// TestPostprocess_RewritesAPIKeyToHTTPBearer reverses the TRA-480 §3.3
+// decision per TRA-517 AC1. The token is consumed as a Bearer JWT; declaring
+// the scheme as type=apiKey makes generated SDKs send the raw value in an
+// Authorization header without the "Bearer " prefix, which the platform
+// rejects. type=http/scheme=bearer/bearerFormat=JWT is the correct shape.
+// We accept the cosmetic SDK-naming churn (e.g. setApiKeyAuth → setBearerAuth)
+// in exchange for over-the-wire correctness.
+func TestPostprocess_RewritesAPIKeyToHTTPBearer(t *testing.T) {
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	postprocessPublic(doc)
 
 	scheme := doc.Components.SecuritySchemes["APIKey"]
 	require.NotNil(t, scheme)
 	require.NotNil(t, scheme.Value)
-	assert.Equal(t, "apiKey", scheme.Value.Type, "APIKey scheme name implies apiKey type — keep them aligned")
-	assert.Equal(t, "header", scheme.Value.In)
-	assert.Equal(t, "Authorization", scheme.Value.Name)
+	assert.Equal(t, "http", scheme.Value.Type)
+	assert.Equal(t, "bearer", scheme.Value.Scheme)
+	assert.Equal(t, "JWT", scheme.Value.BearerFormat)
+	assert.NotEmpty(t, scheme.Value.Description, "description must be preserved across the rewrite")
 }
 
+// TestPostprocess_SetsPublicInfoAndServers locks in TRA-517 AC12: servers
+// are listed Preview-first so generated clients default to preview during
+// integration testing, and each entry's description warns that an API key
+// scoped to one environment will fail against the other.
 func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	postprocessPublic(doc)
@@ -54,10 +61,18 @@ func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
 	assert.Equal(t, "TrakRF API", doc.Info.Title)
 	assert.Equal(t, "v1", doc.Info.Version)
 	require.Len(t, doc.Servers, 2)
-	assert.Equal(t, "https://app.trakrf.id", doc.Servers[0].URL,
+
+	assert.Equal(t, "https://app.preview.trakrf.id", doc.Servers[0].URL,
+		"preview must be the first server so codegen defaults to it")
+	assert.Contains(t, doc.Servers[0].Description, "Preview")
+	assert.Contains(t, doc.Servers[0].Description, "fail",
+		"preview description must warn that production keys won't authenticate here")
+
+	assert.Equal(t, "https://app.trakrf.id", doc.Servers[1].URL,
 		"production server must be app.trakrf.id — the marketing site at trakrf.id does not serve /api/v1/*")
-	assert.Equal(t, "Production", doc.Servers[0].Description)
-	assert.Equal(t, "https://app.preview.trakrf.id", doc.Servers[1].URL)
+	assert.Contains(t, doc.Servers[1].Description, "Production")
+	assert.Contains(t, doc.Servers[1].Description, "fail",
+		"production description must warn that preview keys won't authenticate here")
 }
 
 func TestPostprocess_SetsInternalInfoAndServers(t *testing.T) {
@@ -126,6 +141,104 @@ func TestPostprocess_ConvertsExtensibleEnumStringToBool(t *testing.T) {
 	got, ok := typ.Extensions["x-extensible-enum"]
 	require.True(t, ok)
 	assert.Equal(t, true, got, "x-extensible-enum must be a real bool so consumers don't parse the string")
+}
+
+// TestPostprocess_AnnotatesErrorEnvelope locks in TRA-517 AC4: the
+// errors.ErrorResponse schema must carry the title/detail contract in its
+// schema description, and the title/detail properties must each describe
+// their semantics. swaggo doesn't propagate godoc through an outer struct
+// that wraps an anonymous nested struct, so this is applied here.
+func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
+	doc := docWithSchemas(openapi3.Schemas{
+		"errors.ErrorResponse": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"error": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{
+						"type":   stringProp(""),
+						"title":  stringProp(""),
+						"detail": stringProp(""),
+					},
+				}},
+			},
+		}},
+	})
+	postprocessPublic(doc)
+
+	envelope := doc.Components.Schemas["errors.ErrorResponse"].Value
+	require.NotEmpty(t, envelope.Description, "envelope schema must carry the contract description")
+	assert.Contains(t, envelope.Description, "title")
+	assert.Contains(t, envelope.Description, "detail")
+	assert.Contains(t, envelope.Description, "stable", "description must say title is stable")
+
+	errProps := envelope.Properties["error"].Value.Properties
+	assert.NotEmpty(t, errProps["title"].Value.Description, "title field needs its own description")
+	assert.NotEmpty(t, errProps["detail"].Value.Description, "detail field needs its own description")
+}
+
+// TestPostprocess_MarksNullableFields locks in TRA-517 AC2/AC9/AC11. Go
+// pointer types (*string, *time.Time, *int) marshal to null but swaggo
+// doesn't carry that into the OpenAPI 3.0 schema. This is the post-process
+// step that adds nullable:true on the curated allowlist of fields.
+func TestPostprocess_MarksNullableFields(t *testing.T) {
+	doc := docWithSchemas(openapi3.Schemas{
+		"asset.PublicAssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"current_location": stringProp(""),
+				"valid_to":         stringProp("date-time"),
+				"name":             stringProp(""), // not on the allowlist
+			},
+		}},
+		"apikey.APIKeyListItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"created_by_key_id": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"expires_at":        stringProp("date-time"),
+				"last_used_at":      stringProp("date-time"),
+			},
+		}},
+		"apikey.APIKeyCreateResponse": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"expires_at": stringProp("date-time"),
+			},
+		}},
+		"report.PublicAssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"duration_seconds": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"timestamp":        stringProp("date-time"), // not on the allowlist
+			},
+		}},
+	})
+	postprocessPublic(doc)
+
+	cases := []struct {
+		schema string
+		field  string
+	}{
+		{"asset.PublicAssetView", "current_location"},
+		{"asset.PublicAssetView", "valid_to"},
+		{"apikey.APIKeyListItem", "created_by_key_id"},
+		{"apikey.APIKeyListItem", "expires_at"},
+		{"apikey.APIKeyListItem", "last_used_at"},
+		{"apikey.APIKeyCreateResponse", "expires_at"},
+		{"report.PublicAssetHistoryItem", "duration_seconds"},
+	}
+	for _, tc := range cases {
+		prop := doc.Components.Schemas[tc.schema].Value.Properties[tc.field]
+		assert.True(t, prop.Value.Nullable, "%s.%s must be marked nullable", tc.schema, tc.field)
+	}
+
+	// fields NOT on the allowlist must remain non-nullable
+	assert.False(t,
+		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["name"].Value.Nullable,
+		"name is not nullable")
+	assert.False(t,
+		doc.Components.Schemas["report.PublicAssetHistoryItem"].Value.Properties["timestamp"].Value.Nullable,
+		"timestamp is not nullable")
 }
 
 func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
