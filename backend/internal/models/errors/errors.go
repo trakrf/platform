@@ -39,6 +39,15 @@ type FieldError struct {
 
 // ErrorResponse implements RFC 7807 Problem Details, extended with an
 // optional per-field validation list.
+//
+// Title vs detail contract:
+//   - title is a stable, machine-readable summary suitable for client-side
+//     branching. It does not vary between calls for the same condition.
+//   - detail is the specific, human-readable cause of this particular
+//     failure. May be empty when the title alone fully describes the
+//     condition.
+//
+// Generated clients should branch on type and title, not detail.
 type ErrorResponse struct {
 	Error struct {
 		Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error" extensions:"x-extensible-enum=true"`

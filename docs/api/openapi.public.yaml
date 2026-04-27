@@ -7,6 +7,7 @@ components:
                     type: string
                 expires_at:
                     format: date-time
+                    nullable: true
                     type: string
                 id:
                     type: integer
@@ -29,9 +30,11 @@ components:
                 created_by:
                     type: integer
                 created_by_key_id:
+                    nullable: true
                     type: integer
                 expires_at:
                     format: date-time
+                    nullable: true
                     type: string
                 id:
                     type: integer
@@ -39,6 +42,7 @@ components:
                     type: string
                 last_used_at:
                     format: date-time
+                    nullable: true
                     type: string
                 name:
                     type: string
@@ -116,6 +120,7 @@ components:
                     format: date-time
                     type: string
                 current_location:
+                    nullable: true
                     type: string
                 description:
                     type: string
@@ -144,6 +149,7 @@ components:
                     type: string
                 valid_to:
                     format: date-time
+                    nullable: true
                     type: string
             type: object
         asset.UpdateAssetRequest:
@@ -216,10 +222,12 @@ components:
                     $ref: '#/components/schemas/asset.PublicAssetView'
             type: object
         errors.ErrorResponse:
+            description: RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.
             properties:
                 error:
                     properties:
                         detail:
+                            description: Specific, human-readable cause of this particular failure. May be empty when title alone fully describes the condition. Do not branch on this value.
                             type: string
                         fields:
                             items:
@@ -232,6 +240,7 @@ components:
                         status:
                             type: integer
                         title:
+                            description: Stable, machine-readable summary suitable for client-side branching. Does not vary between calls for the same condition.
                             type: string
                         type:
                             enum:
@@ -508,6 +517,7 @@ components:
         report.PublicAssetHistoryItem:
             properties:
                 duration_seconds:
+                    nullable: true
                     type: integer
                 location:
                     type: string
@@ -613,10 +623,10 @@ components:
             type: object
     securitySchemes:
         APIKey:
+            bearerFormat: JWT
             description: 'TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account.'
-            in: header
-            name: Authorization
-            type: apiKey
+            scheme: bearer
+            type: http
         BearerAuth:
             bearerFormat: JWT
             description: Session JWT for internal endpoints (platform frontend uses this).
@@ -1693,6 +1703,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
                 "429":
                     content:
                         application/json:
@@ -1759,6 +1775,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
                 "429":
                     content:
                         application/json:
@@ -1825,6 +1847,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
                 "429":
                     content:
                         application/json:
@@ -2276,7 +2304,7 @@ paths:
             tags:
                 - orgs
 servers:
-    - description: Production
-      url: https://app.trakrf.id
-    - description: Preview (per-PR deploys)
+    - description: Preview (per-PR deploys). Preview-scoped API keys authenticate here only — they will fail with 401 against Production, and Production keys will fail here.
       url: https://app.preview.trakrf.id
+    - description: Production. Production-scoped API keys authenticate here only — they will fail with 401 against Preview, and Preview keys will fail here.
+      url: https://app.trakrf.id
