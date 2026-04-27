@@ -97,9 +97,9 @@ export interface DeleteResponse {
 }
 
 /**
- * Tag identifier input for forms - may not have an id if new
+ * Tag input for forms — may not have an id if new
  */
-export interface TagIdentifierInput {
+export interface TagInput {
   id?: number;
   type: 'rfid';
   value: string;

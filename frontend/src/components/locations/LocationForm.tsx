@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { validateIdentifier, validateName } from '@/lib/location/validators';
 import { LocationParentSelector } from './LocationParentSelector';
 import { useLocationStore } from '@/stores/locations/locationStore';
-import type { Location, TagIdentifierInput } from '@/types/locations';
+import type { Location, TagInput } from '@/types/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { useDeviceStore } from '@/stores';
 import { lookupApi } from '@/lib/api/lookup';
@@ -74,7 +74,7 @@ export function LocationForm({
   });
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
+  const [tagIdentifiers, setTagIdentifiers] = useState<TagInput[]>([]);
 
   // Get parent location info for context message
   const getLocationById = useLocationStore((state) => state.getLocationById);

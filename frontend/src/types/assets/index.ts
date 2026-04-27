@@ -70,10 +70,10 @@ export interface UpdateAssetRequest {
 }
 
 /**
- * Tag identifier input for forms - may not have an id if new
+ * Tag input for forms — may not have an id if new
  */
-export interface TagIdentifierInput {
-  id?: number; // Present if existing identifier, undefined if new
+export interface TagInput {
+  id?: number; // Present if existing tag, undefined if new
   type: 'rfid';
   value: string;
 }

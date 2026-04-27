@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { Location, CreateLocationRequest, UpdateLocationRequest, TagIdentifierInput } from '@/types/locations';
+import type { Location, CreateLocationRequest, UpdateLocationRequest, TagInput } from '@/types/locations';
 import { LocationForm } from './LocationForm';
 import { locationsApi } from '@/lib/api/locations';
 import { normalizeLocation } from '@/lib/location/normalize';
@@ -32,8 +32,8 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
     try {
       if (mode === 'create') {
         // Tags must be added separately after creation
-        const identifiers = (data as CreateLocationRequest & { tags?: TagIdentifierInput[] }).tags || [];
-        const { tags: _, ...createData } = data as CreateLocationRequest & { tags?: TagIdentifierInput[] };
+        const identifiers = (data as CreateLocationRequest & { tags?: TagInput[] }).tags || [];
+        const { tags: _, ...createData } = data as CreateLocationRequest & { tags?: TagInput[] };
 
         const response = await locationsApi.create(createData as CreateLocationRequest);
 
@@ -73,11 +73,11 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         toast.success(`Location "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && location) {
         // New tags (without id) need to be added after update
-        const identifiers = (data as UpdateLocationRequest & { tags?: TagIdentifierInput[] }).tags || [];
+        const identifiers = (data as UpdateLocationRequest & { tags?: TagInput[] }).tags || [];
         const newIdentifiers = identifiers.filter(id => !id.id);
 
         // Backend doesn't support tags in update request
-        const { tags: _, ...updateData } = data as UpdateLocationRequest & { tags?: TagIdentifierInput[] };
+        const { tags: _, ...updateData } = data as UpdateLocationRequest & { tags?: TagInput[] };
 
         const response = await locationsApi.update(location.id, updateData);
 

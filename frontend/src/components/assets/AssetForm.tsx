@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType, TagIdentifierInput } from '@/types/assets';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType, TagInput } from '@/types/assets';
 import { validateDateRange, validateAssetType } from '@/lib/asset/validators';
 import { ErrorBanner } from '@/components/shared';
 import { useDeviceStore, useLocationStore } from '@/stores';
@@ -41,7 +41,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
+  const [tagIdentifiers, setTagIdentifiers] = useState<TagInput[]>([]);
 
   // Load locations for dropdown
   useLocations({ enabled: true });

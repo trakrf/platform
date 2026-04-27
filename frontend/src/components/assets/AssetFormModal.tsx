@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagIdentifierInput } from '@/types/assets';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagInput } from '@/types/assets';
 import { AssetForm } from './AssetForm';
 import { assetsApi } from '@/lib/api/assets';
 import { normalizeAsset } from '@/lib/asset/normalize';
@@ -55,8 +55,8 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
     try {
       if (mode === 'create') {
         // Extract tags from the request (they need to be added separately after creation)
-        const identifiers = (data as CreateAssetRequest & { tags?: TagIdentifierInput[] }).tags || [];
-        const { tags: _, ...createData } = data as CreateAssetRequest & { tags?: TagIdentifierInput[] };
+        const identifiers = (data as CreateAssetRequest & { tags?: TagInput[] }).tags || [];
+        const { tags: _, ...createData } = data as CreateAssetRequest & { tags?: TagInput[] };
 
         const response = await assetsApi.create(createData as CreateAssetRequest);
 
@@ -97,10 +97,10 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
         toast.success(`Asset "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
-        const identifiers = (data as UpdateAssetRequest & { tags?: TagIdentifierInput[] }).tags || [];
+        const identifiers = (data as UpdateAssetRequest & { tags?: TagInput[] }).tags || [];
         const newIdentifiers = identifiers.filter(id => !id.id);
 
-        const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagIdentifierInput[] };
+        const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagInput[] };
 
         const response = await assetsApi.update(asset.id, updateData);
 
