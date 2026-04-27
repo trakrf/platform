@@ -84,6 +84,19 @@ func (l *Limiter) Close() {
 	})
 }
 
+// AnonDecision returns the decision an unrecognized caller would receive: full
+// quota available now, no consumption charged. Used by DefaultRateLimitHeaders
+// to advertise rate-limit policy on responses where the principal can't be
+// identified (auth-failure 401s, 404s on unknown /api/v1/* paths).
+func (l *Limiter) AnonDecision() Decision {
+	return Decision{
+		Allowed:   true,
+		Limit:     l.cfg.RatePerMinute,
+		Remaining: l.cfg.RatePerMinute,
+		ResetAt:   l.cfg.Clock.Now(),
+	}
+}
+
 // Allow consumes one token for the given key and returns the decision.
 func (l *Limiter) Allow(key string) Decision {
 	now := l.cfg.Clock.Now()

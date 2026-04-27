@@ -112,16 +112,25 @@ func setupRouter(
 	})
 
 	// Per-key rate limiter for API-key-authenticated requests (TRA-395).
-	// /orgs/me is intentionally excluded as a health-check exemption.
 	// Limiter lives for the process lifetime; its sweeper runs in a goroutine.
+	//
+	// TRA-518: every /api/v1/* group is wrapped with DefaultRateLimitHeaders
+	// so X-RateLimit-* headers appear on every response — including auth-failure
+	// 401s and 404s where no principal is known. RateLimit (where present)
+	// overwrites the static defaults with real bucket values for API-key calls.
 	rl := ratelimit.NewLimiter(ratelimit.DefaultConfig())
 
 	// Public API — API-key auth (TRA-393 canary)
-	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
+	r.With(
+		middleware.DefaultRateLimitHeaders(rl),
+		middleware.APIKeyAuth(store),
+		middleware.RateLimit(rl),
+	).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
 
 	// TRA-466 API-key management — accepts session admin OR api-key with keys:admin scope.
 	// Lives outside the session-only orgs subtree so api-key JWTs are accepted.
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.RateLimit(rl))
 		r.Use(middleware.SentryContext)
@@ -130,6 +139,7 @@ func setupRouter(
 
 	// TRA-396 public read surface — accepts API-key OR session auth via EitherAuth.
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.RateLimit(rl))
 		r.Use(middleware.SentryContext)
@@ -152,9 +162,14 @@ func setupRouter(
 
 	// TRA-397 public write surface — accepts API-key OR session auth via EitherAuth.
 	// Every route is audited via WriteAudit and gated by a per-resource write scope.
+	// WriteAudit is deliberately positioned before RateLimit so 429 denials are
+	// captured in the audit log too (the recorder sees whatever status downstream
+	// middleware writes).
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.WriteAudit)
+		r.Use(middleware.RateLimit(rl))
 		r.Use(middleware.SentryContext)
 
 		// Assets
@@ -179,6 +194,7 @@ func setupRouter(
 	// TRA-425 added PUT/DELETE/POST variants so the frontend can continue writing by
 	// surrogate id after TRA-407 flipped the public write surface to {identifier}.
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.Auth)
 		r.Use(middleware.SentryContext)
 
@@ -204,7 +220,9 @@ func setupRouter(
 	// on the SPA's index.html fallback. Must be registered before the /* wildcard.
 	// Registered as GET (not HandleFunc) so the chimiddleware.GetHead rewrite works
 	// for HEAD requests to known GET routes above this catch-all.
-	r.Get("/api/*", func(w http.ResponseWriter, req *http.Request) {
+	// TRA-518: wrapped with DefaultRateLimitHeaders so 404s under /api/v1/* carry
+	// rate-limit headers too.
+	r.With(middleware.DefaultRateLimitHeaders(rl)).Get("/api/*", func(w http.ResponseWriter, req *http.Request) {
 		httputil.WriteJSONError(w, req, http.StatusNotFound, errors.ErrNotFound,
 			"Unknown API route: "+req.URL.Path, "", middleware.GetRequestID(req.Context()))
 	})
