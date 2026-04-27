@@ -180,14 +180,24 @@ func TestSave_EmptyAssetIdentifiers(t *testing.T) {
 
 	var response struct {
 		Error struct {
-			Type   string `json:"type"`
-			Title  string `json:"title"`
-			Status int    `json:"status"`
+			Type   string                   `json:"type"`
+			Title  string                   `json:"title"`
+			Status int                      `json:"status"`
+			Fields []modelerrors.FieldError `json:"fields"`
 		} `json:"error"`
 	}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "validation_error", response.Error.Type)
+
+	// TRA-519: array minItems violation must render with array wording, not
+	// the string-length template. Locks in the contract end-to-end.
+	require.Len(t, response.Error.Fields, 1)
+	f := response.Error.Fields[0]
+	assert.Equal(t, "asset_identifiers", f.Field)
+	assert.Equal(t, "too_short", f.Code)
+	assert.NotContains(t, f.Message, "characters",
+		"array minItems violation must not render as string-length; got %q", f.Message)
 }
 
 func TestSave_RouteRegistration(t *testing.T) {
