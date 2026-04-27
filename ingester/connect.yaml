@@ -16,7 +16,7 @@ output:
   sql_raw:
     driver: postgres
     dsn: ${PG_URL}
-    query: "INSERT INTO trakrf.identifier_scans (message_topic, message_data) VALUES ($1, $2)"
+    query: "INSERT INTO trakrf.tag_scans (message_topic, message_data) VALUES ($1, $2)"
     args_mapping: 'root = [ meta("mqtt_topic"), this.string() ]'
 
 #output:
