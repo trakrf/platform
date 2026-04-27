@@ -19,7 +19,7 @@ type PublicLocationView struct {
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   *time.Time             `json:"updated_at,omitempty"`
 	SurrogateID int                    `json:"surrogate_id"`
-	Identifiers []shared.TagIdentifier `json:"identifiers"`
+	Tags        []shared.TagIdentifier `json:"tags"`
 }
 
 func ToPublicLocationView(l LocationWithParent) PublicLocationView {
@@ -36,6 +36,6 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 		CreatedAt:   l.CreatedAt,
 		UpdatedAt:   l.UpdatedAt,
 		SurrogateID: l.ID,
-		Identifiers: l.Identifiers,
+		Tags:        l.Tags,
 	}
 }

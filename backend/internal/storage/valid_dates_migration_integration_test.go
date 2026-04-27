@@ -73,8 +73,8 @@ func TestNormalizeValidDatesMigration(t *testing.T) {
 		`UPDATE trakrf.assets SET valid_to = NULL WHERE valid_to IS NOT NULL AND (valid_to < TIMESTAMPTZ '1900-01-01' OR valid_to > TIMESTAMPTZ '2099-01-01')`,
 		`UPDATE trakrf.locations SET valid_from = created_at WHERE valid_from < TIMESTAMPTZ '1900-01-01'`,
 		`UPDATE trakrf.locations SET valid_to = NULL WHERE valid_to IS NOT NULL AND (valid_to < TIMESTAMPTZ '1900-01-01' OR valid_to > TIMESTAMPTZ '2099-01-01')`,
-		`UPDATE trakrf.identifiers SET valid_from = created_at WHERE valid_from < TIMESTAMPTZ '1900-01-01'`,
-		`UPDATE trakrf.identifiers SET valid_to = NULL WHERE valid_to IS NOT NULL AND (valid_to < TIMESTAMPTZ '1900-01-01' OR valid_to > TIMESTAMPTZ '2099-01-01')`,
+		`UPDATE trakrf.tags SET valid_from = created_at WHERE valid_from < TIMESTAMPTZ '1900-01-01'`,
+		`UPDATE trakrf.tags SET valid_to = NULL WHERE valid_to IS NOT NULL AND (valid_to < TIMESTAMPTZ '1900-01-01' OR valid_to > TIMESTAMPTZ '2099-01-01')`,
 	}
 	for _, stmt := range cleanupStmts {
 		_, err := pool.Exec(ctx, stmt)

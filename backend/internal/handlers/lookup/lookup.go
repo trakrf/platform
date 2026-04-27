@@ -23,7 +23,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 // @Summary Lookup entity by tag
-// @Description Find an asset or location by tag identifier value
+// @Description Find an asset or location by tag value
 // @Tags lookup,internal
 // @Accept json
 // @Produce json
@@ -84,7 +84,7 @@ type BatchLookupRequest struct {
 }
 
 // @Summary Batch lookup entities by tags
-// @Description Find assets or locations by multiple tag identifier values
+// @Description Find assets or locations by multiple tag values
 // @Tags lookup,internal
 // @Accept json
 // @Produce json

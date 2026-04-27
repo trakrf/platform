@@ -32,7 +32,7 @@ export interface Asset {
   is_active: boolean; // Go: bool
   created_at: string; // Go: time.Time → ISO 8601 string
   updated_at: string; // Go: time.Time → ISO 8601 string
-  identifiers: TagIdentifier[]; // Tag identifiers (RFID) linked to this asset
+  tags: TagIdentifier[]; // Physical tags (RFID, BLE, NFC, barcode) linked to this asset
 }
 
 // ============ Request/Response Types ============

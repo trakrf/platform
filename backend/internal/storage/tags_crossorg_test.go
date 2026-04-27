@@ -18,11 +18,11 @@ import (
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
-// TestRemoveAssetIdentifier_CrossOrg_ReturnsFalse verifies that an API-key
-// caller in orgB cannot delete an identifier owned by an asset in orgA.
-// It also asserts the identifier row survives (deleted_at still NULL) to
+// TestRemoveAssetTag_CrossOrg_ReturnsFalse verifies that an API-key
+// caller in orgB cannot delete a tag owned by an asset in orgA.
+// It also asserts the tag row survives (deleted_at still NULL) to
 // guard against the storage layer mutating state before short-circuiting.
-func TestRemoveAssetIdentifier_CrossOrg_ReturnsFalse(t *testing.T) {
+func TestRemoveAssetTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -40,28 +40,28 @@ func TestRemoveAssetIdentifier_CrossOrg_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
 		Type:  "epc",
 		Value: "EPC-CROSS-ORG-ASSET",
 	})
 	require.NoError(t, err)
 
 	// orgB attempts to delete orgA's identifier.
-	deleted, err := store.RemoveAssetIdentifier(context.Background(), orgB, created.ID, ident.ID)
+	deleted, err := store.RemoveAssetTag(context.Background(), orgB, created.ID, tag.ID)
 	require.NoError(t, err)
-	assert.False(t, deleted, "cross-org asset identifier removal must return false")
+	assert.False(t, deleted, "cross-org asset tag removal must return false")
 
 	// Confirm the identifier was NOT mutated.
-	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
 	require.NoError(t, err)
-	require.NotNil(t, fetched, "identifier must still exist after cross-org removal attempt")
-	assert.Equal(t, ident.ID, fetched.ID)
+	require.NotNil(t, fetched, "tag must still exist after cross-org removal attempt")
+	assert.Equal(t, tag.ID, fetched.ID)
 }
 
-// TestRemoveAssetIdentifier_WrongAssetID_ReturnsFalse verifies that the
-// assetID path param is load-bearing: an identifier belonging to one asset
+// TestRemoveAssetTag_WrongAssetID_ReturnsFalse verifies that the
+// assetID path param is load-bearing: a tag belonging to one asset
 // cannot be deleted by referencing a different asset of the same org.
-func TestRemoveAssetIdentifier_WrongAssetID_ReturnsFalse(t *testing.T) {
+func TestRemoveAssetTag_WrongAssetID_ReturnsFalse(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -88,26 +88,26 @@ func TestRemoveAssetIdentifier_WrongAssetID_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgA, assetOwner.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgA, assetOwner.ID, shared.TagIdentifierRequest{
 		Type:  "epc",
 		Value: "EPC-OWNER",
 	})
 	require.NoError(t, err)
 
 	// Path claims bystander asset, but identifier actually belongs to owner.
-	deleted, err := store.RemoveAssetIdentifier(context.Background(), orgA, assetBystander.ID, ident.ID)
+	deleted, err := store.RemoveAssetTag(context.Background(), orgA, assetBystander.ID, tag.ID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "removal via wrong assetID must return false")
 
 	// Identifier must still exist.
-	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
 	require.NoError(t, err)
-	require.NotNil(t, fetched, "identifier must still exist after wrong-assetID removal attempt")
+	require.NotNil(t, fetched, "tag must still exist after wrong-assetID removal attempt")
 }
 
-// TestRemoveLocationIdentifier_CrossOrg_ReturnsFalse: same pattern as asset
-// cross-org, but for location-scoped identifiers.
-func TestRemoveLocationIdentifier_CrossOrg_ReturnsFalse(t *testing.T) {
+// TestRemoveLocationTag_CrossOrg_ReturnsFalse: same pattern as asset
+// cross-org, but for location-scoped tags.
+func TestRemoveLocationTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -125,25 +125,25 @@ func TestRemoveLocationIdentifier_CrossOrg_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToLocation(context.Background(), orgA, loc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgA, loc.ID, shared.TagIdentifierRequest{
 		Type:  "epc",
 		Value: "EPC-CROSS-ORG-LOC",
 	})
 	require.NoError(t, err)
 
-	deleted, err := store.RemoveLocationIdentifier(context.Background(), orgB, loc.ID, ident.ID)
+	deleted, err := store.RemoveLocationTag(context.Background(), orgB, loc.ID, tag.ID)
 	require.NoError(t, err)
-	assert.False(t, deleted, "cross-org location identifier removal must return false")
+	assert.False(t, deleted, "cross-org location tag removal must return false")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
 	require.NoError(t, err)
-	require.NotNil(t, fetched, "identifier must still exist after cross-org removal attempt")
-	assert.Equal(t, ident.ID, fetched.ID)
+	require.NotNil(t, fetched, "tag must still exist after cross-org removal attempt")
+	assert.Equal(t, tag.ID, fetched.ID)
 }
 
-// TestRemoveLocationIdentifier_WrongLocationID_ReturnsFalse: same pattern as
-// wrong-assetID, but for location-scoped identifiers.
-func TestRemoveLocationIdentifier_WrongLocationID_ReturnsFalse(t *testing.T) {
+// TestRemoveLocationTag_WrongLocationID_ReturnsFalse: same pattern as
+// wrong-assetID, but for location-scoped tags.
+func TestRemoveLocationTag_WrongLocationID_ReturnsFalse(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -170,17 +170,17 @@ func TestRemoveLocationIdentifier_WrongLocationID_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToLocation(context.Background(), orgA, locOwner.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgA, locOwner.ID, shared.TagIdentifierRequest{
 		Type:  "epc",
 		Value: "EPC-LOC-OWNER",
 	})
 	require.NoError(t, err)
 
-	deleted, err := store.RemoveLocationIdentifier(context.Background(), orgA, locBystander.ID, ident.ID)
+	deleted, err := store.RemoveLocationTag(context.Background(), orgA, locBystander.ID, tag.ID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "removal via wrong locationID must return false")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
 	require.NoError(t, err)
-	require.NotNil(t, fetched, "identifier must still exist after wrong-locationID removal attempt")
+	require.NotNil(t, fetched, "tag must still exist after wrong-locationID removal attempt")
 }

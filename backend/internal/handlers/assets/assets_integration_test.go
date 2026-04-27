@@ -37,8 +37,8 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	r.Post("/api/v1/assets", handler.Create)
 	r.Put("/api/v1/assets/{identifier}", handler.UpdateAsset)
 	r.Delete("/api/v1/assets/{identifier}", handler.DeleteAsset)
-	r.Post("/api/v1/assets/{identifier}/identifiers", handler.AddIdentifier)
-	r.Delete("/api/v1/assets/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
+	r.Post("/api/v1/assets/{identifier}/tags", handler.AddTag)
+	r.Delete("/api/v1/assets/{identifier}/tags/{tagId}", handler.RemoveTag)
 	handler.RegisterRoutes(r)
 	return r
 }
@@ -457,7 +457,7 @@ func TestAssetsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	assert.Equal(t, "conflict", resp["error"]["type"])
 }
 
-// TRA-482: POST /api/v1/assets/{identifier}/identifiers with a tag value
+// TRA-482: POST /api/v1/assets/{identifier}/tags with a tag value
 // already attached to a different asset must return 409 Conflict.
 //
 // Before the 000032 migration this path silently created duplicate rows:
@@ -491,7 +491,7 @@ func TestAssetsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 
 	// Attach an identifier to asset B via the handler.
 	body := `{"type":"rfid","value":"TRA-482-IDENT-DUP"}`
-	reqB := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-B-dup-host/identifiers", bytes.NewBufferString(body))
+	reqB := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-B-dup-host/tags", bytes.NewBufferString(body))
 	reqB.Header.Set("Content-Type", "application/json")
 	reqB = withOrgContext(reqB, accountID)
 	wB := httptest.NewRecorder()
@@ -499,7 +499,7 @@ func TestAssetsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	require.Equal(t, http.StatusCreated, wB.Code, wB.Body.String())
 
 	// Act: attach the same value to asset A.
-	reqA := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-A-dup-host/identifiers", bytes.NewBufferString(body))
+	reqA := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-A-dup-host/tags", bytes.NewBufferString(body))
 	reqA.Header.Set("Content-Type", "application/json")
 	reqA = withOrgContext(reqA, accountID)
 	wA := httptest.NewRecorder()
@@ -1163,7 +1163,7 @@ func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 
 	// Attach.
 	body := `{"type":"rfid","value":"TRA-482-REUSE"}`
-	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-reuse-host/identifiers", bytes.NewBufferString(body))
+	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-reuse-host/tags", bytes.NewBufferString(body))
 	reqAdd.Header.Set("Content-Type", "application/json")
 	reqAdd = withOrgContext(reqAdd, accountID)
 	wAdd := httptest.NewRecorder()
@@ -1178,10 +1178,10 @@ func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	rawID, ok := data["id"]
 	require.True(t, ok, "response data missing id: %s", wAdd.Body.String())
 	// JSON numbers decode as float64; the DELETE route expects an int-shaped path segment.
-	identifierID := int(rawID.(float64))
+	tagID := int(rawID.(float64))
 
 	// Soft-delete.
-	delURL := fmt.Sprintf("/api/v1/assets/SN-reuse-host/identifiers/%d", identifierID)
+	delURL := fmt.Sprintf("/api/v1/assets/SN-reuse-host/tags/%d", tagID)
 	reqDel := httptest.NewRequest(http.MethodDelete, delURL, nil)
 	reqDel = withOrgContext(reqDel, accountID)
 	wDel := httptest.NewRecorder()
@@ -1189,7 +1189,7 @@ func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, wDel.Code, wDel.Body.String())
 
 	// Re-attach the same value.
-	reqReadd := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-reuse-host/identifiers", bytes.NewBufferString(body))
+	reqReadd := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-reuse-host/tags", bytes.NewBufferString(body))
 	reqReadd.Header.Set("Content-Type", "application/json")
 	reqReadd = withOrgContext(reqReadd, accountID)
 	wReadd := httptest.NewRecorder()

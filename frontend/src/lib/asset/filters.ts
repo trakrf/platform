@@ -181,7 +181,7 @@ export function searchAssetsWithMatches(
 
     // 2. EPC: suffix match (for hex/numeric terms only)
     if (isIdentifierLikeTerm(term)) {
-      const matchingEpc = asset.identifiers?.find((id) =>
+      const matchingEpc = asset.tags?.find((id) =>
         id.value.toLowerCase().endsWith(termLower)
       );
       if (matchingEpc) {

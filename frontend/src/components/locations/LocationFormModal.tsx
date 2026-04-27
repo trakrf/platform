@@ -31,9 +31,9 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
     try {
       if (mode === 'create') {
-        // Identifiers must be added separately after creation
-        const identifiers = (data as CreateLocationRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
-        const { identifiers: _, ...createData } = data as CreateLocationRequest & { identifiers?: TagIdentifierInput[] };
+        // Tags must be added separately after creation
+        const identifiers = (data as CreateLocationRequest & { tags?: TagIdentifierInput[] }).tags || [];
+        const { tags: _, ...createData } = data as CreateLocationRequest & { tags?: TagIdentifierInput[] };
 
         const response = await locationsApi.create(createData as CreateLocationRequest);
 
@@ -50,12 +50,12 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
         for (const identifier of validIdentifiers) {
           try {
-            await locationsApi.addIdentifier(newLocationId, {
+            await locationsApi.addTag(newLocationId, {
               type: identifier.type,
               value: identifier.value,
             });
           } catch (idErr) {
-            console.error('Failed to add identifier:', idErr);
+            console.error('Failed to add tag:', idErr);
           }
         }
 
@@ -72,12 +72,12 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
         toast.success(`Location "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && location) {
-        // New identifiers (without id) need to be added after update
-        const identifiers = (data as UpdateLocationRequest & { identifiers?: TagIdentifierInput[] }).identifiers || [];
+        // New tags (without id) need to be added after update
+        const identifiers = (data as UpdateLocationRequest & { tags?: TagIdentifierInput[] }).tags || [];
         const newIdentifiers = identifiers.filter(id => !id.id);
 
-        // Backend doesn't support identifiers in update request
-        const { identifiers: _, ...updateData } = data as UpdateLocationRequest & { identifiers?: TagIdentifierInput[] };
+        // Backend doesn't support tags in update request
+        const { tags: _, ...updateData } = data as UpdateLocationRequest & { tags?: TagIdentifierInput[] };
 
         const response = await locationsApi.update(location.id, updateData);
 
@@ -92,12 +92,12 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
         for (const identifier of newIdentifiers) {
           try {
-            await locationsApi.addIdentifier(location.id, {
+            await locationsApi.addTag(location.id, {
               type: identifier.type,
               value: identifier.value,
             });
           } catch (idErr) {
-            console.error('Failed to add identifier:', idErr);
+            console.error('Failed to add tag:', idErr);
           }
         }
 

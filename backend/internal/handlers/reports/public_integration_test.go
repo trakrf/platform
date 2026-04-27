@@ -76,7 +76,7 @@ func buildReportsPublicRouter(store *storage.Storage) *chi.Mux {
 func insertAssetScan(t *testing.T, pool *pgxpool.Pool, orgID, assetID, locationID int, ts time.Time) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, identifier_scan_id)
+		`INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
          VALUES ($1, $2, $3, $4, NULL, NULL)`,
 		ts, orgID, assetID, locationID,
 	)
@@ -111,9 +111,9 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Insert a tag identifier so the asset field in the response is populated
+	// Insert a tag so the asset field in the response is populated
 	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
+		`INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
          VALUES ($1, 'barcode', $2, $3, true)`,
 		orgID, "CURR-TAG-001", a.ID,
 	)

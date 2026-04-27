@@ -102,7 +102,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
-				   SELECT 1 FROM trakrf.identifiers ai
+				   SELECT 1 FROM trakrf.tags ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
 		  AND (a.deleted_at IS NULL OR $4::bool)
@@ -155,7 +155,7 @@ func buildCurrentLocationsQueryDistinctOn() string {
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
-				   SELECT 1 FROM trakrf.identifiers ai
+				   SELECT 1 FROM trakrf.tags ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
 		  AND (a.deleted_at IS NULL OR $6::bool)
@@ -190,7 +190,7 @@ func buildCurrentLocationsQueryTimescale() string {
 		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
-				   SELECT 1 FROM trakrf.identifiers ai
+				   SELECT 1 FROM trakrf.tags ai
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
 			   ))
 		  AND (a.deleted_at IS NULL OR $6::bool)

@@ -14,7 +14,7 @@ describe('normalizeAsset()', () => {
     is_active: true,
     created_at: '2026-04-21T00:00:00Z',
     updated_at: '2026-04-21T00:00:00Z',
-    identifiers: [],
+    tags: [],
   };
 
   it('populates id from surrogate_id when only surrogate_id is present (public shape)', () => {

@@ -28,7 +28,7 @@ export interface Location {
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
-  identifiers?: TagIdentifier[];
+  tags?: TagIdentifier[];
 }
 
 /**

@@ -35,13 +35,13 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 // @Summary      Create a location
-// @Description  Create a new location in the hierarchy, optionally with one or more tag identifiers.
+// @Description  Create a new location in the hierarchy, optionally with one or more tags.
 // @Description  Set ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.
 // @Tags         locations,public
 // @ID           locations.create
 // @Accept       json
 // @Produce      json
-// @Param        request  body  location.CreateLocationWithIdentifiersRequest  true  "Location to create with optional identifiers"
+// @Param        request  body  location.CreateLocationWithTagsRequest  true  "Location to create with optional tags"
 // @Success      201  {object}  locations.CreateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -61,7 +61,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request location.CreateLocationWithIdentifiersRequest
+	var request location.CreateLocationWithTagsRequest
 	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
@@ -118,7 +118,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		request.ValidFrom = &fd
 	}
 
-	result, err := handler.storage.CreateLocationWithIdentifiers(r.Context(), orgID, request)
+	result, err := handler.storage.CreateLocationWithTags(r.Context(), orgID, request)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
@@ -761,7 +761,7 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 }
 
 // toPublicLocationViews is the hierarchy-endpoint response adapter. Each input carries
-// the parent's natural key (LEFT JOIN) and its tag identifiers (bulk-fetched) so the
+// the parent's natural key (LEFT JOIN) and its tags (bulk-fetched) so the
 // output shape is identical to GET /locations/{identifier}.
 func toPublicLocationViews(locs []location.LocationWithParent) []location.PublicLocationView {
 	views := make([]location.PublicLocationView, len(locs))
@@ -771,15 +771,15 @@ func toPublicLocationViews(locs []location.LocationWithParent) []location.Public
 	return views
 }
 
-// @Summary      Add an identifier to a location
-// @Description  Attach a tag identifier (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
-// @Description  The identifier must be unique within the organization.
+// @Summary      Add a tag to a location
+// @Description  Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
+// @Description  The tag must be unique within the organization.
 // @Tags         locations,public
-// @ID           locations.identifiers.add
+// @ID           locations.tags.add
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string                         true  "Location identifier"
-// @Param        request     body  shared.TagIdentifierRequest    true  "Tag identifier to attach"
+// @Param        request     body  shared.TagIdentifierRequest    true  "Tag to attach"
 // @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -788,8 +788,8 @@ func toPublicLocationViews(locs []location.LocationWithParent) []location.Public
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
-// @Router       /api/v1/locations/{identifier}/identifiers [post]
-func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
+// @Router       /api/v1/locations/{identifier}/tags [post]
+func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -813,15 +813,15 @@ func (handler *Handler) AddIdentifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler.doAddLocationIdentifier(w, r, orgID, loc.ID)
+	handler.doAddLocationTag(w, r, orgID, loc.ID)
 }
 
 // doAddLocationIdentifier decodes + validates the identifier body and inserts
 // via storage. Caller must have already verified that (orgID, locationID)
-// names a real location — storage.AddIdentifierToLocation does NOT cross-check
+// names a real location — storage.AddTagToLocation does NOT cross-check
 // ownership before INSERT, so skipping the pre-check would allow cross-org
-// identifier attachment.
-func (handler *Handler) doAddLocationIdentifier(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
+// tag attachment.
+func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
 	var request shared.TagIdentifierRequest
@@ -835,7 +835,7 @@ func (handler *Handler) doAddLocationIdentifier(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	tagIdent, err := handler.storage.AddIdentifierToLocation(r.Context(), orgID, locationID, request)
+	tag, err := handler.storage.AddTagToLocation(r.Context(), orgID, locationID, request)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
@@ -846,17 +846,17 @@ func (handler *Handler) doAddLocationIdentifier(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tagIdent})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tag})
 }
 
-// @Summary      Remove an identifier from a location
-// @Description  Detach a tag identifier from a location by its identifier record ID.
+// @Summary      Remove a tag from a location
+// @Description  Detach a tag from a location by its tag record ID.
 // @Tags         locations,public
-// @ID           locations.identifiers.remove
+// @ID           locations.tags.remove
 // @Accept       json
 // @Produce      json
 // @Param        identifier    path  string  true  "Location identifier"
-// @Param        identifierId  path  int     true  "Identifier ID"
+// @Param        tagId  path  int     true  "Tag ID"
 // @Success      204  "deleted"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -865,8 +865,8 @@ func (handler *Handler) doAddLocationIdentifier(w http.ResponseWriter, r *http.R
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
-// @Router       /api/v1/locations/{identifier}/identifiers/{identifierId} [delete]
-func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request) {
+// @Router       /api/v1/locations/{identifier}/tags/{tagId} [delete]
+func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -890,25 +890,25 @@ func (handler *Handler) RemoveIdentifier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	handler.doRemoveLocationIdentifier(w, r, orgID, loc.ID)
+	handler.doRemoveLocationTag(w, r, orgID, loc.ID)
 }
 
-// doRemoveLocationIdentifier parses {identifierId} and soft-deletes via
+// doRemoveLocationTag parses {tagId} and soft-deletes via
 // storage. Storage guards cross-location / cross-org misuse itself (EXISTS
 // subquery on location_id + org_id), so a missing match surfaces as
 // deleted=false rather than an error.
-func (handler *Handler) doRemoveLocationIdentifier(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
+func (handler *Handler) doRemoveLocationTag(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	identifierIDParam := chi.URLParam(r, "identifierId")
-	identifierID, err := strconv.Atoi(identifierIDParam)
+	tagIDParam := chi.URLParam(r, "tagId")
+	tagID, err := strconv.Atoi(tagIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"invalid identifier ID", err.Error(), requestID)
+			"invalid tag ID", err.Error(), requestID)
 		return
 	}
 
-	_, err = handler.storage.RemoveLocationIdentifier(r.Context(), orgID, locationID, identifierID)
+	_, err = handler.storage.RemoveLocationTag(r.Context(), orgID, locationID, tagID)
 	if err != nil {
 		httputil.RespondStorageError(w, r, err, requestID)
 		return
@@ -965,10 +965,10 @@ func (handler *Handler) DeleteByID(w http.ResponseWriter, req *http.Request) {
 	handler.doDelete(w, req, orgID, id)
 }
 
-// @Summary Add identifier to location by surrogate ID (internal)
+// @Summary Add tag to location by surrogate ID (internal)
 // @Tags locations,internal
-// @Router /api/v1/locations/by-id/{id}/identifiers [post]
-func (handler *Handler) AddIdentifierByID(w http.ResponseWriter, req *http.Request) {
+// @Router /api/v1/locations/by-id/{id}/tags [post]
+func (handler *Handler) AddTagByID(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
 	orgID, err := middleware.GetRequestOrgID(req)
@@ -983,13 +983,13 @@ func (handler *Handler) AddIdentifierByID(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	handler.doAddLocationIdentifier(w, req, orgID, id)
+	handler.doAddLocationTag(w, req, orgID, id)
 }
 
-// @Summary Remove identifier from location by surrogate ID (internal)
+// @Summary Remove tag from location by surrogate ID (internal)
 // @Tags locations,internal
-// @Router /api/v1/locations/by-id/{id}/identifiers/{identifierId} [delete]
-func (handler *Handler) RemoveIdentifierByID(w http.ResponseWriter, req *http.Request) {
+// @Router /api/v1/locations/by-id/{id}/tags/{tagId} [delete]
+func (handler *Handler) RemoveTagByID(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
 	orgID, err := middleware.GetRequestOrgID(req)
@@ -1004,7 +1004,7 @@ func (handler *Handler) RemoveIdentifierByID(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	handler.doRemoveLocationIdentifier(w, req, orgID, id)
+	handler.doRemoveLocationTag(w, req, orgID, id)
 }
 
 // parseAndVerifyLocationID extracts {id}, parses it as a surrogate int, and

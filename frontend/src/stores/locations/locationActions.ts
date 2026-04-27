@@ -263,11 +263,11 @@ export function createCacheActions(
           updateRootSet(cache, location.id, parentId);
           updateActiveSet(cache, location);
 
-          // Build EPC index from location's tag identifiers
-          if (location.identifiers) {
-            for (const identifier of location.identifiers) {
-              if (identifier.is_active && identifier.type === 'rfid') {
-                cache.byTagEpc.set(identifier.value, location);
+          // Build EPC index from location's tags
+          if (location.tags) {
+            for (const tag of location.tags) {
+              if (tag.is_active && tag.type === 'rfid') {
+                cache.byTagEpc.set(tag.value, location);
               }
             }
           }

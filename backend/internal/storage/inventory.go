@@ -90,7 +90,7 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 		}
 
 		// 3. Batch INSERT into asset_scans
-		insertQuery := `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, identifier_scan_id) VALUES ($1, $2, $3, $4, NULL, NULL)`
+		insertQuery := `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id) VALUES ($1, $2, $3, $4, NULL, NULL)`
 		for _, assetID := range req.AssetIDs {
 			if _, err := tx.Exec(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID); err != nil {
 				return fmt.Errorf("failed to insert asset scan for asset %d: %w", assetID, err)

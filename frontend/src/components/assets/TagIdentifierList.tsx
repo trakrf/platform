@@ -115,9 +115,9 @@ export function TagIdentifierRow({ identifier, size = 'sm', entityId, entityType
     setIsDeleting(true);
     try {
       if (entityType === 'asset') {
-        await assetsApi.removeIdentifier(entityId, identifier.id);
+        await assetsApi.removeTag(entityId, identifier.id);
       } else {
-        await locationsApi.removeIdentifier(entityId, identifier.id);
+        await locationsApi.removeTag(entityId, identifier.id);
       }
       toast.success('Tag removed');
       onDelete(identifier.id);

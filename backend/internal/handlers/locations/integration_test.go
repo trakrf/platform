@@ -37,8 +37,8 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	r.Post("/api/v1/locations", handler.Create)
 	r.Put("/api/v1/locations/{identifier}", handler.Update)
 	r.Delete("/api/v1/locations/{identifier}", handler.Delete)
-	r.Post("/api/v1/locations/{identifier}/identifiers", handler.AddIdentifier)
-	r.Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
+	r.Post("/api/v1/locations/{identifier}/tags", handler.AddTag)
+	r.Delete("/api/v1/locations/{identifier}/tags/{tagId}", handler.RemoveTag)
 	return r
 }
 
@@ -71,7 +71,7 @@ func TestCreateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 
 	vfFD := shared.FlexibleDate{Time: validFrom}
 	active := true
-	body, err := json.Marshal(locmodel.CreateLocationWithIdentifiersRequest{
+	body, err := json.Marshal(locmodel.CreateLocationWithTagsRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
 			Name:       "Duplicate",
 			Identifier: "dup-loc",
@@ -94,7 +94,7 @@ func TestCreateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 	assert.Equal(t, string(modelerrors.ErrConflict), resp.Error.Type)
 }
 
-func TestCreateLocationWithIdentifiers_DuplicateReturns409(t *testing.T) {
+func TestCreateLocationWithTags_DuplicateReturns409(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -117,14 +117,14 @@ func TestCreateLocationWithIdentifiers_DuplicateReturns409(t *testing.T) {
 
 	vfFD2 := shared.FlexibleDate{Time: validFrom}
 	active2 := true
-	body, err := json.Marshal(locmodel.CreateLocationWithIdentifiersRequest{
+	body, err := json.Marshal(locmodel.CreateLocationWithTagsRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
 			Name:       "Duplicate",
 			Identifier: "dup-loc-ids",
 			ValidFrom:  &vfFD2,
 			IsActive:   &active2,
 		},
-		Identifiers: []shared.TagIdentifierRequest{
+		Tags: []shared.TagIdentifierRequest{
 			{Type: "rfid", Value: "E2000000DEADBEEF"},
 		},
 	})
@@ -211,7 +211,7 @@ func TestLocationsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 
 	vfFD3 := shared.FlexibleDate{Time: validFrom}
 	active3 := true
-	body, err := json.Marshal(locmodel.CreateLocationWithIdentifiersRequest{
+	body, err := json.Marshal(locmodel.CreateLocationWithTagsRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
 			Name:       "Second",
 			Identifier: "tra407-dup-loc",
@@ -233,7 +233,7 @@ func TestLocationsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	assert.Equal(t, "conflict", resp.Error.Type)
 }
 
-// TRA-482: POST /api/v1/locations/{identifier}/identifiers with a tag value
+// TRA-482: POST /api/v1/locations/{identifier}/tags with a tag value
 // already attached to a different location must return 409 Conflict.
 // Mirror of the assets test. See the assets-side comment for schema context.
 func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
@@ -262,7 +262,7 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 
 	// Attach an identifier to loc host2 via the handler.
 	body := `{"type":"rfid","value":"TRA-482-LOC-IDENT-DUP"}`
-	reqHost2 := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host2/identifiers", bytes.NewBufferString(body))
+	reqHost2 := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host2/tags", bytes.NewBufferString(body))
 	reqHost2.Header.Set("Content-Type", "application/json")
 	reqHost2 = withOrgContext(reqHost2, orgID)
 	wHost2 := httptest.NewRecorder()
@@ -270,7 +270,7 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	require.Equal(t, http.StatusCreated, wHost2.Code, wHost2.Body.String())
 
 	// Act: attach same value to the first location.
-	reqHost := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host/identifiers", bytes.NewBufferString(body))
+	reqHost := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host/tags", bytes.NewBufferString(body))
 	reqHost.Header.Set("Content-Type", "application/json")
 	reqHost = withOrgContext(reqHost, orgID)
 	wHost := httptest.NewRecorder()
@@ -374,7 +374,7 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 	t.Run("POST_NoParent", func(t *testing.T) {
 		vfFD4 := shared.FlexibleDate{Time: validFrom}
 		active4 := true
-		reqBody := locmodel.CreateLocationWithIdentifiersRequest{
+		reqBody := locmodel.CreateLocationWithTagsRequest{
 			CreateLocationRequest: locmodel.CreateLocationRequest{
 				Name:       "TRA-429 Leak Guard",
 				Identifier: "tra429-no-parent",
@@ -400,7 +400,7 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 	t.Run("POST_WithParent", func(t *testing.T) {
 		vfFD5 := shared.FlexibleDate{Time: validFrom}
 		active5 := true
-		reqBody := locmodel.CreateLocationWithIdentifiersRequest{
+		reqBody := locmodel.CreateLocationWithTagsRequest{
 			CreateLocationRequest: locmodel.CreateLocationRequest{
 				Name:             "TRA-429 With Parent",
 				Identifier:       "tra429-with-parent",
@@ -477,7 +477,7 @@ func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	router := setupTestRouter(handler)
 
 	body := `{"type":"rfid","value":"TRA-482-LOC-REUSE"}`
-	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/identifiers", bytes.NewBufferString(body))
+	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/tags", bytes.NewBufferString(body))
 	reqAdd.Header.Set("Content-Type", "application/json")
 	reqAdd = withOrgContext(reqAdd, orgID)
 	wAdd := httptest.NewRecorder()
@@ -490,16 +490,16 @@ func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	require.True(t, ok, "response missing data object: %s", wAdd.Body.String())
 	rawID, ok := data["id"]
 	require.True(t, ok, "response data missing id: %s", wAdd.Body.String())
-	identifierID := int(rawID.(float64))
+	tagID := int(rawID.(float64))
 
-	delURL := fmt.Sprintf("/api/v1/locations/tra482-loc-reuse/identifiers/%d", identifierID)
+	delURL := fmt.Sprintf("/api/v1/locations/tra482-loc-reuse/tags/%d", tagID)
 	reqDel := httptest.NewRequest(http.MethodDelete, delURL, nil)
 	reqDel = withOrgContext(reqDel, orgID)
 	wDel := httptest.NewRecorder()
 	router.ServeHTTP(wDel, reqDel)
 	require.Equal(t, http.StatusNoContent, wDel.Code, wDel.Body.String())
 
-	reqReadd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/identifiers", bytes.NewBufferString(body))
+	reqReadd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/tags", bytes.NewBufferString(body))
 	reqReadd.Header.Set("Content-Type", "application/json")
 	reqReadd = withOrgContext(reqReadd, orgID)
 	wReadd := httptest.NewRecorder()
@@ -531,7 +531,7 @@ func TestLocationsAddIdentifier_CollidesWithAssetIdentifier_Returns409(t *testin
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(),
-		`INSERT INTO trakrf.identifiers (org_id, type, value, asset_id, is_active)
+		`INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
 		 VALUES ($1, 'rfid', 'TRA-482-CROSS', $2, true)`,
 		orgID, assetID,
 	)
@@ -549,7 +549,7 @@ func TestLocationsAddIdentifier_CollidesWithAssetIdentifier_Returns409(t *testin
 	router := setupTestRouter(handler)
 
 	body := `{"type":"rfid","value":"TRA-482-CROSS"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/cross-loc/identifiers", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/cross-loc/tags", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, orgID)
 	w := httptest.NewRecorder()

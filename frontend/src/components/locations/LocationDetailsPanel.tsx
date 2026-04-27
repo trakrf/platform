@@ -30,7 +30,7 @@ export function LocationDetailsPanel({
   const getRootLocations = useLocationStore((state) => state.getRootLocations);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
-  const [localIdentifiers, setLocalIdentifiers] = useState<TagIdentifier[]>([]);
+  const [localTags, setLocalTags] = useState<TagIdentifier[]>([]);
 
   const location = locationId ? getLocationById(locationId) : undefined;
   const children = location ? getChildren(location.id) : [];
@@ -38,24 +38,24 @@ export function LocationDetailsPanel({
   const isRoot = location?.parent_location_id === null;
   const Icon = isRoot ? Building2 : MapPin;
 
-  // Sync local identifiers with location
+  // Sync local tags with location
   useEffect(() => {
-    if (location?.identifiers) {
-      setLocalIdentifiers(location.identifiers);
+    if (location?.tags) {
+      setLocalTags(location.tags);
     } else {
-      setLocalIdentifiers([]);
+      setLocalTags([]);
     }
-  }, [location?.identifiers]);
+  }, [location?.tags]);
 
   const handleIdentifierRemoved = (identifierId: number) => {
     if (!location) return;
 
-    const updatedIdentifiers = localIdentifiers.filter((i) => i.id !== identifierId);
-    setLocalIdentifiers(updatedIdentifiers);
+    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    setLocalTags(updatedTags);
 
     updateCachedLocation(location.id, {
       ...location,
-      identifiers: updatedIdentifiers,
+      tags: updatedTags,
     });
   };
 
@@ -172,7 +172,7 @@ export function LocationDetailsPanel({
 
         {/* Tag Identifiers */}
         <TagIdentifierList
-          identifiers={localIdentifiers}
+          identifiers={localTags}
           size="md"
           showHeader
           entityId={location.id}

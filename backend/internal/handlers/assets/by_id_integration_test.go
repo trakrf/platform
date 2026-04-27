@@ -34,8 +34,8 @@ func setupByIDRouter(handler *Handler) *chi.Mux {
 	r.Use(middleware.RequestID)
 	r.Put("/api/v1/assets/by-id/{id}", handler.UpdateAssetByID)
 	r.Delete("/api/v1/assets/by-id/{id}", handler.DeleteAssetByID)
-	r.Post("/api/v1/assets/by-id/{id}/identifiers", handler.AddIdentifierByID)
-	r.Delete("/api/v1/assets/by-id/{id}/identifiers/{identifierId}", handler.RemoveIdentifierByID)
+	r.Post("/api/v1/assets/by-id/{id}/tags", handler.AddTagByID)
+	r.Delete("/api/v1/assets/by-id/{id}/tags/{tagId}", handler.RemoveTagByID)
 	return r
 }
 
@@ -263,7 +263,7 @@ func TestAddIdentifierByID_HappyPath(t *testing.T) {
 
 	body := `{"type":"rfid","value":"EPC-BYID-ADD-1"}`
 	req := httptest.NewRequest(http.MethodPost,
-		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/identifiers",
+		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, orgID)
@@ -299,7 +299,7 @@ func TestAddIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 
 	body := `{"type":"rfid","value":"EPC-CROSS"}`
 	req := httptest.NewRequest(http.MethodPost,
-		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/identifiers",
+		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, orgB)
@@ -329,7 +329,7 @@ func TestAddIdentifierByID_InvalidBody_Returns400(t *testing.T) {
 	// Missing required value field.
 	body := `{"type":"rfid"}`
 	req := httptest.NewRequest(http.MethodPost,
-		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/identifiers",
+		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, orgID)
@@ -356,12 +356,12 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgID, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, created.ID, shared.TagIdentifierRequest{
 		Type: "rfid", Value: "EPC-BYID-RM",
 	})
 	require.NoError(t, err)
 
-	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req = withOrgContext(req, orgID)
 	w := httptest.NewRecorder()
@@ -369,7 +369,7 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier must be soft-deleted")
 }
@@ -392,12 +392,12 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
 		Type: "rfid", Value: "EPC-CROSS-RM",
 	})
 	require.NoError(t, err)
 
-	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req = withOrgContext(req, orgB)
 	w := httptest.NewRecorder()
@@ -406,7 +406,7 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Identifier must still exist.
-	fetched, err := store.GetIdentifierByID(context.Background(), orgA, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must survive cross-org DELETE attempt")
 }

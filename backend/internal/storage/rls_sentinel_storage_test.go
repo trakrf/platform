@@ -107,18 +107,18 @@ func TestRLS_SentinelMode_StorageMethods(t *testing.T) {
 		assert.NotEmpty(t, list, "ListAllAssets must return the seeded asset")
 	})
 
-	// ── 6. identifiers.go: AddIdentifierToAsset + GetIdentifiersByAssetID. ─────
-	t.Run("identifiers", func(t *testing.T) {
+	// ── 6. tags.go: AddTagToAsset + GetTagsByAssetID. ─────
+	t.Run("tags", func(t *testing.T) {
 		require.NotZero(t, createdAssetID, "need asset from previous subtest")
-		ident, err := store.AddIdentifierToAsset(ctx, orgID, createdAssetID, shared.TagIdentifierRequest{
+		tag, err := store.AddTagToAsset(ctx, orgID, createdAssetID, shared.TagIdentifierRequest{
 			Type:  "rfid",
 			Value: "RLS-SENTINEL-STORAGE-RFID",
 		})
-		require.NoError(t, err, "AddIdentifierToAsset must succeed under sentinel pool")
-		require.NotNil(t, ident)
+		require.NoError(t, err, "AddTagToAsset must succeed under sentinel pool")
+		require.NotNil(t, tag)
 
-		idents, err := store.GetIdentifiersByAssetID(ctx, orgID, createdAssetID)
-		require.NoError(t, err, "GetIdentifiersByAssetID must succeed under sentinel pool")
+		idents, err := store.GetTagsByAssetID(ctx, orgID, createdAssetID)
+		require.NoError(t, err, "GetTagsByAssetID must succeed under sentinel pool")
 		assert.NotEmpty(t, idents, "identifier just added must be visible")
 
 		// LookupByTagValues exercises the batch SELECT path.

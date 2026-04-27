@@ -346,30 +346,30 @@ describe('assetsApi', () => {
     });
   });
 
-  describe('addIdentifier()', () => {
-    it('should call POST /assets/by-id/:assetId/identifiers with identifier data', async () => {
+  describe('addTag()', () => {
+    it('should call POST /assets/by-id/:assetId/tags with tag data', async () => {
       const mockResponse = {
         data: { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
 
-      await assetsApi.addIdentifier(1, { type: 'rfid', value: 'TAG-001' });
+      await assetsApi.addTag(1, { type: 'rfid', value: 'TAG-001' });
 
-      expect(apiClient.post).toHaveBeenCalledWith('/assets/by-id/1/identifiers', {
+      expect(apiClient.post).toHaveBeenCalledWith('/assets/by-id/1/tags', {
         type: 'rfid',
         value: 'TAG-001',
       });
     });
 
-    it('should return the created identifier', async () => {
+    it('should return the created tag', async () => {
       const mockResponse = {
         data: { id: 42, type: 'rfid', value: 'NEW-TAG', is_active: true },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
 
-      const result = await assetsApi.addIdentifier(5, {
+      const result = await assetsApi.addTag(5, {
         type: 'rfid',
         value: 'NEW-TAG',
       });
@@ -379,7 +379,7 @@ describe('assetsApi', () => {
       expect(result.data.data.is_active).toBe(true);
     });
 
-    it('should handle duplicate identifier errors', async () => {
+    it('should handle duplicate tag errors', async () => {
       const mockError = {
         response: {
           status: 409,
@@ -390,7 +390,7 @@ describe('assetsApi', () => {
       vi.mocked(apiClient.post).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.addIdentifier(1, { type: 'rfid', value: 'DUP-TAG' })
+        assetsApi.addTag(1, { type: 'rfid', value: 'DUP-TAG' })
       ).rejects.toMatchObject(mockError);
     });
 
@@ -405,29 +405,29 @@ describe('assetsApi', () => {
       vi.mocked(apiClient.post).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.addIdentifier(999, { type: 'rfid', value: 'TAG-001' })
+        assetsApi.addTag(999, { type: 'rfid', value: 'TAG-001' })
       ).rejects.toMatchObject(mockError);
     });
   });
 
-  describe('removeIdentifier()', () => {
-    it('should call DELETE /assets/by-id/:assetId/identifiers/:identifierId', async () => {
+  describe('removeTag()', () => {
+    it('should call DELETE /assets/by-id/:assetId/tags/:tagId', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
 
-      await assetsApi.removeIdentifier(1, 42);
+      await assetsApi.removeTag(1, 42);
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/assets/by-id/1/identifiers/42');
+      expect(apiClient.delete).toHaveBeenCalledWith('/assets/by-id/1/tags/42');
     });
 
     it('should return deletion status', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
 
-      const result = await assetsApi.removeIdentifier(5, 10);
+      const result = await assetsApi.removeTag(5, 10);
 
       expect(result.data.deleted).toBe(true);
     });
 
-    it('should handle identifier not found errors', async () => {
+    it('should handle tag not found errors', async () => {
       const mockError = {
         response: {
           status: 404,
@@ -437,7 +437,7 @@ describe('assetsApi', () => {
 
       vi.mocked(apiClient.delete).mockRejectedValue(mockError);
 
-      await expect(assetsApi.removeIdentifier(1, 999)).rejects.toMatchObject(
+      await expect(assetsApi.removeTag(1, 999)).rejects.toMatchObject(
         mockError
       );
     });
@@ -452,7 +452,7 @@ describe('assetsApi', () => {
 
       vi.mocked(apiClient.delete).mockRejectedValue(mockError);
 
-      await expect(assetsApi.removeIdentifier(999, 1)).rejects.toMatchObject(
+      await expect(assetsApi.removeTag(999, 1)).rejects.toMatchObject(
         mockError
       );
     });

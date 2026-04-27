@@ -38,8 +38,8 @@ func buildLocationsPublicWriteRouter(store *storage.Storage) *chi.Mux {
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", handler.Create)
 		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{identifier}", handler.Update)
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}", handler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/identifiers", handler.AddIdentifier)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/identifiers/{identifierId}", handler.RemoveIdentifier)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/tags", handler.AddTag)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/tags/{tagId}", handler.RemoveTag)
 	})
 	return r
 }
@@ -199,7 +199,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	// TagIdentifierRequest.Type accepts only rfid/ble/barcode; use rfid.
 	body := `{"type":"rfid","value":"EPC-LOC-ABC-123"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ident-host-loc/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ident-host-loc/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -215,7 +215,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	assert.Equal(t, "EPC-LOC-ABC-123", data["value"])
 }
 
-func TestRemoveLocationIdentifier_APIKey_HappyPath(t *testing.T) {
+func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations-write-remove-ident-happy")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -229,7 +229,7 @@ func TestRemoveLocationIdentifier_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
 		Type:  "rfid",
 		Value: "EPC-LOC-HAPPY-1",
 	})
@@ -237,7 +237,7 @@ func TestRemoveLocationIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	url := "/api/v1/locations/ident-host/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/locations/ident-host/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -247,12 +247,12 @@ func TestRemoveLocationIdentifier_APIKey_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
 	require.NoError(t, err)
-	assert.Nil(t, fetched, "identifier row must be soft-deleted (GetIdentifierByID hides deleted rows)")
+	assert.Nil(t, fetched, "tag row must be soft-deleted (GetTagByID hides deleted rows)")
 }
 
-func TestRemoveLocationIdentifier_WrongLocationID_DoesNotDelete(t *testing.T) {
+func TestRemoveLocationTag_WrongLocationID_DoesNotDelete(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations-write-remove-ident-wrong-owner")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -272,7 +272,7 @@ func TestRemoveLocationIdentifier_WrongLocationID_DoesNotDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToLocation(context.Background(), orgID, owningLoc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgID, owningLoc.ID, shared.TagIdentifierRequest{
 		Type:  "rfid",
 		Value: "EPC-LOC-WRONG-1",
 	})
@@ -281,11 +281,11 @@ func TestRemoveLocationIdentifier_WrongLocationID_DoesNotDelete(t *testing.T) {
 	r := buildLocationsPublicWriteRouter(store)
 
 	// DELETE via otherLoc's identifier targeting ident (which belongs to owningLoc).
-	// Storage cross-location check: identifierID's location_id won't match other-loc's ID → no row
+	// Storage cross-location check: tagID's location_id won't match other-loc's ID → no row
 	// is soft-deleted, but TRA-407 changed the response to an unconditional 204. The invariant
 	// being verified here is that the identifier itself survives — not the (now gone) "deleted"
 	// flag in the response body.
-	url := "/api/v1/locations/other-loc/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/locations/other-loc/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -293,7 +293,7 @@ func TestRemoveLocationIdentifier_WrongLocationID_DoesNotDelete(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetIdentifierByID(context.Background(), orgID, ident.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist since the path identifier didn't match its owner")
 	assert.Equal(t, "EPC-LOC-WRONG-1", fetched.Value)
@@ -405,7 +405,7 @@ func TestLocationsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 	body := `{"type":"rfid","value":"EPC-TRA407-ADD-1"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/addident-target/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/addident-target/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -430,7 +430,7 @@ func TestLocationsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 	body := `{"type":"rfid","value":"EPC-GHOST"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ghost-parent/identifiers",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ghost-parent/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -453,13 +453,13 @@ func TestLocationsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ident, err := store.AddIdentifierToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
 		Type: "rfid", Value: "EPC-TRA407-REMOVE-1",
 	})
 	require.NoError(t, err)
 
 	r := buildLocationsPublicWriteRouter(store)
-	url := "/api/v1/locations/removeident-target/identifiers/" + strconv.Itoa(ident.ID)
+	url := "/api/v1/locations/removeident-target/tags/" + strconv.Itoa(tag.ID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -479,7 +479,7 @@ func TestLocationsRemoveIdentifier_UnknownParent_Returns404(t *testing.T) {
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
 	r := buildLocationsPublicWriteRouter(store)
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/ghost-loc/identifiers/999", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/locations/ghost-loc/tags/999", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
