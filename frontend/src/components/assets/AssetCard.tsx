@@ -4,7 +4,7 @@ import type { Asset } from '@/types/assets';
 import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
 import { TagCountBadge } from './TagCountBadge';
-import { TagIdentifiersModal } from './TagIdentifiersModal';
+import { TagsModal } from './TagsModal';
 import { LocateTagPopover } from './LocateTagPopover';
 
 interface AssetCardProps {
@@ -187,15 +187,15 @@ export function AssetCard({
           </td>
         </tr>
 
-        {/* Tag Identifiers Modal */}
-        <TagIdentifiersModal
-          identifiers={localTags}
+        {/* Tags Modal */}
+        <TagsModal
+          tags={localTags}
           entityId={asset.id}
           entityName={asset.identifier}
           entityType="asset"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
-          onIdentifierRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleIdentifierRemoved}
         />
       </>
     );
@@ -285,15 +285,15 @@ export function AssetCard({
         )}
       </div>
 
-      {/* Tag Identifiers Modal */}
-      <TagIdentifiersModal
-        identifiers={localTags}
+      {/* Tags Modal */}
+      <TagsModal
+        tags={localTags}
         entityId={asset.id}
         entityName={asset.identifier}
         entityType="asset"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}
-        onIdentifierRemoved={handleIdentifierRemoved}
+        onTagRemoved={handleIdentifierRemoved}
       />
     </>
   );

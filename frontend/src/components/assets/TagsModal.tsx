@@ -10,36 +10,36 @@ const handleLocateTag = (tagValue: string) => {
   window.location.hash = `#locate?epc=${encodeURIComponent(tagValue)}`;
 };
 
-interface TagIdentifiersModalProps {
-  identifiers: Tag[];
+interface TagsModalProps {
+  tags: Tag[];
   entityId?: number;
   entityName?: string;
   entityType?: 'asset' | 'location';
   isOpen: boolean;
   onClose: () => void;
-  onIdentifierRemoved?: (identifierId: number) => void;
+  onTagRemoved?: (tagId: number) => void;
 }
 
 const TAG_TYPE_LABELS: Record<string, string> = {
   rfid: 'RFID',
 };
 
-export function TagIdentifiersModal({
-  identifiers,
+export function TagsModal({
+  tags,
   entityId,
   entityName,
   entityType = 'asset',
   isOpen,
   onClose,
-  onIdentifierRemoved,
-}: TagIdentifiersModalProps) {
+  onTagRemoved,
+}: TagsModalProps) {
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
 
   if (!isOpen) return null;
 
-  const handleRemoveClick = (identifierId: number) => {
-    setConfirmingId(identifierId);
+  const handleRemoveClick = (tagId: number) => {
+    setConfirmingId(tagId);
   };
 
   const handleConfirmRemove = async () => {
@@ -53,7 +53,7 @@ export function TagIdentifiersModal({
         await assetsApi.removeTag(entityId, confirmingId);
       }
       toast.success('Tag removed');
-      onIdentifierRemoved?.(confirmingId);
+      onTagRemoved?.(confirmingId);
     } catch (err) {
       toast.error('Failed to remove tag');
     } finally {
@@ -66,7 +66,7 @@ export function TagIdentifiersModal({
     setConfirmingId(null);
   };
 
-  const canRemove = entityId !== undefined && onIdentifierRemoved !== undefined;
+  const canRemove = entityId !== undefined && onTagRemoved !== undefined;
 
   return createPortal(
     <>
@@ -100,48 +100,48 @@ export function TagIdentifiersModal({
             </button>
           </div>
           <div className="px-4 sm:px-6 py-4 overflow-y-auto max-h-[calc(80vh-8rem)] sm:max-h-[calc(60vh-8rem)]">
-            {identifiers.length === 0 ? (
+            {tags.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No RFID tags linked to this {entityType}.
               </p>
             ) : (
               <div className="space-y-2">
-                {identifiers.map((identifier) => (
+                {tags.map((tag) => (
                   <div
-                    key={identifier.id}
+                    key={tag.id}
                     className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                   >
                     <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 flex-shrink-0">
-                      {TAG_TYPE_LABELS[identifier.type] || identifier.type.toUpperCase()}
+                      {TAG_TYPE_LABELS[tag.type] || tag.type.toUpperCase()}
                     </span>
                     <span className="flex-1 text-sm font-mono text-gray-900 dark:text-gray-100 truncate min-w-0">
-                      {identifier.value}
+                      {tag.value}
                     </span>
                     <span
                       className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded flex-shrink-0 ${
-                        identifier.is_active
+                        tag.is_active
                           ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                           : 'bg-gray-100 text-gray-600 dark:bg-gray-600 dark:text-gray-300'
                       }`}
                     >
-                      {identifier.is_active ? 'Active' : 'Inactive'}
+                      {tag.is_active ? 'Active' : 'Inactive'}
                     </span>
                     <button
-                      onClick={() => handleLocateTag(identifier.value)}
-                      disabled={!identifier.is_active}
+                      onClick={() => handleLocateTag(tag.value)}
+                      disabled={!tag.is_active}
                       className={`p-1.5 rounded transition-colors flex-shrink-0 ${
-                        identifier.is_active
+                        tag.is_active
                           ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
                           : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
                       }`}
-                      aria-label={`Locate tag ${identifier.value}`}
-                      title={identifier.is_active ? 'Locate this tag' : 'Tag is inactive'}
+                      aria-label={`Locate tag ${tag.value}`}
+                      title={tag.is_active ? 'Locate this tag' : 'Tag is inactive'}
                     >
                       <Target className="w-4 h-4" />
                     </button>
                     {canRemove && (
                       <div className="flex-shrink-0">
-                        {confirmingId === identifier.id ? (
+                        {confirmingId === tag.id ? (
                           <div className="flex items-center gap-2">
                             <button
                               onClick={handleCancelRemove}
@@ -155,7 +155,7 @@ export function TagIdentifiersModal({
                               disabled={removingId !== null}
                               className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded disabled:opacity-50"
                             >
-                              {removingId === identifier.id ? (
+                              {removingId === tag.id ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                               ) : null}
                               Remove
@@ -163,7 +163,7 @@ export function TagIdentifiersModal({
                           </div>
                         ) : (
                           <button
-                            onClick={() => handleRemoveClick(identifier.id)}
+                            onClick={() => handleRemoveClick(tag.id)}
                             className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
                             aria-label="Remove tag"
                           >

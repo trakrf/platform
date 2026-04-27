@@ -3,7 +3,7 @@ import { Pencil, Trash2, MapPin, Building2 } from 'lucide-react';
 import type { Location } from '@/types/locations';
 import type { Tag } from '@/types/shared';
 import { useLocationStore } from '@/stores';
-import { TagCountBadge, TagIdentifiersModal, LocateTagPopover } from '@/components/assets';
+import { TagCountBadge, TagsModal, LocateTagPopover } from '@/components/assets';
 
 interface LocationCardProps {
   location: Location;
@@ -162,15 +162,15 @@ export function LocationCard({
           </td>
         </tr>
 
-        {/* Tag Identifiers Modal */}
-        <TagIdentifiersModal
-          identifiers={localTags}
+        {/* Tags Modal */}
+        <TagsModal
+          tags={localTags}
           entityId={location.id}
           entityName={location.identifier}
           entityType="location"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
-          onIdentifierRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleIdentifierRemoved}
         />
       </>
     );
@@ -258,15 +258,15 @@ export function LocationCard({
         )}
       </div>
 
-      {/* Tag Identifiers Modal */}
-      <TagIdentifiersModal
-        identifiers={localTags}
+      {/* Tags Modal */}
+      <TagsModal
+        tags={localTags}
         entityId={location.id}
         entityName={location.identifier}
         entityType="location"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}
-        onIdentifierRemoved={handleIdentifierRemoved}
+        onTagRemoved={handleIdentifierRemoved}
       />
     </>
   );

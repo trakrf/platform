@@ -18,5 +18,5 @@ export { LocateTagPopover } from './LocateTagPopover';
 // Shared tag identifier components (reusable for locations)
 export { TagCountBadge } from './TagCountBadge';
 export { TagIdentifierList } from './TagIdentifierList';
-export { TagIdentifiersModal } from './TagIdentifiersModal';
+export { TagsModal } from './TagsModal';
 export { TagIdentifierInputRow } from './TagIdentifierInputRow';
