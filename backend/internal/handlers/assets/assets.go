@@ -418,7 +418,7 @@ type UpdateAssetResponse struct {
 // @Param location query string false "filter by location natural key (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
 // @Param type     query string false "filter by type"
-// @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active identifier values"
+// @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active tag values"
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"
 // @Success 200 {object} assets.ListAssetsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"

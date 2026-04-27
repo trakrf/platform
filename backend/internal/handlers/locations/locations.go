@@ -386,7 +386,7 @@ type ListDescendantsResponse struct {
 // @Param offset   query int    false "min 0"    default(0)
 // @Param parent   query string false "filter by parent identifier (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
-// @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active identifier values"
+// @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active tag values"
 // @Param sort     query string false "comma-separated, prefix '-' for DESC"
 // @Success 200 {object} locations.ListLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"

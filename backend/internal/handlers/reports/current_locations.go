@@ -38,7 +38,7 @@ type ListCurrentLocationsResponse struct {
 // @Param limit query int false "max 200"   default(50)
 // @Param offset query int false "min 0"    default(0)
 // @Param location query string false "filter by location identifier (may repeat)"
-// @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active identifier values"
+// @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active tag values"
 // @Param include_deleted query bool false "include rows for soft-deleted assets" default(false)
 // @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
 // @Success 200 {object} reports.ListCurrentLocationsResponse
