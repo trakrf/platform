@@ -76,7 +76,7 @@ func buildReportsPublicRouter(store *storage.Storage) *chi.Mux {
 func insertAssetScan(t *testing.T, pool *pgxpool.Pool, orgID, assetID, locationID int, ts time.Time) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, identifier_scan_id)
+		`INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
          VALUES ($1, $2, $3, $4, NULL, NULL)`,
 		ts, orgID, assetID, locationID,
 	)
