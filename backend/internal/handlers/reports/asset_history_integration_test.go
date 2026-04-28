@@ -58,7 +58,7 @@ func createTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, name string) i
 	var assetID int
 	err := pool.QueryRow(ctx, `
 		INSERT INTO trakrf.assets (org_id, identifier, name, type, description, is_active)
-		VALUES ($1, $2, $3, 'asset', '', true)
+		VALUES ($1, $2, $3, 'item', '', true)
 		RETURNING id
 	`, orgID, "TEST-"+name, name).Scan(&assetID)
 

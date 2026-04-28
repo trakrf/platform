@@ -525,7 +525,7 @@ func TestLocationsAddIdentifier_CollidesWithAssetIdentifier_Returns409(t *testin
 	var assetID int
 	err := pool.QueryRow(context.Background(),
 		`INSERT INTO trakrf.assets (org_id, identifier, name, type, valid_from, is_active)
-		 VALUES ($1, 'cross-asset', 'Cross Asset', 'asset', NOW(), true)
+		 VALUES ($1, 'cross-asset', 'Cross Asset', 'item', NOW(), true)
 		 RETURNING id`, orgID,
 	).Scan(&assetID)
 	require.NoError(t, err)

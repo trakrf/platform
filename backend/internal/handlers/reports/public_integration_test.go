@@ -238,7 +238,7 @@ func TestSessionJWT_PassesThroughRequireScope(t *testing.T) {
 	})
 	require.NoError(t, err)
 	a, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "sess-asset", Name: "SA", Type: "asset",
+		OrgID: orgID, Identifier: "sess-asset", Name: "SA", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
