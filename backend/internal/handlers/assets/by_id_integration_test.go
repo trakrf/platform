@@ -160,11 +160,15 @@ func TestUpdateAssetByID_InvalidID_Returns400(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 }
 
-func TestUpdateAssetByID_NoSession_Returns401(t *testing.T) {
+func TestUpdateAssetByID_NoOrgContext_Returns422(t *testing.T) {
 	// The router group that owns /by-id/{id} in production applies
 	// middleware.Auth; here we exercise the handler without injecting a
-	// session to prove the handler itself short-circuits with 401 when
-	// GetRequestOrgID returns an error.
+	// session to prove the handler itself short-circuits when
+	// GetRequestOrgID returns an error. Per TRA-537, that path now emits
+	// 422 + missing_org_context (auth genuinely failed at the upstream
+	// middleware in production, but the handler-level defensive check
+	// classifies the 'no org context resolvable' state as a 422 — see
+	// httputil.RespondMissingOrgContext).
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -177,7 +181,7 @@ func TestUpdateAssetByID_NoSession_Returns401(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
 }
 
 func TestDeleteAssetByID_HappyPath(t *testing.T) {
