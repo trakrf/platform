@@ -29,3 +29,23 @@ func Respond415(w http.ResponseWriter, r *http.Request, requestID string) {
 	WriteJSONError(w, r, http.StatusUnsupportedMediaType, apierrors.ErrUnsupportedMedia,
 		"Unsupported media type", "Content-Type must be application/json", requestID)
 }
+
+// RespondMissingOrgContext writes the canonical 422 envelope used when
+// auth has succeeded but the request lacks an active organization context.
+//
+// Two real-world causes:
+//   - Session-authenticated user has no current org (just signed up,
+//     deleted last org, cleared client state). Frontend should route to
+//     the org picker.
+//   - API-key request with no org bound (shouldn't happen in production:
+//     keys are minted per-org). Integrator should re-mint with the
+//     correct org.
+//
+// Title and detail are both fixed; the variable cause does not surface
+// per-call to keep the contract clean for client-side branching.
+func RespondMissingOrgContext(w http.ResponseWriter, r *http.Request, requestID string) {
+	WriteJSONError(w, r, http.StatusUnprocessableEntity, apierrors.ErrMissingOrgContext,
+		"Organization context required",
+		"This request requires an active organization context. Select an organization or re-authenticate.",
+		requestID)
+}

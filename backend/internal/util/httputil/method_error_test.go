@@ -70,3 +70,34 @@ func TestRespond415_DropsMultipartWording(t *testing.T) {
 		t.Errorf("request_id = %q, want req-4", resp.Error.RequestID)
 	}
 }
+
+func TestRespondMissingOrgContext_EnvelopeShape(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/api/v1/assets", nil)
+	httputil.RespondMissingOrgContext(w, r, "req-mo")
+
+	if w.Code != 422 {
+		t.Fatalf("status = %d, want 422", w.Code)
+	}
+	if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want application/json; charset=utf-8", got)
+	}
+
+	var resp apierrors.ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Error.Type != string(apierrors.ErrMissingOrgContext) {
+		t.Errorf("type = %q, want %q", resp.Error.Type, apierrors.ErrMissingOrgContext)
+	}
+	if resp.Error.Title != "Organization context required" {
+		t.Errorf("title = %q, want Organization context required", resp.Error.Title)
+	}
+	if resp.Error.Status != 422 {
+		t.Errorf("status field = %d, want 422", resp.Error.Status)
+	}
+	if resp.Error.Detail != "This request requires an active organization context. Select an organization or re-authenticate." {
+		t.Errorf("detail = %q, want canonical message", resp.Error.Detail)
+	}
+	if resp.Error.RequestID != "req-mo" {
+		t.Errorf("request_id = %q, want req-mo", resp.Error.RequestID)
+	}
+}
