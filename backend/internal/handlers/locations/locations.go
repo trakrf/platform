@@ -56,8 +56,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationCreateFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 
@@ -156,8 +155,7 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationUpdateFailed, "missing organization context", ctx)
+		httputil.RespondMissingOrgContext(w, req, ctx)
 		return
 	}
 
@@ -284,8 +282,7 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationDeleteFailed, "missing organization context", ctx)
+		httputil.RespondMissingOrgContext(w, req, ctx)
 		return
 	}
 
@@ -400,8 +397,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationListFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -480,8 +476,7 @@ func (handler *Handler) GetLocationByIdentifier(w http.ResponseWriter, req *http
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationGetFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -516,8 +511,7 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationGetFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -571,8 +565,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationGetFailed, "missing organization context", ctx)
+		httputil.RespondMissingOrgContext(w, req, ctx)
 		return
 	}
 
@@ -640,8 +633,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationGetFailed, "missing organization context", ctx)
+		httputil.RespondMissingOrgContext(w, req, ctx)
 		return
 	}
 
@@ -709,8 +701,7 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationGetFailed, "missing organization context", ctx)
+		httputil.RespondMissingOrgContext(w, req, ctx)
 		return
 	}
 
@@ -788,8 +779,7 @@ func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationCreateFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 
@@ -864,8 +854,7 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationDeleteFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 
@@ -923,8 +912,7 @@ func (handler *Handler) UpdateByID(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationUpdateFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -944,8 +932,7 @@ func (handler *Handler) DeleteByID(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationDeleteFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -965,8 +952,7 @@ func (handler *Handler) AddTagByID(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationCreateFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -986,8 +972,7 @@ func (handler *Handler) RemoveTagByID(w http.ResponseWriter, req *http.Request) 
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LocationDeleteFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 

@@ -229,7 +229,8 @@ func TestLocationsHierarchy_WrongScope_Returns403(t *testing.T) {
 	}
 }
 
-func TestLocationsHierarchy_NoAuth_Returns401(t *testing.T) {
+func TestLocationsHierarchy_NoAuth_Returns422(t *testing.T) {
+	// RespondMissingOrgContext (TRA-537) now returns 422 instead of 401.
 	t.Setenv("JWT_SECRET", "tra446-hierarchy-no-auth")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -250,7 +251,7 @@ func TestLocationsHierarchy_NoAuth_Returns401(t *testing.T) {
 			// No Authorization header.
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
-			require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+			require.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
 		})
 	}
 }
