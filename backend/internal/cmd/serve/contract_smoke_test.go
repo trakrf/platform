@@ -194,3 +194,75 @@ func TestContract_BB12_401Reproductions(t *testing.T) {
 		})
 	}
 }
+
+// TestContract_NotFound_FixedTitleAndDetail covers TRA-538: 404 responses
+// must emit title="Not found" with the resource-specific message in detail.
+func TestContract_NotFound_FixedTitleAndDetail(t *testing.T) {
+	mux := chi.NewRouter()
+	mux.Use(middleware.RequestID)
+	mux.Get("/api/v1/assets/{id}", func(w http.ResponseWriter, req *http.Request) {
+		httputil.Respond404(w, req, "Asset not found",
+			middleware.GetRequestID(req.Context()))
+	})
+	mux.Get("/api/*", func(w http.ResponseWriter, req *http.Request) {
+		httputil.Respond404(w, req, "Unknown API route: "+req.URL.Path,
+			middleware.GetRequestID(req.Context()))
+	})
+
+	cases := []struct {
+		name          string
+		path          string
+		wantDetailHas string
+		titleMustNot  string
+	}{
+		{"handler 404", "/api/v1/assets/bogus", "Asset not found", "Asset not found"},
+		{"catchall 404", "/api/v1/nonexistent", "Unknown API route", "Unknown API route"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusNotFound, rec.Code)
+
+			var resp apierrors.ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			require.Equal(t, "Not found", resp.Error.Title,
+				"title must be the fixed string per TRA-538 contract")
+			require.Equal(t, "not_found", resp.Error.Type)
+			require.Contains(t, resp.Error.Detail, tc.wantDetailHas)
+			require.NotContains(t, resp.Error.Title, tc.titleMustNot,
+				"title must not contain the variable string")
+		})
+	}
+}
+
+// TestContract_UnsupportedMediaType_EnvelopeAndType covers TRA-541 §1.11:
+// 415 must emit type=unsupported_media_type and a detail that does not
+// name multipart (since the public OpenAPI spec contains no multipart
+// endpoints).
+func TestContract_UnsupportedMediaType_EnvelopeAndType(t *testing.T) {
+	mux := chi.NewRouter()
+	mux.Use(middleware.RequestID)
+	mux.Use(middleware.ContentType)
+	mux.Post("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", nil)
+	req.Header.Set("Content-Type", "text/plain")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "unsupported_media_type", resp.Error.Type)
+	require.Equal(t, "Unsupported media type", resp.Error.Title)
+	require.Equal(t, 415, resp.Error.Status)
+	require.NotContains(t, resp.Error.Detail, "multipart",
+		"public 415 detail must not name multipart per TRA-541 POLS resolution")
+}
