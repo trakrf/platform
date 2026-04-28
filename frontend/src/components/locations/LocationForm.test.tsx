@@ -16,7 +16,7 @@ describe('LocationForm - Scanner Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Mock useScanToInput - only barcode scanning for tag identifiers
+    // Mock useScanToInput - only barcode scanning for tags
     vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
       startRfidScan: vi.fn(),
       startBarcodeScan: mockStartBarcodeScan,
@@ -31,7 +31,7 @@ describe('LocationForm - Scanner Integration', () => {
     cleanup();
   });
 
-  it('should show scanner button in Tag Identifiers section when device connected', () => {
+  it('should show scanner button in Tags section when device connected', () => {
     useDeviceStore.setState({ isConnected: true });
 
     render(
@@ -42,7 +42,7 @@ describe('LocationForm - Scanner Integration', () => {
       />
     );
 
-    // Find the Scan button in Tag Identifiers section
+    // Find the Scan button in Tags section
     expect(screen.getByText('Scan')).toBeInTheDocument();
     expect(screen.getByText('Add Tag')).toBeInTheDocument();
   });

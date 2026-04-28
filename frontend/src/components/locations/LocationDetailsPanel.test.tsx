@@ -6,7 +6,7 @@ import type { Location } from '@/types/locations';
 
 // Mock the TagList component
 vi.mock('@/components/assets', () => ({
-  TagList: () => <div data-testid="tag-identifier-list">Tag Identifiers</div>,
+  TagList: () => <div data-testid="tag-list">Tags</div>,
 }));
 
 // Mock the LocationBreadcrumb component
