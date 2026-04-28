@@ -95,7 +95,7 @@ func TestListAssets_APIKey_HappyPath(t *testing.T) {
 		OrgID:             orgID,
 		Identifier:        "widget-42",
 		Name:              "Widget",
-		Type:              "asset",
+		Type:              "item",
 		CurrentLocationID: &loc.ID,
 		ValidFrom:         time.Now(),
 		IsActive:          true,
@@ -175,7 +175,7 @@ func TestGetAssetByIdentifier_CrossOrgReturns404(t *testing.T) {
 		OrgID:      orgAID,
 		Identifier: "asset-in-orga",
 		Name:       "OrgA Asset",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})

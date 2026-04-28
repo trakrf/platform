@@ -38,7 +38,7 @@ func TestNormalizeValidDatesMigration(t *testing.T) {
 		INSERT INTO trakrf.assets
 			(name, identifier, type, description, org_id, valid_from, valid_to, is_active, metadata)
 		VALUES
-			($1, $2, 'asset', '', $3,
+			($1, $2, 'item', '', $3,
 			 TIMESTAMPTZ '0001-01-01', TIMESTAMPTZ '2099-12-31',
 			 true, '{}'::jsonb)
 		RETURNING id

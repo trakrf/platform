@@ -106,7 +106,7 @@ func TestCreateAsset(t *testing.T) {
 	requestBody := testutil.NewAssetFactory(accountID).
 		WithIdentifier("TEST-001").
 		WithName("Test Asset").
-		WithType("asset").
+		WithType("item").
 		WithDescription("Test description").
 		BuildCreateRequest()
 
@@ -436,7 +436,7 @@ func TestAssetsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 		OrgID:      accountID,
 		Identifier: "TRA-407-DUP-1",
 		Name:       "First",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Time{}, // zero time — matches handler default when valid_from absent
 		IsActive:   true,
 	})
@@ -479,12 +479,12 @@ func TestAssetsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 
 	// Arrange: two assets.
 	_, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: accountID, Identifier: "SN-A-dup-host", Name: "Asset A", Type: "asset",
+		OrgID: accountID, Identifier: "SN-A-dup-host", Name: "Asset A", Type: "item",
 		ValidFrom: time.Time{}, IsActive: true,
 	})
 	require.NoError(t, err)
 	_, err = store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: accountID, Identifier: "SN-B-dup-host", Name: "Asset B", Type: "asset",
+		OrgID: accountID, Identifier: "SN-B-dup-host", Name: "Asset B", Type: "item",
 		ValidFrom: time.Time{}, IsActive: true,
 	})
 	require.NoError(t, err)
@@ -720,7 +720,7 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 		requestBody := testutil.NewAssetFactory(accountID).
 			WithIdentifier("tra429-no-parent").
 			WithName("TRA-429 Leak Guard").
-			WithType("asset").
+			WithType("item").
 			BuildCreateRequest()
 
 		body, err := json.Marshal(requestBody)
@@ -747,7 +747,7 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 		reqBody := asset.CreateAssetRequest{
 			Identifier:        "tra429-with-parent",
 			Name:              "TRA-429 With Parent",
-			Type:              "asset",
+			Type:              "item",
 			CurrentLocationID: &parent.ID,
 			IsActive:          &active,
 		}
@@ -774,7 +774,7 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 		// Seed an asset to update.
 		_, err := store.CreateAsset(context.Background(), asset.Asset{
 			OrgID: accountID, Identifier: "tra429-update-target",
-			Name: "Before", Type: "asset",
+			Name: "Before", Type: "item",
 			ValidFrom: time.Now(), IsActive: true,
 		})
 		require.NoError(t, err)
@@ -971,7 +971,7 @@ func TestUpdateAsset_DoesNotClobberValidDates(t *testing.T) {
 		OrgID:      accountID,
 		Identifier: "TRA468-UPD-001",
 		Name:       "update-test",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  vf,
 		ValidTo:    &vt,
 		IsActive:   true,
@@ -1156,7 +1156,7 @@ func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	router := setupTestRouter(handler)
 
 	_, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: accountID, Identifier: "SN-reuse-host", Name: "Host", Type: "asset",
+		OrgID: accountID, Identifier: "SN-reuse-host", Name: "Host", Type: "item",
 		ValidFrom: time.Time{}, IsActive: true,
 	})
 	require.NoError(t, err)
@@ -1319,7 +1319,7 @@ func TestGetAsset_LocationInferredFromLatestScan(t *testing.T) {
 
 	// Seed asset directly (no explicit current_location_id).
 	a, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: accountID, Identifier: "TRA477-SA1", Name: "Scan Asset", Type: "asset",
+		OrgID: accountID, Identifier: "TRA477-SA1", Name: "Scan Asset", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

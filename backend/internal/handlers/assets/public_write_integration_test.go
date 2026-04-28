@@ -99,7 +99,7 @@ func TestUpdateAsset_CrossOrg_Returns404(t *testing.T) {
 	_, tokenB := seedOrgAndKey(t, pool, store, "orgB-assets-write", []string{"assets:write"})
 
 	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgA, Identifier: "orgA-asset", Name: "A", Type: "asset",
+		OrgID: orgA, Identifier: "orgA-asset", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestDeleteAsset_CrossOrg_Returns404(t *testing.T) {
 	_, tokenB := seedOrgAndKey(t, pool, store, "orgB-assets-write-delete", []string{"assets:write"})
 
 	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgA, Identifier: "orgA-delete-target", Name: "Survivor", Type: "asset",
+		OrgID: orgA, Identifier: "orgA-delete-target", Name: "Survivor", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -165,7 +165,7 @@ func TestDeleteAsset_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "to-delete", Name: "Bye", Type: "asset",
+		OrgID: orgID, Identifier: "to-delete", Name: "Bye", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -198,7 +198,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	_ = loc
 
 	_, err = store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "ident-host", Name: "A", Type: "asset",
+		OrgID: orgID, Identifier: "ident-host", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -232,7 +232,7 @@ func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "ident-host", Name: "A", Type: "asset",
+		OrgID: orgID, Identifier: "ident-host", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -269,13 +269,13 @@ func TestRemoveAssetTag_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	owningAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "owning-asset", Name: "Owner", Type: "asset",
+		OrgID: orgID, Identifier: "owning-asset", Name: "Owner", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "other-asset", Name: "Other", Type: "asset",
+		OrgID: orgID, Identifier: "other-asset", Name: "Other", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -316,7 +316,7 @@ func TestAssetsUpdate_ByIdentifier_Works(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "TRA-407B-UPDATE-1", Name: "Original", Type: "asset",
+		OrgID: orgID, Identifier: "TRA-407B-UPDATE-1", Name: "Original", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -372,7 +372,7 @@ func TestAssetsDelete_ByIdentifier_Works(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "TRA-407B-DELETE-1", Name: "ToDelete", Type: "asset",
+		OrgID: orgID, Identifier: "TRA-407B-DELETE-1", Name: "ToDelete", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -420,7 +420,7 @@ func TestAssetsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "TRA-407B-ADDIDENT-1", Name: "Host", Type: "asset",
+		OrgID: orgID, Identifier: "TRA-407B-ADDIDENT-1", Name: "Host", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -478,7 +478,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	seededAsset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "TRA-407B-REMOVEIDENT-1", Name: "Host", Type: "asset",
+		OrgID: orgID, Identifier: "TRA-407B-REMOVEIDENT-1", Name: "Host", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -706,7 +706,7 @@ func TestUpdateAsset_APIKey_UnknownField_Rejected(t *testing.T) {
 
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "tra447-u-unknown", Name: "x", Type: "asset",
+		OrgID: orgID, Identifier: "tra447-u-unknown", Name: "x", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -889,7 +889,7 @@ func TestUpdateAsset_ValidToNull_ClearsField(t *testing.T) {
 	validTo := time.Now().UTC().AddDate(1, 0, 0)
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgID, Identifier: "tra476-null-vt", Name: "expires",
-		Type: "asset", ValidFrom: time.Now().UTC(), ValidTo: &validTo, IsActive: true,
+		Type: "item", ValidFrom: time.Now().UTC(), ValidTo: &validTo, IsActive: true,
 	})
 	require.NoError(t, err)
 
@@ -924,7 +924,7 @@ func TestUpdateAsset_ValidFromNull_Returns400(t *testing.T) {
 
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
 		OrgID: orgID, Identifier: "tra476-null-vf", Name: "has-valid-from",
-		Type: "asset", ValidFrom: time.Now().UTC(), IsActive: true,
+		Type: "item", ValidFrom: time.Now().UTC(), IsActive: true,
 	})
 	require.NoError(t, err)
 

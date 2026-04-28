@@ -34,7 +34,7 @@ func TestRemoveAssetTag_CrossOrg_ReturnsFalse(t *testing.T) {
 		OrgID:      orgA,
 		Identifier: "ident-host-a",
 		Name:       "A",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -72,7 +72,7 @@ func TestRemoveAssetTag_WrongAssetID_ReturnsFalse(t *testing.T) {
 		OrgID:      orgA,
 		Identifier: "ident-owner",
 		Name:       "Owner",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -82,7 +82,7 @@ func TestRemoveAssetTag_WrongAssetID_ReturnsFalse(t *testing.T) {
 		OrgID:      orgA,
 		Identifier: "ident-bystander",
 		Name:       "Bystander",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})

@@ -455,7 +455,7 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 	}
 	assetType := request.Type
 	if assetType == "" {
-		assetType = "asset"
+		assetType = "item"
 	}
 
 	query := `SELECT * FROM trakrf.create_asset_with_tags($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
@@ -916,7 +916,7 @@ func parseAssetWithTagsError(err error, identifier string) error {
 	}
 
 	if strings.Contains(errStr, "assets_type_check") {
-		return fmt.Errorf("invalid asset type: type must be 'asset'")
+		return fmt.Errorf("invalid asset type: type must be one of 'item', 'person', 'inventory'")
 	}
 
 	return fmt.Errorf("failed to create asset with tags: %w", err)

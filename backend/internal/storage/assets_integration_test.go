@@ -30,7 +30,7 @@ func TestGetAssetByIdentifier_Found(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "widget-42", Name: "Widget", Type: "asset",
+		OrgID: orgID, Identifier: "widget-42", Name: "Widget", Type: "item",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestGetAssetByIdentifier_WrongOrg(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgA, Identifier: "a-only", Name: "A", Type: "asset",
+		OrgID: orgA, Identifier: "a-only", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestGetAssetByIdentifier_SoftDeletedNotReturned(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "gone", Name: "Gone", Type: "asset",
+		OrgID: orgID, Identifier: "gone", Name: "Gone", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestListAssetsFiltered_LocationAndSort(t *testing.T) {
 		{"ccc", "C Asset", &locA.ID},
 	} {
 		created, err := store.CreateAsset(context.Background(), asset.Asset{
-			OrgID: orgID, Identifier: spec.id, Name: spec.name, Type: "asset",
+			OrgID: orgID, Identifier: spec.id, Name: spec.name, Type: "item",
 			ValidFrom: time.Now(), IsActive: true,
 		})
 		require.NoError(t, err)
@@ -154,11 +154,11 @@ func TestListAssetsFiltered_Q(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	_, _ = store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "forklift-1", Name: "Forklift One", Type: "asset",
+		OrgID: orgID, Identifier: "forklift-1", Name: "Forklift One", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	_, _ = store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "widget-1", Name: "Widget", Type: "asset",
+		OrgID: orgID, Identifier: "widget-1", Name: "Widget", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 
@@ -179,19 +179,19 @@ func TestListAssetsFiltered_QMatchesActiveIdentifier(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	activeAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-active", Name: "Active", Type: "asset",
+		OrgID: orgID, Identifier: "asset-active", Name: "Active", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	inactiveIDAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-inactive-id", Name: "InactiveID", Type: "asset",
+		OrgID: orgID, Identifier: "asset-inactive-id", Name: "InactiveID", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	deletedIDAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-deleted-id", Name: "DeletedID", Type: "asset",
+		OrgID: orgID, Identifier: "asset-deleted-id", Name: "DeletedID", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -278,7 +278,7 @@ func TestGetAssetByIdentifier_CrossOrgLocationFenced(t *testing.T) {
 		`INSERT INTO trakrf.assets
 			(org_id, identifier, name, type, description, current_location_id,
 			 valid_from, metadata, is_active, created_at, updated_at)
-		 VALUES ($1, 'leaker', 'A', 'asset', '', $2, now(), '{}'::jsonb, true, now(), now())
+		 VALUES ($1, 'leaker', 'A', 'item', '', $2, now(), '{}'::jsonb, true, now(), now())
 		 RETURNING id`,
 		orgA, locB.ID,
 	).Scan(&assetID)
@@ -318,7 +318,7 @@ func TestGetAssetWithLocationByID_ResolvesParent(t *testing.T) {
 
 	// Create asset with parent
 	placed, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra429-placed", Name: "Placed", Type: "asset",
+		OrgID: orgID, Identifier: "tra429-placed", Name: "Placed", Type: "item",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestGetAssetWithLocationByID_ResolvesParent(t *testing.T) {
 
 	// Create asset without parent
 	unplaced, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra429-unplaced", Name: "Unplaced", Type: "asset",
+		OrgID: orgID, Identifier: "tra429-unplaced", Name: "Unplaced", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestGetAssetWithLocationByID_SoftDeletedAssetReturnsNil(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	a, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra429-doomed", Name: "Doomed", Type: "asset",
+		OrgID: orgID, Identifier: "tra429-doomed", Name: "Doomed", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -389,7 +389,7 @@ func TestGetAssetWithLocationByID_SoftDeletedLocationYieldsNilIdentifier(t *test
 	require.NoError(t, err)
 
 	a, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra429-stale-ref", Name: "StaleRef", Type: "asset",
+		OrgID: orgID, Identifier: "tra429-stale-ref", Name: "StaleRef", Type: "item",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -435,7 +435,7 @@ func TestUpdateAsset_PopulatesCurrentLocationIdentifier(t *testing.T) {
 	require.NoError(t, err)
 
 	base, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra429-widget", Name: "Widget", Type: "asset",
+		OrgID: orgID, Identifier: "tra429-widget", Name: "Widget", Type: "item",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -460,12 +460,12 @@ func TestGetAssetIDsByIdentifiers_HappyPath(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	a1, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra448-a1", Name: "A1", Type: "asset",
+		OrgID: orgID, Identifier: "tra448-a1", Name: "A1", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	a2, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra448-a2", Name: "A2", Type: "asset",
+		OrgID: orgID, Identifier: "tra448-a2", Name: "A2", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -486,7 +486,7 @@ func TestGetAssetIDsByIdentifiers_MissingIdentifierAbsent(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	a, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "tra448-present", Name: "A", Type: "asset",
+		OrgID: orgID, Identifier: "tra448-present", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -509,7 +509,7 @@ func TestGetAssetIDsByIdentifiers_OtherOrgFilteredOut(t *testing.T) {
          VALUES ('tra448-orgB','tra448-orgB',true) RETURNING id`).Scan(&orgB))
 
 	_, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgB, Identifier: "tra448-shared", Name: "A", Type: "asset",
+		OrgID: orgB, Identifier: "tra448-shared", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -544,7 +544,7 @@ func TestAssetsPartialUniqueIndex_BlocksLiveDuplicates(t *testing.T) {
 	insert := func(identifier string) error {
 		_, err := pool.Exec(ctx, `
 			INSERT INTO trakrf.assets (org_id, identifier, name, type, valid_from)
-			VALUES ($1, $2, 'name', 'asset', now())
+			VALUES ($1, $2, 'name', 'item', now())
 		`, orgID, identifier)
 		return err
 	}

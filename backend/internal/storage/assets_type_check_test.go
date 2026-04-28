@@ -24,7 +24,7 @@ func TestAssets_TypeCheck_AcceptsPersonAndInventory(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	for _, kind := range []string{"asset", "person", "inventory"} {
+	for _, kind := range []string{"item", "person", "inventory"} {
 		kind := kind
 		t.Run(kind, func(t *testing.T) {
 			a, err := store.CreateAsset(context.Background(), asset.Asset{

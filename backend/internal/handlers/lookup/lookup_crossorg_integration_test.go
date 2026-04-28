@@ -121,7 +121,7 @@ func TestLookupByTags_CrossOrg_AssetNoLeak(t *testing.T) {
 		OrgID:      orgB,
 		Identifier: "orgB-secret-asset",
 		Name:       "OrgB Secret Asset",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})

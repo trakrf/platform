@@ -88,7 +88,7 @@ func TestRLS_SentinelMode_StorageMethods(t *testing.T) {
 			OrgID:      orgID,
 			Identifier: "rls-sentinel-storage-asset",
 			Name:       "Sentinel Storage Asset",
-			Type:       "asset",
+			Type:       "item",
 			ValidFrom:  time.Now(),
 			IsActive:   true,
 		})

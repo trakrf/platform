@@ -105,7 +105,7 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 		OrgID:      orgID,
 		Identifier: "curr-asset-1",
 		Name:       "Current Asset 1",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -175,7 +175,7 @@ func TestGetAssetHistory_ByIdentifier(t *testing.T) {
 		OrgID:      orgID,
 		Identifier: "hist-asset-1",
 		Name:       "History Asset 1",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -289,7 +289,7 @@ func seedDeletedAssetFixture(t *testing.T, store *storage.Storage, pool *pgxpool
 		OrgID:      orgID,
 		Identifier: "del-asset-live",
 		Name:       "LiveDel",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -299,7 +299,7 @@ func seedDeletedAssetFixture(t *testing.T, store *storage.Storage, pool *pgxpool
 		OrgID:      orgID,
 		Identifier: "del-asset-dead",
 		Name:       "DeadDel",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})

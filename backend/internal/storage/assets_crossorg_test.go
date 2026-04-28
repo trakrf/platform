@@ -43,7 +43,7 @@ func TestUpdateAsset_CrossOrgReturnsNotFound(t *testing.T) {
 		OrgID:      orgA,
 		Identifier: "asset-a",
 		Name:       "Owned by A",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -78,7 +78,7 @@ func TestUpdateAsset_OrgIDInBodyIgnored(t *testing.T) {
 		OrgID:      orgA,
 		Identifier: "asset-no-reassign",
 		Name:       "Owned by A",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -117,7 +117,7 @@ func TestDeleteAsset_CrossOrgReturnsFalse(t *testing.T) {
 		OrgID:      orgA,
 		Identifier: "asset-a-del",
 		Name:       "Owned by A",
-		Type:       "asset",
+		Type:       "item",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})

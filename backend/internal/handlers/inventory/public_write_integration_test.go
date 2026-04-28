@@ -100,7 +100,7 @@ func TestInventorySave_APIKey_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "inv-asset", Name: "A", Type: "asset",
+		OrgID: orgID, Identifier: "inv-asset", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -136,12 +136,12 @@ func TestInventorySave_APIKey_MultiAsset_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	asset1, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "ma-asset-1", Name: "A1", Type: "asset",
+		OrgID: orgID, Identifier: "ma-asset-1", Name: "A1", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	asset2, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "ma-asset-2", Name: "A2", Type: "asset",
+		OrgID: orgID, Identifier: "ma-asset-2", Name: "A2", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -250,7 +250,7 @@ func TestInventorySave_SessionAuth_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "sess-inv-asset", Name: "A", Type: "asset",
+		OrgID: orgID, Identifier: "sess-inv-asset", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -295,7 +295,7 @@ func TestInventorySave_CrossOrg_Returns400(t *testing.T) {
 	})
 	require.NoError(t, err)
 	asset, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgA, Identifier: "xo-asset", Name: "A", Type: "asset",
+		OrgID: orgA, Identifier: "xo-asset", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -325,7 +325,7 @@ func TestInventorySave_APIKey_LocationIdentifierNotFound(t *testing.T) {
 
 	orgID, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
 	_, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "tra448-asset-2", Name: "A", Type: "asset",
+		OrgID: orgID, Identifier: "tra448-asset-2", Name: "A", Type: "item",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

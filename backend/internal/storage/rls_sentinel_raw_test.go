@@ -237,7 +237,7 @@ func TestRLS_SentinelMode(t *testing.T) {
 			assertInsertRejected(t, sentinelPool, "assets",
 				`INSERT INTO trakrf.assets
 				 (org_id, identifier, name, type, valid_from, metadata, is_active, created_at, updated_at)
-				 VALUES ($1, 'rls-sentinel-insert-asset', 'test', 'asset', $2, '{}', true, $3, $3)`,
+				 VALUES ($1, 'rls-sentinel-insert-asset', 'test', 'item', $2, '{}', true, $3, $3)`,
 				realOrgID, time.Now(), time.Now())
 		})
 
@@ -341,7 +341,7 @@ func TestRLS_SentinelMode(t *testing.T) {
 					_, err := tx.Exec(context.Background(), `
 						INSERT INTO trakrf.assets
 						(org_id, identifier, name, type, valid_from, metadata, is_active, created_at, updated_at)
-						VALUES ($1, 'rls-withorgtx-asset', 'WithOrgTx Asset', 'asset', $2, '{}', true, $3, $3)`,
+						VALUES ($1, 'rls-withorgtx-asset', 'WithOrgTx Asset', 'item', $2, '{}', true, $3, $3)`,
 						realOrgID, time.Now(), time.Now())
 					return err
 				},
@@ -364,7 +364,7 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool, orgID int) {
 	_, err := pool.Exec(ctx, `
 		INSERT INTO trakrf.assets
 		(org_id, identifier, name, type, valid_from, metadata, is_active, created_at, updated_at)
-		VALUES ($1, 'rls-seed-asset', 'Seed Asset', 'asset', $2, '{}', true, $3, $3)
+		VALUES ($1, 'rls-seed-asset', 'Seed Asset', 'item', $2, '{}', true, $3, $3)
 		ON CONFLICT DO NOTHING`,
 		orgID, now, now)
 	require.NoError(t, err, "seed asset row")

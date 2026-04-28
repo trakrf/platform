@@ -429,7 +429,7 @@ type UpdateAssetResponse struct {
 // @Param offset   query int    false "min 0"    default(0)
 // @Param location query string false "filter by location natural key (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
-// @Param type     query string false "filter by type"
+// @Param asset_type query string false "filter by type (one of: item, person, inventory)"
 // @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active tag values"
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"
 // @Success 200 {object} assets.ListAssetsResponse
@@ -454,7 +454,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"location", "is_active", "type", "q"},
+		Filters:     []string{"location", "is_active", "asset_type", "q"},
 		BoolFilters: []string{"is_active"},
 		Sorts:       []string{"identifier", "name", "created_at", "updated_at"},
 	})
@@ -472,7 +472,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		b := vs[0] == "true"
 		f.IsActive = &b
 	}
-	if vs, ok := params.Filters["type"]; ok && len(vs) > 0 {
+	if vs, ok := params.Filters["asset_type"]; ok && len(vs) > 0 {
 		f.Type = &vs[0]
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
