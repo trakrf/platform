@@ -32,7 +32,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
     try {
       if (mode === 'create') {
         // Tags must be added separately after creation
-        const identifiers = (data as CreateLocationRequest & { tags?: TagInput[] }).tags || [];
+        const newTags = (data as CreateLocationRequest & { tags?: TagInput[] }).tags || [];
         const { tags: _, ...createData } = data as CreateLocationRequest & { tags?: TagInput[] };
 
         const response = await locationsApi.create(createData as CreateLocationRequest);
@@ -47,19 +47,19 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         }
 
         const newLocationId = normalized.id;
-        const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
-        for (const identifier of validIdentifiers) {
+        const validTags = newTags.filter(id => id.value.trim() !== '');
+        for (const tag of validTags) {
           try {
             await locationsApi.addTag(newLocationId, {
-              type: identifier.type,
-              value: identifier.value,
+              type: tag.type,
+              value: tag.value,
             });
           } catch (idErr) {
             console.error('Failed to add tag:', idErr);
           }
         }
 
-        if (validIdentifiers.length > 0) {
+        if (validTags.length > 0) {
           const freshResponse = await locationsApi.get(newLocationId);
           if (freshResponse.data?.data) {
             addLocation(normalizeLocation(freshResponse.data.data));
@@ -73,8 +73,8 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         toast.success(`Location "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && location) {
         // New tags (without id) need to be added after update
-        const identifiers = (data as UpdateLocationRequest & { tags?: TagInput[] }).tags || [];
-        const newIdentifiers = identifiers.filter(id => !id.id);
+        const allTags = (data as UpdateLocationRequest & { tags?: TagInput[] }).tags || [];
+        const newTags = allTags.filter(id => !id.id);
 
         // Backend doesn't support tags in update request
         const { tags: _, ...updateData } = data as UpdateLocationRequest & { tags?: TagInput[] };
@@ -90,11 +90,11 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
           throw new Error('Invalid response from server. Location API may not be available.');
         }
 
-        for (const identifier of newIdentifiers) {
+        for (const tag of newTags) {
           try {
             await locationsApi.addTag(location.id, {
-              type: identifier.type,
-              value: identifier.value,
+              type: tag.type,
+              value: tag.value,
             });
           } catch (idErr) {
             console.error('Failed to add tag:', idErr);

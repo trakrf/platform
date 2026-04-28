@@ -57,9 +57,9 @@ export function AssetCard({
     }
   };
 
-  const handleIdentifierRemoved = (identifierId: number) => {
+  const handleTagRemoved = (tagId: number) => {
     // Update local state
-    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    const updatedTags = localTags.filter((i) => i.id !== tagId);
     setLocalTags(updatedTags);
 
     // Update the asset store cache so the change persists when opening forms
@@ -195,7 +195,7 @@ export function AssetCard({
           entityType="asset"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
-          onTagRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleTagRemoved}
         />
       </>
     );
@@ -293,7 +293,7 @@ export function AssetCard({
         entityType="asset"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}
-        onTagRemoved={handleIdentifierRemoved}
+        onTagRemoved={handleTagRemoved}
       />
     </>
   );

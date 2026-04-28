@@ -47,10 +47,10 @@ export function LocationDetailsPanel({
     }
   }, [location?.tags]);
 
-  const handleIdentifierRemoved = (identifierId: number) => {
+  const handleTagRemoved = (tagId: number) => {
     if (!location) return;
 
-    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    const updatedTags = localTags.filter((i) => i.id !== tagId);
     setLocalTags(updatedTags);
 
     updateCachedLocation(location.id, {
@@ -177,7 +177,7 @@ export function LocationDetailsPanel({
           showHeader
           entityId={location.id}
           entityType="location"
-          onTagRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleTagRemoved}
         />
 
         {/* Direct children */}

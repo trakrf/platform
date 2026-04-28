@@ -38,8 +38,8 @@ export function LocationDetailsModal({
 
   useEscapeToClose(isOpen, onClose);
 
-  const handleIdentifierRemoved = (identifierId: number) => {
-    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+  const handleTagRemoved = (tagId: number) => {
+    const updatedTags = localTags.filter((i) => i.id !== tagId);
     setLocalTags(updatedTags);
 
     updateCachedLocation(location.id, {
@@ -144,7 +144,7 @@ export function LocationDetailsModal({
               showHeader
               entityId={location.id}
               entityType="location"
-              onTagRemoved={handleIdentifierRemoved}
+              onTagRemoved={handleTagRemoved}
             />
           </div>
 
