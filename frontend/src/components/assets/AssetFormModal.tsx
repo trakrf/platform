@@ -71,16 +71,16 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
         const newAssetId = normalized.id;
 
-        const validTags = newTags.filter(id => id.value.trim() !== '');
+        const validTags = newTags.filter(t => t.value.trim() !== '');
         for (const tag of validTags) {
           try {
             await assetsApi.addTag(newAssetId, {
               type: tag.type,
               value: tag.value,
             });
-          } catch (idErr: any) {
-            console.error('Failed to add tag:', idErr);
-            toast.error(`Failed to add tag "${tag.value}": ${idErr.message || 'Unknown error'}`);
+          } catch (tagErr: any) {
+            console.error('Failed to add tag:', tagErr);
+            toast.error(`Failed to add tag "${tag.value}": ${tagErr.message || 'Unknown error'}`);
           }
         }
 
@@ -98,7 +98,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         toast.success(`Asset "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
         const allTags = (data as UpdateAssetRequest & { tags?: TagInput[] }).tags || [];
-        const newTags = allTags.filter(id => !id.id);
+        const newTags = allTags.filter(t => !t.id);
 
         const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagInput[] };
 
@@ -119,9 +119,9 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
               type: tag.type,
               value: tag.value,
             });
-          } catch (idErr: any) {
-            console.error('Failed to add tag:', idErr);
-            toast.error(`Failed to add tag "${tag.value}": ${idErr.message || 'Unknown error'}`);
+          } catch (tagErr: any) {
+            console.error('Failed to add tag:', tagErr);
+            toast.error(`Failed to add tag "${tag.value}": ${tagErr.message || 'Unknown error'}`);
           }
         }
 

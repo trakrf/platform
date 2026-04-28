@@ -47,15 +47,15 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         }
 
         const newLocationId = normalized.id;
-        const validTags = newTags.filter(id => id.value.trim() !== '');
+        const validTags = newTags.filter(t => t.value.trim() !== '');
         for (const tag of validTags) {
           try {
             await locationsApi.addTag(newLocationId, {
               type: tag.type,
               value: tag.value,
             });
-          } catch (idErr) {
-            console.error('Failed to add tag:', idErr);
+          } catch (tagErr) {
+            console.error('Failed to add tag:', tagErr);
           }
         }
 
@@ -74,7 +74,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
       } else if (mode === 'edit' && location) {
         // New tags (without id) need to be added after update
         const allTags = (data as UpdateLocationRequest & { tags?: TagInput[] }).tags || [];
-        const newTags = allTags.filter(id => !id.id);
+        const newTags = allTags.filter(t => !t.id);
 
         // Backend doesn't support tags in update request
         const { tags: _, ...updateData } = data as UpdateLocationRequest & { tags?: TagInput[] };
@@ -96,8 +96,8 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
               type: tag.type,
               value: tag.value,
             });
-          } catch (idErr) {
-            console.error('Failed to add tag:', idErr);
+          } catch (tagErr) {
+            console.error('Failed to add tag:', tagErr);
           }
         }
 
