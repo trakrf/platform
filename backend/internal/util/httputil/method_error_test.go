@@ -36,6 +36,9 @@ func TestRespond405_EnvelopeShape(t *testing.T) {
 	if resp.Error.Detail != "" {
 		t.Errorf("detail = %q, want empty", resp.Error.Detail)
 	}
+	if resp.Error.RequestID != "req-3" {
+		t.Errorf("request_id = %q, want req-3", resp.Error.RequestID)
+	}
 }
 
 func TestRespond415_DropsMultipartWording(t *testing.T) {
