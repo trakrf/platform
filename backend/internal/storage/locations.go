@@ -527,7 +527,7 @@ func (s *Storage) scanHierarchyRows(
 				return fmt.Errorf("failed to scan %s: %w", kind, err)
 			}
 			out = append(out, location.LocationWithParent{
-				LocationView:     location.LocationView{Location: loc},
+				LocationView:             location.LocationView{Location: loc},
 				ParentLocationIdentifier: parIdt,
 			})
 		}
@@ -833,7 +833,7 @@ func (s *Storage) ListLocationsFiltered(
 				return fmt.Errorf("scan location: %w", err)
 			}
 			out = append(out, location.LocationWithParent{
-				LocationView:     location.LocationView{Location: loc},
+				LocationView:             location.LocationView{Location: loc},
 				ParentLocationIdentifier: parIdt,
 			})
 		}
@@ -891,8 +891,8 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 	clauses := []string{"l.org_id = $1", "l.deleted_at IS NULL"}
 	args := []any{orgID}
 
-	if len(f.ParentIdentifiers) > 0 {
-		args = append(args, f.ParentIdentifiers)
+	if len(f.ParentLocationIdentifiers) > 0 {
+		args = append(args, f.ParentLocationIdentifiers)
 		clauses = append(clauses, fmt.Sprintf("p.identifier = ANY($%d::text[])", len(args)))
 	}
 	if f.IsActive != nil {

@@ -16,10 +16,10 @@ type SaveInventoryRequest struct {
 
 // SaveInventoryResult represents the result of saving inventory scans
 type SaveInventoryResult struct {
-	Count                int       `json:"count"`
-	LocationIdentifier   string    `json:"location_identifier"`
-	LocationName         string    `json:"location_name"`
-	Timestamp            time.Time `json:"timestamp"`
+	Count              int       `json:"count"`
+	LocationIdentifier string    `json:"location_identifier"`
+	LocationName       string    `json:"location_name"`
+	Timestamp          time.Time `json:"timestamp"`
 }
 
 // InventoryAccessError provides diagnostic context for 403 responses.
@@ -35,9 +35,9 @@ type InventoryAccessError struct {
 func (e *InventoryAccessError) Error() string {
 	switch e.Reason {
 	case "location":
-		return fmt.Sprintf("location not found or access denied (org_id=%d, location_id=%d)", e.OrgID, e.LocationID)
+		return "location not found or access denied"
 	case "assets":
-		return fmt.Sprintf("assets not found or access denied (org_id=%d, valid=%d/%d)", e.OrgID, e.ValidCount, e.TotalCount)
+		return "assets not found or access denied"
 	default:
 		return "access denied"
 	}

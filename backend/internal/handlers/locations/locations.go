@@ -377,7 +377,7 @@ type ListDescendantsResponse struct {
 // @ID locations.list
 // @Param limit    query int    false "max 200"   default(50)
 // @Param offset   query int    false "min 0"    default(0)
-// @Param parent   query string false "filter by parent identifier (may repeat)"
+// @Param parent_location_identifier query string false "filter by parent location identifier (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
 // @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active tag values"
 // @Param sort     query string false "comma-separated, prefix '-' for DESC"
@@ -402,7 +402,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"parent", "is_active", "q"},
+		Filters:     []string{"parent_location_identifier", "is_active", "q"},
 		BoolFilters: []string{"is_active"},
 		Sorts:       []string{"path", "identifier", "name", "created_at"},
 	})
@@ -412,9 +412,9 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	}
 
 	f := location.ListFilter{
-		ParentIdentifiers: params.Filters["parent"],
-		Limit:             params.Limit,
-		Offset:            params.Offset,
+		ParentLocationIdentifiers: params.Filters["parent_location_identifier"],
+		Limit:                     params.Limit,
+		Offset:                    params.Offset,
 	}
 	if vs, ok := params.Filters["is_active"]; ok && len(vs) > 0 {
 		b := vs[0] == "true"

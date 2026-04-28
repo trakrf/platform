@@ -76,9 +76,9 @@ func TestListLocationsFiltered_Parent(t *testing.T) {
 	})
 
 	items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
-		ParentIdentifiers: []string{"root"},
-		Sorts:             []location.ListSort{{Field: "identifier"}},
-		Limit:             50,
+		ParentLocationIdentifiers: []string{"root"},
+		Sorts:                     []location.ListSort{{Field: "identifier"}},
+		Limit:                     50,
 	})
 	require.NoError(t, err)
 	require.Len(t, items, 2)

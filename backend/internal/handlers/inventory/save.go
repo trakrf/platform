@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -149,18 +150,20 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		errStr := err.Error()
-		if strings.Contains(errStr, "not found or access denied") {
+		var accessErr *storage.InventoryAccessError
+		if errors.As(err, &accessErr) {
 			logger.Get().Warn().
 				Int("org_id", orgID).
 				Int("location_id", locationID).
 				Ints("asset_ids", assetIDs).
+				Str("reason", accessErr.Reason).
+				Int("org_id_internal", accessErr.OrgID).
+				Int("location_id_internal", accessErr.LocationID).
 				Str("request_id", requestID).
-				Str("error", errStr).
-				Msg("Inventory save denied: org context mismatch")
+				Msg("inventory_save: location access denied")
 
 			httputil.WriteJSONError(w, r, http.StatusForbidden, modelerrors.ErrForbidden,
-				apierrors.InventorySaveForbidden, errStr, requestID)
+				apierrors.InventorySaveForbidden, accessErr.Error(), requestID)
 			return
 		}
 		httputil.RespondStorageError(w, r, err, requestID)

@@ -164,7 +164,7 @@ func TestGetAncestors_EmptyReturnsNonNil(t *testing.T) {
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
-			"parent_identifier",
+			"parent_location_identifier",
 		}))
 	mock.ExpectCommit()
 
@@ -185,7 +185,7 @@ func TestGetDescendants_EmptyReturnsNonNil(t *testing.T) {
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
-			"parent_identifier",
+			"parent_location_identifier",
 		}))
 	mock.ExpectCommit()
 
@@ -206,7 +206,7 @@ func TestGetChildren_EmptyReturnsNonNil(t *testing.T) {
 			"id", "org_id", "name", "identifier", "parent_location_id",
 			"path", "depth", "description", "valid_from", "valid_to",
 			"is_active", "created_at", "updated_at", "deleted_at",
-			"parent_identifier",
+			"parent_location_identifier",
 		}))
 	mock.ExpectCommit()
 
