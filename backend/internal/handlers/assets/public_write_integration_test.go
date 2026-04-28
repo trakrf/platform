@@ -53,7 +53,7 @@ func TestCreateAsset_APIKey_HappyPath(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"identifier":"api-create-1","name":"Via API","type":"asset"}`
+	body := `{"identifier":"api-create-1","name":"Via API","asset_type":"item"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -79,7 +79,7 @@ func TestCreateAsset_WrongScope_Returns403(t *testing.T) {
 	r := buildAssetsPublicWriteRouter(store)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets",
-		bytes.NewBufferString(`{"identifier":"x","name":"y","type":"asset"}`))
+		bytes.NewBufferString(`{"identifier":"x","name":"y","asset_type":"item"}`))
 	req.Header.Set("Authorization", "Bearer "+readOnlyToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -606,7 +606,7 @@ func TestCreateAsset_APIKey_TypeInvalidListsAllowedValues(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"identifier":"tra447-bad-type","name":"x","type":"widget"}`
+	body := `{"identifier":"tra447-bad-type","name":"x","asset_type":"widget"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -617,13 +617,13 @@ func TestCreateAsset_APIKey_TypeInvalidListsAllowedValues(t *testing.T) {
 	var resp modelerrors.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.Len(t, resp.Error.Fields, 1)
-	assert.Equal(t, "type", resp.Error.Fields[0].Field)
+	assert.Equal(t, "asset_type", resp.Error.Fields[0].Field)
 	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
-	assert.Contains(t, resp.Error.Fields[0].Message, "asset")
+	assert.Contains(t, resp.Error.Fields[0].Message, "item")
 	assert.Contains(t, resp.Error.Fields[0].Message, "person")
 	assert.Contains(t, resp.Error.Fields[0].Message, "inventory")
 	require.NotNil(t, resp.Error.Fields[0].Params)
-	assert.ElementsMatch(t, []any{"asset", "person", "inventory"},
+	assert.ElementsMatch(t, []any{"item", "person", "inventory"},
 		resp.Error.Fields[0].Params["allowed_values"])
 }
 
@@ -647,7 +647,7 @@ func TestCreateAsset_APIKey_TypeOmittedDefaultsToAsset(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "asset", data["type"])
+	assert.Equal(t, "item", data["asset_type"])
 }
 
 func TestCreateAsset_APIKey_TypePerson_Accepted(t *testing.T) {
@@ -659,7 +659,7 @@ func TestCreateAsset_APIKey_TypePerson_Accepted(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"identifier":"tra447-a-person","name":"Jane","type":"person"}`
+	body := `{"identifier":"tra447-a-person","name":"Jane","asset_type":"person"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -669,7 +669,7 @@ func TestCreateAsset_APIKey_TypePerson_Accepted(t *testing.T) {
 
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "person", resp["data"].(map[string]any)["type"])
+	assert.Equal(t, "person", resp["data"].(map[string]any)["asset_type"])
 }
 
 func TestCreateAsset_APIKey_UnknownField_Rejected(t *testing.T) {
@@ -681,7 +681,7 @@ func TestCreateAsset_APIKey_UnknownField_Rejected(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"identifier":"x","name":"y","type":"asset","foo":"bar"}`
+	body := `{"identifier":"x","name":"y","asset_type":"item","foo":"bar"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -752,7 +752,7 @@ func TestCreateAsset_DuplicateIdentifier_Returns409(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"identifier":"dup-asset-1","name":"first","type":"asset"}`
+	body := `{"identifier":"dup-asset-1","name":"first","asset_type":"item"}`
 
 	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req1.Header.Set("Authorization", "Bearer "+token)
@@ -784,7 +784,7 @@ func TestCreateAsset_AfterSoftDelete_ReusesIdentifier(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	createBody := `{"identifier":"reuse-asset-1","name":"v1","type":"asset"}`
+	createBody := `{"identifier":"reuse-asset-1","name":"v1","asset_type":"item"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(createBody))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -799,7 +799,7 @@ func TestCreateAsset_AfterSoftDelete_ReusesIdentifier(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, delW.Code)
 
 	recreateReq := httptest.NewRequest(http.MethodPost, "/api/v1/assets",
-		bytes.NewBufferString(`{"identifier":"reuse-asset-1","name":"v2","type":"asset"}`))
+		bytes.NewBufferString(`{"identifier":"reuse-asset-1","name":"v2","asset_type":"item"}`))
 	recreateReq.Header.Set("Authorization", "Bearer "+token)
 	recreateReq.Header.Set("Content-Type", "application/json")
 	rcW := httptest.NewRecorder()
@@ -822,7 +822,7 @@ func TestDeleteAsset_SecondDeleteReturns404(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"identifier":"idem-asset-1","name":"x","type":"asset"}`
+	body := `{"identifier":"idem-asset-1","name":"x","asset_type":"item"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -861,8 +861,8 @@ func TestUpdateAsset_RenameToExistingIdentifier_Returns409(t *testing.T) {
 		return w
 	}
 
-	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-a","name":"a","type":"asset"}`).Code)
-	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-b","name":"b","type":"asset"}`).Code)
+	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-a","name":"a","asset_type":"item"}`).Code)
+	require.Equal(t, http.StatusCreated, mkPost(`{"identifier":"rn-b","name":"b","asset_type":"item"}`).Code)
 
 	upBody := `{"identifier":"rn-a"}`
 	upReq := httptest.NewRequest(http.MethodPut, "/api/v1/assets/rn-b", bytes.NewBufferString(upBody))
@@ -980,7 +980,7 @@ func TestSoftDeleteVisibility_Asset(t *testing.T) {
 	// 1. Create asset with is_active=false so the post-delete ?is_active=false
 	// assertion is not trivially passing on the is_active filter alone.
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/assets",
-		bytes.NewBufferString(`{"identifier":"tra499-vis-1","name":"v","type":"asset","is_active":false}`))
+		bytes.NewBufferString(`{"identifier":"tra499-vis-1","name":"v","asset_type":"item","is_active":false}`))
 	auth(createReq)
 	createW := httptest.NewRecorder()
 	writeRouter.ServeHTTP(createW, createReq)
@@ -1050,7 +1050,7 @@ func TestCreateAsset_APIKey_OmittedIdentifier_AutoGenerates(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"name":"No Identifier Asset","type":"asset"}`
+	body := `{"name":"No Identifier Asset","asset_type":"item"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -1081,7 +1081,7 @@ func TestCreateAsset_APIKey_WhitespaceIdentifier_Returns400(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"identifier":"   ","name":"Whitespace Asset","type":"asset"}`
+	body := `{"identifier":"   ","name":"Whitespace Asset","asset_type":"item"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")

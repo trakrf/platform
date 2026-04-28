@@ -120,7 +120,7 @@ func TestListAssets_APIKey_HappyPath(t *testing.T) {
 	require.Len(t, data, 1)
 	row := data[0].(map[string]any)
 	assert.Equal(t, "widget-42", row["identifier"])
-	assert.Equal(t, "wh-1", row["current_location"])
+	assert.Equal(t, "wh-1", row["current_location_identifier"])
 	assert.NotContains(t, row, "org_id")
 	assert.Contains(t, row, "surrogate_id")
 	assert.Contains(t, row, "valid_from")

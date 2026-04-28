@@ -84,7 +84,7 @@ func rewriteBearerSchemes(doc *openapi3.T) {
 // nullable:true for Go *Type pointers, so we add it here. The list is
 // curated from BB10/BB11 audit findings (TRA-517 AC2, AC9, AC11).
 var nullableFields = map[string][]string{
-	"asset.PublicAssetView":         {"current_location", "valid_to"},
+	"asset.PublicAssetView":         {"current_location_identifier", "valid_to"},
 	"apikey.APIKeyListItem":         {"created_by_key_id", "expires_at", "last_used_at"},
 	"apikey.APIKeyCreateResponse":   {"expires_at"},
 	"report.PublicAssetHistoryItem": {"duration_seconds"},

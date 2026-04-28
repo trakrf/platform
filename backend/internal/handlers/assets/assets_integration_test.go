@@ -443,7 +443,7 @@ func TestAssetsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act: POST /api/v1/assets with the same identifier (no valid_from → also zero time).
-	body := `{"identifier":"TRA-407-DUP-1","name":"Second","type":"asset"}`
+	body := `{"identifier":"TRA-407-DUP-1","name":"Second","asset_type":"item"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, accountID)
@@ -734,10 +734,10 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 		data := assertNoLeaks(t, w.Body.Bytes())
-		// TRA-477: current_location is always present in the response; null when
+		// TRA-477: current_location_identifier is always present in the response; null when
 		// the asset has no explicit parent and no scan-inferred location.
-		assert.Contains(t, data, "current_location", "current_location must always be present")
-		assert.Nil(t, data["current_location"], "current_location should be null when no parent and no scans")
+		assert.Contains(t, data, "current_location_identifier", "current_location_identifier must always be present")
+		assert.Nil(t, data["current_location_identifier"], "current_location_identifier should be null when no parent and no scans")
 	})
 
 	t.Run("POST_WithParent", func(t *testing.T) {
@@ -765,9 +765,9 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 		data := assertNoLeaks(t, w.Body.Bytes())
 
 		// When a parent is present, the public shape exposes it as the parent's
-		// natural key under "current_location".
-		assert.Equal(t, "tra429-parent-loc", data["current_location"],
-			"current_location must be the parent's natural identifier")
+		// natural key under "current_location_identifier".
+		assert.Equal(t, "tra429-parent-loc", data["current_location_identifier"],
+			"current_location_identifier must be the parent's natural identifier")
 	})
 
 	t.Run("PUT_Update", func(t *testing.T) {
@@ -859,9 +859,9 @@ func TestListAssets_LocationFilter_FollowsLatestScanNotStaleColumn(t *testing.T)
 	data2, _ := resp2["data"].([]any)
 	require.Len(t, data2, 1, "asset whose latest scan is at WHS-02 must match ?location=LOC-WHS-02")
 
-	// Hydrated current_location must reflect the latest scan, not the stale column.
+	// Hydrated current_location_identifier must reflect the latest scan, not the stale column.
 	item := data2[0].(map[string]any)
-	assert.Equal(t, "LOC-WHS-02", item["current_location"])
+	assert.Equal(t, "LOC-WHS-02", item["current_location_identifier"])
 }
 
 // TRA-465: single-value ?location= happy path.
@@ -894,7 +894,7 @@ func TestListAssets_LocationFilter_HappyPath(t *testing.T) {
 	data, _ := resp["data"].([]any)
 	require.Len(t, data, 1)
 	assert.Equal(t, "HP-ASSET-001", data[0].(map[string]any)["identifier"])
-	assert.Equal(t, "LOC-WHS-01", data[0].(map[string]any)["current_location"])
+	assert.Equal(t, "LOC-WHS-01", data[0].(map[string]any)["current_location_identifier"])
 	assert.EqualValues(t, 1, resp["total_count"])
 }
 
@@ -1050,7 +1050,7 @@ func TestListAssets_LocationFilter_ExcludesAssetsWithNoScans(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &resp2))
 	data2, _ := resp2["data"].([]any)
 	require.Len(t, data2, 1)
-	assert.Nil(t, data2[0].(map[string]any)["current_location"])
+	assert.Nil(t, data2[0].(map[string]any)["current_location_identifier"])
 }
 
 // TRA-468: POST with no valid_to must omit the `valid_to` key from the response JSON.
@@ -1067,7 +1067,7 @@ func TestCreateAsset_OmitsValidToWhenNull(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	reqBody := `{"identifier":"TRA468-OMIT","name":"no-expiry","type":"asset","valid_from":"2026-01-01"}`
+	reqBody := `{"identifier":"TRA468-OMIT","name":"no-expiry","asset_type":"item","valid_from":"2026-01-01"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, accountID)
@@ -1100,7 +1100,7 @@ func TestCreateAsset_IncludesValidToWhenSet(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	reqBody := `{"identifier":"TRA468-KEEP","name":"with-expiry","type":"asset","valid_from":"2026-01-01","valid_to":"2027-06-15"}`
+	reqBody := `{"identifier":"TRA468-KEEP","name":"with-expiry","asset_type":"item","valid_from":"2026-01-01","valid_to":"2027-06-15"}`
 	reqC := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(reqBody))
 	reqC.Header.Set("Content-Type", "application/json")
 	reqC = withOrgContext(reqC, accountID)
@@ -1214,7 +1214,7 @@ func TestCreateAsset_CurrentLocation_HappyPath(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	body := `{"identifier":"TRA477-A1","name":"Asset","current_location":"LOC-TRA477WHS"}`
+	body := `{"identifier":"TRA477-A1","name":"Asset","current_location_identifier":"LOC-TRA477WHS"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, accountID)
@@ -1224,13 +1224,13 @@ func TestCreateAsset_CurrentLocation_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 	var resp struct {
 		Data struct {
-			Identifier      string  `json:"identifier"`
-			CurrentLocation *string `json:"current_location"`
+			Identifier                string  `json:"identifier"`
+			CurrentLocationIdentifier *string `json:"current_location_identifier"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.NotNil(t, resp.Data.CurrentLocation, "current_location should be set from natural identifier")
-	assert.Equal(t, "LOC-TRA477WHS", *resp.Data.CurrentLocation)
+	require.NotNil(t, resp.Data.CurrentLocationIdentifier, "current_location_identifier should be set from natural identifier")
+	assert.Equal(t, "LOC-TRA477WHS", *resp.Data.CurrentLocationIdentifier)
 }
 
 func TestCreateAsset_CurrentLocation_NotFound(t *testing.T) {
@@ -1246,7 +1246,7 @@ func TestCreateAsset_CurrentLocation_NotFound(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	body := `{"identifier":"TRA477-A2","name":"Asset","current_location":"DOES-NOT-EXIST"}`
+	body := `{"identifier":"TRA477-A2","name":"Asset","current_location_identifier":"DOES-NOT-EXIST"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, accountID)
@@ -1281,8 +1281,8 @@ func TestUpdateAsset_CurrentLocation_HappyPath(t *testing.T) {
 	router.ServeHTTP(cw, creq)
 	require.Equal(t, http.StatusCreated, cw.Code, cw.Body.String())
 
-	// PUT with current_location natural identifier.
-	updateBody := `{"current_location":"LOC-TRA477UPD"}`
+	// PUT with current_location_identifier natural identifier.
+	updateBody := `{"current_location_identifier":"LOC-TRA477UPD"}`
 	ureq := httptest.NewRequest(http.MethodPut, "/api/v1/assets/TRA477-UA1", bytes.NewBufferString(updateBody))
 	ureq.Header.Set("Content-Type", "application/json")
 	ureq = withOrgContext(ureq, accountID)
@@ -1292,12 +1292,12 @@ func TestUpdateAsset_CurrentLocation_HappyPath(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			CurrentLocation *string `json:"current_location"`
+			CurrentLocationIdentifier *string `json:"current_location_identifier"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(uw.Body.Bytes(), &resp))
-	require.NotNil(t, resp.Data.CurrentLocation)
-	assert.Equal(t, "LOC-TRA477UPD", *resp.Data.CurrentLocation)
+	require.NotNil(t, resp.Data.CurrentLocationIdentifier)
+	assert.Equal(t, "LOC-TRA477UPD", *resp.Data.CurrentLocationIdentifier)
 }
 
 func TestGetAsset_LocationInferredFromLatestScan(t *testing.T) {
@@ -1337,13 +1337,13 @@ func TestGetAsset_LocationInferredFromLatestScan(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			CurrentLocation *string `json:"current_location"`
+			CurrentLocationIdentifier *string `json:"current_location_identifier"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(gw.Body.Bytes(), &resp))
-	require.NotNil(t, resp.Data.CurrentLocation,
-		"current_location must be inferred from the latest scan when current_location_id is NULL")
-	assert.Equal(t, "LOC-TRA477SCAN", *resp.Data.CurrentLocation)
+	require.NotNil(t, resp.Data.CurrentLocationIdentifier,
+		"current_location_identifier must be inferred from the latest scan when current_location_id is NULL")
+	assert.Equal(t, "LOC-TRA477SCAN", *resp.Data.CurrentLocationIdentifier)
 }
 
 func TestCreateAsset_CurrentLocation_Disagree(t *testing.T) {
@@ -1363,7 +1363,7 @@ func TestCreateAsset_CurrentLocation_Disagree(t *testing.T) {
 
 	// Send a current_location_id that deliberately disagrees with current_location.
 	body := fmt.Sprintf(
-		`{"identifier":"TRA477-A3","name":"Asset","current_location":"LOC-TRA477WHS2","current_location_id":%d}`,
+		`{"identifier":"TRA477-A3","name":"Asset","current_location_identifier":"LOC-TRA477WHS2","current_location_id":%d}`,
 		locID+99999,
 	)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewBufferString(body))

@@ -79,7 +79,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// but API consumers commonly omit. Absence is distinguishable from zero
 	// because these fields are pointer-typed.
 	if request.Type == "" {
-		request.Type = "asset"
+		request.Type = "item"
 	}
 	if request.IsActive == nil {
 		t := true
@@ -100,22 +100,22 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if loc == nil {
-			msg := fmt.Sprintf("current_location %q not found", *request.CurrentLocation)
+			msg := fmt.Sprintf("current_location_identifier %q not found", *request.CurrentLocation)
 			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.AssetCreateFailed, msg, requestID,
 				[]modelerrors.FieldError{{
-					Field:   "current_location",
+					Field:   "current_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})
 			return
 		}
 		if request.CurrentLocationID != nil && *request.CurrentLocationID != loc.ID {
-			msg := "current_location and current_location_id disagree"
+			msg := "current_location_identifier and current_location_id disagree"
 			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.AssetCreateFailed, msg, requestID,
 				[]modelerrors.FieldError{{
-					Field:   "current_location",
+					Field:   "current_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})
@@ -239,7 +239,7 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
-	// Resolve current_location → current_location_id (TRA-477).
+	// Resolve current_location_identifier → current_location_id (TRA-477).
 	if request.CurrentLocation != nil && *request.CurrentLocation != "" {
 		loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, *request.CurrentLocation)
 		if err != nil {
@@ -248,22 +248,22 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 			return
 		}
 		if loc == nil {
-			msg := fmt.Sprintf("current_location %q not found", *request.CurrentLocation)
+			msg := fmt.Sprintf("current_location_identifier %q not found", *request.CurrentLocation)
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.AssetUpdateFailed, msg, reqID,
 				[]modelerrors.FieldError{{
-					Field:   "current_location",
+					Field:   "current_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})
 			return
 		}
 		if request.CurrentLocationID != nil && *request.CurrentLocationID != loc.ID {
-			msg := "current_location and current_location_id disagree"
+			msg := "current_location_identifier and current_location_id disagree"
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.AssetUpdateFailed, msg, reqID,
 				[]modelerrors.FieldError{{
-					Field:   "current_location",
+					Field:   "current_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})
