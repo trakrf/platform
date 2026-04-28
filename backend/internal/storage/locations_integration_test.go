@@ -39,8 +39,8 @@ func TestGetLocationByIdentifier_Found(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, view)
 	assert.Equal(t, "wh-1.bay-3", view.Identifier)
-	require.NotNil(t, view.ParentIdentifier)
-	assert.Equal(t, "wh-1", *view.ParentIdentifier)
+	require.NotNil(t, view.ParentLocationIdentifier)
+	assert.Equal(t, "wh-1", *view.ParentLocationIdentifier)
 }
 
 func TestGetLocationByIdentifier_NotFound(t *testing.T) {
@@ -84,8 +84,8 @@ func TestListLocationsFiltered_Parent(t *testing.T) {
 	require.Len(t, items, 2)
 	assert.Equal(t, "root.a", items[0].Identifier)
 	assert.Equal(t, "root.b", items[1].Identifier)
-	require.NotNil(t, items[0].ParentIdentifier)
-	assert.Equal(t, "root", *items[0].ParentIdentifier)
+	require.NotNil(t, items[0].ParentLocationIdentifier)
+	assert.Equal(t, "root", *items[0].ParentLocationIdentifier)
 }
 
 func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
@@ -145,7 +145,7 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 }
 
 // TestGetLocationWithParentByID_ResolvesParent verifies that the private
-// helper returns LocationWithParent with ParentIdentifier populated when the
+// helper returns LocationWithParent with ParentLocationIdentifier populated when the
 // location has a live parent, and nil when the location is root-level.
 // Guards against regression to the bare Location/LocationView shape on write
 // paths.
@@ -175,8 +175,8 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, child.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.NotNil(t, got.ParentIdentifier)
-	assert.Equal(t, "wh-1", *got.ParentIdentifier)
+	require.NotNil(t, got.ParentLocationIdentifier)
+	assert.Equal(t, "wh-1", *got.ParentLocationIdentifier)
 	assert.Equal(t, "wh-1.bay-3", got.Identifier)
 
 	// Create a root-level location (no parent)
@@ -186,11 +186,11 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Negative: no parent → nil ParentIdentifier
+	// Negative: no parent → nil ParentLocationIdentifier
 	got2, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, root.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got2)
-	assert.Nil(t, got2.ParentIdentifier)
+	assert.Nil(t, got2.ParentLocationIdentifier)
 }
 
 // TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil verifies the
@@ -221,7 +221,7 @@ func TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil(t *testing.T) {
 
 // TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier verifies
 // the LEFT JOIN's `p.deleted_at IS NULL` predicate — a live child pointing at
-// a tombstoned parent should expose nil ParentIdentifier, never the stale
+// a tombstoned parent should expose nil ParentLocationIdentifier, never the stale
 // identifier.
 func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
@@ -251,7 +251,7 @@ func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testi
 	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, child.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Nil(t, got.ParentIdentifier,
+	assert.Nil(t, got.ParentLocationIdentifier,
 		"LEFT JOIN's deleted_at IS NULL predicate must suppress the stale parent identifier")
 }
 
@@ -266,8 +266,8 @@ func TestGetLocationWithParentByID_UnknownIDReturnsNil(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-// TestUpdateLocation_PopulatesParentIdentifier verifies UpdateLocation
-// returns the LocationWithParent shape with ParentIdentifier populated
+// TestUpdateLocation_PopulatesParentLocationIdentifier verifies UpdateLocation
+// returns the LocationWithParent shape with ParentLocationIdentifier populated
 // when the location has a live parent (TRA-429).
 func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
@@ -295,8 +295,8 @@ func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.NotNil(t, result.ParentIdentifier)
-	assert.Equal(t, "wh-1", *result.ParentIdentifier)
+	require.NotNil(t, result.ParentLocationIdentifier)
+	assert.Equal(t, "wh-1", *result.ParentLocationIdentifier)
 	assert.Equal(t, newName, result.Name)
 	assert.NotNil(t, result.Tags, "Tags slice must be non-nil (empty is OK)")
 }

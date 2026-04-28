@@ -528,7 +528,7 @@ func (s *Storage) scanHierarchyRows(
 			}
 			out = append(out, location.LocationWithParent{
 				LocationView:     location.LocationView{Location: loc},
-				ParentIdentifier: parIdt,
+				ParentLocationIdentifier: parIdt,
 			})
 		}
 		return rows.Err()
@@ -675,7 +675,7 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 			Location: loc,
 			Tags:     tags,
 		},
-		ParentIdentifier: parIdt,
+		ParentLocationIdentifier: parIdt,
 	}, nil
 }
 
@@ -781,7 +781,7 @@ func (s *Storage) GetLocationByIdentifier(
 			Location: loc,
 			Tags:     tags,
 		},
-		ParentIdentifier: parIdt,
+		ParentLocationIdentifier: parIdt,
 	}, nil
 }
 
@@ -834,7 +834,7 @@ func (s *Storage) ListLocationsFiltered(
 			}
 			out = append(out, location.LocationWithParent{
 				LocationView:     location.LocationView{Location: loc},
-				ParentIdentifier: parIdt,
+				ParentLocationIdentifier: parIdt,
 			})
 		}
 		return rows.Err()

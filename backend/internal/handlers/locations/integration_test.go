@@ -394,7 +394,7 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 		data := assertNoLeaks(t, w.Body.Bytes())
-		assert.NotContains(t, data, "parent", "parent must be omitted entirely when no parent_location_id")
+		assert.NotContains(t, data, "parent_location_identifier", "parent_location_identifier must be omitted entirely when no parent_location_id")
 	})
 
 	t.Run("POST_WithParent", func(t *testing.T) {
@@ -423,9 +423,9 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 		data := assertNoLeaks(t, w.Body.Bytes())
 
 		// When a parent is present, the public shape exposes it as the parent's
-		// natural key under "parent".
-		assert.Equal(t, "tra429-parent-loc", data["parent"],
-			"parent must be the parent's natural identifier")
+		// natural key under "parent_location_identifier".
+		assert.Equal(t, "tra429-parent-loc", data["parent_location_identifier"],
+			"parent_location_identifier must be the parent's natural identifier")
 	})
 
 	t.Run("PUT_Update", func(t *testing.T) {

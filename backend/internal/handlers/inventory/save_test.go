@@ -281,10 +281,10 @@ func TestSaveRequest_Validation(t *testing.T) {
 
 func TestSaveInventoryResult_JSON(t *testing.T) {
 	result := storage.SaveInventoryResult{
-		Count:        5,
-		LocationID:   123,
-		LocationName: "Warehouse A - Rack 12",
-		Timestamp:    time.Date(2026, 1, 23, 20, 30, 0, 0, time.UTC),
+		Count:              5,
+		LocationIdentifier: "warehouse-a-rack-12",
+		LocationName:       "Warehouse A - Rack 12",
+		Timestamp:          time.Date(2026, 1, 23, 20, 30, 0, 0, time.UTC),
 	}
 
 	data, err := json.Marshal(result)
@@ -295,7 +295,7 @@ func TestSaveInventoryResult_JSON(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, float64(5), parsed["count"])
-	assert.Equal(t, float64(123), parsed["location_id"])
+	assert.Equal(t, "warehouse-a-rack-12", parsed["location_identifier"])
 	assert.Equal(t, "Warehouse A - Rack 12", parsed["location_name"])
 }
 
@@ -305,7 +305,7 @@ func TestSaveInventoryRequest_Struct(t *testing.T) {
 		AssetIDs:   []int{1, 2, 3},
 	}
 
-	assert.Equal(t, 123, req.LocationID)
+	assert.Equal(t, 123, req.LocationID) // internal surrogate, not exposed in response
 	assert.Equal(t, []int{1, 2, 3}, req.AssetIDs)
 	assert.Len(t, req.AssetIDs, 3)
 }
@@ -543,10 +543,10 @@ func TestSave_Success(t *testing.T) {
 	ts := time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC)
 	mock := &mockInventoryStorage{
 		saveResult: &storage.SaveInventoryResult{
-			Count:        3,
-			LocationID:   42,
-			LocationName: "Warehouse B",
-			Timestamp:    ts,
+			Count:              3,
+			LocationIdentifier: "WH-B",
+			LocationName:       "Warehouse B",
+			Timestamp:          ts,
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
 			"WH-B": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-B"}}},
@@ -571,7 +571,7 @@ func TestSave_Success(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, 3, response.Data.Count)
-	assert.Equal(t, 42, response.Data.LocationID)
+	assert.Equal(t, "WH-B", response.Data.LocationIdentifier)
 	assert.Equal(t, "Warehouse B", response.Data.LocationName)
 	assert.Equal(t, ts, response.Data.Timestamp)
 }
@@ -640,7 +640,7 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 	ts := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
 	mock := &mockInventoryStorage{
 		saveResult: &storage.SaveInventoryResult{
-			Count: 2, LocationID: 42, LocationName: "WH-01", Timestamp: ts,
+			Count: 2, LocationIdentifier: "WH-01", LocationName: "WH-01", Timestamp: ts,
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
 			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-01", Name: "WH-01"}}},
@@ -665,7 +665,7 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, 2, resp.Data.Count)
-	assert.Equal(t, 42, resp.Data.LocationID)
+	assert.Equal(t, "WH-01", resp.Data.LocationIdentifier)
 }
 
 func ptr[T any](v T) *T { return &v }

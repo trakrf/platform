@@ -16,10 +16,10 @@ type SaveInventoryRequest struct {
 
 // SaveInventoryResult represents the result of saving inventory scans
 type SaveInventoryResult struct {
-	Count        int       `json:"count"`
-	LocationID   int       `json:"location_id"`
-	LocationName string    `json:"location_name"`
-	Timestamp    time.Time `json:"timestamp"`
+	Count                int       `json:"count"`
+	LocationIdentifier   string    `json:"location_identifier"`
+	LocationName         string    `json:"location_name"`
+	Timestamp            time.Time `json:"timestamp"`
 }
 
 // InventoryAccessError provides diagnostic context for 403 responses.
@@ -56,12 +56,12 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 		return nil, fmt.Errorf("no assets to save")
 	}
 
-	var locationName string
+	var locationName, locationIdentifier string
 	timestamp := time.Now()
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		// 1. Validate location belongs to org and get its name
-		err := tx.QueryRow(ctx, `SELECT name FROM trakrf.locations WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`, req.LocationID, orgID).Scan(&locationName)
+		// 1. Validate location belongs to org and get its name and identifier
+		err := tx.QueryRow(ctx, `SELECT name, identifier FROM trakrf.locations WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`, req.LocationID, orgID).Scan(&locationName, &locationIdentifier)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return &InventoryAccessError{
@@ -105,9 +105,9 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 	}
 
 	return &SaveInventoryResult{
-		Count:        len(req.AssetIDs),
-		LocationID:   req.LocationID,
-		LocationName: locationName,
-		Timestamp:    timestamp,
+		Count:              len(req.AssetIDs),
+		LocationIdentifier: locationIdentifier,
+		LocationName:       locationName,
+		Timestamp:          timestamp,
 	}, nil
 }

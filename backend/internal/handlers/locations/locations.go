@@ -71,33 +71,33 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve parent_identifier → internal surrogate FK (TRA-447).
-	// parent_identifier is the API-consumer natural key; parent_location_id
+	// Resolve parent_location_identifier → internal surrogate FK (TRA-447).
+	// parent_location_identifier is the API-consumer natural key; parent_location_id
 	// stays for the UI (hidden from public OpenAPI).
-	if request.ParentIdentifier != nil && *request.ParentIdentifier != "" {
-		parent, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, *request.ParentIdentifier)
+	if request.ParentLocationIdentifier != nil && *request.ParentLocationIdentifier != "" {
+		parent, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, *request.ParentLocationIdentifier)
 		if err != nil {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 				apierrors.LocationCreateFailed, err.Error(), requestID)
 			return
 		}
 		if parent == nil {
-			msg := fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier)
+			msg := fmt.Sprintf("parent_location_identifier %q not found", *request.ParentLocationIdentifier)
 			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.LocationCreateFailed, msg, requestID,
 				[]modelerrors.FieldError{{
-					Field:   "parent_identifier",
+					Field:   "parent_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})
 			return
 		}
 		if request.ParentLocationID != nil && *request.ParentLocationID != parent.ID {
-			msg := "parent_identifier and parent_location_id disagree"
+			msg := "parent_location_identifier and parent_location_id disagree"
 			httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.LocationCreateFailed, msg, requestID,
 				[]modelerrors.FieldError{{
-					Field:   "parent_identifier",
+					Field:   "parent_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})
@@ -208,32 +208,32 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	// Resolve parent_identifier → parent_location_id (TRA-447). Empty
+	// Resolve parent_location_identifier → parent_location_id (TRA-447). Empty
 	// string is treated as nil (detach not supported in this ticket).
-	if request.ParentIdentifier != nil && *request.ParentIdentifier != "" {
-		parent, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, *request.ParentIdentifier)
+	if request.ParentLocationIdentifier != nil && *request.ParentLocationIdentifier != "" {
+		parent, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, *request.ParentLocationIdentifier)
 		if err != nil {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 				apierrors.LocationUpdateFailed, err.Error(), reqID)
 			return
 		}
 		if parent == nil {
-			msg := fmt.Sprintf("parent_identifier %q not found", *request.ParentIdentifier)
+			msg := fmt.Sprintf("parent_location_identifier %q not found", *request.ParentLocationIdentifier)
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.LocationUpdateFailed, msg, reqID,
 				[]modelerrors.FieldError{{
-					Field:   "parent_identifier",
+					Field:   "parent_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})
 			return
 		}
 		if request.ParentLocationID != nil && *request.ParentLocationID != parent.ID {
-			msg := "parent_identifier and parent_location_id disagree"
+			msg := "parent_location_identifier and parent_location_id disagree"
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 				apierrors.LocationUpdateFailed, msg, reqID,
 				[]modelerrors.FieldError{{
-					Field:   "parent_identifier",
+					Field:   "parent_location_identifier",
 					Code:    "invalid_value",
 					Message: msg,
 				}})

@@ -528,12 +528,12 @@ func TestLocationsGetAncestors_ByIdentifier_Works(t *testing.T) {
 
 	rootNode := data[0].(map[string]any)
 	assert.Equal(t, "anc-root", rootNode["identifier"])
-	_, rootHasParent := rootNode["parent"]
-	assert.False(t, rootHasParent, "root ancestor must omit parent")
+	_, rootHasParent := rootNode["parent_location_identifier"]
+	assert.False(t, rootHasParent, "root ancestor must omit parent_location_identifier")
 
 	parentNode := data[1].(map[string]any)
 	assert.Equal(t, "anc-parent", parentNode["identifier"])
-	assert.Equal(t, "anc-root", parentNode["parent"], "non-root ancestor must carry parent identifier")
+	assert.Equal(t, "anc-root", parentNode["parent_location_identifier"], "non-root ancestor must carry parent identifier")
 }
 
 func TestLocationsGetAncestors_UnknownIdentifier_Returns404(t *testing.T) {
@@ -630,7 +630,7 @@ func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
 	require.Len(t, data, 1)
 	child := data[0].(map[string]any)
 	assert.Equal(t, "children-child", child["identifier"])
-	assert.Equal(t, "children-parent", child["parent"], "child must carry parent identifier")
+	assert.Equal(t, "children-parent", child["parent_location_identifier"], "child must carry parent identifier")
 }
 
 func TestLocationsGetChildren_UnknownIdentifier_Returns404(t *testing.T) {
@@ -696,8 +696,8 @@ func TestLocationsGetDescendants_ByIdentifier_Works(t *testing.T) {
 	}
 	require.Contains(t, byIdentifier, "desc-child")
 	require.Contains(t, byIdentifier, "desc-grandchild")
-	assert.Equal(t, "desc-root", byIdentifier["desc-child"]["parent"], "direct descendant must carry root as parent")
-	assert.Equal(t, "desc-child", byIdentifier["desc-grandchild"]["parent"], "grandchild must carry intermediate parent")
+	assert.Equal(t, "desc-root", byIdentifier["desc-child"]["parent_location_identifier"], "direct descendant must carry root as parent")
+	assert.Equal(t, "desc-child", byIdentifier["desc-grandchild"]["parent_location_identifier"], "grandchild must carry intermediate parent")
 }
 
 func TestLocationsGetDescendants_UnknownIdentifier_Returns404(t *testing.T) {
@@ -760,7 +760,7 @@ func TestCreateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	r := buildLocationsPublicWriteRouter(store)
-	body := `{"identifier":"tra447-child","name":"Child","parent_identifier":"tra447-parent"}`
+	body := `{"identifier":"tra447-child","name":"Child","parent_location_identifier":"tra447-parent"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -771,7 +771,7 @@ func TestCreateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "tra447-parent", data["parent"])
+	assert.Equal(t, "tra447-parent", data["parent_location_identifier"])
 	depth, _ := data["depth"].(float64)
 	assert.Equal(t, float64(parent.Depth+1), depth)
 }
@@ -785,7 +785,7 @@ func TestCreateLocation_APIKey_ParentIdentifier_NotFound(t *testing.T) {
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	r := buildLocationsPublicWriteRouter(store)
 
-	body := `{"identifier":"tra447-orphan","name":"x","parent_identifier":"ghost"}`
+	body := `{"identifier":"tra447-orphan","name":"x","parent_location_identifier":"ghost"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -799,7 +799,7 @@ func TestCreateLocation_APIKey_ParentIdentifier_NotFound(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, string(modelerrors.ErrValidation), resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
-	assert.Equal(t, "parent_identifier", resp.Error.Fields[0].Field)
+	assert.Equal(t, "parent_location_identifier", resp.Error.Fields[0].Field)
 	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
 	assert.Contains(t, resp.Error.Fields[0].Message, "ghost")
 	assert.Contains(t, resp.Error.Fields[0].Message, "not found")
@@ -847,7 +847,7 @@ func TestUpdateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	r := buildLocationsPublicWriteRouter(store)
-	body := `{"parent_identifier":"tra447-u-parent"}`
+	body := `{"parent_location_identifier":"tra447-u-parent"}`
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/tra447-u-child", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -858,7 +858,7 @@ func TestUpdateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "tra447-u-parent", data["parent"])
+	assert.Equal(t, "tra447-u-parent", data["parent_location_identifier"])
 	// Reparented from root → child of tra447-u-parent. Depth advances.
 	depth, _ := data["depth"].(float64)
 	assert.Equal(t, float64(parent.Depth+1), depth, "child should now sit at parent.depth+1")
@@ -903,7 +903,7 @@ func TestCreateLocation_APIKey_ParentDisagree_Rejected(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 	bogusID := parent.ID + 9999
-	body := fmt.Sprintf(`{"identifier":"tra447-d-child","name":"x","parent_identifier":"tra447-disagree-parent","parent_location_id":%d}`, bogusID)
+	body := fmt.Sprintf(`{"identifier":"tra447-d-child","name":"x","parent_location_identifier":"tra447-disagree-parent","parent_location_id":%d}`, bogusID)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")

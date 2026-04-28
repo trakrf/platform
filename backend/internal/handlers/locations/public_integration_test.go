@@ -132,7 +132,7 @@ func TestListLocations_APIKey_HappyPath(t *testing.T) {
 		row := item.(map[string]any)
 		if row["identifier"] == "child-loc" {
 			foundChild = true
-			assert.Equal(t, "root-loc", row["parent"])
+			assert.Equal(t, "root-loc", row["parent_location_identifier"])
 		}
 	}
 	assert.True(t, foundChild, "child-loc not found in response")

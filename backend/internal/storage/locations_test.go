@@ -228,7 +228,7 @@ func TestUpdateLocation(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 			"description", "valid_from", "valid_to", "is_active",
-			"created_at", "updated_at", "deleted_at", "parent_identifier",
+			"created_at", "updated_at", "deleted_at", "parent_location_identifier",
 		}).AddRow(
 			locationID, 1, newName, "warehouse_1", nil, "warehouse_1", 1,
 			newDescription, now, nil, true, now, now, nil, nil,
@@ -285,7 +285,7 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{
 			"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 			"description", "valid_from", "valid_to", "is_active",
-			"created_at", "updated_at", "deleted_at", "parent_identifier",
+			"created_at", "updated_at", "deleted_at", "parent_location_identifier",
 		}).AddRow(
 			locationID, 1, "Zone A", "zone_a", &newParentID,
 			"usa.california.zone_a", 3, "Test zone", now, nil, true,
@@ -581,7 +581,7 @@ func TestGetAncestors(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	}).
 		AddRow(1, 1, "USA", "usa", nil, "usa", 1, "United States", now, nil, true, now, &now, nil, nil).
 		AddRow(2, 1, "California", "california", &parent1, "usa.california", 2, "California State", now, nil, true, now, &now, nil, &usaIdent)
@@ -609,10 +609,10 @@ func TestGetAncestors(t *testing.T) {
 	require.NotNil(t, results)
 	assert.Len(t, results, 2)
 	assert.Equal(t, "usa", results[0].Path)
-	assert.Nil(t, results[0].ParentIdentifier, "root ancestor must have no parent identifier")
+	assert.Nil(t, results[0].ParentLocationIdentifier, "root ancestor must have no parent identifier")
 	assert.Equal(t, "usa.california", results[1].Path)
-	require.NotNil(t, results[1].ParentIdentifier)
-	assert.Equal(t, "usa", *results[1].ParentIdentifier)
+	require.NotNil(t, results[1].ParentLocationIdentifier)
+	assert.Equal(t, "usa", *results[1].ParentLocationIdentifier)
 	assert.NotNil(t, results[1].Tags, "Tags must be non-nil empty slice, not nil")
 	assert.Len(t, results[1].Tags, 0)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -632,7 +632,7 @@ func TestGetAncestors_RootLocation(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	})
 
 	mock.ExpectBegin()
@@ -668,7 +668,7 @@ func TestListAncestorsPaginated(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	}).
 		AddRow(2, 1, "California", "california", &parent1, "usa.california", 2, "California State", now, nil, true, now, &now, nil, &usaIdent)
 
@@ -737,7 +737,7 @@ func TestGetDescendants(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	}).
 		AddRow(2, 1, "California", "california", &parent1, "usa.california", 2, "California State", now, nil, true, now, &now, nil, &usaIdent).
 		AddRow(3, 1, "Warehouse 1", "warehouse_1", &parent2, "usa.california.warehouse_1", 3, "Main Warehouse", now, nil, true, now, &now, nil, &caIdent).
@@ -766,14 +766,14 @@ func TestGetDescendants(t *testing.T) {
 	require.NotNil(t, results)
 	assert.Len(t, results, 3)
 	assert.Equal(t, "usa.california", results[0].Path)
-	require.NotNil(t, results[0].ParentIdentifier)
-	assert.Equal(t, "usa", *results[0].ParentIdentifier)
+	require.NotNil(t, results[0].ParentLocationIdentifier)
+	assert.Equal(t, "usa", *results[0].ParentLocationIdentifier)
 	assert.Equal(t, "usa.california.warehouse_1", results[1].Path)
-	require.NotNil(t, results[1].ParentIdentifier)
-	assert.Equal(t, "california", *results[1].ParentIdentifier)
+	require.NotNil(t, results[1].ParentLocationIdentifier)
+	assert.Equal(t, "california", *results[1].ParentLocationIdentifier)
 	assert.Equal(t, "usa.california.warehouse_1.zone_a", results[2].Path)
-	require.NotNil(t, results[2].ParentIdentifier)
-	assert.Equal(t, "warehouse_1", *results[2].ParentIdentifier)
+	require.NotNil(t, results[2].ParentLocationIdentifier)
+	assert.Equal(t, "warehouse_1", *results[2].ParentLocationIdentifier)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -791,7 +791,7 @@ func TestGetDescendants_LeafLocation(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	})
 
 	mock.ExpectBegin()
@@ -826,7 +826,7 @@ func TestListDescendantsPaginated(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	}).
 		AddRow(3, 1, "B", "b", &parentRef, "root.b", 2, "", now, nil, true, now, &now, nil, &rootIdent).
 		AddRow(4, 1, "C", "c", &parentRef, "root.c", 2, "", now, nil, true, now, &now, nil, &rootIdent)
@@ -889,7 +889,7 @@ func TestGetChildren(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	}).
 		AddRow(3, 1, "Warehouse 1", "warehouse_1", &parentID, "usa.california.warehouse_1", 3, "Main Warehouse", now, nil, true, now, &now, nil, &caIdent).
 		AddRow(4, 1, "Warehouse 2", "warehouse_2", &parentID, "usa.california.warehouse_2", 3, "Secondary Warehouse", now, nil, true, now, &now, nil, &caIdent)
@@ -920,10 +920,10 @@ func TestGetChildren(t *testing.T) {
 	assert.Equal(t, 3, results[1].Depth)
 	assert.Equal(t, "Warehouse 1", results[0].Name)
 	assert.Equal(t, "Warehouse 2", results[1].Name)
-	require.NotNil(t, results[0].ParentIdentifier)
-	assert.Equal(t, "california", *results[0].ParentIdentifier)
-	require.NotNil(t, results[1].ParentIdentifier)
-	assert.Equal(t, "california", *results[1].ParentIdentifier)
+	require.NotNil(t, results[0].ParentLocationIdentifier)
+	assert.Equal(t, "california", *results[0].ParentLocationIdentifier)
+	require.NotNil(t, results[1].ParentLocationIdentifier)
+	assert.Equal(t, "california", *results[1].ParentLocationIdentifier)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -941,7 +941,7 @@ func TestGetChildren_NoChildren(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	})
 
 	mock.ExpectBegin()
@@ -976,7 +976,7 @@ func TestListChildrenPaginated(t *testing.T) {
 		"id", "org_id", "name", "identifier", "parent_location_id", "path", "depth",
 		"description", "valid_from", "valid_to", "is_active",
 		"created_at", "updated_at", "deleted_at",
-		"parent_identifier",
+		"parent_location_identifier",
 	}).
 		AddRow(2, 1, "Aisle A", "aisle-a", &parentRef, "parent.aisle-a", 2, "", now, nil, true, now, &now, nil, &parentIdent).
 		AddRow(3, 1, "Aisle B", "aisle-b", &parentRef, "parent.aisle-b", 2, "", now, nil, true, now, &now, nil, &parentIdent)
