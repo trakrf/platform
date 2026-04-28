@@ -136,7 +136,7 @@ export function AssetCard({
           {/* Tags */}
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <TagCountBadge
-              identifiers={localTags}
+              tags={localTags}
               onClick={localTags.length ? handleOpenTagsModal : undefined}
             />
           </td>
@@ -163,7 +163,7 @@ export function AssetCard({
             {showActions && (
               <div className="flex items-center gap-1 sm:gap-2">
                 <LocateTagPopover
-                  identifiers={localTags}
+                  tags={localTags}
                   entityIdentifier={asset.identifier}
                   isActive={asset.is_active}
                   variant="icon"
@@ -223,7 +223,7 @@ export function AssetCard({
               </h3>
               {localTags.length > 0 && (
                 <TagCountBadge
-                  identifiers={localTags}
+                  tags={localTags}
                   onClick={handleOpenTagsModal}
                 />
               )}
@@ -262,7 +262,7 @@ export function AssetCard({
         {showActions && (
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
             <LocateTagPopover
-              identifiers={localTags}
+              tags={localTags}
               entityIdentifier={asset.identifier}
               isActive={asset.is_active}
               variant="button"
