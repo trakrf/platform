@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -96,4 +97,100 @@ func TestContract_MissingAuthHeader_WWWAuthenticate(t *testing.T) {
 	require.Equal(t, "Authentication required", resp.Error.Title)
 	require.Equal(t, string(apierrors.ErrUnauthorized), resp.Error.Type)
 	require.Equal(t, "Authorization header is required", resp.Error.Detail)
+}
+
+// TestContract_BB12_401Reproductions covers the four 401 variants named in
+// BB12 §1.2 (TRA-538). Each must emit title="Authentication required" with
+// the variable explanation in detail. Title must NOT contain "Bearer" or
+// the offending value — the contract violation the audit found.
+func TestContract_BB12_401Reproductions(t *testing.T) {
+	// Stand-in for EitherAuth that mirrors its four 401 paths but runs
+	// without a DB. Real EitherAuth is integration-tagged in
+	// either_auth_test.go; this test guards the contract end-to-end.
+	auth := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reqID := middleware.GetRequestID(r.Context())
+			h := r.Header.Get("Authorization")
+			if h == "" {
+				detail := "Missing authorization header"
+				if r.Header.Get("X-API-Key") != "" {
+					detail = "Use Authorization: Bearer <token>"
+				}
+				httputil.Respond401(w, r, detail, reqID)
+				return
+			}
+			parts := strings.SplitN(h, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				httputil.Respond401(w, r, "Invalid authorization header format", reqID)
+				return
+			}
+			httputil.Respond401(w, r, "Invalid or expired token", reqID)
+		})
+	}
+
+	mkRouter := func() *chi.Mux {
+		mux := chi.NewRouter()
+		mux.Use(middleware.RequestID)
+		mux.Use(auth)
+		mux.Get("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
+			t.Fatal("auth should reject before handler")
+		})
+		return mux
+	}
+
+	cases := []struct {
+		name           string
+		setup          func(*http.Request)
+		wantDetailHas  string
+		titleMustNotBe []string
+	}{
+		{
+			name:           "missing header",
+			setup:          func(r *http.Request) {},
+			wantDetailHas:  "Missing authorization header",
+			titleMustNotBe: []string{"Bearer", "Missing authorization header"},
+		},
+		{
+			name:           "wrong scheme",
+			setup:          func(r *http.Request) { r.Header.Set("Authorization", "Basic abc") },
+			wantDetailHas:  "Invalid authorization header format",
+			titleMustNotBe: []string{"Basic", "Invalid authorization header format"},
+		},
+		{
+			name:           "garbage token",
+			setup:          func(r *http.Request) { r.Header.Set("Authorization", "Bearer not-a-jwt") },
+			wantDetailHas:  "Invalid or expired token",
+			titleMustNotBe: []string{"Bearer not-a-jwt", "Invalid or expired token"},
+		},
+		{
+			name:           "missing header with X-API-Key",
+			setup:          func(r *http.Request) { r.Header.Set("X-API-Key", "some-token") },
+			wantDetailHas:  "Use Authorization: Bearer <token>",
+			titleMustNotBe: []string{"Bearer <token>", "Use Authorization: Bearer <token>"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
+			tc.setup(req)
+			rec := httptest.NewRecorder()
+			mkRouter().ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+
+			var resp apierrors.ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+			require.Equal(t, "Authentication required", resp.Error.Title,
+				"title must be the fixed string per TRA-538 contract")
+			require.Equal(t, "unauthorized", resp.Error.Type)
+			require.Contains(t, resp.Error.Detail, tc.wantDetailHas,
+				"variable explanation must live in detail")
+			for _, forbidden := range tc.titleMustNotBe {
+				require.NotContains(t, resp.Error.Title, forbidden,
+					"title must not contain the variable substring %q", forbidden)
+			}
+		})
+	}
 }
