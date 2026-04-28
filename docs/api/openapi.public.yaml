@@ -252,6 +252,8 @@ components:
                                 - conflict
                                 - rate_limited
                                 - internal_error
+                                - method_not_allowed
+                                - unsupported_media_type
                             example: validation_error
                             type: string
                             x-extensible-enum: true

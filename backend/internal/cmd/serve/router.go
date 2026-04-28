@@ -28,7 +28,6 @@ import (
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
-	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/ratelimit"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -49,6 +48,10 @@ func setupRouter(
 	store *storage.Storage,
 ) *chi.Mux {
 	r := chi.NewRouter()
+
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		httputil.Respond405(w, req, middleware.GetRequestID(req.Context()))
+	})
 
 	r.Use(middleware.RequestID)
 	r.Use(logger.Middleware)
@@ -223,8 +226,7 @@ func setupRouter(
 	// TRA-518: wrapped with DefaultRateLimitHeaders so 404s under /api/v1/* carry
 	// rate-limit headers too.
 	r.With(middleware.DefaultRateLimitHeaders(rl)).Get("/api/*", func(w http.ResponseWriter, req *http.Request) {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, errors.ErrNotFound,
-			"Unknown API route: "+req.URL.Path, "", middleware.GetRequestID(req.Context()))
+		httputil.Respond404(w, req, "Unknown API route: "+req.URL.Path, middleware.GetRequestID(req.Context()))
 	})
 
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {

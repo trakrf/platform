@@ -101,8 +101,7 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 	err = h.service.UpdateMemberRole(r.Context(), orgID, userID, role)
 	if err != nil {
 		if err.Error() == "member not found" {
-			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				apierrors.MemberNotFound, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond404(w, r, apierrors.MemberNotFound, middleware.GetRequestID(r.Context()))
 			return
 		}
 		if err.Error() == "cannot demote the last admin" {
@@ -164,8 +163,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err.Error() == "member not found" {
-			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				apierrors.MemberNotFound, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond404(w, r, apierrors.MemberNotFound, middleware.GetRequestID(r.Context()))
 			return
 		}
 		if err.Error() == "cannot remove the last admin" {

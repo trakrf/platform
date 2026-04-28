@@ -347,7 +347,9 @@
                   "not_found",
                   "conflict",
                   "rate_limited",
-                  "internal_error"
+                  "internal_error",
+                  "method_not_allowed",
+                  "unsupported_media_type"
                 ],
                 "example": "validation_error",
                 "type": "string",

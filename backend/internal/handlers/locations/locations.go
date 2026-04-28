@@ -170,8 +170,7 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if loc == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", ctx)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, ctx)
 		return
 	}
 
@@ -257,8 +256,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	if result == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
 		return
 	}
 
@@ -300,8 +298,7 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if loc == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", ctx)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, ctx)
 		return
 	}
 
@@ -320,8 +317,7 @@ func (handler *Handler) doDelete(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	if !deleted {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
 		return
 	}
 
@@ -503,8 +499,7 @@ func (handler *Handler) GetLocationByIdentifier(w http.ResponseWriter, req *http
 		return
 	}
 	if l == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
 		return
 	}
 
@@ -541,8 +536,7 @@ func (handler *Handler) GetLocationByID(w http.ResponseWriter, req *http.Request
 		return
 	}
 	if view == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
 		return
 	}
 
@@ -589,8 +583,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if loc == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", ctx)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, ctx)
 		return
 	}
 	id := loc.ID
@@ -659,8 +652,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 		return
 	}
 	if loc == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", ctx)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, ctx)
 		return
 	}
 	id := loc.ID
@@ -729,8 +721,7 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if loc == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", ctx)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, ctx)
 		return
 	}
 	id := loc.ID
@@ -811,8 +802,7 @@ func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if loc == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", requestID)
+		httputil.Respond404(w, r, apierrors.LocationNotFound, requestID)
 		return
 	}
 
@@ -888,8 +878,7 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if loc == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", requestID)
+		httputil.Respond404(w, r, apierrors.LocationNotFound, requestID)
 		return
 	}
 
@@ -1029,8 +1018,7 @@ func (handler *Handler) parseAndVerifyLocationID(w http.ResponseWriter, req *htt
 		return 0, false
 	}
 	if loc == nil || loc.OrgID != orgID {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LocationNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
 		return 0, false
 	}
 

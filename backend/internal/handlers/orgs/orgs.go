@@ -143,8 +143,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if org == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.OrgNotFound, "", middleware.GetRequestID(r.Context()))
+		httputil.Respond404(w, r, apierrors.OrgNotFound, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -196,8 +195,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if org == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.OrgUpdateNotFound, "", middleware.GetRequestID(r.Context()))
+		httputil.Respond404(w, r, apierrors.OrgUpdateNotFound, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -244,8 +242,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err.Error() == "organization not found" {
-			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				apierrors.OrgDeleteNotFound, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond404(w, r, apierrors.OrgDeleteNotFound, middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,

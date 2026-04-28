@@ -53,8 +53,7 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if job == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.BulkImportJobNotFound, "", requestID)
+		httputil.Respond404(w, r, apierrors.BulkImportJobNotFound, requestID)
 		return
 	}
 

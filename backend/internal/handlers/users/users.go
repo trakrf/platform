@@ -106,8 +106,7 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if u == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.UserNotFound, "", middleware.GetRequestID(r.Context()))
+		httputil.Respond404(w, r, apierrors.UserNotFound, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -206,8 +205,7 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if u == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.UserUpdateNotFound, "", middleware.GetRequestID(r.Context()))
+		httputil.Respond404(w, r, apierrors.UserUpdateNotFound, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -237,8 +235,7 @@ func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := handler.storage.SoftDeleteUser(r.Context(), id); err != nil {
 		if errors.Is(err, modelerrors.ErrUserNotFound) {
-			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				apierrors.UserDeleteNotFound, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond404(w, r, apierrors.UserDeleteNotFound, middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,

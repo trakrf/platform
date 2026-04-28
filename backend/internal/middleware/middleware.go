@@ -108,11 +108,7 @@ func ContentType(next http.Handler) http.Handler {
 				strings.HasPrefix(ct, "multipart/form-data")
 
 			if !isAllowed {
-				httputil.WriteJSONError(w, r, http.StatusUnsupportedMediaType,
-					errors.ErrBadRequest,
-					"Content-Type must be application/json or multipart/form-data",
-					"",
-					GetRequestID(r.Context()))
+				httputil.Respond415(w, r, GetRequestID(r.Context()))
 				return
 			}
 		}

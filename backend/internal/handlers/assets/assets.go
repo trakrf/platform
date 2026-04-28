@@ -199,8 +199,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if a == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", ctx)
+		httputil.Respond404(w, req, apierrors.AssetNotFound, ctx)
 		return
 	}
 
@@ -287,8 +286,7 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 	}
 
 	if result == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.AssetNotFound, reqID)
 		return
 	}
 
@@ -329,8 +327,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if view == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.AssetNotFound, reqID)
 		return
 	}
 
@@ -375,8 +372,7 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if a == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", ctx)
+		httputil.Respond404(w, req, apierrors.AssetNotFound, ctx)
 		return
 	}
 
@@ -395,8 +391,7 @@ func (handler *Handler) doDeleteAsset(w http.ResponseWriter, req *http.Request, 
 	}
 
 	if !deleted {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.AssetNotFound, reqID)
 		return
 	}
 
@@ -560,8 +555,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 		return
 	}
 	if a == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.AssetNotFound, reqID)
 		return
 	}
 
@@ -607,8 +601,7 @@ func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existingAsset == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", requestID)
+		httputil.Respond404(w, r, apierrors.AssetNotFound, requestID)
 		return
 	}
 
@@ -684,8 +677,7 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existingAsset == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", requestID)
+		httputil.Respond404(w, r, apierrors.AssetNotFound, requestID)
 		return
 	}
 
@@ -825,8 +817,7 @@ func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.R
 		return 0, false
 	}
 	if a == nil {
-		httputil.WriteJSONError(w, req, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.AssetNotFound, "", reqID)
+		httputil.Respond404(w, req, apierrors.AssetNotFound, reqID)
 		return 0, false
 	}
 

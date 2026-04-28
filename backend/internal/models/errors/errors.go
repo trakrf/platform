@@ -6,14 +6,16 @@ import "errors"
 type ErrorType string
 
 const (
-	ErrValidation   ErrorType = "validation_error"
-	ErrNotFound     ErrorType = "not_found"
-	ErrConflict     ErrorType = "conflict"
-	ErrInternal     ErrorType = "internal_error"
-	ErrBadRequest   ErrorType = "bad_request"
-	ErrUnauthorized ErrorType = "unauthorized"
-	ErrForbidden    ErrorType = "forbidden"
-	ErrRateLimited  ErrorType = "rate_limited"
+	ErrValidation       ErrorType = "validation_error"
+	ErrNotFound         ErrorType = "not_found"
+	ErrConflict         ErrorType = "conflict"
+	ErrInternal         ErrorType = "internal_error"
+	ErrBadRequest       ErrorType = "bad_request"
+	ErrUnauthorized     ErrorType = "unauthorized"
+	ErrForbidden        ErrorType = "forbidden"
+	ErrRateLimited      ErrorType = "rate_limited"
+	ErrMethodNotAllowed ErrorType = "method_not_allowed"
+	ErrUnsupportedMedia ErrorType = "unsupported_media_type"
 )
 
 // FieldError describes a single field-level validation failure.
@@ -50,7 +52,7 @@ type FieldError struct {
 // Generated clients should branch on type and title, not detail.
 type ErrorResponse struct {
 	Error struct {
-		Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error" extensions:"x-extensible-enum=true"`
+		Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error,method_not_allowed,unsupported_media_type" extensions:"x-extensible-enum=true"`
 		Title     string       `json:"title"`
 		Status    int          `json:"status"`
 		Detail    string       `json:"detail"`
