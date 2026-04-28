@@ -91,7 +91,7 @@ func RequireOrgMember(store OrgRoleStore) func(http.Handler) http.Handler {
 				if err.Error() == ErrOrgUserNotFound.Error() {
 					logAccessDenied(claims.UserID, orgID, "member", r)
 					httputil.WriteJSONError(w, r, http.StatusForbidden,
-						errors.ErrUnauthorized, "Forbidden", "You are not a member of this organization", requestID)
+						errors.ErrForbidden, "Forbidden", "You are not a member of this organization", requestID)
 					return
 				}
 				logger.Get().Error().
@@ -138,7 +138,7 @@ func RequireOrgRole(store OrgRoleStore, minRole models.OrgRole) func(http.Handle
 				logAccessDenied(claims.UserID, orgID, minRole.String(), r)
 
 				httputil.WriteJSONError(w, r, http.StatusForbidden,
-					errors.ErrUnauthorized, "Forbidden",
+					errors.ErrForbidden, "Forbidden",
 					"Insufficient permissions. Required role: "+minRole.String(), requestID)
 				return
 			}
