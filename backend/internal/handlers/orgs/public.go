@@ -39,8 +39,7 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	principal := middleware.GetAPIKeyPrincipal(r)
 	if principal == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			"Unauthorized", "", reqID)
+		httputil.Respond401(w, r, "API key authentication required", reqID)
 		return
 	}
 
@@ -52,8 +51,7 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 	}
 	if org == nil {
 		// Org was deleted between key issuance and this request — treat the key as unauthorized.
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			"Unauthorized", "Organization no longer exists", reqID)
+		httputil.Respond401(w, r, "Organization no longer exists", reqID)
 		return
 	}
 

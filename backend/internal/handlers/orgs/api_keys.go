@@ -62,8 +62,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		parent, err := h.storage.GetAPIKeyByJTI(r.Context(), p.JTI)
 		if err != nil {
 			if stderrors.Is(err, storage.ErrAPIKeyNotFound) {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-					"API key is no longer valid", "", reqID)
+				httputil.Respond401(w, r, "API key is no longer valid", reqID)
 				return
 			}
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -73,8 +72,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		parentID := parent.ID
 		creator = apikey.Creator{KeyID: &parentID}
 	} else {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			"Unauthorized", "", reqID)
+		httputil.Respond401(w, r, "Authentication required", reqID)
 		return
 	}
 
