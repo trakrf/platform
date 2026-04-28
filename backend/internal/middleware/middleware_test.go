@@ -160,6 +160,21 @@ func TestContentType(t *testing.T) {
 					tt.method,
 					tt.contentType)
 			}
+			if tt.expectedStatus == http.StatusUnsupportedMediaType {
+				var resp apierrors.ErrorResponse
+				if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if resp.Error.Type != string(apierrors.ErrUnsupportedMedia) {
+					t.Errorf("type = %q, want %q", resp.Error.Type, apierrors.ErrUnsupportedMedia)
+				}
+				if resp.Error.Title != "Unsupported media type" {
+					t.Errorf("title = %q, want Unsupported media type", resp.Error.Title)
+				}
+				if strings.Contains(resp.Error.Detail, "multipart") {
+					t.Errorf("detail = %q, must not mention multipart", resp.Error.Detail)
+				}
+			}
 		})
 	}
 }
