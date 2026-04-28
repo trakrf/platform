@@ -80,7 +80,7 @@ export function LocationForm({
   const getLocationById = useLocationStore((state) => state.getLocationById);
   const parentLocation = parentLocationId ? getLocationById(parentLocationId) : null;
 
-  // Barcode scanning for tag identifiers
+  // Barcode scanning for tags
   const isConnected = useDeviceStore((s) => s.isConnected);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -113,7 +113,7 @@ export function LocationForm({
         valid_to: formatDateForInput(location.valid_to),
         is_active: location.is_active,
       });
-      // Initialize tag identifiers from existing location + add blank row for new entry
+      // Initialize tags from existing location + add blank row for new entry
       const existingTags = (location.tags || []).map((id) => ({
         id: id.id,
         type: 'rfid' as const,
@@ -138,7 +138,7 @@ export function LocationForm({
     }
   }, [mode, location, parentLocationId]);
 
-  // Handle barcode scan for tag identifiers
+  // Handle barcode scan for tags
   const handleBarcodeScan = async (epc: string) => {
     setIsScanning(false);
 
@@ -272,7 +272,7 @@ export function LocationForm({
       return;
     }
 
-    // Filter out empty tag identifiers
+    // Filter out empty tags
     const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
     const submitData = {
@@ -455,7 +455,7 @@ export function LocationForm({
         </div>
       </div>
 
-      {/* Tag Identifiers Section */}
+      {/* Tags Section */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
         <div className="flex items-center justify-between mb-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">

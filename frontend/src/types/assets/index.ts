@@ -132,7 +132,7 @@ export interface JobStatusResponse {
   processed_rows: number;
   failed_rows: number;
   successful_rows?: number; // Only present when completed
-  tags_created?: number; // Number of tag identifiers created
+  tags_created?: number; // Number of tags created
   created_at: string; // ISO 8601
   completed_at?: string; // ISO 8601, only when completed/failed
   errors?: BulkErrorDetail[];

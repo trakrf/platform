@@ -48,7 +48,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   const locationCache = useLocationStore((state) => state.cache.byId);
   const locations = useMemo(() => Array.from(locationCache.values()), [locationCache]);
 
-  // Barcode scanning for RFID tag identifiers
+  // Barcode scanning for RFID tags
   const isConnected = useDeviceStore((s) => s.isConnected);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -97,7 +97,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
       });
-      // Initialize tag identifiers from existing asset + add blank row for new entry
+      // Initialize tags from existing asset + add blank row for new entry
       const existingTags = (asset.tags || []).map((id) => ({
         id: id.id,
         type: 'rfid' as const,
@@ -112,7 +112,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     }
   }, [asset, mode]);
 
-  // Handle barcode scan for tag identifiers
+  // Handle barcode scan for tags
   const handleBarcodeScan = async (epc: string) => {
     setIsScanning(false);
 
@@ -250,7 +250,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       return dateStr;
     };
 
-    // Filter out empty tag identifiers and include in request
+    // Filter out empty tags and include in request
     const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
     const data: CreateAssetRequest | UpdateAssetRequest = {

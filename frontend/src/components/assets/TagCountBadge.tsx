@@ -8,7 +8,7 @@ interface TagCountBadgeProps {
 
 /**
  * Displays a clickable badge showing the count of RFID tags linked to an asset.
- * Shows just the count with an icon - clicking opens the tag identifiers modal.
+ * Shows just the count with an icon - clicking opens the tags modal.
  */
 export function TagCountBadge({ identifiers, onClick }: TagCountBadgeProps) {
   if (!identifiers || identifiers.length === 0) {
