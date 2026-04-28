@@ -47,15 +47,15 @@ func TestRemoveAssetTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 
 	// orgB attempts to delete orgA's identifier.
-	deleted, err := store.RemoveAssetTag(context.Background(), orgB, created.ID, tag.ID)
+	deleted, err := store.RemoveAssetTag(context.Background(), orgB, created.ID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "cross-org asset tag removal must return false")
 
 	// Confirm the identifier was NOT mutated.
-	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.SurrogateID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "tag must still exist after cross-org removal attempt")
-	assert.Equal(t, tag.ID, fetched.ID)
+	assert.Equal(t, tag.SurrogateID, fetched.SurrogateID)
 }
 
 // TestRemoveAssetTag_WrongAssetID_ReturnsFalse verifies that the
@@ -95,12 +95,12 @@ func TestRemoveAssetTag_WrongAssetID_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Path claims bystander asset, but identifier actually belongs to owner.
-	deleted, err := store.RemoveAssetTag(context.Background(), orgA, assetBystander.ID, tag.ID)
+	deleted, err := store.RemoveAssetTag(context.Background(), orgA, assetBystander.ID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "removal via wrong assetID must return false")
 
 	// Identifier must still exist.
-	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.SurrogateID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "tag must still exist after wrong-assetID removal attempt")
 }
@@ -131,14 +131,14 @@ func TestRemoveLocationTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	deleted, err := store.RemoveLocationTag(context.Background(), orgB, loc.ID, tag.ID)
+	deleted, err := store.RemoveLocationTag(context.Background(), orgB, loc.ID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "cross-org location tag removal must return false")
 
-	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.SurrogateID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "tag must still exist after cross-org removal attempt")
-	assert.Equal(t, tag.ID, fetched.ID)
+	assert.Equal(t, tag.SurrogateID, fetched.SurrogateID)
 }
 
 // TestRemoveLocationTag_WrongLocationID_ReturnsFalse: same pattern as
@@ -176,11 +176,11 @@ func TestRemoveLocationTag_WrongLocationID_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	deleted, err := store.RemoveLocationTag(context.Background(), orgA, locBystander.ID, tag.ID)
+	deleted, err := store.RemoveLocationTag(context.Background(), orgA, locBystander.ID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "removal via wrong locationID must return false")
 
-	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.SurrogateID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "tag must still exist after wrong-locationID removal attempt")
 }

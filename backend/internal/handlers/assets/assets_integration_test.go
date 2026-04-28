@@ -38,7 +38,7 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	r.Put("/api/v1/assets/{identifier}", handler.UpdateAsset)
 	r.Delete("/api/v1/assets/{identifier}", handler.DeleteAsset)
 	r.Post("/api/v1/assets/{identifier}/tags", handler.AddTag)
-	r.Delete("/api/v1/assets/{identifier}/tags/{tagId}", handler.RemoveTag)
+	r.Delete("/api/v1/assets/{identifier}/tags/{tagSurrogateId}", handler.RemoveTag)
 	handler.RegisterRoutes(r)
 	return r
 }
@@ -1175,8 +1175,8 @@ func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	require.NoError(t, json.Unmarshal(wAdd.Body.Bytes(), &addResp))
 	data, ok := addResp["data"].(map[string]any)
 	require.True(t, ok, "response missing data object: %s", wAdd.Body.String())
-	rawID, ok := data["id"]
-	require.True(t, ok, "response data missing id: %s", wAdd.Body.String())
+	rawID, ok := data["surrogate_id"]
+	require.True(t, ok, "response data missing surrogate_id: %s", wAdd.Body.String())
 	// JSON numbers decode as float64; the DELETE route expects an int-shaped path segment.
 	tagID := int(rawID.(float64))
 

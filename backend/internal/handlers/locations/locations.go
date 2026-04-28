@@ -339,6 +339,12 @@ type CreateLocationResponse struct {
 	Data location.PublicLocationView `json:"data"`
 }
 
+// AddTagResponse is the typed envelope returned by POST /api/v1/locations/{identifier}/tags
+// and POST /api/v1/locations/by-id/{id}/tags.
+type AddTagResponse struct {
+	Data shared.TagIdentifier `json:"data"`
+}
+
 // UpdateLocationResponse is the typed envelope returned by PUT /api/v1/locations/{identifier}
 // and PUT /api/v1/locations/by-id/{id}.
 type UpdateLocationResponse struct {
@@ -765,7 +771,7 @@ func toPublicLocationViews(locs []location.LocationWithParent) []location.Public
 // @Produce      json
 // @Param        identifier  path  string                         true  "Location identifier"
 // @Param        request     body  shared.TagIdentifierRequest    true  "Tag to attach"
-// @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
+// @Success      201  {object}  locations.AddTagResponse      "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -839,7 +845,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 // @Accept       json
 // @Produce      json
 // @Param        identifier    path  string  true  "Location identifier"
-// @Param        tagId  path  int     true  "Tag ID"
+// @Param        tagSurrogateId  path  int     true  "Tag surrogate ID"
 // @Success      204  "deleted"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -848,7 +854,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
-// @Router       /api/v1/locations/{identifier}/tags/{tagId} [delete]
+// @Router       /api/v1/locations/{identifier}/tags/{tagSurrogateId} [delete]
 func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -874,14 +880,14 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	handler.doRemoveLocationTag(w, r, orgID, loc.ID)
 }
 
-// doRemoveLocationTag parses {tagId} and soft-deletes via
+// doRemoveLocationTag parses {tagSurrogateId} and soft-deletes via
 // storage. Storage guards cross-location / cross-org misuse itself (EXISTS
 // subquery on location_id + org_id), so a missing match surfaces as
 // deleted=false rather than an error.
 func (handler *Handler) doRemoveLocationTag(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	tagIDParam := chi.URLParam(r, "tagId")
+	tagIDParam := chi.URLParam(r, "tagSurrogateId")
 	tagID, err := strconv.Atoi(tagIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -966,7 +972,7 @@ func (handler *Handler) AddTagByID(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Remove tag from location by surrogate ID (internal)
 // @Tags locations,internal
-// @Router /api/v1/locations/by-id/{id}/tags/{tagId} [delete]
+// @Router /api/v1/locations/by-id/{id}/tags/{tagSurrogateId} [delete]
 func (handler *Handler) RemoveTagByID(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 

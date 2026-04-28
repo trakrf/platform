@@ -32,7 +32,7 @@ func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]s
 		tags = []shared.TagIdentifier{}
 		for rows.Next() {
 			var tag shared.TagIdentifier
-			if err := rows.Scan(&tag.ID, &tag.Type, &tag.Value, &tag.IsActive); err != nil {
+			if err := rows.Scan(&tag.SurrogateID, &tag.TagType, &tag.Value, &tag.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}
 			tags = append(tags, tag)
@@ -65,7 +65,7 @@ func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int
 		tags = []shared.TagIdentifier{}
 		for rows.Next() {
 			var tag shared.TagIdentifier
-			if err := rows.Scan(&tag.ID, &tag.Type, &tag.Value, &tag.IsActive); err != nil {
+			if err := rows.Scan(&tag.SurrogateID, &tag.TagType, &tag.Value, &tag.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}
 			tags = append(tags, tag)
@@ -91,7 +91,7 @@ func (s *Storage) AddTagToAsset(ctx context.Context, orgID, assetID int, req sha
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, tagType, req.Value, assetID).Scan(
-			&tag.ID, &tag.Type, &tag.Value, &tag.IsActive,
+			&tag.SurrogateID, &tag.TagType, &tag.Value, &tag.IsActive,
 		)
 	})
 
@@ -114,7 +114,7 @@ func (s *Storage) AddTagToLocation(ctx context.Context, orgID, locationID int, r
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, tagType, req.Value, locationID).Scan(
-			&tag.ID, &tag.Type, &tag.Value, &tag.IsActive,
+			&tag.SurrogateID, &tag.TagType, &tag.Value, &tag.IsActive,
 		)
 	})
 
@@ -197,7 +197,7 @@ func (s *Storage) GetTagByID(ctx context.Context, orgID, tagID int) (*shared.Tag
 	found := false
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, query, tagID, orgID).Scan(
-			&tag.ID, &tag.Type, &tag.Value, &tag.IsActive,
+			&tag.SurrogateID, &tag.TagType, &tag.Value, &tag.IsActive,
 		)
 		if err != nil {
 			if err.Error() == "no rows in result set" {
@@ -275,7 +275,7 @@ func (s *Storage) getTagsForAssets(ctx context.Context, orgID int, assetIDs []in
 		for rows.Next() {
 			var assetID int
 			var id shared.TagIdentifier
-			if err := rows.Scan(&assetID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
+			if err := rows.Scan(&assetID, &id.SurrogateID, &id.TagType, &id.Value, &id.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}
 			result[assetID] = append(result[assetID], id)
@@ -313,7 +313,7 @@ func (s *Storage) getTagsForLocations(ctx context.Context, orgID int, locationID
 		for rows.Next() {
 			var locationID int
 			var id shared.TagIdentifier
-			if err := rows.Scan(&locationID, &id.ID, &id.Type, &id.Value, &id.IsActive); err != nil {
+			if err := rows.Scan(&locationID, &id.SurrogateID, &id.TagType, &id.Value, &id.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}
 			result[locationID] = append(result[locationID], id)

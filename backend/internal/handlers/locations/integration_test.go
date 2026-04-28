@@ -38,7 +38,7 @@ func setupTestRouter(handler *Handler) *chi.Mux {
 	r.Put("/api/v1/locations/{identifier}", handler.Update)
 	r.Delete("/api/v1/locations/{identifier}", handler.Delete)
 	r.Post("/api/v1/locations/{identifier}/tags", handler.AddTag)
-	r.Delete("/api/v1/locations/{identifier}/tags/{tagId}", handler.RemoveTag)
+	r.Delete("/api/v1/locations/{identifier}/tags/{tagSurrogateId}", handler.RemoveTag)
 	return r
 }
 
@@ -488,8 +488,8 @@ func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	require.NoError(t, json.Unmarshal(wAdd.Body.Bytes(), &addResp))
 	data, ok := addResp["data"].(map[string]any)
 	require.True(t, ok, "response missing data object: %s", wAdd.Body.String())
-	rawID, ok := data["id"]
-	require.True(t, ok, "response data missing id: %s", wAdd.Body.String())
+	rawID, ok := data["surrogate_id"]
+	require.True(t, ok, "response data missing surrogate_id: %s", wAdd.Body.String())
 	tagID := int(rawID.(float64))
 
 	delURL := fmt.Sprintf("/api/v1/locations/tra482-loc-reuse/tags/%d", tagID)

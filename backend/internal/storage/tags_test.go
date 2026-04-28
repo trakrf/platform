@@ -37,9 +37,9 @@ func TestGetTagsByAssetID(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, results)
 	assert.Len(t, results, 2)
-	assert.Equal(t, "rfid", results[0].Type)
+	assert.Equal(t, "rfid", results[0].TagType)
 	assert.Equal(t, "E20000001234", results[0].Value)
-	assert.Equal(t, "ble", results[1].Type)
+	assert.Equal(t, "ble", results[1].TagType)
 	assert.Equal(t, "AA:BB:CC:DD:EE:FF", results[1].Value)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -121,7 +121,7 @@ func TestGetTagsByLocationID(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, results)
 	assert.Len(t, results, 1)
-	assert.Equal(t, "barcode", results[0].Type)
+	assert.Equal(t, "barcode", results[0].TagType)
 	assert.Equal(t, "LOC-001", results[0].Value)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -182,8 +182,8 @@ func TestAddTagToAsset(t *testing.T) {
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 301, result.ID)
-	assert.Equal(t, "rfid", result.Type)
+	assert.Equal(t, 301, result.SurrogateID)
+	assert.Equal(t, "rfid", result.TagType)
 	assert.Equal(t, "E20000009999", result.Value)
 	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -248,8 +248,8 @@ func TestAddTagToLocation(t *testing.T) {
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 401, result.ID)
-	assert.Equal(t, "barcode", result.Type)
+	assert.Equal(t, 401, result.SurrogateID)
+	assert.Equal(t, "barcode", result.TagType)
 	assert.Equal(t, "LOC-SHELF-01", result.Value)
 	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -431,8 +431,8 @@ func TestGetTagByID(t *testing.T) {
 
 	assert.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 101, result.ID)
-	assert.Equal(t, "rfid", result.Type)
+	assert.Equal(t, 101, result.SurrogateID)
+	assert.Equal(t, "rfid", result.TagType)
 	assert.Equal(t, "E20000001234", result.Value)
 	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -492,12 +492,12 @@ func TestGetTagsForAssets_Batch(t *testing.T) {
 
 	// Asset 1 has 2 tags
 	assert.Len(t, result[1], 2)
-	assert.Equal(t, "rfid", result[1][0].Type)
-	assert.Equal(t, "ble", result[1][1].Type)
+	assert.Equal(t, "rfid", result[1][0].TagType)
+	assert.Equal(t, "ble", result[1][1].TagType)
 
 	// Asset 2 has 1 tag
 	assert.Len(t, result[2], 1)
-	assert.Equal(t, "barcode", result[2][0].Type)
+	assert.Equal(t, "barcode", result[2][0].TagType)
 
 	// Asset 3 has empty slice (not nil)
 	assert.Len(t, result[3], 0)
@@ -535,12 +535,12 @@ func TestGetTagsForLocations_Batch(t *testing.T) {
 
 	// Location 10 has 1 tag
 	assert.Len(t, result[10], 1)
-	assert.Equal(t, "barcode", result[10][0].Type)
+	assert.Equal(t, "barcode", result[10][0].TagType)
 
 	// Location 20 has 2 tags
 	assert.Len(t, result[20], 2)
-	assert.Equal(t, "rfid", result[20][0].Type)
-	assert.Equal(t, "barcode", result[20][1].Type)
+	assert.Equal(t, "rfid", result[20][0].TagType)
+	assert.Equal(t, "barcode", result[20][1].TagType)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

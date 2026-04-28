@@ -413,6 +413,12 @@ type CreateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
 
+// AddTagResponse is the typed envelope returned by POST /api/v1/assets/{identifier}/tags
+// and POST /api/v1/assets/by-id/{id}/tags.
+type AddTagResponse struct {
+	Data shared.TagIdentifier `json:"data"`
+}
+
 // UpdateAssetResponse is the typed envelope returned by PUT /api/v1/assets/{identifier}
 // and PUT /api/v1/assets/by-id/{id}.
 type UpdateAssetResponse struct {
@@ -567,7 +573,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 // @Produce      json
 // @Param        identifier  path  string                         true  "Asset identifier"
 // @Param        request     body  shared.TagIdentifierRequest    true  "Tag to attach"
-// @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
+// @Success      201  {object}  assets.AddTagResponse         "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -641,7 +647,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 // @Accept       json
 // @Produce      json
 // @Param        identifier    path  string  true  "Asset identifier"
-// @Param        tagId  path  int     true  "Tag ID"
+// @Param        tagSurrogateId  path  int     true  "Tag surrogate ID"
 // @Success      204  "deleted"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -650,7 +656,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{identifier}/tags/{tagId} [delete]
+// @Router       /api/v1/assets/{identifier}/tags/{tagSurrogateId} [delete]
 func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -676,14 +682,14 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	handler.doRemoveAssetTag(w, r, orgID, existingAsset.ID)
 }
 
-// doRemoveAssetTag parses {tagId} and soft-deletes via storage.
+// doRemoveAssetTag parses {tagSurrogateId} and soft-deletes via storage.
 // Storage guards cross-asset / cross-org misuse itself (EXISTS subquery on
 // asset_id + org_id), so a missing match surfaces as deleted=false rather
 // than an error.
 func (handler *Handler) doRemoveAssetTag(w http.ResponseWriter, r *http.Request, orgID, assetID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	tagIDParam := chi.URLParam(r, "tagId")
+	tagIDParam := chi.URLParam(r, "tagSurrogateId")
 	tagID, err := strconv.Atoi(tagIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -768,7 +774,7 @@ func (handler *Handler) AddTagByID(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Remove tag from asset by surrogate ID (internal)
 // @Tags assets,internal
-// @Router /api/v1/assets/by-id/{id}/tags/{tagId} [delete]
+// @Router /api/v1/assets/by-id/{id}/tags/{tagSurrogateId} [delete]
 func (handler *Handler) RemoveTagByID(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 

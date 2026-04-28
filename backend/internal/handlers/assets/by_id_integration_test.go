@@ -35,7 +35,7 @@ func setupByIDRouter(handler *Handler) *chi.Mux {
 	r.Put("/api/v1/assets/by-id/{id}", handler.UpdateAssetByID)
 	r.Delete("/api/v1/assets/by-id/{id}", handler.DeleteAssetByID)
 	r.Post("/api/v1/assets/by-id/{id}/tags", handler.AddTagByID)
-	r.Delete("/api/v1/assets/by-id/{id}/tags/{tagId}", handler.RemoveTagByID)
+	r.Delete("/api/v1/assets/by-id/{id}/tags/{tagSurrogateId}", handler.RemoveTagByID)
 	return r
 }
 
@@ -279,7 +279,7 @@ func TestAddIdentifierByID_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-BYID-ADD-1", data["value"])
 }
 
@@ -365,7 +365,7 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req = withOrgContext(req, orgID)
 	w := httptest.NewRecorder()
@@ -373,7 +373,7 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier must be soft-deleted")
 }
@@ -401,7 +401,7 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/assets/by-id/" + strconv.Itoa(created.ID) + "/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req = withOrgContext(req, orgB)
 	w := httptest.NewRecorder()
@@ -410,7 +410,7 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
 	// Identifier must still exist.
-	fetched, err := store.GetTagByID(context.Background(), orgA, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgA, tag.SurrogateID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must survive cross-org DELETE attempt")
 }

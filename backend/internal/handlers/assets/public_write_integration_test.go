@@ -39,7 +39,7 @@ func buildAssetsPublicWriteRouter(store *storage.Storage) *chi.Mux {
 		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{identifier}", handler.UpdateAsset)
 		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}", handler.DeleteAsset)
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/tags", handler.AddTag)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/tags/{tagId}", handler.RemoveTag)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/tags/{tagSurrogateId}", handler.RemoveTag)
 	})
 	return r
 }
@@ -219,7 +219,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-ABC-123", data["value"])
 }
 
@@ -245,7 +245,7 @@ func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	url := "/api/v1/assets/ident-host/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/assets/ident-host/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -255,7 +255,7 @@ func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "tag row must be soft-deleted (GetTagByID hides deleted rows)")
 }
@@ -293,7 +293,7 @@ func TestRemoveAssetTag_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 	// is soft-deleted, but TRA-407 changed the response to an unconditional 204. The invariant
 	// being verified here is that the identifier itself survives — not the (now gone) "deleted"
 	// flag in the response body.
-	url := "/api/v1/assets/other-asset/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/assets/other-asset/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -301,7 +301,7 @@ func TestRemoveAssetTag_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.SurrogateID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist since the path identifier didn't match its owner")
 	assert.Equal(t, "EPC-WRONG-1", fetched.Value)
@@ -440,7 +440,7 @@ func TestAssetsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-407B-NEW", data["value"])
 }
 
@@ -491,7 +491,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	url := "/api/v1/assets/TRA-407B-REMOVEIDENT-1/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/assets/TRA-407B-REMOVEIDENT-1/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -501,7 +501,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "identifier must be soft-deleted")
 }

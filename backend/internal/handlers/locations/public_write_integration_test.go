@@ -39,7 +39,7 @@ func buildLocationsPublicWriteRouter(store *storage.Storage) *chi.Mux {
 		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{identifier}", handler.Update)
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}", handler.Delete)
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/tags", handler.AddTag)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/tags/{tagId}", handler.RemoveTag)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/tags/{tagSurrogateId}", handler.RemoveTag)
 	})
 	return r
 }
@@ -211,7 +211,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-LOC-ABC-123", data["value"])
 }
 
@@ -237,7 +237,7 @@ func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	url := "/api/v1/locations/ident-host/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/locations/ident-host/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -247,7 +247,7 @@ func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.Bytes(), "204 response must have empty body")
 
-	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.SurrogateID)
 	require.NoError(t, err)
 	assert.Nil(t, fetched, "tag row must be soft-deleted (GetTagByID hides deleted rows)")
 }
@@ -285,7 +285,7 @@ func TestRemoveLocationTag_WrongLocationID_DoesNotDelete(t *testing.T) {
 	// is soft-deleted, but TRA-407 changed the response to an unconditional 204. The invariant
 	// being verified here is that the identifier itself survives — not the (now gone) "deleted"
 	// flag in the response body.
-	url := "/api/v1/locations/other-loc/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/locations/other-loc/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -293,7 +293,7 @@ func TestRemoveLocationTag_WrongLocationID_DoesNotDelete(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	fetched, err := store.GetTagByID(context.Background(), orgID, tag.ID)
+	fetched, err := store.GetTagByID(context.Background(), orgID, tag.SurrogateID)
 	require.NoError(t, err)
 	require.NotNil(t, fetched, "identifier must still exist since the path identifier didn't match its owner")
 	assert.Equal(t, "EPC-LOC-WRONG-1", fetched.Value)
@@ -416,7 +416,7 @@ func TestLocationsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-TRA407-ADD-1", data["value"])
 }
 
@@ -459,7 +459,7 @@ func TestLocationsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.NoError(t, err)
 
 	r := buildLocationsPublicWriteRouter(store)
-	url := "/api/v1/locations/removeident-target/tags/" + strconv.Itoa(tag.ID)
+	url := "/api/v1/locations/removeident-target/tags/" + strconv.Itoa(tag.SurrogateID)
 	req := httptest.NewRequest(http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
