@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { X, MapPin, Building2, Calendar, CheckCircle, XCircle } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
-import { TagIdentifierList } from '@/components/assets';
+import { TagList } from '@/components/assets';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import type { Location } from '@/types/locations';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 interface LocationDetailsModalProps {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export function LocationDetailsModal({
   const getDescendants = useLocationStore((state) => state.getDescendants);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>([]);
+  const [localTags, setLocalTags] = useState<Tag[]>([]);
 
   useEffect(() => {
     setLocalTags(location.tags || []);
@@ -38,8 +38,8 @@ export function LocationDetailsModal({
 
   useEscapeToClose(isOpen, onClose);
 
-  const handleIdentifierRemoved = (identifierId: number) => {
-    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+  const handleTagRemoved = (tagId: number) => {
+    const updatedTags = localTags.filter((i) => i.id !== tagId);
     setLocalTags(updatedTags);
 
     updateCachedLocation(location.id, {
@@ -137,14 +137,14 @@ export function LocationDetailsModal({
               </span>
             </div>
 
-            {/* Tag Identifiers */}
-            <TagIdentifierList
-              identifiers={localTags}
+            {/* Tags */}
+            <TagList
+              tags={localTags}
               size="md"
               showHeader
               entityId={location.id}
               entityType="location"
-              onIdentifierRemoved={handleIdentifierRemoved}
+              onTagRemoved={handleTagRemoved}
             />
           </div>
 

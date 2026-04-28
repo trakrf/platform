@@ -5,7 +5,7 @@
  * All types match backend API responses exactly.
  */
 
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 // ============ Core Entity Types ============
 
@@ -32,7 +32,7 @@ export interface Asset {
   is_active: boolean; // Go: bool
   created_at: string; // Go: time.Time → ISO 8601 string
   updated_at: string; // Go: time.Time → ISO 8601 string
-  tags: TagIdentifier[]; // Physical tags (RFID, BLE, NFC, barcode) linked to this asset
+  tags: Tag[]; // Physical tags (RFID, BLE, NFC, barcode) linked to this asset
 }
 
 // ============ Request/Response Types ============
@@ -70,10 +70,10 @@ export interface UpdateAssetRequest {
 }
 
 /**
- * Tag identifier input for forms - may not have an id if new
+ * Tag input for forms — may not have an id if new
  */
-export interface TagIdentifierInput {
-  id?: number; // Present if existing identifier, undefined if new
+export interface TagInput {
+  id?: number; // Present if existing tag, undefined if new
   type: 'rfid';
   value: string;
 }
@@ -132,7 +132,7 @@ export interface JobStatusResponse {
   processed_rows: number;
   failed_rows: number;
   successful_rows?: number; // Only present when completed
-  tags_created?: number; // Number of tag identifiers created
+  tags_created?: number; // Number of tags created
   created_at: string; // ISO 8601
   completed_at?: string; // ISO 8601, only when completed/failed
   errors?: BulkErrorDetail[];

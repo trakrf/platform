@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType, TagIdentifierInput } from '@/types/assets';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType, TagInput } from '@/types/assets';
 import { validateDateRange, validateAssetType } from '@/lib/asset/validators';
 import { ErrorBanner } from '@/components/shared';
 import { useDeviceStore, useLocationStore } from '@/stores';
@@ -10,7 +10,7 @@ import { lookupApi } from '@/lib/api/lookup';
 import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
 import { Plus, QrCode, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { TagIdentifierInputRow } from './TagIdentifierInputRow';
+import { TagInputRow } from './TagInputRow';
 
 interface AssetFormProps {
   mode: 'create' | 'edit';
@@ -41,14 +41,14 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
+  const [tagInputs, setTagInputs] = useState<TagInput[]>([]);
 
   // Load locations for dropdown
   useLocations({ enabled: true });
   const locationCache = useLocationStore((state) => state.cache.byId);
   const locations = useMemo(() => Array.from(locationCache.values()), [locationCache]);
 
-  // Barcode scanning for RFID tag identifiers
+  // Barcode scanning for RFID tags
   const isConnected = useDeviceStore((s) => s.isConnected);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -64,7 +64,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     onPreview: (value) => {
       // Live preview: update focused tag input value directly (no API calls)
       if (focusedTagIndex !== null) {
-        setTagIdentifiers((prev) => {
+        setTagInputs((prev) => {
           const updated = [...prev];
           if (updated[focusedTagIndex]) {
             updated[focusedTagIndex] = { ...updated[focusedTagIndex], value };
@@ -97,22 +97,22 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
       });
-      // Initialize tag identifiers from existing asset + add blank row for new entry
+      // Initialize tags from existing asset + add blank row for new entry
       const existingTags = (asset.tags || []).map((id) => ({
         id: id.id,
         type: 'rfid' as const,
         value: id.value,
       }));
-      setTagIdentifiers([...existingTags, { type: 'rfid', value: '' }]);
+      setTagInputs([...existingTags, { type: 'rfid', value: '' }]);
       // Auto-focus removed - only Add Tag button triggers focus
     } else if (mode === 'create') {
       // Start with one blank tag row for create mode
-      setTagIdentifiers([{ type: 'rfid', value: '' }]);
+      setTagInputs([{ type: 'rfid', value: '' }]);
       // Auto-focus removed - only Add Tag button triggers focus
     }
   }, [asset, mode]);
 
-  // Handle barcode scan for tag identifiers
+  // Handle barcode scan for tags
   const handleBarcodeScan = async (epc: string) => {
     setIsScanning(false);
 
@@ -123,9 +123,9 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     }
 
     // If a tag row is focused (trigger scan), update that row's value
-    if (focusedTagIndex !== null && tagIdentifiers[focusedTagIndex]) {
+    if (focusedTagIndex !== null && tagInputs[focusedTagIndex]) {
       // Local duplicate check (excluding current row)
-      if (tagIdentifiers.some((t, i) => i !== focusedTagIndex && t.value === epc)) {
+      if (tagInputs.some((t, i) => i !== focusedTagIndex && t.value === epc)) {
         toast.error('This tag is already in the list');
         return;
       }
@@ -141,9 +141,9 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         const axiosError = error as { response?: { status: number } };
         if (axiosError.response?.status === 404) {
           // Not found = no duplicate, update focused row directly
-          const updated = [...tagIdentifiers];
+          const updated = [...tagInputs];
           updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: epc };
-          setTagIdentifiers(updated);
+          setTagInputs(updated);
           toast.success('Tag updated');
         } else {
           toast.error('Failed to check tag assignment');
@@ -154,7 +154,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
     // Original behavior: append new row (button-initiated scan)
     // Local duplicate check
-    if (tagIdentifiers.some((t) => t.value === epc)) {
+    if (tagInputs.some((t) => t.value === epc)) {
       toast.error('This tag is already in the list');
       return;
     }
@@ -171,7 +171,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       const axiosError = error as { response?: { status: number } };
       if (axiosError.response?.status === 404) {
         // Not found = no duplicate, add directly
-        setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: epc }]);
+        setTagInputs([...tagInputs, { type: 'rfid', value: epc }]);
         toast.success('Tag added');
       } else {
         toast.error('Failed to check tag assignment');
@@ -181,15 +181,15 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
   const handleConfirmReassign = () => {
     if (confirmModal) {
-      if (focusedTagIndex !== null && tagIdentifiers[focusedTagIndex]) {
+      if (focusedTagIndex !== null && tagInputs[focusedTagIndex]) {
         // Update focused row
-        const updated = [...tagIdentifiers];
+        const updated = [...tagInputs];
         updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: confirmModal.epc };
-        setTagIdentifiers(updated);
+        setTagInputs(updated);
         toast.success('Tag updated (will be reassigned on save)');
       } else {
         // Original: append new row
-        setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: confirmModal.epc }]);
+        setTagInputs([...tagInputs, { type: 'rfid', value: confirmModal.epc }]);
         toast.success('Tag added (will be reassigned on save)');
       }
     }
@@ -250,8 +250,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       return dateStr;
     };
 
-    // Filter out empty tag identifiers and include in request
-    const validIdentifiers = tagIdentifiers.filter((id) => id.value.trim() !== '');
+    // Filter out empty tags and include in request
+    const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
     const data: CreateAssetRequest | UpdateAssetRequest = {
       identifier: formData.identifier,
@@ -266,7 +266,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     };
 
     // Include tags for the modal to handle (modal extracts and processes separately)
-    await onSubmit({ ...data, tags: validIdentifiers } as unknown as CreateAssetRequest | UpdateAssetRequest);
+    await onSubmit({ ...data, tags: validTags } as unknown as CreateAssetRequest | UpdateAssetRequest);
   };
 
   const handleChange = (field: string, value: any) => {
@@ -468,8 +468,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             <button
               type="button"
               onClick={() => {
-                const newIndex = tagIdentifiers.length;
-                setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }]);
+                const newIndex = tagInputs.length;
+                setTagInputs([...tagInputs, { type: 'rfid', value: '' }]);
                 setAutoFocusIndex(newIndex);
               }}
               disabled={loading}
@@ -491,17 +491,17 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
           </div>
         )}
 
-        {tagIdentifiers.length === 0 ? (
+        {tagInputs.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
             No RFID tags linked. Click &quot;Add Tag&quot; to associate RFID tag IDs.
           </p>
         ) : (
           <div className="space-y-3">
-            {tagIdentifiers.map((identifier, index) => (
-              <TagIdentifierInputRow
-                key={identifier.id ?? `new-${index}`}
-                type={identifier.type}
-                value={identifier.value}
+            {tagInputs.map((tagInput, index) => (
+              <TagInputRow
+                key={tagInput.id ?? `new-${index}`}
+                type={tagInput.type}
+                value={tagInput.value}
                 autoFocus={index === autoFocusIndex}
                 onFocus={() => {
                   setFocusedTagIndex(index);
@@ -510,17 +510,17 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
                 onBlur={() => setFocusedTagIndex(null)}
                 isFocused={focusedTagIndex === index}
                 onTypeChange={(type) => {
-                  const updated = [...tagIdentifiers];
+                  const updated = [...tagInputs];
                   updated[index] = { ...updated[index], type };
-                  setTagIdentifiers(updated);
+                  setTagInputs(updated);
                 }}
                 onValueChange={(value) => {
-                  const updated = [...tagIdentifiers];
+                  const updated = [...tagInputs];
                   updated[index] = { ...updated[index], value };
-                  setTagIdentifiers(updated);
+                  setTagInputs(updated);
                 }}
                 onRemove={() => {
-                  setTagIdentifiers(tagIdentifiers.filter((_, i) => i !== index));
+                  setTagInputs(tagInputs.filter((_, i) => i !== index));
                 }}
                 disabled={loading}
               />

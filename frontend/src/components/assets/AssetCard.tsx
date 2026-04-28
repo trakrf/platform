@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
 import { TagCountBadge } from './TagCountBadge';
-import { TagIdentifiersModal } from './TagIdentifiersModal';
+import { TagsModal } from './TagsModal';
 import { LocateTagPopover } from './LocateTagPopover';
 
 interface AssetCardProps {
@@ -40,7 +40,7 @@ export function AssetCard({
   const locationName = locationData?.name ?? asset.current_location ?? undefined;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>(asset.tags || []);
+  const [localTags, setLocalTags] = useState<Tag[]>(asset.tags || []);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
   const getSearchMatch = useAssetStore((state) => state.getSearchMatch);
   const searchMatch = getSearchMatch(asset.id);
@@ -57,9 +57,9 @@ export function AssetCard({
     }
   };
 
-  const handleIdentifierRemoved = (identifierId: number) => {
+  const handleTagRemoved = (tagId: number) => {
     // Update local state
-    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    const updatedTags = localTags.filter((i) => i.id !== tagId);
     setLocalTags(updatedTags);
 
     // Update the asset store cache so the change persists when opening forms
@@ -136,7 +136,7 @@ export function AssetCard({
           {/* Tags */}
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <TagCountBadge
-              identifiers={localTags}
+              tags={localTags}
               onClick={localTags.length ? handleOpenTagsModal : undefined}
             />
           </td>
@@ -163,7 +163,7 @@ export function AssetCard({
             {showActions && (
               <div className="flex items-center gap-1 sm:gap-2">
                 <LocateTagPopover
-                  identifiers={localTags}
+                  tags={localTags}
                   entityIdentifier={asset.identifier}
                   isActive={asset.is_active}
                   variant="icon"
@@ -187,15 +187,15 @@ export function AssetCard({
           </td>
         </tr>
 
-        {/* Tag Identifiers Modal */}
-        <TagIdentifiersModal
-          identifiers={localTags}
+        {/* Tags Modal */}
+        <TagsModal
+          tags={localTags}
           entityId={asset.id}
           entityName={asset.identifier}
           entityType="asset"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
-          onIdentifierRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleTagRemoved}
         />
       </>
     );
@@ -223,7 +223,7 @@ export function AssetCard({
               </h3>
               {localTags.length > 0 && (
                 <TagCountBadge
-                  identifiers={localTags}
+                  tags={localTags}
                   onClick={handleOpenTagsModal}
                 />
               )}
@@ -262,7 +262,7 @@ export function AssetCard({
         {showActions && (
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
             <LocateTagPopover
-              identifiers={localTags}
+              tags={localTags}
               entityIdentifier={asset.identifier}
               isActive={asset.is_active}
               variant="button"
@@ -285,15 +285,15 @@ export function AssetCard({
         )}
       </div>
 
-      {/* Tag Identifiers Modal */}
-      <TagIdentifiersModal
-        identifiers={localTags}
+      {/* Tags Modal */}
+      <TagsModal
+        tags={localTags}
         entityId={asset.id}
         entityName={asset.identifier}
         entityType="asset"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}
-        onIdentifierRemoved={handleIdentifierRemoved}
+        onTagRemoved={handleTagRemoved}
       />
     </>
   );

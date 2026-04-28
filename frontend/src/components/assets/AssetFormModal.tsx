@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagIdentifierInput } from '@/types/assets';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagInput } from '@/types/assets';
 import { AssetForm } from './AssetForm';
 import { assetsApi } from '@/lib/api/assets';
 import { normalizeAsset } from '@/lib/asset/normalize';
@@ -55,8 +55,8 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
     try {
       if (mode === 'create') {
         // Extract tags from the request (they need to be added separately after creation)
-        const identifiers = (data as CreateAssetRequest & { tags?: TagIdentifierInput[] }).tags || [];
-        const { tags: _, ...createData } = data as CreateAssetRequest & { tags?: TagIdentifierInput[] };
+        const newTags = (data as CreateAssetRequest & { tags?: TagInput[] }).tags || [];
+        const { tags: _, ...createData } = data as CreateAssetRequest & { tags?: TagInput[] };
 
         const response = await assetsApi.create(createData as CreateAssetRequest);
 
@@ -71,20 +71,20 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
         const newAssetId = normalized.id;
 
-        const validIdentifiers = identifiers.filter(id => id.value.trim() !== '');
-        for (const identifier of validIdentifiers) {
+        const validTags = newTags.filter(t => t.value.trim() !== '');
+        for (const tag of validTags) {
           try {
             await assetsApi.addTag(newAssetId, {
-              type: identifier.type,
-              value: identifier.value,
+              type: tag.type,
+              value: tag.value,
             });
-          } catch (idErr: any) {
-            console.error('Failed to add tag:', idErr);
-            toast.error(`Failed to add tag "${identifier.value}": ${idErr.message || 'Unknown error'}`);
+          } catch (tagErr: any) {
+            console.error('Failed to add tag:', tagErr);
+            toast.error(`Failed to add tag "${tag.value}": ${tagErr.message || 'Unknown error'}`);
           }
         }
 
-        if (validIdentifiers.length > 0) {
+        if (validTags.length > 0) {
           const freshResponse = await assetsApi.get(newAssetId);
           if (freshResponse.data?.data) {
             addAsset(normalizeAsset(freshResponse.data.data));
@@ -97,10 +97,10 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
 
         toast.success(`Asset "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
-        const identifiers = (data as UpdateAssetRequest & { tags?: TagIdentifierInput[] }).tags || [];
-        const newIdentifiers = identifiers.filter(id => !id.id);
+        const allTags = (data as UpdateAssetRequest & { tags?: TagInput[] }).tags || [];
+        const newTags = allTags.filter(t => !t.id);
 
-        const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagIdentifierInput[] };
+        const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagInput[] };
 
         const response = await assetsApi.update(asset.id, updateData);
 
@@ -113,15 +113,15 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
           throw new Error('Invalid response from server. Asset API may not be available.');
         }
 
-        for (const identifier of newIdentifiers) {
+        for (const tag of newTags) {
           try {
             await assetsApi.addTag(asset.id, {
-              type: identifier.type,
-              value: identifier.value,
+              type: tag.type,
+              value: tag.value,
             });
-          } catch (idErr: any) {
-            console.error('Failed to add tag:', idErr);
-            toast.error(`Failed to add tag "${identifier.value}": ${idErr.message || 'Unknown error'}`);
+          } catch (tagErr: any) {
+            console.error('Failed to add tag:', tagErr);
+            toast.error(`Failed to add tag "${tag.value}": ${tagErr.message || 'Unknown error'}`);
           }
         }
 

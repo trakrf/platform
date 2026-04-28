@@ -21,7 +21,7 @@ export type {
 } from './org';
 
 // Re-export shared types
-export type { TagIdentifier, TagType } from './shared';
+export type { Tag, TagType } from './shared';
 
 // Re-export report types
 export type {

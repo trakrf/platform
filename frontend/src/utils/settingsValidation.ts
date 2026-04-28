@@ -16,7 +16,7 @@ export interface ValidationResult {
  * EPC Validation following RFID standards
  * Supports SGTIN-96, SGTIN-128, and other common EPC formats
  *
- * Note: Validation is relaxed to allow any alphanumeric tag identifier
+ * Note: Validation is relaxed to allow any alphanumeric tag value
  * for use with the locate feature. Strict hex validation only applies
  * when the value will be used for hardware filtering.
  */
@@ -39,7 +39,7 @@ export function validateEPC(epc: string): ValidationResult {
   const hexRegex = /^[0-9A-Fa-f]+$/;
   const isValidHex = hexRegex.test(cleanEpc);
 
-  // If not valid hex, accept but warn (allows tag identifiers from database)
+  // If not valid hex, accept but warn (allows tag values from database)
   if (!isValidHex) {
     return {
       isValid: true,

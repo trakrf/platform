@@ -15,8 +15,8 @@ export { AssetDetailsModal } from './AssetDetailsModal';
 export { BulkUploadModal } from './BulkUploadModal';
 export { LocateTagPopover } from './LocateTagPopover';
 
-// Shared tag identifier components (reusable for locations)
+// Shared tag components (reusable for locations)
 export { TagCountBadge } from './TagCountBadge';
-export { TagIdentifierList } from './TagIdentifierList';
-export { TagIdentifiersModal } from './TagIdentifiersModal';
-export { TagIdentifierInputRow } from './TagIdentifierInputRow';
+export { TagList } from './TagList';
+export { TagsModal } from './TagsModal';
+export { TagInputRow } from './TagInputRow';

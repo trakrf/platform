@@ -12,9 +12,9 @@ export type TagType = 'rfid' | 'ble' | 'nfc' | 'barcode';
 
 /**
  * Tag entity — returned from API
- * Reference: backend/internal/models/shared/tag.go TagIdentifier (Go type name kept)
+ * Reference: backend/internal/models/shared/tag.go
  */
-export interface TagIdentifier {
+export interface Tag {
   id: number;
   type: TagType;
   value: string;

@@ -37,7 +37,7 @@ export interface SingleLookupResponse {
 /**
  * Lookup API Client
  *
- * Provides methods for looking up assets/locations by tag identifiers (e.g., RFID EPCs).
+ * Provides methods for looking up assets/locations by tag values (e.g., RFID EPCs).
  */
 export const lookupApi = {
   /**

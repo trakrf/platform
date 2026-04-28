@@ -2,14 +2,14 @@ import { useState, useEffect, FormEvent } from 'react';
 import { validateIdentifier, validateName } from '@/lib/location/validators';
 import { LocationParentSelector } from './LocationParentSelector';
 import { useLocationStore } from '@/stores/locations/locationStore';
-import type { Location, TagIdentifierInput } from '@/types/locations';
+import type { Location, TagInput } from '@/types/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { useDeviceStore } from '@/stores';
 import { lookupApi } from '@/lib/api/lookup';
 import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
 import { Plus, QrCode, Loader2, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { TagIdentifierInputRow } from '@/components/assets';
+import { TagInputRow } from '@/components/assets';
 
 interface LocationFormData {
   identifier: string;
@@ -74,13 +74,13 @@ export function LocationForm({
   });
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [tagIdentifiers, setTagIdentifiers] = useState<TagIdentifierInput[]>([]);
+  const [tagInputs, setTagInputs] = useState<TagInput[]>([]);
 
   // Get parent location info for context message
   const getLocationById = useLocationStore((state) => state.getLocationById);
   const parentLocation = parentLocationId ? getLocationById(parentLocationId) : null;
 
-  // Barcode scanning for tag identifiers
+  // Barcode scanning for tags
   const isConnected = useDeviceStore((s) => s.isConnected);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -113,13 +113,13 @@ export function LocationForm({
         valid_to: formatDateForInput(location.valid_to),
         is_active: location.is_active,
       });
-      // Initialize tag identifiers from existing location + add blank row for new entry
+      // Initialize tags from existing location + add blank row for new entry
       const existingTags = (location.tags || []).map((id) => ({
         id: id.id,
         type: 'rfid' as const,
         value: id.value,
       }));
-      setTagIdentifiers([...existingTags, { type: 'rfid', value: '' }]);
+      setTagInputs([...existingTags, { type: 'rfid', value: '' }]);
       setAutoFocusIndex(existingTags.length); // Focus the new blank row
     } else if (mode === 'create') {
       // Reset form data for create mode
@@ -133,12 +133,12 @@ export function LocationForm({
         is_active: true,
       });
       // Start with one blank tag row for create mode
-      setTagIdentifiers([{ type: 'rfid', value: '' }]);
+      setTagInputs([{ type: 'rfid', value: '' }]);
       setAutoFocusIndex(0);
     }
   }, [mode, location, parentLocationId]);
 
-  // Handle barcode scan for tag identifiers
+  // Handle barcode scan for tags
   const handleBarcodeScan = async (epc: string) => {
     setIsScanning(false);
 
@@ -149,9 +149,9 @@ export function LocationForm({
     }
 
     // If a tag row is focused (trigger scan), update that row's value
-    if (focusedTagIndex !== null && tagIdentifiers[focusedTagIndex]) {
+    if (focusedTagIndex !== null && tagInputs[focusedTagIndex]) {
       // Local duplicate check (excluding current row)
-      if (tagIdentifiers.some((t, i) => i !== focusedTagIndex && t.value === epc)) {
+      if (tagInputs.some((t, i) => i !== focusedTagIndex && t.value === epc)) {
         toast.error('This tag is already in the list');
         return;
       }
@@ -167,9 +167,9 @@ export function LocationForm({
         const axiosError = error as { response?: { status: number } };
         if (axiosError.response?.status === 404) {
           // Not found = no duplicate, update focused row directly
-          const updated = [...tagIdentifiers];
+          const updated = [...tagInputs];
           updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: epc };
-          setTagIdentifiers(updated);
+          setTagInputs(updated);
           toast.success('Tag updated');
         } else {
           toast.error('Failed to check tag assignment');
@@ -180,7 +180,7 @@ export function LocationForm({
 
     // Original behavior: append new row (button-initiated scan)
     // Local duplicate check
-    if (tagIdentifiers.some((t) => t.value === epc)) {
+    if (tagInputs.some((t) => t.value === epc)) {
       toast.error('This tag is already in the list');
       return;
     }
@@ -197,7 +197,7 @@ export function LocationForm({
       const axiosError = error as { response?: { status: number } };
       if (axiosError.response?.status === 404) {
         // Not found = no duplicate, add directly
-        setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: epc }]);
+        setTagInputs([...tagInputs, { type: 'rfid', value: epc }]);
         toast.success('Tag added');
       } else {
         toast.error('Failed to check tag assignment');
@@ -207,15 +207,15 @@ export function LocationForm({
 
   const handleConfirmReassign = () => {
     if (confirmModal) {
-      if (focusedTagIndex !== null && tagIdentifiers[focusedTagIndex]) {
+      if (focusedTagIndex !== null && tagInputs[focusedTagIndex]) {
         // Update focused row
-        const updated = [...tagIdentifiers];
+        const updated = [...tagInputs];
         updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: confirmModal.epc };
-        setTagIdentifiers(updated);
+        setTagInputs(updated);
         toast.success('Tag updated (will be reassigned on save)');
       } else {
         // Original: append new row
-        setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: confirmModal.epc }]);
+        setTagInputs([...tagInputs, { type: 'rfid', value: confirmModal.epc }]);
         toast.success('Tag added (will be reassigned on save)');
       }
     }
@@ -272,14 +272,14 @@ export function LocationForm({
       return;
     }
 
-    // Filter out empty tag identifiers
-    const validIdentifiers = tagIdentifiers.filter((id) => id.value.trim() !== '');
+    // Filter out empty tags
+    const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
     const submitData = {
       ...formData,
       valid_from: formData.valid_from ? formatDateToRFC3339(formData.valid_from) : '',
       valid_to: formData.valid_to ? formatDateToRFC3339(formData.valid_to) : '',
-      tags: validIdentifiers,
+      tags: validTags,
     };
 
     onSubmit(submitData as LocationFormData);
@@ -455,11 +455,11 @@ export function LocationForm({
         </div>
       </div>
 
-      {/* Tag Identifiers Section */}
+      {/* Tags Section */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
         <div className="flex items-center justify-between mb-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Tag Identifiers
+            Tags
           </label>
           <div className="flex items-center gap-2">
             {isConnected && (
@@ -498,8 +498,8 @@ export function LocationForm({
             <button
               type="button"
               onClick={() => {
-                const newIndex = tagIdentifiers.length;
-                setTagIdentifiers([...tagIdentifiers, { type: 'rfid', value: '' }]);
+                const newIndex = tagInputs.length;
+                setTagInputs([...tagInputs, { type: 'rfid', value: '' }]);
                 setAutoFocusIndex(newIndex);
               }}
               disabled={loading}
@@ -521,17 +521,17 @@ export function LocationForm({
           </div>
         )}
 
-        {tagIdentifiers.length === 0 ? (
+        {tagInputs.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-            No tag identifiers added. Click &quot;Add Tag&quot; to link RFID tags.
+            No tags added. Click &quot;Add Tag&quot; to link RFID tags.
           </p>
         ) : (
           <div className="space-y-3">
-            {tagIdentifiers.map((identifier, index) => (
-              <TagIdentifierInputRow
-                key={identifier.id ?? `new-${index}`}
-                type={identifier.type}
-                value={identifier.value}
+            {tagInputs.map((tagInput, index) => (
+              <TagInputRow
+                key={tagInput.id ?? `new-${index}`}
+                type={tagInput.type}
+                value={tagInput.value}
                 autoFocus={index === autoFocusIndex}
                 onFocus={() => {
                   setFocusedTagIndex(index);
@@ -540,17 +540,17 @@ export function LocationForm({
                 onBlur={() => setFocusedTagIndex(null)}
                 isFocused={focusedTagIndex === index}
                 onTypeChange={(type) => {
-                  const updated = [...tagIdentifiers];
+                  const updated = [...tagInputs];
                   updated[index] = { ...updated[index], type };
-                  setTagIdentifiers(updated);
+                  setTagInputs(updated);
                 }}
                 onValueChange={(value) => {
-                  const updated = [...tagIdentifiers];
+                  const updated = [...tagInputs];
                   updated[index] = { ...updated[index], value };
-                  setTagIdentifiers(updated);
+                  setTagInputs(updated);
                 }}
                 onRemove={() => {
-                  setTagIdentifiers(tagIdentifiers.filter((_, i) => i !== index));
+                  setTagInputs(tagInputs.filter((_, i) => i !== index));
                 }}
                 disabled={loading}
               />

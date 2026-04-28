@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { TagIdentifiersModal } from './TagIdentifiersModal';
+import { TagsModal } from './TagsModal';
 import { assetsApi } from '@/lib/api/assets';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 // Mock the assets API
 vi.mock('@/lib/api/assets', () => ({
@@ -20,15 +20,15 @@ vi.mock('react-hot-toast', () => ({
   },
 }));
 
-describe('TagIdentifiersModal', () => {
-  const mockIdentifiers: TagIdentifier[] = [
+describe('TagsModal', () => {
+  const mockTags: Tag[] = [
     { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
     { id: 2, type: 'rfid', value: 'TAG-002', is_active: true },
     { id: 3, type: 'rfid', value: 'TAG-003', is_active: false },
   ];
 
   const defaultProps = {
-    identifiers: mockIdentifiers,
+    tags: mockTags,
     isOpen: true,
     onClose: vi.fn(),
   };
@@ -45,19 +45,19 @@ describe('TagIdentifiersModal', () => {
 
   describe('rendering', () => {
     it('renders nothing when isOpen is false', () => {
-      render(<TagIdentifiersModal {...defaultProps} isOpen={false} />);
+      render(<TagsModal {...defaultProps} isOpen={false} />);
 
       expect(screen.queryByText('RFID Tags')).not.toBeInTheDocument();
     });
 
     it('renders modal when isOpen is true', () => {
-      render(<TagIdentifiersModal {...defaultProps} />);
+      render(<TagsModal {...defaultProps} />);
 
       expect(screen.getByText('RFID Tags')).toBeInTheDocument();
     });
 
     it('renders in a portal (attached to document.body)', () => {
-      render(<TagIdentifiersModal {...defaultProps} />);
+      render(<TagsModal {...defaultProps} />);
 
       // The modal should be a direct child of body due to portal
       const backdrop = document.querySelector('[aria-hidden="true"]');
@@ -65,28 +65,28 @@ describe('TagIdentifiersModal', () => {
     });
 
     it('displays entity name when provided', () => {
-      render(<TagIdentifiersModal {...defaultProps} entityName="LAPTOP-001" />);
+      render(<TagsModal {...defaultProps} entityName="LAPTOP-001" />);
 
       expect(screen.getByText('LAPTOP-001')).toBeInTheDocument();
     });
 
-    it('displays all identifiers', () => {
-      render(<TagIdentifiersModal {...defaultProps} />);
+    it('displays all tags', () => {
+      render(<TagsModal {...defaultProps} />);
 
       expect(screen.getByText('TAG-001')).toBeInTheDocument();
       expect(screen.getByText('TAG-002')).toBeInTheDocument();
       expect(screen.getByText('TAG-003')).toBeInTheDocument();
     });
 
-    it('displays RFID badge for each identifier', () => {
-      render(<TagIdentifiersModal {...defaultProps} />);
+    it('displays RFID badge for each tag', () => {
+      render(<TagsModal {...defaultProps} />);
 
       const rfidBadges = screen.getAllByText('RFID');
       expect(rfidBadges).toHaveLength(3);
     });
 
     it('displays Active/Inactive status badges', () => {
-      render(<TagIdentifiersModal {...defaultProps} />);
+      render(<TagsModal {...defaultProps} />);
 
       const activeBadges = screen.getAllByText('Active');
       const inactiveBadges = screen.getAllByText('Inactive');
@@ -95,8 +95,8 @@ describe('TagIdentifiersModal', () => {
       expect(inactiveBadges).toHaveLength(1);
     });
 
-    it('displays empty state when no identifiers', () => {
-      render(<TagIdentifiersModal {...defaultProps} identifiers={[]} />);
+    it('displays empty state when no tags', () => {
+      render(<TagsModal {...defaultProps} tags={[]} />);
 
       expect(
         screen.getByText('No RFID tags linked to this asset.')
@@ -107,7 +107,7 @@ describe('TagIdentifiersModal', () => {
   describe('close functionality', () => {
     it('calls onClose when X close button is clicked', () => {
       const onClose = vi.fn();
-      render(<TagIdentifiersModal {...defaultProps} onClose={onClose} />);
+      render(<TagsModal {...defaultProps} onClose={onClose} />);
 
       fireEvent.click(screen.getByLabelText('Close modal'));
 
@@ -116,7 +116,7 @@ describe('TagIdentifiersModal', () => {
 
     it('calls onClose when footer Close button is clicked', () => {
       const onClose = vi.fn();
-      render(<TagIdentifiersModal {...defaultProps} onClose={onClose} />);
+      render(<TagsModal {...defaultProps} onClose={onClose} />);
 
       // Get the Close button in the footer (not the X button)
       const closeButtons = screen.getAllByRole('button');
@@ -132,7 +132,7 @@ describe('TagIdentifiersModal', () => {
 
     it('calls onClose when backdrop is clicked', () => {
       const onClose = vi.fn();
-      render(<TagIdentifiersModal {...defaultProps} onClose={onClose} />);
+      render(<TagsModal {...defaultProps} onClose={onClose} />);
 
       // Click the backdrop
       const backdrop = document.querySelector('[aria-hidden="true"]');
@@ -146,27 +146,27 @@ describe('TagIdentifiersModal', () => {
 
   describe('remove functionality', () => {
     it('does not show remove buttons when entityId is not provided', () => {
-      render(<TagIdentifiersModal {...defaultProps} />);
+      render(<TagsModal {...defaultProps} />);
 
       expect(
         screen.queryByLabelText('Remove tag')
       ).not.toBeInTheDocument();
     });
 
-    it('does not show remove buttons when onIdentifierRemoved is not provided', () => {
-      render(<TagIdentifiersModal {...defaultProps} entityId={1} />);
+    it('does not show remove buttons when onTagRemoved is not provided', () => {
+      render(<TagsModal {...defaultProps} entityId={1} />);
 
       expect(
         screen.queryByLabelText('Remove tag')
       ).not.toBeInTheDocument();
     });
 
-    it('shows remove buttons when both entityId and onIdentifierRemoved are provided', () => {
+    it('shows remove buttons when both entityId and onTagRemoved are provided', () => {
       render(
-        <TagIdentifiersModal
+        <TagsModal
           {...defaultProps}
           entityId={1}
-          onIdentifierRemoved={vi.fn()}
+          onTagRemoved={vi.fn()}
         />
       );
 
@@ -176,10 +176,10 @@ describe('TagIdentifiersModal', () => {
 
     it('shows confirmation buttons when remove is clicked', () => {
       render(
-        <TagIdentifiersModal
+        <TagsModal
           {...defaultProps}
           entityId={1}
-          onIdentifierRemoved={vi.fn()}
+          onTagRemoved={vi.fn()}
         />
       );
 
@@ -199,10 +199,10 @@ describe('TagIdentifiersModal', () => {
 
     it('hides confirmation when Cancel is clicked', () => {
       render(
-        <TagIdentifiersModal
+        <TagsModal
           {...defaultProps}
           entityId={1}
-          onIdentifierRemoved={vi.fn()}
+          onTagRemoved={vi.fn()}
         />
       );
 
@@ -216,21 +216,21 @@ describe('TagIdentifiersModal', () => {
     });
 
     it('calls API and callback when Remove is confirmed', async () => {
-      const onIdentifierRemoved = vi.fn();
+      const onTagRemoved = vi.fn();
       vi.mocked(assetsApi.removeTag).mockResolvedValue({
         data: { deleted: true },
       } as any);
 
       render(
-        <TagIdentifiersModal
+        <TagsModal
           {...defaultProps}
           entityId={5}
           entityType="asset"
-          onIdentifierRemoved={onIdentifierRemoved}
+          onTagRemoved={onTagRemoved}
         />
       );
 
-      // Click remove button for first identifier (id: 1)
+      // Click remove button for first tag (id: 1)
       const removeButtons = screen.getAllByLabelText('Remove tag');
       fireEvent.click(removeButtons[0]);
 
@@ -245,7 +245,7 @@ describe('TagIdentifiersModal', () => {
 
       await waitFor(() => {
         expect(assetsApi.removeTag).toHaveBeenCalledWith(5, 1);
-        expect(onIdentifierRemoved).toHaveBeenCalledWith(1);
+        expect(onTagRemoved).toHaveBeenCalledWith(1);
       });
     });
 
@@ -256,11 +256,11 @@ describe('TagIdentifiersModal', () => {
       );
 
       render(
-        <TagIdentifiersModal
+        <TagsModal
           {...defaultProps}
           entityId={1}
           entityType="asset"
-          onIdentifierRemoved={vi.fn()}
+          onTagRemoved={vi.fn()}
         />
       );
 

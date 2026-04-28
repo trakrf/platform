@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Target, Radio } from 'lucide-react';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 interface LocateTagPopoverProps {
-  identifiers: TagIdentifier[];
+  tags: Tag[];
   entityIdentifier: string;
   isActive: boolean;
   triggerClassName?: string;
@@ -12,7 +12,7 @@ interface LocateTagPopoverProps {
 }
 
 export function LocateTagPopover({
-  identifiers,
+  tags,
   entityIdentifier,
   isActive,
   triggerClassName = '',
@@ -23,15 +23,15 @@ export function LocateTagPopover({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  const activeIdentifiers = identifiers.filter((i) => i.is_active);
-  const hasActiveIdentifiers = activeIdentifiers.length > 0;
-  const canLocate = isActive && hasActiveIdentifiers;
+  const activeTags = tags.filter((t) => t.is_active);
+  const hasActiveTags = activeTags.length > 0;
+  const canLocate = isActive && hasActiveTags;
 
   useEffect(() => {
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const popoverWidth = 280;
-      const popoverHeight = Math.min(activeIdentifiers.length * 48 + 60, 300);
+      const popoverHeight = Math.min(activeTags.length * 48 + 60, 300);
 
       let left = rect.left + rect.width / 2 - popoverWidth / 2;
       let top = rect.bottom + 8;
@@ -46,7 +46,7 @@ export function LocateTagPopover({
 
       setPosition({ top, left });
     }
-  }, [isOpen, activeIdentifiers.length]);
+  }, [isOpen, activeTags.length]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -139,19 +139,19 @@ export function LocateTagPopover({
                   Select tag to locate
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {activeIdentifiers.length} active tag{activeIdentifiers.length !== 1 ? 's' : ''}
+                  {activeTags.length} active tag{activeTags.length !== 1 ? 's' : ''}
                 </p>
               </div>
               <div className="max-h-[200px] overflow-y-auto">
-                {activeIdentifiers.map((identifier) => (
+                {activeTags.map((tag) => (
                   <button
-                    key={identifier.id}
-                    onClick={() => handleLocateTag(identifier.value)}
+                    key={tag.id}
+                    onClick={() => handleLocateTag(tag.value)}
                     className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                   >
                     <Radio className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                     <span className="flex-1 text-sm font-mono text-gray-900 dark:text-gray-100 truncate">
-                      {identifier.value}
+                      {tag.value}
                     </span>
                     <Target className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                   </button>

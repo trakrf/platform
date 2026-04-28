@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, MapPin, Building2 } from 'lucide-react';
 import type { Location } from '@/types/locations';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 import { useLocationStore } from '@/stores';
-import { TagCountBadge, TagIdentifiersModal, LocateTagPopover } from '@/components/assets';
+import { TagCountBadge, TagsModal, LocateTagPopover } from '@/components/assets';
 
 interface LocationCardProps {
   location: Location;
@@ -28,7 +28,7 @@ export function LocationCard({
   const isRoot = location.parent_location_id === null;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>(location.tags || []);
+  const [localTags, setLocalTags] = useState<Tag[]>(location.tags || []);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
   // Sync local tags when location prop changes
@@ -43,9 +43,9 @@ export function LocationCard({
     }
   };
 
-  const handleIdentifierRemoved = (identifierId: number) => {
+  const handleTagRemoved = (tagId: number) => {
     // Update local state
-    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    const updatedTags = localTags.filter((i) => i.id !== tagId);
     setLocalTags(updatedTags);
 
     // Update the location store cache so the change persists when opening forms
@@ -113,7 +113,7 @@ export function LocationCard({
           {/* Tags */}
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <TagCountBadge
-              identifiers={localTags}
+              tags={localTags}
               onClick={localTags.length ? handleOpenTagsModal : undefined}
             />
           </td>
@@ -138,7 +138,7 @@ export function LocationCard({
             {showActions && (
               <div className="flex items-center gap-1 sm:gap-2">
                 <LocateTagPopover
-                  identifiers={localTags}
+                  tags={localTags}
                   entityIdentifier={location.identifier}
                   isActive={location.is_active}
                   variant="icon"
@@ -162,15 +162,15 @@ export function LocationCard({
           </td>
         </tr>
 
-        {/* Tag Identifiers Modal */}
-        <TagIdentifiersModal
-          identifiers={localTags}
+        {/* Tags Modal */}
+        <TagsModal
+          tags={localTags}
           entityId={location.id}
           entityName={location.identifier}
           entityType="location"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
-          onIdentifierRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleTagRemoved}
         />
       </>
     );
@@ -198,7 +198,7 @@ export function LocationCard({
               </h3>
               {localTags.length > 0 && (
                 <TagCountBadge
-                  identifiers={localTags}
+                  tags={localTags}
                   onClick={handleOpenTagsModal}
                 />
               )}
@@ -235,7 +235,7 @@ export function LocationCard({
         {showActions && (
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
             <LocateTagPopover
-              identifiers={localTags}
+              tags={localTags}
               entityIdentifier={location.identifier}
               isActive={location.is_active}
               variant="button"
@@ -258,15 +258,15 @@ export function LocationCard({
         )}
       </div>
 
-      {/* Tag Identifiers Modal */}
-      <TagIdentifiersModal
-        identifiers={localTags}
+      {/* Tags Modal */}
+      <TagsModal
+        tags={localTags}
         entityId={location.id}
         entityName={location.identifier}
         entityType="location"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}
-        onIdentifierRemoved={handleIdentifierRemoved}
+        onTagRemoved={handleTagRemoved}
       />
     </>
   );

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { MapPin, Building2, Calendar, CheckCircle, XCircle, FolderTree, Plus, Pencil, ArrowRightLeft, Trash2 } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
-import { TagIdentifierList } from '@/components/assets';
-import type { TagIdentifier } from '@/types/shared';
+import { TagList } from '@/components/assets';
+import type { Tag } from '@/types/shared';
 
 export interface LocationDetailsPanelProps {
   locationId: number | null;
@@ -30,7 +30,7 @@ export function LocationDetailsPanel({
   const getRootLocations = useLocationStore((state) => state.getRootLocations);
   const updateCachedLocation = useLocationStore((state) => state.updateCachedLocation);
 
-  const [localTags, setLocalTags] = useState<TagIdentifier[]>([]);
+  const [localTags, setLocalTags] = useState<Tag[]>([]);
 
   const location = locationId ? getLocationById(locationId) : undefined;
   const children = location ? getChildren(location.id) : [];
@@ -47,10 +47,10 @@ export function LocationDetailsPanel({
     }
   }, [location?.tags]);
 
-  const handleIdentifierRemoved = (identifierId: number) => {
+  const handleTagRemoved = (tagId: number) => {
     if (!location) return;
 
-    const updatedTags = localTags.filter((i) => i.id !== identifierId);
+    const updatedTags = localTags.filter((i) => i.id !== tagId);
     setLocalTags(updatedTags);
 
     updateCachedLocation(location.id, {
@@ -170,14 +170,14 @@ export function LocationDetailsPanel({
           )}
         </div>
 
-        {/* Tag Identifiers */}
-        <TagIdentifierList
-          identifiers={localTags}
+        {/* Tags */}
+        <TagList
+          tags={localTags}
           size="md"
           showHeader
           entityId={location.id}
           entityType="location"
-          onIdentifierRemoved={handleIdentifierRemoved}
+          onTagRemoved={handleTagRemoved}
         />
 
         {/* Direct children */}

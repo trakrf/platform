@@ -374,7 +374,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
     expect(found).toBeUndefined();
   });
 
-  it('should not index inactive tag identifiers', () => {
+  it('should not index inactive tags', () => {
     const location = createMockLocation(1, {
       identifier: 'WH-B',
       name: 'Warehouse B',
@@ -403,7 +403,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
     expect(useLocationStore.getState().getLocationByTagEpc('CLEAREDTAG')).toBeUndefined();
   });
 
-  it('should handle multiple tag identifiers per location', () => {
+  it('should handle multiple tags per location', () => {
     const location = createMockLocation(1, {
       identifier: 'MULTI-TAG',
       name: 'Multi-Tag Location',

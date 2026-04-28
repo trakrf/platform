@@ -1,21 +1,21 @@
 import { Radio } from 'lucide-react';
-import type { TagIdentifier } from '@/types/shared';
+import type { Tag } from '@/types/shared';
 
 interface TagCountBadgeProps {
-  identifiers: TagIdentifier[] | undefined;
+  tags: Tag[] | undefined;
   onClick?: (e: React.MouseEvent) => void;
 }
 
 /**
  * Displays a clickable badge showing the count of RFID tags linked to an asset.
- * Shows just the count with an icon - clicking opens the tag identifiers modal.
+ * Shows just the count with an icon - clicking opens the tags modal.
  */
-export function TagCountBadge({ identifiers, onClick }: TagCountBadgeProps) {
-  if (!identifiers || identifiers.length === 0) {
+export function TagCountBadge({ tags, onClick }: TagCountBadgeProps) {
+  if (!tags || tags.length === 0) {
     return <span className="text-sm text-gray-400 dark:text-gray-500">-</span>;
   }
 
-  const count = identifiers.length;
+  const count = tags.length;
   const title = `${count} RFID tag${count !== 1 ? 's' : ''} linked - click to view`;
 
   const baseClasses =
