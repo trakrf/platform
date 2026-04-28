@@ -80,8 +80,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if assetRow == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.ReportAssetNotFound, "asset not found", reqID)
+		httputil.Respond404(w, r, apierrors.ReportAssetNotFound, reqID)
 		return
 	}
 
@@ -168,8 +167,7 @@ func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 
 	assetRow, err := h.storage.GetAssetByID(r.Context(), orgID, &id)
 	if err != nil || assetRow == nil || assetRow.OrgID != orgID {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.ReportAssetNotFound, "asset not found or not accessible", reqID)
+		httputil.Respond404(w, r, "asset not found or not accessible", reqID)
 		return
 	}
 

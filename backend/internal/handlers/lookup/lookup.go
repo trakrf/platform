@@ -69,8 +69,7 @@ func (h *Handler) LookupByTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if result == nil {
-		httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-			apierrors.LookupNotFound, "", requestID)
+		httputil.Respond404(w, r, apierrors.LookupNotFound, requestID)
 		return
 	}
 

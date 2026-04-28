@@ -322,8 +322,7 @@ func (handler *Handler) GetInvitationInfo(w http.ResponseWriter, r *http.Request
 		// All these cases return 404 to avoid leaking token validity
 		switch errMsg {
 		case "invalid_token", "expired", "cancelled", "already_accepted":
-			httputil.WriteJSONError(w, r, http.StatusNotFound, errors.ErrNotFound,
-				apierrors.InvitationInvalidToken, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond404(w, r, apierrors.InvitationInvalidToken, middleware.GetRequestID(r.Context()))
 		default:
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
 				apierrors.InvitationInfoFailed, "", middleware.GetRequestID(r.Context()))
