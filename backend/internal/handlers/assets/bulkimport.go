@@ -38,9 +38,12 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.BulkImportJobMissingOrg, "", requestID)
+	if claims == nil {
+		httputil.Respond401(w, r, "Session authentication required", requestID)
+		return
+	}
+	if claims.CurrentOrgID == nil {
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 	orgID := *claims.CurrentOrgID
@@ -94,9 +97,12 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
 	claims := middleware.GetUserClaims(r)
-	if claims == nil || claims.CurrentOrgID == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.BulkImportUploadMissingOrg, "", requestID)
+	if claims == nil {
+		httputil.Respond401(w, r, "Session authentication required", requestID)
+		return
+	}
+	if claims.CurrentOrgID == nil {
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 	orgID := *claims.CurrentOrgID

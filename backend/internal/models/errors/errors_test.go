@@ -55,3 +55,9 @@ func TestNewErrorTypeConstants(t *testing.T) {
 		})
 	}
 }
+
+func TestErrMissingOrgContext(t *testing.T) {
+	if string(ErrMissingOrgContext) != "missing_org_context" {
+		t.Errorf("got %q, want missing_org_context", ErrMissingOrgContext)
+	}
+}

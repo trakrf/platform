@@ -57,8 +57,7 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.ReportCurrentLocationsFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
 

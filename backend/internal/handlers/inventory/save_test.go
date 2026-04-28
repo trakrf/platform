@@ -90,7 +90,7 @@ func TestSave_MissingOrgContext(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 
 	var response struct {
 		Error struct {
@@ -101,7 +101,7 @@ func TestSave_MissingOrgContext(t *testing.T) {
 	}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "unauthorized", response.Error.Type)
+	assert.Equal(t, "missing_org_context", response.Error.Type)
 }
 
 func TestSave_InvalidJSON(t *testing.T) {

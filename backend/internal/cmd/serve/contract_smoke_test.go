@@ -266,3 +266,29 @@ func TestContract_UnsupportedMediaType_EnvelopeAndType(t *testing.T) {
 	require.NotContains(t, resp.Error.Detail, "multipart",
 		"public 415 detail must not name multipart per TRA-541 POLS resolution")
 }
+
+// TestContract_MissingOrgContext_EnvelopeAndType covers TRA-537 follow-up:
+// 422 with type=missing_org_context for the "auth ok but org missing"
+// state. The test wires RespondMissingOrgContext through chi to confirm
+// the helper produces the documented envelope shape end-to-end.
+func TestContract_MissingOrgContext_EnvelopeAndType(t *testing.T) {
+	mux := chi.NewRouter()
+	mux.Use(middleware.RequestID)
+	mux.Get("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
+		httputil.RespondMissingOrgContext(w, req, middleware.GetRequestID(req.Context()))
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "missing_org_context", resp.Error.Type)
+	require.Equal(t, "Organization context required", resp.Error.Title)
+	require.Equal(t, 422, resp.Error.Status)
+	require.Contains(t, resp.Error.Detail, "active organization context")
+	require.NotEmpty(t, resp.Error.RequestID, "request_id must propagate into envelope")
+}

@@ -45,8 +45,7 @@ func NewHandler(storage *storage.Storage, service *orgsservice.Service) *Handler
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
 	if claims == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			"Unauthorized", "", middleware.GetRequestID(r.Context()))
+		httputil.Respond401(w, r, "Session authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -78,8 +77,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
 	if claims == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			"Unauthorized", "", middleware.GetRequestID(r.Context()))
+		httputil.Respond401(w, r, "Session authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
 

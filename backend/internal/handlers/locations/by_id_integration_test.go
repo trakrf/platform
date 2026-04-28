@@ -157,7 +157,8 @@ func TestUpdateLocationByID_InvalidID_Returns400(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 }
 
-func TestUpdateLocationByID_NoSession_Returns401(t *testing.T) {
+func TestUpdateLocationByID_NoSession_Returns422(t *testing.T) {
+	// RespondMissingOrgContext (TRA-537) now returns 422 instead of 401.
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -170,7 +171,7 @@ func TestUpdateLocationByID_NoSession_Returns401(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
 }
 
 func TestDeleteLocationByID_HappyPath(t *testing.T) {

@@ -26,7 +26,7 @@ func TestGetAssetHistory_MissingOrgContext(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 
 	var response struct {
 		Error struct {
@@ -36,7 +36,7 @@ func TestGetAssetHistory_MissingOrgContext(t *testing.T) {
 	}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, "unauthorized", response.Error.Type)
+	assert.Equal(t, "missing_org_context", response.Error.Type)
 }
 
 func TestGetAssetHistory_InvalidAssetID(t *testing.T) {

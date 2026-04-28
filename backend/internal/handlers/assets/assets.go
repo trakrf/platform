@@ -65,8 +65,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetCreateFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 
@@ -185,8 +184,7 @@ func (handler *Handler) UpdateAsset(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetUpdateFailed, "missing organization context", ctx)
+		httputil.RespondMissingOrgContext(w, req, ctx)
 		return
 	}
 
@@ -307,8 +305,7 @@ func (handler *Handler) GetAssetByID(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetGetFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -358,8 +355,7 @@ func (handler *Handler) DeleteAsset(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetDeleteFailed, "missing organization context", ctx)
+		httputil.RespondMissingOrgContext(w, req, ctx)
 		return
 	}
 
@@ -453,8 +449,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetListFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -536,8 +531,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetGetFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -587,8 +581,7 @@ func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetCreateFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 
@@ -663,8 +656,7 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetDeleteFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 
@@ -722,8 +714,7 @@ func (handler *Handler) UpdateAssetByID(w http.ResponseWriter, req *http.Request
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetUpdateFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -743,8 +734,7 @@ func (handler *Handler) DeleteAssetByID(w http.ResponseWriter, req *http.Request
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetDeleteFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -764,8 +754,7 @@ func (handler *Handler) AddTagByID(w http.ResponseWriter, req *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetCreateFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 
@@ -785,8 +774,7 @@ func (handler *Handler) RemoveTagByID(w http.ResponseWriter, req *http.Request) 
 
 	orgID, err := middleware.GetRequestOrgID(req)
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.AssetDeleteFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, req, reqID)
 		return
 	}
 

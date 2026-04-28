@@ -136,8 +136,7 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r)
 	if claims == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			"Unauthorized", "", middleware.GetRequestID(r.Context()))
+		httputil.Respond401(w, r, "Session authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
 

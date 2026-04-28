@@ -254,6 +254,7 @@ components:
                                 - internal_error
                                 - method_not_allowed
                                 - unsupported_media_type
+                                - missing_org_context
                             example: validation_error
                             type: string
                             x-extensible-enum: true

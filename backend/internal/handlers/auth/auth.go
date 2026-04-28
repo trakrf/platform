@@ -244,8 +244,7 @@ func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	claims := middleware.GetUserClaims(r)
 	if claims == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, errors.ErrUnauthorized,
-			"Please log in to accept this invitation", "", middleware.GetRequestID(r.Context()))
+		httputil.Respond401(w, r, "Please log in to accept this invitation", middleware.GetRequestID(r.Context()))
 		return
 	}
 
