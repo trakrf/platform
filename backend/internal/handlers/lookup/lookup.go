@@ -40,8 +40,7 @@ func (h *Handler) LookupByTag(w http.ResponseWriter, r *http.Request) {
 
 	claims := middleware.GetUserClaims(r)
 	if claims == nil || claims.CurrentOrgID == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LookupFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 	orgID := *claims.CurrentOrgID
@@ -98,8 +97,7 @@ func (h *Handler) LookupByTags(w http.ResponseWriter, r *http.Request) {
 
 	claims := middleware.GetUserClaims(r)
 	if claims == nil || claims.CurrentOrgID == nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.LookupFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 	orgID := *claims.CurrentOrgID

@@ -67,8 +67,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.ReportAssetHistoryFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
 
@@ -152,8 +151,7 @@ func (h *Handler) GetAssetHistoryByID(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.ReportAssetHistoryFailed, "missing organization context", reqID)
+		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
 

@@ -79,8 +79,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusUnauthorized, modelerrors.ErrUnauthorized,
-			apierrors.InventorySaveFailed, "missing organization context", requestID)
+		httputil.RespondMissingOrgContext(w, r, requestID)
 		return
 	}
 
