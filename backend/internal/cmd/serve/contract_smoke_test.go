@@ -12,6 +12,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/middleware"
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
 var ulidRE = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{26}$`)
@@ -42,6 +43,33 @@ func TestContract_RequestIDIsULIDAndPropagates(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, hdr, resp.Error.RequestID,
 		"request_id in body does not match X-Request-ID header")
+}
+
+// TestContract_MethodNotAllowed_EmitsEnvelope asserts that an unknown method
+// against an existing route returns the documented envelope (TRA-541 §1.10).
+// Before the fix, chi's default 405 handler returned an empty body.
+func TestContract_MethodNotAllowed_EmitsEnvelope(t *testing.T) {
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		httputil.Respond405(w, req, middleware.GetRequestID(req.Context()))
+	})
+	r.Get("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/assets", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+	require.NotEmpty(t, rec.Body.String(), "405 must carry an envelope, not an empty body")
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "method_not_allowed", resp.Error.Type)
+	require.Equal(t, 405, resp.Error.Status)
+	require.Equal(t, "Method not allowed", resp.Error.Title)
 }
 
 // TestContract_MissingAuthHeader_WWWAuthenticate verifies that a request to an

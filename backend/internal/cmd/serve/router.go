@@ -50,6 +50,10 @@ func setupRouter(
 ) *chi.Mux {
 	r := chi.NewRouter()
 
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		httputil.Respond405(w, req, middleware.GetRequestID(req.Context()))
+	})
+
 	r.Use(middleware.RequestID)
 	r.Use(logger.Middleware)
 	r.Use(sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle)
