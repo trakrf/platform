@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -28,22 +27,18 @@ func EitherAuth(store *storage.Storage) func(http.Handler) http.Handler {
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized,
-					missingAuthDetail(r, "Missing authorization header"), "", reqID)
+				httputil.Respond401(w, r, missingAuthDetail(r, "Missing authorization header"), reqID)
 				return
 			}
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid authorization header format", "", reqID)
+				httputil.Respond401(w, r, "Invalid authorization header format", reqID)
 				return
 			}
 
 			kind, err := jwt.ClassifyToken(parts[1])
 			if err != nil {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid or expired token", "", reqID)
+				httputil.Respond401(w, r, "Invalid or expired token", reqID)
 				return
 			}
 
@@ -53,8 +48,7 @@ func EitherAuth(store *storage.Storage) func(http.Handler) http.Handler {
 			case jwt.TokenKindSession:
 				Auth(next).ServeHTTP(w, r)
 			default:
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Invalid or expired token", "", reqID)
+				httputil.Respond401(w, r, "Invalid or expired token", reqID)
 			}
 		})
 	}
