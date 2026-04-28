@@ -142,8 +142,7 @@ func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.CancelInvitation(r.Context(), inviteID); err != nil {
 		if err.Error() == "invitation not found or already cancelled/accepted" {
-			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				apierrors.InvitationNotFound, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond404(w, r, apierrors.InvitationNotFound, middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -195,8 +194,7 @@ func (h *Handler) ResendInvitation(w http.ResponseWriter, r *http.Request) {
 	newExpiry, err := h.service.ResendInvitation(r.Context(), inviteID, orgID, baseURL)
 	if err != nil {
 		if err.Error() == "invitation not found" {
-			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				apierrors.InvitationNotFound, "", middleware.GetRequestID(r.Context()))
+			httputil.Respond404(w, r, apierrors.InvitationNotFound, middleware.GetRequestID(r.Context()))
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,

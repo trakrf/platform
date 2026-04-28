@@ -256,8 +256,7 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 
 	if revokeErr != nil {
 		if stderrors.Is(revokeErr, storage.ErrAPIKeyNotFound) {
-			httputil.WriteJSONError(w, r, http.StatusNotFound, modelerrors.ErrNotFound,
-				"Not found", "API key not found", reqID)
+			httputil.Respond404(w, r, "API key not found", reqID)
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
