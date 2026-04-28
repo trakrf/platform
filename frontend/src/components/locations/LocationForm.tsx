@@ -459,7 +459,7 @@ export function LocationForm({
       <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
         <div className="flex items-center justify-between mb-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Tag Identifiers
+            Tags
           </label>
           <div className="flex items-center gap-2">
             {isConnected && (
@@ -523,7 +523,7 @@ export function LocationForm({
 
         {tagInputs.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-            No tag identifiers added. Click &quot;Add Tag&quot; to link RFID tags.
+            No tags added. Click &quot;Add Tag&quot; to link RFID tags.
           </p>
         ) : (
           <div className="space-y-3">
