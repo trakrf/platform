@@ -35,8 +35,7 @@ func RequireOrgMember(store OrgRoleStore) func(http.Handler) http.Handler {
 			// Get user claims from auth middleware
 			claims := GetUserClaims(r)
 			if claims == nil {
-				httputil.WriteJSONError(w, r, http.StatusUnauthorized,
-					errors.ErrUnauthorized, "Unauthorized", "Authentication required", requestID)
+				httputil.Respond401(w, r, "Session authentication required", requestID)
 				return
 			}
 
