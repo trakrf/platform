@@ -37,3 +37,21 @@ func TestErrorResponse(t *testing.T) {
 		t.Errorf("expected status 400, got %d", resp.Error.Status)
 	}
 }
+
+func TestNewErrorTypeConstants(t *testing.T) {
+	cases := []struct {
+		name string
+		got  ErrorType
+		want string
+	}{
+		{"method_not_allowed", ErrMethodNotAllowed, "method_not_allowed"},
+		{"unsupported_media_type", ErrUnsupportedMedia, "unsupported_media_type"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if string(tc.got) != tc.want {
+				t.Errorf("got %q, want %q", tc.got, tc.want)
+			}
+		})
+	}
+}
