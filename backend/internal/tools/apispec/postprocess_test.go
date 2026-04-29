@@ -214,7 +214,6 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		field  string
 	}{
 		{"asset.PublicAssetView", "current_location_identifier"},
-		{"asset.PublicAssetView", "valid_to"},
 		{"apikey.APIKeyListItem", "created_by_key_id"},
 		{"apikey.APIKeyListItem", "last_used_at"},
 		{"report.PublicAssetHistoryItem", "duration_seconds"},
@@ -235,6 +234,10 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 	assert.False(t,
 		doc.Components.Schemas["apikey.APIKeyListItem"].Value.Properties["expires_at"].Value.Nullable,
 		"apikey expires_at is omit-when-unset, not nullable")
+	// valid_to is omit-when-unset (*time.Time + omitempty) — TRA-539 §2.2 requires NOT nullable
+	assert.False(t,
+		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["valid_to"].Value.Nullable,
+		"asset.PublicAssetView valid_to is omit-when-unset, not nullable")
 }
 
 // TestPostprocess_InjectsTopLevelSecurity locks in TRA-539 §2.6: the document-

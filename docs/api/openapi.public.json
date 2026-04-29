@@ -211,7 +211,6 @@
           },
           "valid_to": {
             "format": "date-time",
-            "nullable": true,
             "type": "string"
           }
         },

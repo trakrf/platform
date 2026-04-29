@@ -152,7 +152,6 @@ components:
                     type: string
                 valid_to:
                     format: date-time
-                    nullable: true
                     type: string
             type: object
         asset.UpdateAssetRequest:
