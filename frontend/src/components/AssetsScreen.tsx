@@ -53,7 +53,7 @@ export default function AssetsScreen() {
   }, [filters, sort]);
 
   const hasActiveFilters =
-    (filters.type && filters.type !== 'all') ||
+    (filters.asset_type && filters.asset_type !== 'all') ||
     (filters.is_active !== 'all' && filters.is_active !== undefined) ||
     (filters.search && filters.search.trim() !== '') ||
     (filters.location_id !== 'all' && filters.location_id !== undefined);
@@ -84,7 +84,7 @@ export default function AssetsScreen() {
   };
 
   const handleClearFilters = () => {
-    setFilters({ type: 'all', is_active: 'all', search: '', location_id: 'all' });
+    setFilters({ asset_type: 'all', is_active: 'all', search: '', location_id: 'all' });
   };
 
   const handleCreateClick = () => {

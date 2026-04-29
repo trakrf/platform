@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { X, Filter, User, Laptop, Package, Archive, HelpCircle } from 'lucide-react';
+import { X, Filter, User, Package, Archive } from 'lucide-react';
 import { useAssetStore } from '@/stores';
 import { Container } from '@/components/shared';
 import type { AssetType } from '@/types/assets';
@@ -11,11 +11,9 @@ interface AssetFiltersProps {
 }
 
 const TYPE_OPTIONS: Array<{ value: AssetType; label: string; icon: typeof User }> = [
+  { value: 'item', label: 'Items', icon: Package },
   { value: 'person', label: 'People', icon: User },
-  { value: 'device', label: 'Devices', icon: Laptop },
-  { value: 'asset', label: 'Assets', icon: Package },
   { value: 'inventory', label: 'Inventory', icon: Archive },
-  { value: 'other', label: 'Other', icon: HelpCircle },
 ];
 
 export function AssetFilters({ isOpen = true, onToggle, className = '' }: AssetFiltersProps) {
@@ -27,24 +25,24 @@ export function AssetFilters({ isOpen = true, onToggle, className = '' }: AssetF
     const assets = Array.from(cache.byId.values());
     return TYPE_OPTIONS.map((option) => ({
       ...option,
-      count: assets.filter((a) => a.type === option.value).length,
+      count: assets.filter((a) => a.asset_type === option.value).length,
     }));
   }, [cache.byId.size]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (filters.type && filters.type !== 'all') count++;
+    if (filters.asset_type && filters.asset_type !== 'all') count++;
     if (filters.is_active !== 'all' && filters.is_active !== undefined) count++;
     if (filters.search && filters.search.trim() !== '') count++;
     return count;
   }, [filters]);
 
   const handleClearFilters = () => {
-    setFilters({ type: 'all', is_active: 'all', search: '' });
+    setFilters({ asset_type: 'all', is_active: 'all', search: '' });
   };
 
   const handleTypeChange = (type: AssetType) => {
-    setFilters({ type: filters.type === type ? 'all' : type });
+    setFilters({ asset_type: filters.asset_type === type ? 'all' : type });
   };
 
   const handleStatusChange = (status: boolean | 'all') => {
@@ -100,7 +98,7 @@ export function AssetFilters({ isOpen = true, onToggle, className = '' }: AssetF
               >
                 <input
                   type="checkbox"
-                  checked={filters.type === value}
+                  checked={filters.asset_type === value}
                   onChange={() => handleTypeChange(value)}
                   className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 dark:focus:ring-blue-400"
                 />

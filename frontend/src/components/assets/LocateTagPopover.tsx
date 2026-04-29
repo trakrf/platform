@@ -145,7 +145,7 @@ export function LocateTagPopover({
               <div className="max-h-[200px] overflow-y-auto">
                 {activeTags.map((tag) => (
                   <button
-                    key={tag.id}
+                    key={tag.surrogate_id}
                     onClick={() => handleLocateTag(tag.value)}
                     className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                   >

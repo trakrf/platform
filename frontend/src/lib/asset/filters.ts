@@ -25,8 +25,8 @@ export function filterAssets(
 ): Asset[] {
   return assets.filter((asset) => {
     // Filter by type
-    if (filters.type && filters.type !== 'all') {
-      if (asset.type !== filters.type) {
+    if (filters.asset_type && filters.asset_type !== 'all') {
+      if (asset.asset_type !== filters.asset_type) {
         return false;
       }
     }
@@ -42,14 +42,14 @@ export function filterAssets(
     if (filters.location_id !== undefined && filters.location_id !== 'all') {
       if (filters.location_id === null) {
         // Filter for unassigned assets (no location)
-        if (asset.current_location !== null && asset.current_location !== undefined) {
+        if (asset.current_location_identifier !== null && asset.current_location_identifier !== undefined) {
           return false;
         }
       } else {
         // Filter for specific location — look up identifier from store by surrogate ID
         const locById = useLocationStore.getState().cache.byId.get(filters.location_id as number);
         const filterIdentifier = locById?.identifier;
-        if (asset.current_location !== filterIdentifier) {
+        if (asset.current_location_identifier !== filterIdentifier) {
           return false;
         }
       }
@@ -86,9 +86,9 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
         aValue = a.name;
         bValue = b.name;
         break;
-      case 'type':
-        aValue = a.type;
-        bValue = b.type;
+      case 'asset_type':
+        aValue = a.asset_type;
+        bValue = b.asset_type;
         break;
       case 'valid_from':
         aValue = a.valid_from;

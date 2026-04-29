@@ -11,8 +11,8 @@ import type {
 /** Normalize raw public API location to internal shape. Resolves parent_location_id from store cache. */
 function normalizeLocation(raw: Location): Location {
   const byIdentifier = useLocationStore.getState().cache?.byIdentifier;
-  const parentId = raw.parent
-    ? (byIdentifier?.get(raw.parent)?.id ?? null)
+  const parentId = raw.parent_location_identifier
+    ? (byIdentifier?.get(raw.parent_location_identifier)?.id ?? null)
     : null;
   return {
     ...raw,

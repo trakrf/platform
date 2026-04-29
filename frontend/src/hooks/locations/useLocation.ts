@@ -6,8 +6,8 @@ import type { Location } from '@/types/locations';
 
 function normalizeLocation(raw: Location): Location {
   const byIdentifier = useLocationStore.getState().cache?.byIdentifier;
-  const parentId = raw.parent
-    ? (byIdentifier?.get(raw.parent)?.id ?? null)
+  const parentId = raw.parent_location_identifier
+    ? (byIdentifier?.get(raw.parent_location_identifier)?.id ?? null)
     : null;
   return {
     ...raw,

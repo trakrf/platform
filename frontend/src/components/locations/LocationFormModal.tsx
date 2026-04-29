@@ -51,7 +51,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         for (const tag of validTags) {
           try {
             await locationsApi.addTag(newLocationId, {
-              type: tag.type,
+              tag_type: tag.tag_type,
               value: tag.value,
             });
           } catch (tagErr) {
@@ -74,7 +74,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
       } else if (mode === 'edit' && location) {
         // New tags (without id) need to be added after update
         const allTags = (data as UpdateLocationRequest & { tags?: TagInput[] }).tags || [];
-        const newTags = allTags.filter(t => !t.id);
+        const newTags = allTags.filter(t => !t.surrogate_id);
 
         // Backend doesn't support tags in update request
         const { tags: _, ...updateData } = data as UpdateLocationRequest & { tags?: TagInput[] };
@@ -93,7 +93,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         for (const tag of newTags) {
           try {
             await locationsApi.addTag(location.id, {
-              type: tag.type,
+              tag_type: tag.tag_type,
               value: tag.value,
             });
           } catch (tagErr) {

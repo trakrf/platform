@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
+import { Pencil, Trash2, User, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
@@ -18,11 +18,9 @@ interface AssetCardProps {
 }
 
 const TYPE_ICONS = {
+  item: Package,
   person: User,
-  device: Laptop,
-  asset: Package,
   inventory: Archive,
-  other: HelpCircle,
 } as const;
 
 export function AssetCard({
@@ -34,10 +32,10 @@ export function AssetCard({
   showActions = true,
   className = '',
 }: AssetCardProps) {
-  const TypeIcon = TYPE_ICONS[asset.type] || HelpCircle;
+  const TypeIcon = TYPE_ICONS[asset.asset_type] || HelpCircle;
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const locationData = asset.current_location ? getLocationByIdentifier(asset.current_location) : null;
-  const locationName = locationData?.name ?? asset.current_location ?? undefined;
+  const locationData = asset.current_location_identifier ? getLocationByIdentifier(asset.current_location_identifier) : null;
+  const locationName = locationData?.name ?? asset.current_location_identifier ?? undefined;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localTags, setLocalTags] = useState<Tag[]>(asset.tags || []);
@@ -59,7 +57,7 @@ export function AssetCard({
 
   const handleTagRemoved = (tagId: number) => {
     // Update local state
-    const updatedTags = localTags.filter((i) => i.id !== tagId);
+    const updatedTags = localTags.filter((i) => i.surrogate_id !== tagId);
     setLocalTags(updatedTags);
 
     // Update the asset store cache so the change persists when opening forms

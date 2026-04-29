@@ -15,8 +15,8 @@ export type TagType = 'rfid' | 'ble' | 'nfc' | 'barcode';
  * Reference: backend/internal/models/shared/tag.go
  */
 export interface Tag {
-  id: number;
-  type: TagType;
+  surrogate_id: number;
+  tag_type: TagType;
   value: string;
   is_active: boolean;
 }

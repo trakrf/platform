@@ -22,7 +22,7 @@ export const reportsApi = {
     const params = new URLSearchParams();
     if (options.limit !== undefined) params.append('limit', String(options.limit));
     if (options.offset !== undefined) params.append('offset', String(options.offset));
-    if (options.location) params.append('location', options.location);
+    if (options.location_identifier) params.append('location_identifier', options.location_identifier);
     if (options.q) params.append('q', options.q);
 
     const queryString = params.toString();

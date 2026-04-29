@@ -10,9 +10,9 @@ import type { Tag } from '@/types/shared';
 // ============ Core Entity Types ============
 
 /**
- * Asset type union - matches backend validation: oneof=person device asset inventory other
+ * Asset type union - matches backend validation: oneof=item person inventory
  */
-export type AssetType = 'person' | 'device' | 'asset' | 'inventory' | 'other';
+export type AssetType = 'item' | 'person' | 'inventory';
 
 /**
  * Core Asset entity - matches backend PublicAssetView struct
@@ -23,11 +23,11 @@ export interface Asset {
   surrogate_id: number; // Go: int — public API field name
   identifier: string; // Go: string - Customer identifier (e.g., "LAP-001")
   name: string; // Go: string
-  type: AssetType; // Go: string with validation
-  description: string; // Go: string
-  current_location: string | null; // Natural key of current location (was current_location_id int)
+  asset_type: AssetType; // Go: string with validation
+  description?: string; // Go: string (omit-when-empty)
+  current_location_identifier?: string | null; // Natural key of current location
   valid_from: string; // Go: time.Time → ISO 8601 string
-  valid_to: string | null; // Go: *time.Time → ISO 8601 string or null
+  valid_to?: string | null; // Go: *time.Time → ISO 8601 string or null
   metadata: Record<string, any>; // Go: any → JSON object
   is_active: boolean; // Go: bool
   created_at: string; // Go: time.Time → ISO 8601 string
@@ -44,12 +44,12 @@ export interface Asset {
 export interface CreateAssetRequest {
   identifier?: string; // optional - auto-generated as ASSET-XXXX if not provided
   name: string; // required, max 255
-  type: AssetType; // required, oneof
+  asset_type?: AssetType; // optional, oneof
   description?: string; // optional, max 1024
-  current_location_id?: number | null; // optional location FK (write path, unchanged)
-  valid_from: string; // ISO 8601 date
-  valid_to: string; // ISO 8601 date
-  is_active: boolean;
+  current_location_identifier?: string | null; // optional location natural key (write path)
+  valid_from?: string; // ISO 8601 date
+  valid_to?: string; // ISO 8601 date
+  is_active?: boolean;
   metadata?: Record<string, any>;
 }
 
@@ -60,9 +60,9 @@ export interface CreateAssetRequest {
 export interface UpdateAssetRequest {
   identifier?: string;
   name?: string;
-  type?: AssetType;
+  asset_type?: AssetType;
   description?: string;
-  current_location_id?: number | null; // write path, unchanged
+  current_location_identifier?: string | null; // write path — location natural key
   valid_from?: string;
   valid_to?: string;
   is_active?: boolean;
@@ -73,8 +73,8 @@ export interface UpdateAssetRequest {
  * Tag input for forms — may not have an id if new
  */
 export interface TagInput {
-  id?: number; // Present if existing tag, undefined if new
-  type: 'rfid';
+  surrogate_id?: number; // Present if existing tag, undefined if new
+  tag_type: 'rfid';
   value: string;
 }
 
@@ -154,10 +154,10 @@ export interface BulkErrorDetail {
  * Filter criteria for asset list
  */
 export interface AssetFilters {
-  type?: AssetType | 'all';
+  asset_type?: AssetType | 'all';
   is_active?: boolean | 'all';
   search?: string;
-  location_id?: number | null | 'all'; // null = unassigned, 'all' = all locations
+  location_id?: number | null | 'all'; // null = unassigned, 'all' = all locations — internal UI filter, uses surrogate ID for store lookup
 }
 
 /**
@@ -173,7 +173,7 @@ export interface PaginationState {
 /**
  * Sort field options
  */
-export type SortField = 'identifier' | 'name' | 'type' | 'is_active' | 'valid_from' | 'created_at';
+export type SortField = 'identifier' | 'name' | 'asset_type' | 'is_active' | 'valid_from' | 'created_at';
 
 /**
  * Sort direction

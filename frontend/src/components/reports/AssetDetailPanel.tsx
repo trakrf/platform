@@ -44,7 +44,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Current Location</p>
           <p className="font-medium text-blue-600 dark:text-blue-400">
-            {asset.location || 'Unknown'}
+            {asset.location_identifier || 'Unknown'}
           </p>
         </div>
         <div>

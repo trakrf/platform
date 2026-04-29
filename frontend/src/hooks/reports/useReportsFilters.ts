@@ -56,7 +56,7 @@ export function useReportsFilters({
     : undefined;
   const { data, totalCount, isLoading, error } = useCurrentLocations({
     q: debouncedSearch || undefined,
-    location: selectedLocationIdentifier,
+    location_identifier: selectedLocationIdentifier,
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
   });

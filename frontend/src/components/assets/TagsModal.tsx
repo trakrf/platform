@@ -108,11 +108,11 @@ export function TagsModal({
               <div className="space-y-2">
                 {tags.map((tag) => (
                   <div
-                    key={tag.id}
+                    key={tag.surrogate_id}
                     className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                   >
                     <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 flex-shrink-0">
-                      {TAG_TYPE_LABELS[tag.type] || tag.type.toUpperCase()}
+                      {TAG_TYPE_LABELS[tag.tag_type] || tag.tag_type.toUpperCase()}
                     </span>
                     <span className="flex-1 text-sm font-mono text-gray-900 dark:text-gray-100 truncate min-w-0">
                       {tag.value}
@@ -141,7 +141,7 @@ export function TagsModal({
                     </button>
                     {canRemove && (
                       <div className="flex-shrink-0">
-                        {confirmingId === tag.id ? (
+                        {confirmingId === tag.surrogate_id ? (
                           <div className="flex items-center gap-2">
                             <button
                               onClick={handleCancelRemove}
@@ -155,7 +155,7 @@ export function TagsModal({
                               disabled={removingId !== null}
                               className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded disabled:opacity-50"
                             >
-                              {removingId === tag.id ? (
+                              {removingId === tag.surrogate_id ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                               ) : null}
                               Remove
@@ -163,7 +163,7 @@ export function TagsModal({
                           </div>
                         ) : (
                           <button
-                            onClick={() => handleRemoveClick(tag.id)}
+                            onClick={() => handleRemoveClick(tag.surrogate_id)}
                             className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
                             aria-label="Remove tag"
                           >

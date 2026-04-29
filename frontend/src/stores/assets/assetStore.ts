@@ -91,7 +91,7 @@ const initialCache: AssetCache = {
  * Initial filters state
  */
 const initialFilters: AssetFilters = {
-  type: 'all',
+  asset_type: 'all',
   is_active: 'all',
   search: '',
   location_id: 'all',

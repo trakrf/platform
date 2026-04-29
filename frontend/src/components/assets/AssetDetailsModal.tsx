@@ -15,7 +15,7 @@ interface AssetDetailsModalProps {
 export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetailsModalProps) {
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
-  const location = asset?.current_location ? getLocationByIdentifier(asset.current_location) : null;
+  const location = asset?.current_location_identifier ? getLocationByIdentifier(asset.current_location_identifier) : null;
 
   const [localTags, setLocalTags] = useState<Tag[]>([]);
 
@@ -26,7 +26,7 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
   }, [asset]);
 
   const handleTagRemoved = (tagId: number) => {
-    const updatedTags = localTags.filter((i) => i.id !== tagId);
+    const updatedTags = localTags.filter((i) => i.surrogate_id !== tagId);
     setLocalTags(updatedTags);
 
     if (asset) {
@@ -137,7 +137,7 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <InfoField label="Valid From" value={formatDate(asset.valid_from)} />
-                <InfoField label="Valid To" value={formatDate(asset.valid_to)} />
+                <InfoField label="Valid To" value={formatDate(asset.valid_to ?? null)} />
               </div>
               {asset.metadata && Object.keys(asset.metadata).length > 0 && (
                 <div>

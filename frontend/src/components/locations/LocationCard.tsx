@@ -45,7 +45,7 @@ export function LocationCard({
 
   const handleTagRemoved = (tagId: number) => {
     // Update local state
-    const updatedTags = localTags.filter((i) => i.id !== tagId);
+    const updatedTags = localTags.filter((i) => i.surrogate_id !== tagId);
     setLocalTags(updatedTags);
 
     // Update the location store cache so the change persists when opening forms

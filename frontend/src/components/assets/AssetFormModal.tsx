@@ -75,7 +75,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         for (const tag of validTags) {
           try {
             await assetsApi.addTag(newAssetId, {
-              type: tag.type,
+              tag_type: tag.tag_type,
               value: tag.value,
             });
           } catch (tagErr: any) {
@@ -98,7 +98,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         toast.success(`Asset "${normalized.identifier}" created successfully`);
       } else if (mode === 'edit' && asset) {
         const allTags = (data as UpdateAssetRequest & { tags?: TagInput[] }).tags || [];
-        const newTags = allTags.filter(t => !t.id);
+        const newTags = allTags.filter(t => !t.surrogate_id);
 
         const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagInput[] };
 
@@ -116,7 +116,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         for (const tag of newTags) {
           try {
             await assetsApi.addTag(asset.id, {
-              type: tag.type,
+              tag_type: tag.tag_type,
               value: tag.value,
             });
           } catch (tagErr: any) {

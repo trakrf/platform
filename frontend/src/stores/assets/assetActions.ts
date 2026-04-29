@@ -31,10 +31,10 @@ export function createCacheActions(
           newCache.byId.set(asset.id, asset);
           newCache.byIdentifier.set(asset.identifier, asset);
 
-          const typeSet = newCache.byType.get(asset.type) ?? new Set();
+          const typeSet = newCache.byType.get(asset.asset_type) ?? new Set();
           const newTypeSet = new Set(typeSet);
           newTypeSet.add(asset.id);
-          newCache.byType.set(asset.type, newTypeSet);
+          newCache.byType.set(asset.asset_type, newTypeSet);
 
           if (asset.is_active) {
             newCache.activeIds.add(asset.id);
@@ -87,22 +87,22 @@ export function createCacheActions(
           newCache.byIdentifier.set(current.identifier, updated);
         }
 
-        if (updates.type && updates.type !== current.type) {
-          const oldTypeSet = newCache.byType.get(current.type);
+        if (updates.asset_type && updates.asset_type !== current.asset_type) {
+          const oldTypeSet = newCache.byType.get(current.asset_type);
           if (oldTypeSet) {
             const newOldTypeSet = new Set(oldTypeSet);
             newOldTypeSet.delete(id);
             if (newOldTypeSet.size === 0) {
-              newCache.byType.delete(current.type);
+              newCache.byType.delete(current.asset_type);
             } else {
-              newCache.byType.set(current.type, newOldTypeSet);
+              newCache.byType.set(current.asset_type, newOldTypeSet);
             }
           }
 
-          const newTypeSet = newCache.byType.get(updates.type) ?? new Set();
+          const newTypeSet = newCache.byType.get(updates.asset_type) ?? new Set();
           const updatedNewTypeSet = new Set(newTypeSet);
           updatedNewTypeSet.add(id);
-          newCache.byType.set(updates.type, updatedNewTypeSet);
+          newCache.byType.set(updates.asset_type, updatedNewTypeSet);
         }
 
         if (updates.is_active !== undefined) {
@@ -138,14 +138,14 @@ export function createCacheActions(
         newCache.byId.delete(id);
         newCache.byIdentifier.delete(asset.identifier);
 
-        const typeSet = newCache.byType.get(asset.type);
+        const typeSet = newCache.byType.get(asset.asset_type);
         if (typeSet) {
           const newTypeSet = new Set(typeSet);
           newTypeSet.delete(id);
           if (newTypeSet.size === 0) {
-            newCache.byType.delete(asset.type);
+            newCache.byType.delete(asset.asset_type);
           } else {
-            newCache.byType.set(asset.type, newTypeSet);
+            newCache.byType.set(asset.asset_type, newTypeSet);
           }
         }
 

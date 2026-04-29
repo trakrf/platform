@@ -85,7 +85,7 @@ export function CurrentLocationsTable({
             </div>
           </td>
           <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-            {item.location || (
+            {item.location_identifier || (
               <span className="text-gray-400 dark:text-gray-500">Unknown</span>
             )}
           </td>

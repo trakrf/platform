@@ -68,8 +68,8 @@ export function createCacheActions(
         // correctly without waiting for a full list refetch (TRA-484).
         let resolved = location;
         if (resolved.parent_location_id == null) {
-          const parentId = resolved.parent
-            ? (state.cache.byIdentifier.get(resolved.parent)?.id ?? null)
+          const parentId = resolved.parent_location_identifier
+            ? (state.cache.byIdentifier.get(resolved.parent_location_identifier)?.id ?? null)
             : null;
           resolved = { ...resolved, parent_location_id: parentId };
         }
@@ -266,7 +266,7 @@ export function createCacheActions(
           // Build EPC index from location's tags
           if (location.tags) {
             for (const tag of location.tags) {
-              if (tag.is_active && tag.type === 'rfid') {
+              if (tag.is_active && tag.tag_type === 'rfid') {
                 cache.byTagEpc.set(tag.value, location);
               }
             }

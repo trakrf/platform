@@ -25,14 +25,14 @@ interface AssetFormProps {
 export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
   // Resolve current_location_id from natural key for write path (POST/PUT unchanged)
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const resolvedLocationId = asset?.current_location
-    ? (getLocationByIdentifier(asset.current_location)?.id ?? null)
+  const resolvedLocationId = asset?.current_location_identifier
+    ? (getLocationByIdentifier(asset.current_location_identifier)?.id ?? null)
     : null;
 
   const [formData, setFormData] = useState({
     identifier: asset?.identifier || initialIdentifier || '',
     name: asset?.name || '',
-    type: asset?.type || ('asset' as AssetType),
+    type: asset?.asset_type || ('item' as AssetType),
     description: asset?.description || '',
     current_location_id: resolvedLocationId as number | null,
     valid_from: asset?.valid_from?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -88,10 +88,10 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       setFormData({
         identifier: asset.identifier,
         name: asset.name,
-        type: asset.type,
-        description: asset.description,
-        current_location_id: asset.current_location
-          ? (getLocationByIdentifier(asset.current_location)?.id ?? null)
+        type: asset.asset_type,
+        description: asset.description ?? '',
+        current_location_id: asset.current_location_identifier
+          ? (getLocationByIdentifier(asset.current_location_identifier)?.id ?? null)
           : null,
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
@@ -99,15 +99,15 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       });
       // Initialize tags from existing asset + add blank row for new entry
       const existingTags = (asset.tags || []).map((id) => ({
-        id: id.id,
-        type: 'rfid' as const,
+        surrogate_id: id.surrogate_id,
+        tag_type: 'rfid' as const,
         value: id.value,
       }));
-      setTagInputs([...existingTags, { type: 'rfid', value: '' }]);
+      setTagInputs([...existingTags, { tag_type: 'rfid', value: '' }]);
       // Auto-focus removed - only Add Tag button triggers focus
     } else if (mode === 'create') {
       // Start with one blank tag row for create mode
-      setTagInputs([{ type: 'rfid', value: '' }]);
+      setTagInputs([{ tag_type: 'rfid', value: '' }]);
       // Auto-focus removed - only Add Tag button triggers focus
     }
   }, [asset, mode]);
@@ -171,7 +171,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       const axiosError = error as { response?: { status: number } };
       if (axiosError.response?.status === 404) {
         // Not found = no duplicate, add directly
-        setTagInputs([...tagInputs, { type: 'rfid', value: epc }]);
+        setTagInputs([...tagInputs, { tag_type: 'rfid', value: epc }]);
         toast.success('Tag added');
       } else {
         toast.error('Failed to check tag assignment');
@@ -189,7 +189,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         toast.success('Tag updated (will be reassigned on save)');
       } else {
         // Original: append new row
-        setTagInputs([...tagInputs, { type: 'rfid', value: confirmModal.epc }]);
+        setTagInputs([...tagInputs, { tag_type: 'rfid', value: confirmModal.epc }]);
         toast.success('Tag added (will be reassigned on save)');
       }
     }
@@ -256,9 +256,11 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     const data: CreateAssetRequest | UpdateAssetRequest = {
       identifier: formData.identifier,
       name: formData.name,
-      type: formData.type,
+      asset_type: formData.type as AssetType,
       description: formData.description,
-      current_location_id: formData.current_location_id,
+      current_location_identifier: formData.current_location_id
+        ? (Array.from(locationCache.values()).find((l) => l.id === formData.current_location_id)?.identifier ?? null)
+        : null,
       valid_from: toRFC3339(formData.valid_from),
       valid_to: toRFC3339(formData.valid_to || '2099-12-31'),
       is_active: formData.is_active,
@@ -469,7 +471,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
               type="button"
               onClick={() => {
                 const newIndex = tagInputs.length;
-                setTagInputs([...tagInputs, { type: 'rfid', value: '' }]);
+                setTagInputs([...tagInputs, { tag_type: 'rfid', value: '' }]);
                 setAutoFocusIndex(newIndex);
               }}
               disabled={loading}
@@ -499,8 +501,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
           <div className="space-y-3">
             {tagInputs.map((tagInput, index) => (
               <TagInputRow
-                key={tagInput.id ?? `new-${index}`}
-                type={tagInput.type}
+                key={tagInput.surrogate_id ?? `new-${index}`}
+                type={tagInput.tag_type}
                 value={tagInput.value}
                 autoFocus={index === autoFocusIndex}
                 onFocus={() => {
@@ -509,9 +511,9 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
                 }}
                 onBlur={() => setFocusedTagIndex(null)}
                 isFocused={focusedTagIndex === index}
-                onTypeChange={(type) => {
+                onTypeChange={(tag_type) => {
                   const updated = [...tagInputs];
-                  updated[index] = { ...updated[index], type };
+                  updated[index] = { ...updated[index], tag_type };
                   setTagInputs(updated);
                 }}
                 onValueChange={(value) => {

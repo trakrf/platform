@@ -33,7 +33,7 @@ function resolveParentIds(locations: Location[]): Location[] {
   const byIdentifier = new Map(locations.map((l) => [l.identifier, l.id]));
   return locations.map((l) => ({
     ...l,
-    parent_location_id: l.parent ? (byIdentifier.get(l.parent) ?? null) : null,
+    parent_location_id: l.parent_location_identifier ? (byIdentifier.get(l.parent_location_identifier) ?? null) : null,
   }));
 }
 

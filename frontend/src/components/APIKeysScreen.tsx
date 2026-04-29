@@ -124,7 +124,7 @@ export default function APIKeysScreen() {
                 .map((r) => scopeChip(k.scopes, r))
                 .filter((x): x is string => !!x);
               return (
-                <tr key={k.id} className="border-b">
+                <tr key={k.surrogate_id} className="border-b">
                   <td className="py-2 font-medium">
                     <div className="flex items-baseline gap-2">
                       <span>{k.name}</span>
@@ -181,7 +181,7 @@ export default function APIKeysScreen() {
       {revokeTarget && (
         <RevokeConfirmModal
           keyName={revokeTarget.name}
-          onConfirm={() => revokeMutation.mutate(revokeTarget.id)}
+          onConfirm={() => revokeMutation.mutate(revokeTarget.surrogate_id)}
           onCancel={() => setRevokeTarget(null)}
           busy={revokeMutation.isPending}
         />

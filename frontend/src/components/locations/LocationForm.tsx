@@ -115,11 +115,11 @@ export function LocationForm({
       });
       // Initialize tags from existing location + add blank row for new entry
       const existingTags = (location.tags || []).map((id) => ({
-        id: id.id,
-        type: 'rfid' as const,
+        surrogate_id: id.surrogate_id,
+        tag_type: 'rfid' as const,
         value: id.value,
       }));
-      setTagInputs([...existingTags, { type: 'rfid', value: '' }]);
+      setTagInputs([...existingTags, { tag_type: 'rfid', value: '' }]);
       setAutoFocusIndex(existingTags.length); // Focus the new blank row
     } else if (mode === 'create') {
       // Reset form data for create mode
@@ -133,7 +133,7 @@ export function LocationForm({
         is_active: true,
       });
       // Start with one blank tag row for create mode
-      setTagInputs([{ type: 'rfid', value: '' }]);
+      setTagInputs([{ tag_type: 'rfid', value: '' }]);
       setAutoFocusIndex(0);
     }
   }, [mode, location, parentLocationId]);
@@ -197,7 +197,7 @@ export function LocationForm({
       const axiosError = error as { response?: { status: number } };
       if (axiosError.response?.status === 404) {
         // Not found = no duplicate, add directly
-        setTagInputs([...tagInputs, { type: 'rfid', value: epc }]);
+        setTagInputs([...tagInputs, { tag_type: 'rfid', value: epc }]);
         toast.success('Tag added');
       } else {
         toast.error('Failed to check tag assignment');
@@ -215,7 +215,7 @@ export function LocationForm({
         toast.success('Tag updated (will be reassigned on save)');
       } else {
         // Original: append new row
-        setTagInputs([...tagInputs, { type: 'rfid', value: confirmModal.epc }]);
+        setTagInputs([...tagInputs, { tag_type: 'rfid', value: confirmModal.epc }]);
         toast.success('Tag added (will be reassigned on save)');
       }
     }
@@ -499,7 +499,7 @@ export function LocationForm({
               type="button"
               onClick={() => {
                 const newIndex = tagInputs.length;
-                setTagInputs([...tagInputs, { type: 'rfid', value: '' }]);
+                setTagInputs([...tagInputs, { tag_type: 'rfid', value: '' }]);
                 setAutoFocusIndex(newIndex);
               }}
               disabled={loading}
@@ -529,8 +529,8 @@ export function LocationForm({
           <div className="space-y-3">
             {tagInputs.map((tagInput, index) => (
               <TagInputRow
-                key={tagInput.id ?? `new-${index}`}
-                type={tagInput.type}
+                key={tagInput.surrogate_id ?? `new-${index}`}
+                type={tagInput.tag_type}
                 value={tagInput.value}
                 autoFocus={index === autoFocusIndex}
                 onFocus={() => {
@@ -539,9 +539,9 @@ export function LocationForm({
                 }}
                 onBlur={() => setFocusedTagIndex(null)}
                 isFocused={focusedTagIndex === index}
-                onTypeChange={(type) => {
+                onTypeChange={(tag_type) => {
                   const updated = [...tagInputs];
-                  updated[index] = { ...updated[index], type };
+                  updated[index] = { ...updated[index], tag_type };
                   setTagInputs(updated);
                 }}
                 onValueChange={(value) => {

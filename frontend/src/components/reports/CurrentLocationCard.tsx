@@ -29,7 +29,7 @@ export function CurrentLocationCard({ item, onClick }: CurrentLocationCardProps)
       <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-2">
         <div className="flex items-center gap-1">
           <MapPin className="w-4 h-4" />
-          <span>{item.location || 'Unknown'}</span>
+          <span>{item.location_identifier || 'Unknown'}</span>
         </div>
       </div>
       <div className="flex items-center gap-1 text-sm">

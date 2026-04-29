@@ -71,7 +71,7 @@ export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): Export
   const tableData = data.map((item) => [
     item.asset,
     item.asset,
-    item.location || 'Unknown',
+    item.location_identifier || 'Unknown',
     formatRelativeTime(item.last_seen),
     getFreshnessLabel(item.last_seen),
   ]);
@@ -131,7 +131,7 @@ export function generateCurrentLocationsExcel(data: CurrentLocationItem[]): Expo
   const sheetData = data.map((item) => ({
     'Asset ID': item.asset,
     Name: item.asset,
-    Location: item.location || 'Unknown',
+    Location: item.location_identifier || 'Unknown',
     'Last Seen': formatTimestampForExport(item.last_seen),
     Status: getFreshnessLabel(item.last_seen),
   }));
@@ -190,7 +190,7 @@ export function generateCurrentLocationsCSV(data: CurrentLocationItem[]): Export
     const row = [
       `"${item.asset}"`,
       `"${(item.asset || '').replace(/"/g, '""')}"`,
-      `"${(item.location || 'Unknown').replace(/"/g, '""')}"`,
+      `"${(item.location_identifier || 'Unknown').replace(/"/g, '""')}"`,
       formatTimestampForExport(item.last_seen),
       getFreshnessLabel(item.last_seen),
     ];
@@ -237,7 +237,7 @@ export function generateAssetHistoryPDF(
   // Table data
   const tableData = data.map((item) => [
     formatTimestampForExport(item.timestamp),
-    item.location || 'Unknown',
+    item.location_identifier || 'Unknown',
     item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   ]);
 
@@ -298,7 +298,7 @@ export function generateAssetHistoryExcel(
   // Main data sheet
   const sheetData = data.map((item) => ({
     Timestamp: formatTimestampForExport(item.timestamp),
-    Location: item.location || 'Unknown',
+    Location: item.location_identifier || 'Unknown',
     Duration: item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   }));
 
@@ -312,7 +312,7 @@ export function generateAssetHistoryExcel(
   XLSX.utils.book_append_sheet(wb, ws, 'Movement History');
 
   // Summary sheet
-  const uniqueLocations = new Set(data.map((d) => d.location || 'Unknown')).size;
+  const uniqueLocations = new Set(data.map((d) => d.location_identifier || 'Unknown')).size;
   const totalDuration = data.reduce((sum, d) => sum + (d.duration_seconds || 0), 0);
 
   const summaryData = [
@@ -355,7 +355,7 @@ export function generateAssetHistoryCSV(
     const row = [
       `"${assetName.replace(/"/g, '""')}"`,
       formatTimestampForExport(item.timestamp),
-      `"${(item.location || 'Unknown').replace(/"/g, '""')}"`,
+      `"${(item.location_identifier || 'Unknown').replace(/"/g, '""')}"`,
       item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
     ];
     content += row.join(',') + '\n';

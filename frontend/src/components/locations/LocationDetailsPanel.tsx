@@ -50,7 +50,7 @@ export function LocationDetailsPanel({
   const handleTagRemoved = (tagId: number) => {
     if (!location) return;
 
-    const updatedTags = localTags.filter((i) => i.id !== tagId);
+    const updatedTags = localTags.filter((i) => i.surrogate_id !== tagId);
     setLocalTags(updatedTags);
 
     updateCachedLocation(location.id, {
@@ -237,7 +237,7 @@ export function LocationDetailsPanel({
                 <Calendar className="h-4 w-4" />
                 Valid To
               </label>
-              <p className="text-gray-900 dark:text-white">{formatDate(location.valid_to)}</p>
+              <p className="text-gray-900 dark:text-white">{formatDate(location.valid_to ?? null)}</p>
             </div>
           </div>
         </div>

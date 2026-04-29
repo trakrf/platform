@@ -19,11 +19,11 @@ export interface Location {
   name: string;
   description: string;
   parent_location_id: number | null; // Internal — kept for tree navigation (populated at fetch boundary)
-  parent: string | null; // Natural key of parent location (public API field)
+  parent_location_identifier?: string | null; // Natural key of parent location (public API field)
   path: string;
   depth: number;
   valid_from: string;
-  valid_to: string | null;
+  valid_to?: string | null;
   is_active: boolean;
   metadata: Record<string, any>;
   created_at: string;
@@ -38,7 +38,7 @@ export interface Location {
 export interface CreateLocationRequest {
   name: string;
   identifier: string;
-  parent_location_id?: number | null;
+  parent_location_identifier?: string | null;
   description?: string;
   valid_from: string;
   valid_to?: string | null;
@@ -53,7 +53,7 @@ export interface CreateLocationRequest {
 export interface UpdateLocationRequest {
   name?: string;
   identifier?: string;
-  parent_location_id?: number | null;
+  parent_location_identifier?: string | null;
   description?: string;
   valid_from?: string;
   valid_to?: string | null;
@@ -100,8 +100,8 @@ export interface DeleteResponse {
  * Tag input for forms — may not have an id if new
  */
 export interface TagInput {
-  id?: number;
-  type: 'rfid';
+  surrogate_id?: number;
+  tag_type: 'rfid';
   value: string;
 }
 

@@ -51,11 +51,9 @@ export function validateDateRange(
  */
 export function validateAssetType(type: string): type is AssetType {
   const validTypes: AssetType[] = [
+    'item',
     'person',
-    'device',
-    'asset',
     'inventory',
-    'other',
   ];
   return validTypes.includes(type as AssetType);
 }

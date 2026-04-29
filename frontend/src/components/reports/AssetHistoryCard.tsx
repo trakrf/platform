@@ -14,7 +14,7 @@ export function AssetHistoryCard({ item, isFirst = false }: AssetHistoryCardProp
         <div className="flex items-center gap-2">
           <MapPin className="w-4 h-4 text-gray-500" />
           <span className="font-medium text-gray-900 dark:text-gray-100">
-            {item.location || 'Unknown'}
+            {item.location_identifier || 'Unknown'}
           </span>
         </div>
         {isFirst && (

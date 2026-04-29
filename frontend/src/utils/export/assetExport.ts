@@ -46,9 +46,9 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
   const tableData = assets.map((asset) => [
     asset.identifier,
     asset.name || '',
-    asset.type,
+    asset.asset_type,
     asset.tags?.map((t) => t.value).join(', ') || '',
-    getLocationName(asset.current_location),
+    getLocationName(asset.current_location_identifier),
     asset.is_active ? 'Active' : 'Inactive',
     asset.description || '',
   ]);
@@ -110,9 +110,9 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
   const data = assets.map((asset) => ({
     'Asset ID': asset.identifier,
     Name: asset.name || '',
-    Type: asset.type,
+    Type: asset.asset_type,
     'Tag ID(s)': asset.tags?.map((t) => t.value).join(', ') || '',
-    Location: getLocationName(asset.current_location),
+    Location: getLocationName(asset.current_location_identifier),
     Status: asset.is_active ? 'Active' : 'Inactive',
     Description: asset.description || '',
     Created: asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
@@ -185,7 +185,7 @@ export function generateAssetCSV(assets: Asset[]): ExportResult {
       `"${(asset.description || '').replace(/"/g, '""')}"`,
       asset.is_active ? 'Active' : 'Inactive',
       asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
-      `"${getLocationName(asset.current_location).replace(/"/g, '""')}"`,
+      `"${getLocationName(asset.current_location_identifier).replace(/"/g, '""')}"`,
     ];
 
     // Tag columns - one per column, pad with empty if fewer tags

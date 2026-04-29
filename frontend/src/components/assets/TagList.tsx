@@ -50,7 +50,7 @@ export function TagList({
       <div className={spacing}>
         {tags.map((tag) => (
           <TagRow
-            key={tag.id}
+            key={tag.surrogate_id}
             tag={tag}
             size={size}
             entityId={entityId}
@@ -115,12 +115,12 @@ export function TagRow({ tag, size = 'sm', entityId, entityType, onDelete }: Tag
     setIsDeleting(true);
     try {
       if (entityType === 'asset') {
-        await assetsApi.removeTag(entityId, tag.id);
+        await assetsApi.removeTag(entityId, tag.surrogate_id);
       } else {
-        await locationsApi.removeTag(entityId, tag.id);
+        await locationsApi.removeTag(entityId, tag.surrogate_id);
       }
       toast.success('Tag removed');
-      onDelete(tag.id);
+      onDelete(tag.surrogate_id);
     } catch (err) {
       console.error('Failed to remove tag:', err);
       toast.error('Failed to remove tag');
@@ -173,7 +173,7 @@ export function TagRow({ tag, size = 'sm', entityId, entityType, onDelete }: Tag
     <div className={containerClasses}>
       <div className="flex items-center gap-1.5 min-w-0 flex-1">
         <Radio className={iconClasses} />
-        <span className={typeBadgeClasses}>{getTypeLabel(tag.type)}</span>
+        <span className={typeBadgeClasses}>{getTypeLabel(tag.tag_type)}</span>
         <span className={textClasses} title={tag.value}>
           {tag.value}
         </span>

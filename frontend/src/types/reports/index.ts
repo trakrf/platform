@@ -13,7 +13,8 @@
  */
 export interface CurrentLocationItem {
   asset: string; // asset natural key (identifier)
-  location: string; // location natural key (identifier), empty string if unknown
+  location_identifier: string; // location natural key (identifier), empty string if unknown
+  asset_deleted_at?: string; // omit-when-unset — ISO 8601 if asset was soft-deleted
   last_seen: string; // ISO 8601
 }
 
@@ -34,8 +35,8 @@ export interface CurrentLocationsResponse {
 export interface CurrentLocationsParams {
   limit?: number;
   offset?: number;
-  location?: string; // location natural key filter (was location_id: number)
-  q?: string; // search query (was search: string)
+  location_identifier?: string; // location natural key filter
+  q?: string; // search query
 }
 
 // ============ Asset History (TRA-218) ============
@@ -46,7 +47,7 @@ export interface CurrentLocationsParams {
  */
 export interface AssetHistoryItem {
   timestamp: string; // ISO 8601
-  location: string; // location natural key (was location_id + location_name)
+  location_identifier: string; // location natural key
   duration_seconds: number | null;
 }
 

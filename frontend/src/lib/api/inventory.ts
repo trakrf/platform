@@ -1,8 +1,8 @@
 /**
- * Inventory Management API Client
+ * Inventory / Scans API Client
  *
- * Type-safe wrapper around backend inventory endpoints.
- * Backend routes reference: backend/internal/handlers/inventory/save.go
+ * Type-safe wrapper around backend scans endpoint.
+ * Backend routes reference: backend/internal/handlers/scans/save.go
  * Uses shared apiClient with automatic JWT injection and org_id context.
  * Errors propagate unchanged - caller handles RFC 7807 extraction.
  */
@@ -22,7 +22,7 @@ export interface SaveInventoryRequest {
  */
 export interface SaveInventoryResponse {
   count: number;
-  location_id: number;
+  location_identifier: string; // location natural key (was location_id: number)
   location_name: string;
   timestamp: string;
 }
@@ -33,11 +33,11 @@ export interface SaveInventoryResponse {
 export const inventoryApi = {
   /**
    * Save scanned inventory to database
-   * POST /api/v1/inventory/save
+   * POST /api/v1/scans
    *
    * @param data - Save request with location and asset IDs
    * @returns Promise<{ data: SaveInventoryResponse }> with count and location name
    */
   save: (data: SaveInventoryRequest) =>
-    apiClient.post<{ data: SaveInventoryResponse }>('/inventory/save', data),
+    apiClient.post<{ data: SaveInventoryResponse }>('/scans', data),
 };

@@ -131,7 +131,7 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
     if (accumulatedData.length === 0) return null;
 
     const uniqueLocations = new Set(
-      accumulatedData.filter((d) => d.location).map((d) => d.location)
+      accumulatedData.filter((d) => d.location_identifier).map((d) => d.location_identifier)
     );
 
     const totalSeconds = accumulatedData.reduce(
@@ -142,7 +142,7 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
     return {
       locationsVisited: uniqueLocations.size,
       timeTracked: formatDuration(totalSeconds),
-      currentLocation: accumulatedData[0]?.location || null,
+      currentLocation: accumulatedData[0]?.location_identifier || null,
     };
   }, [accumulatedData]);
 
