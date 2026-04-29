@@ -185,6 +185,21 @@ func TestListAPIKeys_ExcludesRevoked(t *testing.T) {
 	assert.NotEmpty(t, out.Data[0].JTI, "list response must include jti for disambiguation")
 	assert.Equal(t, active.JTI, out.Data[0].JTI, "jti in response should match the stored row")
 	assert.NotContains(t, w.Body.String(), "eyJ")
+
+	// Wire-level regression: assert expires_at is absent from the JSON response
+	// body when a key has no expiry (nil *time.Time + omitempty). This defends
+	// against future changes that drop omitempty or convert ExpiresAt to a
+	// non-pointer — both upstream guards would still pass while spec-strict
+	// clients (per docs/api/date-fields) would silently receive an unexpected
+	// null field. Parsing generically lets us distinguish "key absent" from
+	// "key present with null value".
+	var raw struct {
+		Data []map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+	require.GreaterOrEqual(t, len(raw.Data), 1)
+	_, hasExpiresAt := raw.Data[0]["expires_at"]
+	assert.False(t, hasExpiresAt, "expires_at must be omitted when nil, not emitted as null")
 }
 
 func TestCreateAPIKey_SoftCap(t *testing.T) {
