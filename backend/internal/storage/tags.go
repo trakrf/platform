@@ -240,9 +240,18 @@ func tagsToJSON(tags []shared.TagIdentifierRequest) ([]byte, error) {
 		return []byte("[]"), nil
 	}
 
-	normalized := make([]shared.TagIdentifierRequest, len(tags))
+	// dbTagEntry uses the DB-native "type" key that create_asset_with_tags
+	// and create_location_with_tags stored procedures read via ->>'type'.
+	// This is intentionally decoupled from TagIdentifierRequest.TagType (which
+	// uses json:"tag_type" for the public API surface).
+	type dbTagEntry struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+
+	normalized := make([]dbTagEntry, len(tags))
 	for i, t := range tags {
-		normalized[i] = shared.TagIdentifierRequest{
+		normalized[i] = dbTagEntry{
 			Type:  t.GetType(),
 			Value: t.Value,
 		}

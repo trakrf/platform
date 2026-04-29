@@ -10,13 +10,13 @@ type TagIdentifier struct {
 }
 
 type TagIdentifierRequest struct {
-	Type  string `json:"type" validate:"omitempty,oneof=rfid ble barcode" example:"rfid" extensions:"x-extensible-enum=true"`
-	Value string `json:"value" validate:"required,min=1,max=255"`
+	TagType string `json:"tag_type" validate:"omitempty,oneof=rfid ble barcode" example:"rfid" extensions:"x-extensible-enum=true"`
+	Value   string `json:"value" validate:"required,min=1,max=255"`
 }
 
 func (t TagIdentifierRequest) GetType() string {
-	if t.Type == "" {
+	if t.TagType == "" {
 		return DefaultIdentifierType
 	}
-	return t.Type
+	return t.TagType
 }

@@ -41,8 +41,8 @@ func TestRemoveAssetTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
-		Type:  "epc",
-		Value: "EPC-CROSS-ORG-ASSET",
+		TagType: "rfid",
+		Value:   "EPC-CROSS-ORG-ASSET",
 	})
 	require.NoError(t, err)
 
@@ -89,8 +89,8 @@ func TestRemoveAssetTag_WrongAssetID_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgA, assetOwner.ID, shared.TagIdentifierRequest{
-		Type:  "epc",
-		Value: "EPC-OWNER",
+		TagType: "rfid",
+		Value:   "EPC-OWNER",
 	})
 	require.NoError(t, err)
 
@@ -126,8 +126,8 @@ func TestRemoveLocationTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToLocation(context.Background(), orgA, loc.ID, shared.TagIdentifierRequest{
-		Type:  "epc",
-		Value: "EPC-CROSS-ORG-LOC",
+		TagType: "rfid",
+		Value:   "EPC-CROSS-ORG-LOC",
 	})
 	require.NoError(t, err)
 
@@ -171,8 +171,8 @@ func TestRemoveLocationTag_WrongLocationID_ReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToLocation(context.Background(), orgA, locOwner.ID, shared.TagIdentifierRequest{
-		Type:  "epc",
-		Value: "EPC-LOC-OWNER",
+		TagType: "rfid",
+		Value:   "EPC-LOC-OWNER",
 	})
 	require.NoError(t, err)
 

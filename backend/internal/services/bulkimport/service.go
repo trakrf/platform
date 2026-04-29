@@ -216,8 +216,8 @@ func (s *Service) processCSVAsync(
 		identifiers := make([]shared.TagIdentifierRequest, len(pr.tagValues))
 		for i, tag := range pr.tagValues {
 			identifiers[i] = shared.TagIdentifierRequest{
-				Type:  "rfid",
-				Value: tag,
+				TagType: "rfid",
+				Value:   tag,
 			}
 		}
 

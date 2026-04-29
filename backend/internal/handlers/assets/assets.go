@@ -637,7 +637,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tag})
+	httputil.WriteJSON(w, http.StatusCreated, AddTagResponse{Data: *tag})
 }
 
 // @Summary      Remove a tag from an asset

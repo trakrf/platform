@@ -205,8 +205,8 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	// TagIdentifierRequest.Type accepts only rfid/ble/barcode; use rfid.
-	body := `{"type":"rfid","value":"EPC-ABC-123"}`
+	// TagIdentifierRequest.TagType accepts only rfid/ble/barcode; use rfid.
+	body := `{"tag_type":"rfid","value":"EPC-ABC-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/ident-host/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -238,8 +238,8 @@ func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-HAPPY-1",
+		TagType: "rfid",
+		Value:   "EPC-HAPPY-1",
 	})
 	require.NoError(t, err)
 
@@ -281,8 +281,8 @@ func TestRemoveAssetTag_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgID, owningAsset.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-WRONG-1",
+		TagType: "rfid",
+		Value:   "EPC-WRONG-1",
 	})
 	require.NoError(t, err)
 
@@ -427,7 +427,7 @@ func TestAssetsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"type":"rfid","value":"EPC-407B-NEW"}`
+	body := `{"tag_type":"rfid","value":"EPC-407B-NEW"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/TRA-407B-ADDIDENT-1/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -453,7 +453,7 @@ func TestAssetsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
 	_, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 	r := buildAssetsPublicWriteRouter(store)
 
-	body := `{"type":"rfid","value":"EPC-GHOST"}`
+	body := `{"tag_type":"rfid","value":"EPC-GHOST"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/DOES-NOT-EXIST/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -484,8 +484,8 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-407B-REMOVE",
+		TagType: "rfid",
+		Value:   "EPC-407B-REMOVE",
 	})
 	require.NoError(t, err)
 

@@ -835,7 +835,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tag})
+	httputil.WriteJSON(w, http.StatusCreated, AddTagResponse{Data: *tag})
 }
 
 // @Summary      Remove a tag from a location

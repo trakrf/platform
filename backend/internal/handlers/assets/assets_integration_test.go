@@ -490,7 +490,7 @@ func TestAssetsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	require.NoError(t, err)
 
 	// Attach an identifier to asset B via the handler.
-	body := `{"type":"rfid","value":"TRA-482-IDENT-DUP"}`
+	body := `{"tag_type":"rfid","value":"TRA-482-IDENT-DUP"}`
 	reqB := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-B-dup-host/tags", bytes.NewBufferString(body))
 	reqB.Header.Set("Content-Type", "application/json")
 	reqB = withOrgContext(reqB, accountID)
@@ -1162,7 +1162,7 @@ func TestAssetsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	require.NoError(t, err)
 
 	// Attach.
-	body := `{"type":"rfid","value":"TRA-482-REUSE"}`
+	body := `{"tag_type":"rfid","value":"TRA-482-REUSE"}`
 	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/assets/SN-reuse-host/tags", bytes.NewBufferString(body))
 	reqAdd.Header.Set("Content-Type", "application/json")
 	reqAdd = withOrgContext(reqAdd, accountID)
