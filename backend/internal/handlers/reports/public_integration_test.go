@@ -139,7 +139,7 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 	row := data[0].(map[string]any)
 	// "asset" is the asset's natural-key identifier per the public API contract.
 	assert.Equal(t, "curr-asset-1", row["asset"])
-	assert.Equal(t, "curr-loc-1", row["location"])
+	assert.Equal(t, "curr-loc-1", row["location_identifier"])
 	assert.Contains(t, row, "last_seen")
 }
 
@@ -210,7 +210,7 @@ func TestGetAssetHistory_ByIdentifier(t *testing.T) {
 	for _, item := range data {
 		row := item.(map[string]any)
 		assert.Contains(t, row, "timestamp")
-		loc, ok := row["location"].(string)
+		loc, ok := row["location_identifier"].(string)
 		assert.True(t, ok)
 		locations[loc] = true
 	}

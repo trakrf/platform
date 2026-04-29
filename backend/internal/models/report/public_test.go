@@ -21,7 +21,7 @@ func TestToPublicCurrentLocationItem_LiveAsset(t *testing.T) {
 	got := ToPublicCurrentLocationItem(in)
 
 	assert.Equal(t, "FORK-007", got.Asset)
-	assert.Equal(t, "BAY-3", got.Location)
+	assert.Equal(t, "BAY-3", got.LocationIdentifier)
 	assert.Nil(t, got.AssetDeletedAt)
 
 	// Live row must omit asset_deleted_at from JSON entirely.
