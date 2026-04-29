@@ -9,11 +9,7 @@
           },
           "expires_at": {
             "format": "date-time",
-            "nullable": true,
             "type": "string"
-          },
-          "id": {
-            "type": "integer"
           },
           "jti": {
             "type": "string"
@@ -29,6 +25,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "surrogate_id": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -48,11 +47,7 @@
           },
           "expires_at": {
             "format": "date-time",
-            "nullable": true,
             "type": "string"
-          },
-          "id": {
-            "type": "integer"
           },
           "jti": {
             "type": "string"
@@ -70,6 +65,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "surrogate_id": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -101,7 +99,16 @@
       },
       "asset.CreateAssetWithTagsRequest": {
         "properties": {
-          "current_location": {
+          "asset_type": {
+            "enum": [
+              "item",
+              "person",
+              "inventory"
+            ],
+            "example": "item",
+            "type": "string"
+          },
+          "current_location_identifier": {
             "example": "WHS-01",
             "maxLength": 255,
             "minLength": 1,
@@ -134,15 +141,6 @@
             },
             "type": "array"
           },
-          "type": {
-            "enum": [
-              "asset",
-              "person",
-              "inventory"
-            ],
-            "example": "asset",
-            "type": "string"
-          },
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
@@ -161,11 +159,20 @@
       },
       "asset.PublicAssetView": {
         "properties": {
+          "asset_type": {
+            "enum": [
+              "item",
+              "person",
+              "inventory"
+            ],
+            "example": "item",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
           },
-          "current_location": {
+          "current_location_identifier": {
             "nullable": true,
             "type": "string"
           },
@@ -194,9 +201,6 @@
             },
             "type": "array"
           },
-          "type": {
-            "type": "string"
-          },
           "updated_at": {
             "format": "date-time",
             "type": "string"
@@ -215,7 +219,15 @@
       },
       "asset.UpdateAssetRequest": {
         "properties": {
-          "current_location": {
+          "asset_type": {
+            "enum": [
+              "item",
+              "person",
+              "inventory"
+            ],
+            "type": "string"
+          },
+          "current_location_identifier": {
             "example": "WHS-01",
             "maxLength": 255,
             "minLength": 1,
@@ -242,14 +254,6 @@
             "minLength": 1,
             "type": "string"
           },
-          "type": {
-            "enum": [
-              "asset",
-              "person",
-              "inventory"
-            ],
-            "type": "string"
-          },
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
@@ -259,6 +263,14 @@
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "assets.AddTagResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/shared.TagIdentifier"
           }
         },
         "type": "object"
@@ -436,7 +448,7 @@
             "minLength": 1,
             "type": "string"
           },
-          "parent_identifier": {
+          "parent_location_identifier": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
@@ -486,7 +498,7 @@
           "name": {
             "type": "string"
           },
-          "parent": {
+          "parent_location_identifier": {
             "type": "string"
           },
           "path": {
@@ -539,7 +551,7 @@
             "minLength": 1,
             "type": "string"
           },
-          "parent_identifier": {
+          "parent_location_identifier": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
@@ -554,6 +566,14 @@
             "example": "2026-12-14T00:00:00Z",
             "format": "date-time",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "locations.AddTagResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/shared.TagIdentifier"
           }
         },
         "type": "object"
@@ -715,13 +735,13 @@
       },
       "orgs.OrgMeView": {
         "properties": {
-          "id": {
-            "example": 42,
-            "type": "integer"
-          },
           "name": {
             "example": "Acme Logistics",
             "type": "string"
+          },
+          "surrogate_id": {
+            "example": 42,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -732,7 +752,7 @@
             "nullable": true,
             "type": "integer"
           },
-          "location": {
+          "location_identifier": {
             "type": "string"
           },
           "timestamp": {
@@ -755,7 +775,7 @@
             "format": "date-time",
             "type": "string"
           },
-          "location": {
+          "location_identifier": {
             "type": "string"
           }
         },
@@ -809,13 +829,13 @@
       },
       "shared.TagIdentifier": {
         "properties": {
-          "id": {
-            "type": "integer"
-          },
           "is_active": {
             "type": "boolean"
           },
-          "type": {
+          "surrogate_id": {
+            "type": "integer"
+          },
+          "tag_type": {
             "enum": [
               "rfid",
               "ble",
@@ -832,14 +852,14 @@
           }
         },
         "required": [
-          "type",
+          "tag_type",
           "value"
         ],
         "type": "object"
       },
       "shared.TagIdentifierRequest": {
         "properties": {
-          "type": {
+          "tag_type": {
             "enum": [
               "rfid",
               "ble",
@@ -865,8 +885,8 @@
           "count": {
             "type": "integer"
           },
-          "location_id": {
-            "type": "integer"
+          "location_identifier": {
+            "type": "string"
           },
           "location_name": {
             "type": "string"
@@ -949,9 +969,9 @@
             }
           },
           {
-            "description": "filter by type",
+            "description": "filter by type (one of: item, person, inventory)",
             "in": "query",
-            "name": "type",
+            "name": "asset_type",
             "schema": {
               "type": "string"
             }
@@ -1688,12 +1708,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/assets.AddTagResponse"
                 }
               }
             },
-            "description": "data: shared.TagIdentifier"
+            "description": "tag attached"
           },
           "400": {
             "content": {
@@ -1769,7 +1788,7 @@
         ]
       }
     },
-    "/api/v1/assets/{identifier}/tags/{tagId}": {
+    "/api/v1/assets/{identifier}/tags/{tagSurrogateId}": {
       "delete": {
         "description": "Detach a tag from an asset by its tag record ID.",
         "operationId": "assets.tags.remove",
@@ -1784,9 +1803,9 @@
             }
           },
           {
-            "description": "Tag ID",
+            "description": "Tag surrogate ID",
             "in": "path",
-            "name": "tagId",
+            "name": "tagSurrogateId",
             "required": true,
             "schema": {
               "type": "integer"
@@ -1871,105 +1890,6 @@
         ]
       }
     },
-    "/api/v1/inventory/save": {
-      "post": {
-        "description": "Persist scanned RFID assets to the asset_scans hypertable",
-        "operationId": "inventory.save",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/inventory.SaveRequest"
-              }
-            }
-          },
-          "description": "Save request with location and asset identifiers",
-          "required": true,
-          "x-originalParamName": "request"
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/inventory.SaveResponse"
-                }
-              }
-            },
-            "description": "Created"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "Invalid request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "Location or assets not owned by org"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "rate_limited",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds to wait before retrying",
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "APIKey": [
-              "scans:write"
-            ]
-          }
-        ],
-        "summary": "Save inventory scans",
-        "tags": [
-          "inventory"
-        ]
-      }
-    },
     "/api/v1/locations": {
       "get": {
         "operationId": "locations.list",
@@ -1993,9 +1913,9 @@
             }
           },
           {
-            "description": "filter by parent identifier (may repeat)",
+            "description": "filter by parent location identifier (may repeat)",
             "in": "query",
-            "name": "parent",
+            "name": "parent_location_identifier",
             "schema": {
               "type": "string"
             }
@@ -3082,12 +3002,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/locations.AddTagResponse"
                 }
               }
             },
-            "description": "data: shared.TagIdentifier"
+            "description": "tag attached"
           },
           "400": {
             "content": {
@@ -3163,7 +3082,7 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}/tags/{tagId}": {
+    "/api/v1/locations/{identifier}/tags/{tagSurrogateId}": {
       "delete": {
         "description": "Detach a tag from a location by its tag record ID.",
         "operationId": "locations.tags.remove",
@@ -3178,9 +3097,9 @@
             }
           },
           {
-            "description": "Tag ID",
+            "description": "Tag surrogate ID",
             "in": "path",
-            "name": "tagId",
+            "name": "tagSurrogateId",
             "required": true,
             "schema": {
               "type": "integer"
@@ -3608,8 +3527,112 @@
           "api-keys"
         ]
       }
+    },
+    "/api/v1/scans": {
+      "post": {
+        "description": "Persist scanned RFID assets to the asset_scans hypertable",
+        "operationId": "inventory.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/inventory.SaveRequest"
+              }
+            }
+          },
+          "description": "Save request with location and asset identifiers",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inventory.SaveResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Location or assets not owned by org"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "APIKey": [
+              "scans:write"
+            ]
+          }
+        ],
+        "summary": "Save inventory scans",
+        "tags": [
+          "inventory"
+        ]
+      }
     }
   },
+  "security": [
+    {
+      "APIKey": []
+    }
+  ],
   "servers": [
     {
       "description": "Preview (per-PR deploys). Preview-scoped API keys authenticate here only — they will fail with 401 against Production, and Production keys will fail here.",
