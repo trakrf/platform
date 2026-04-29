@@ -63,7 +63,7 @@ func newTestRequest(t *testing.T, body any, orgID int) *http.Request {
 	t.Helper()
 	bodyBytes, err := json.Marshal(body)
 	require.NoError(t, err)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	claims := &jwt.Claims{
 		UserID:       1,
@@ -83,7 +83,7 @@ func TestSave_MissingOrgContext(t *testing.T) {
 	}
 	bodyBytes, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	// Don't set user claims - this simulates missing auth
 
@@ -107,7 +107,7 @@ func TestSave_MissingOrgContext(t *testing.T) {
 func TestSave_InvalidJSON(t *testing.T) {
 	handler := NewHandler(nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("invalid json")))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
 
 	orgID := 1
@@ -161,7 +161,7 @@ func TestSave_EmptyAssetIdentifiers(t *testing.T) {
 	}
 	bodyBytes, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
 	orgID := 1
@@ -201,18 +201,18 @@ func TestSave_EmptyAssetIdentifiers(t *testing.T) {
 }
 
 func TestSave_RouteRegistration(t *testing.T) {
-	// POST /api/v1/inventory/save is now wired in cmd/serve/router.go under the
+	// POST /api/v1/scans is now wired in cmd/serve/router.go under the
 	// public-write group (TRA-397); Handler.RegisterRoutes is intentionally empty.
 	// Wire the route directly here to verify handler-level plumbing.
 	handler := NewHandler(nil)
 
 	r := chi.NewRouter()
-	r.Post("/api/v1/inventory/save", handler.Save)
+	r.Post("/api/v1/scans", handler.Save)
 
 	// Verify route is registered
 	rctx := chi.NewRouteContext()
-	if !r.Match(rctx, http.MethodPost, "/api/v1/inventory/save") {
-		t.Error("Route POST /api/v1/inventory/save not registered")
+	if !r.Match(rctx, http.MethodPost, "/api/v1/scans") {
+		t.Error("Route POST /api/v1/scans not registered")
 	}
 }
 
@@ -402,7 +402,7 @@ func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
 		Email:        "test@example.com",
 		CurrentOrgID: &orgID,
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("not json")))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewReader([]byte("not json")))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
 	req = req.WithContext(ctx)
@@ -436,7 +436,7 @@ func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
 func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	orgID := 1
 	claims := &jwt.Claims{UserID: 1, Email: "test@example.com", CurrentOrgID: &orgID}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("{}")))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewReader([]byte("{}")))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
 	req = req.WithContext(ctx)

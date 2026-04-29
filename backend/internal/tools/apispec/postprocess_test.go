@@ -237,6 +237,35 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		"apikey expires_at is omit-when-unset, not nullable")
 }
 
+// TestPostprocess_InjectsTopLevelSecurity locks in TRA-539 §2.6: the document-
+// level security block must be [{APIKey: []}] after postprocessPublic so that
+// generated clients authenticate every call by default.
+func TestPostprocess_InjectsTopLevelSecurity(t *testing.T) {
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	postprocessPublic(doc)
+
+	require.Len(t, doc.Security, 1, "document-level security must have exactly one requirement")
+	req := doc.Security[0]
+	scopes, ok := req["APIKey"]
+	require.True(t, ok, "security requirement must reference APIKey scheme")
+	assert.Empty(t, scopes, "top-level APIKey requirement must carry an empty scope list")
+}
+
+// TestPostprocess_DoesNotOverrideExistingTopLevelSecurity ensures that if the
+// document already carries a security block (e.g. from a future swag annotation)
+// the postprocess step does not overwrite it.
+func TestPostprocess_DoesNotOverrideExistingTopLevelSecurity(t *testing.T) {
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	doc.Security = openapi3.SecurityRequirements{
+		openapi3.SecurityRequirement{"BearerAuth": []string{"custom"}},
+	}
+	postprocessPublic(doc)
+
+	require.Len(t, doc.Security, 1, "pre-existing security block must not be extended")
+	_, hasBearerAuth := doc.Security[0]["BearerAuth"]
+	assert.True(t, hasBearerAuth, "pre-existing security block must be preserved unchanged")
+}
+
 func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
 	doc := docWithSchemas(openapi3.Schemas{
 		"Asset": &openapi3.SchemaRef{Value: &openapi3.Schema{

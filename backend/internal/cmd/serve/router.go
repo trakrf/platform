@@ -190,7 +190,7 @@ func setupRouter(
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/tags/{tagSurrogateId}", locationsHandler.RemoveTag)
 
 		// Inventory (scan writes)
-		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)
+		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/scans", inventoryHandler.Save)
 	})
 
 	// TRA-396 internal-only surrogate paths — session auth only, for frontend convenience.

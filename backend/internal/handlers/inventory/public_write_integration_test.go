@@ -80,7 +80,7 @@ func buildInventoryPublicWriteRouter(store *storage.Storage) *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.WriteAudit)
-		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", handler.Save)
+		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/scans", handler.Save)
 	})
 	return r
 }
@@ -108,7 +108,7 @@ func TestInventorySave_APIKey_HappyPath(t *testing.T) {
 	r := buildInventoryPublicWriteRouter(store)
 
 	body := fmt.Sprintf(`{"location_identifier":%q,"asset_identifiers":[%q]}`, loc.Identifier, asset.Identifier)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -151,7 +151,7 @@ func TestInventorySave_APIKey_MultiAsset_HappyPath(t *testing.T) {
 		`{"location_identifier":%q,"asset_identifiers":[%q,%q]}`,
 		loc.Identifier, asset1.Identifier, asset2.Identifier,
 	)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -181,7 +181,7 @@ func TestInventorySave_EmptyAssetIdentifiers_Returns400(t *testing.T) {
 
 	r := buildInventoryPublicWriteRouter(store)
 	body := `{"location_identifier":"any-wh","asset_identifiers":[]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestInventorySave_LegacyShape_Returns400(t *testing.T) {
 	r := buildInventoryPublicWriteRouter(store)
 	// Pre-TRA-533 shape — must be rejected post-AC2.
 	body := `{"location_id":1,"asset_ids":[1]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -221,7 +221,7 @@ func TestInventorySave_WrongScope_Returns403(t *testing.T) {
 	_, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:read"})
 
 	r := buildInventoryPublicWriteRouter(store)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans",
 		bytes.NewBufferString(`{"location_identifier":"any","asset_identifiers":["any"]}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -231,7 +231,7 @@ func TestInventorySave_WrongScope_Returns403(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 }
 
-// TRA-426: session-auth regression coverage for POST /inventory/save.
+// TRA-426: session-auth regression coverage for POST /scans.
 // TRA-397 moved this route under EitherAuth but the session-auth path
 // (session JWT, not API key) was never exercised at the HTTP boundary.
 // Keep this as a permanent regression guard.
@@ -261,7 +261,7 @@ func TestInventorySave_SessionAuth_HappyPath(t *testing.T) {
 	r := buildInventoryPublicWriteRouter(store)
 
 	body := fmt.Sprintf(`{"location_identifier":%q,"asset_identifiers":[%q]}`, loc.Identifier, asset.Identifier)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+sessToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -302,7 +302,7 @@ func TestInventorySave_CrossOrg_Returns400(t *testing.T) {
 
 	r := buildInventoryPublicWriteRouter(store)
 	body := fmt.Sprintf(`{"location_identifier":%q,"asset_identifiers":[%q]}`, loc.Identifier, asset.Identifier)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+tokenB)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -332,7 +332,7 @@ func TestInventorySave_APIKey_LocationIdentifierNotFound(t *testing.T) {
 
 	r := buildInventoryPublicWriteRouter(store)
 	body := `{"location_identifier":"ghost-wh","asset_identifiers":["tra448-asset-2"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -357,7 +357,7 @@ func TestInventorySave_APIKey_AssetIdentifierNotFound(t *testing.T) {
 
 	r := buildInventoryPublicWriteRouter(store)
 	body := `{"location_identifier":"tra448-wh-2","asset_identifiers":["ghost-asset"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/scans", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

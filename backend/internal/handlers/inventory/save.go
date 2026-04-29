@@ -43,7 +43,7 @@ func NewHandler(storage InventoryStorage) *Handler {
 	}
 }
 
-// SaveRequest is the request body for POST /api/v1/inventory/save.
+// SaveRequest is the request body for POST /api/v1/scans.
 //
 // Both fields are required; the public surface has a single canonical shape
 // (TRA-533). Use natural identifiers — surrogate IDs were removed to collapse
@@ -53,12 +53,12 @@ type SaveRequest struct {
 	AssetIdentifiers   []string `json:"asset_identifiers" validate:"required,min=1,dive,min=1,max=255" example:"ASSET-0001"`
 }
 
-// SaveResponse is the typed envelope returned on success by POST /api/v1/inventory/save.
+// SaveResponse is the typed envelope returned on success by POST /api/v1/scans.
 type SaveResponse struct {
 	Data storage.SaveInventoryResult `json:"data"`
 }
 
-// Save handles POST /api/v1/inventory/save
+// Save handles POST /api/v1/scans
 // @Summary Save inventory scans
 // @Description Persist scanned RFID assets to the asset_scans hypertable
 // @Tags inventory,public
@@ -74,7 +74,7 @@ type SaveResponse struct {
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security APIKey[scans:write]
-// @Router /api/v1/inventory/save [post]
+// @Router /api/v1/scans [post]
 func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -173,7 +173,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})
 }
 
-// RegisterRoutes is intentionally empty — POST /api/v1/inventory/save is
+// RegisterRoutes is intentionally empty — POST /api/v1/scans is
 // registered in internal/cmd/serve/router.go under the public write group
 // (EitherAuth + WriteAudit + RequireScope("scans:write")).
 func (h *Handler) RegisterRoutes(r chi.Router) {}

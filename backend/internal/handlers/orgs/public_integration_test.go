@@ -58,9 +58,9 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	data, ok := body["data"].(map[string]any)
 	require.True(t, ok, "expected top-level `data` object, got %s", w.Body.String())
-	assert.Equal(t, float64(orgID), data["id"])
+	assert.Equal(t, float64(orgID), data["surrogate_id"])
 	assert.Equal(t, "Test Organization", data["name"])
-	assert.NotContains(t, body, "id", "bare-object shape must be gone")
+	assert.NotContains(t, body, "surrogate_id", "bare-object shape must be gone")
 	assert.NotContains(t, body, "name", "bare-object shape must be gone")
 }
 

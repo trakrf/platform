@@ -12,8 +12,8 @@ import (
 // Customer-facing: just the fields integrators need to confirm the key is
 // bound to the right org.
 type OrgMeView struct {
-	ID   int    `json:"id"   example:"42"`
-	Name string `json:"name" example:"Acme Logistics"`
+	SurrogateID int    `json:"surrogate_id" example:"42"`
+	Name        string `json:"name"         example:"Acme Logistics"`
 }
 
 // GetOrgMeResponse is the typed envelope returned by GET /api/v1/orgs/me.
@@ -57,8 +57,8 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
-			"id":   org.ID,
-			"name": org.Name,
+			"surrogate_id": org.ID,
+			"name":         org.Name,
 		},
 	})
 }
