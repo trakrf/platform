@@ -38,18 +38,18 @@ type CreateAPIKeyRequest struct {
 
 // APIKeyCreateResponse is returned ONCE from POST; Key is the full JWT.
 type APIKeyCreateResponse struct {
-	Key       string     `json:"key"`
-	ID        int        `json:"id"`
-	JTI       string     `json:"jti"`
-	Name      string     `json:"name"`
-	Scopes    []string   `json:"scopes"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	Key         string     `json:"key"`
+	SurrogateID int        `json:"surrogate_id"`
+	JTI         string     `json:"jti"`
+	Name        string     `json:"name"`
+	Scopes      []string   `json:"scopes"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
 // APIKeyListItem is what GET returns — never includes the JWT.
 type APIKeyListItem struct {
-	ID             int        `json:"id"`
+	SurrogateID    int        `json:"surrogate_id"`
 	JTI            string     `json:"jti"`
 	Name           string     `json:"name"`
 	Scopes         []string   `json:"scopes"`

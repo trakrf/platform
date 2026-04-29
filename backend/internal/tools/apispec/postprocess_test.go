@@ -199,12 +199,6 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 				"last_used_at":      stringProp("date-time"),
 			},
 		}},
-		"apikey.APIKeyCreateResponse": &openapi3.SchemaRef{Value: &openapi3.Schema{
-			Type: &openapi3.Types{openapi3.TypeObject},
-			Properties: openapi3.Schemas{
-				"expires_at": stringProp("date-time"),
-			},
-		}},
 		"report.PublicAssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
@@ -222,9 +216,7 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		{"asset.PublicAssetView", "current_location_identifier"},
 		{"asset.PublicAssetView", "valid_to"},
 		{"apikey.APIKeyListItem", "created_by_key_id"},
-		{"apikey.APIKeyListItem", "expires_at"},
 		{"apikey.APIKeyListItem", "last_used_at"},
-		{"apikey.APIKeyCreateResponse", "expires_at"},
 		{"report.PublicAssetHistoryItem", "duration_seconds"},
 	}
 	for _, tc := range cases {
@@ -239,6 +231,10 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 	assert.False(t,
 		doc.Components.Schemas["report.PublicAssetHistoryItem"].Value.Properties["timestamp"].Value.Nullable,
 		"timestamp is not nullable")
+	// expires_at is omit-when-unset (omitempty), not nullable — must not be marked nullable
+	assert.False(t,
+		doc.Components.Schemas["apikey.APIKeyListItem"].Value.Properties["expires_at"].Value.Nullable,
+		"apikey expires_at is omit-when-unset, not nullable")
 }
 
 func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {

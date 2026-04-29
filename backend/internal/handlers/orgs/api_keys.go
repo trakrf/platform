@@ -132,13 +132,13 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := apikey.APIKeyCreateResponse{
-		Key:       signed,
-		ID:        key.ID,
-		JTI:       key.JTI,
-		Name:      key.Name,
-		Scopes:    key.Scopes,
-		CreatedAt: key.CreatedAt,
-		ExpiresAt: key.ExpiresAt,
+		Key:         signed,
+		SurrogateID: key.ID,
+		JTI:         key.JTI,
+		Name:        key.Name,
+		Scopes:      key.Scopes,
+		CreatedAt:   key.CreatedAt,
+		ExpiresAt:   key.ExpiresAt,
 	}
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": resp})
 }
@@ -192,7 +192,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	items := make([]apikey.APIKeyListItem, 0, len(keys))
 	for _, k := range keys {
 		items = append(items, apikey.APIKeyListItem{
-			ID:             k.ID,
+			SurrogateID:    k.ID,
 			JTI:            k.JTI,
 			Name:           k.Name,
 			Scopes:         k.Scopes,
