@@ -21,19 +21,17 @@ describe('lookupApi', () => {
     it('should call GET /lookup/tag with type and value params', async () => {
       const mockAsset: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'LAPTOP-001',
         name: 'Dell XPS 15',
-        type: 'device',
+        asset_type: 'item',
         description: 'Dev laptop',
-        current_location_id: null,
         valid_from: '2024-01-15',
         valid_to: null,
         metadata: {},
         is_active: true,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
-        deleted_at: null,
         tags: [],
       };
 
@@ -57,19 +55,17 @@ describe('lookupApi', () => {
     it('should return lookup result with asset', async () => {
       const mockAsset: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'LAPTOP-001',
         name: 'Dell XPS 15',
-        type: 'device',
+        asset_type: 'item',
         description: 'Dev laptop',
-        current_location_id: null,
         valid_from: '2024-01-15',
         valid_to: null,
         metadata: {},
         is_active: true,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
-        deleted_at: null,
         tags: [],
       };
 
@@ -93,7 +89,7 @@ describe('lookupApi', () => {
     it('should return lookup result with location', async () => {
       const mockLocation: Location = {
         id: 10,
-        org_id: 1,
+        surrogate_id: 10,
         identifier: 'ZONE-A',
         name: 'Zone A',
         description: 'Warehouse Zone A',
@@ -105,7 +101,6 @@ describe('lookupApi', () => {
         is_active: true,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
-        deleted_at: null,
       };
 
       const mockResponse = {
@@ -171,19 +166,17 @@ describe('lookupApi', () => {
     it('should return batch lookup results', async () => {
       const mockAsset: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'LAPTOP-001',
         name: 'Dell XPS 15',
-        type: 'device',
+        asset_type: 'item',
         description: 'Dev laptop',
-        current_location_id: null,
         valid_from: '2024-01-15',
         valid_to: null,
         metadata: {},
         is_active: true,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
-        deleted_at: null,
         tags: [],
       };
 
@@ -228,37 +221,29 @@ describe('lookupApi', () => {
     it('should handle mixed results (some found, some not)', async () => {
       const mockAsset1: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'ASSET-1',
         name: 'Asset 1',
-        type: 'device',
-        description: '',
-        current_location_id: null,
+        asset_type: 'item',
         valid_from: '2024-01-01',
-        valid_to: null,
         metadata: {},
         is_active: true,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
-        deleted_at: null,
         tags: [],
       };
 
       const mockAsset2: Asset = {
         id: 2,
-        org_id: 1,
+        surrogate_id: 2,
         identifier: 'ASSET-2',
         name: 'Asset 2',
-        type: 'device',
-        description: '',
-        current_location_id: null,
+        asset_type: 'item',
         valid_from: '2024-01-01',
-        valid_to: null,
         metadata: {},
         is_active: true,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
-        deleted_at: null,
         tags: [],
       };
 

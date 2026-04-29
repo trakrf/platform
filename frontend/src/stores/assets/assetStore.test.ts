@@ -9,26 +9,27 @@ describe('AssetStore - Cache Operations', () => {
 
   const mockAsset: Asset = {
     id: 1,
-    org_id: 100,
+    surrogate_id: 1,
     identifier: 'LAP-001',
     name: 'Test Laptop',
-    type: 'device',
-    description: 'Test device',
+    asset_type: 'item',
+    description: 'Test item',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     metadata: {},
     is_active: true,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    deleted_at: null,
+    tags: [],
   };
 
   const mockAsset2: Asset = {
     ...mockAsset,
     id: 2,
+    surrogate_id: 2,
     identifier: 'LAP-002',
     name: 'Test Laptop 2',
-    type: 'person',
+    asset_type: 'person',
     is_active: false,
   };
 
@@ -65,11 +66,11 @@ describe('AssetStore - Cache Operations', () => {
     const { addAsset, updateCachedAsset, getAssetsByType } = useAssetStore.getState();
 
     addAsset(mockAsset);
-    expect(getAssetsByType('device')).toHaveLength(1);
+    expect(getAssetsByType('item')).toHaveLength(1);
 
-    updateCachedAsset(mockAsset.id, { type: 'person' as AssetType });
+    updateCachedAsset(mockAsset.id, { asset_type: 'person' as AssetType });
 
-    expect(getAssetsByType('device')).toHaveLength(0);
+    expect(getAssetsByType('item')).toHaveLength(0);
     expect(getAssetsByType('person')).toHaveLength(1);
   });
 
@@ -100,7 +101,7 @@ describe('AssetStore - Cache Operations', () => {
 
     expect(getAssetById(mockAsset.id)).toBeUndefined();
     expect(getAssetByIdentifier(mockAsset.identifier)).toBeUndefined();
-    expect(getAssetsByType(mockAsset.type)).toHaveLength(0);
+    expect(getAssetsByType(mockAsset.asset_type)).toHaveLength(0);
     expect(getActiveAssets()).toHaveLength(0);
     expect(cache.allIds).not.toContain(mockAsset.id);
   });
@@ -127,25 +128,25 @@ describe('AssetStore - Cache Queries', () => {
   const mockAssets: Asset[] = [
     {
       id: 1,
-      org_id: 100,
+      surrogate_id: 1,
       identifier: 'LAP-001',
       name: 'Laptop Alpha',
-      type: 'device',
-      description: 'Device 1',
+      asset_type: 'item',
+      description: 'Item 1',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
     {
       id: 2,
-      org_id: 100,
+      surrogate_id: 2,
       identifier: 'PER-001',
       name: 'Person Beta',
-      type: 'person',
+      asset_type: 'person',
       description: 'Person 1',
       valid_from: '2024-01-02T00:00:00Z',
       valid_to: null,
@@ -153,22 +154,22 @@ describe('AssetStore - Cache Queries', () => {
       is_active: false,
       created_at: '2024-01-02T00:00:00Z',
       updated_at: '2024-01-02T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
     {
       id: 3,
-      org_id: 100,
+      surrogate_id: 3,
       identifier: 'LAP-002',
       name: 'Laptop Gamma',
-      type: 'device',
-      description: 'Device 2',
+      asset_type: 'item',
+      description: 'Item 2',
       valid_from: '2024-01-03T00:00:00Z',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-01-03T00:00:00Z',
       updated_at: '2024-01-03T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
   ];
 
@@ -195,9 +196,9 @@ describe('AssetStore - Cache Queries', () => {
 
     addAssets(mockAssets);
 
-    const devices = getAssetsByType('device');
-    expect(devices).toHaveLength(2);
-    expect(devices.every((a) => a.type === 'device')).toBe(true);
+    const items = getAssetsByType('item');
+    expect(items).toHaveLength(2);
+    expect(items.every((a) => a.asset_type === 'item')).toBe(true);
   });
 
   it('should get active assets only', () => {
@@ -214,11 +215,11 @@ describe('AssetStore - Cache Queries', () => {
     const { addAssets, setFilters, getFilteredAssets } = useAssetStore.getState();
 
     addAssets(mockAssets);
-    setFilters({ type: 'device' });
+    setFilters({ asset_type: 'item' });
 
     const filtered = getFilteredAssets();
     expect(filtered).toHaveLength(2);
-    expect(filtered.every((a) => a.type === 'device')).toBe(true);
+    expect(filtered.every((a) => a.asset_type === 'item')).toBe(true);
   });
 
   it('should get paginated assets', () => {
@@ -235,7 +236,7 @@ describe('AssetStore - Cache Queries', () => {
 describe('AssetStore - UI State', () => {
   beforeEach(() => {
     useAssetStore.setState({
-      filters: { type: 'all', is_active: 'all', search: '' },
+      filters: { asset_type: 'all', is_active: 'all', search: '' },
       pagination: { currentPage: 1, pageSize: 25, totalCount: 0, totalPages: 0 },
       sort: { field: 'created_at', direction: 'desc' },
       selectedAssetId: null,
@@ -245,10 +246,10 @@ describe('AssetStore - UI State', () => {
   it('should update filters partially', () => {
     const { setFilters } = useAssetStore.getState();
 
-    setFilters({ type: 'device' });
+    setFilters({ asset_type: 'item' });
 
     const updated = useAssetStore.getState().filters;
-    expect(updated.type).toBe('device');
+    expect(updated.asset_type).toBe('item');
     expect(updated.is_active).toBe('all');
   });
 
@@ -294,18 +295,18 @@ describe('AssetStore - UI State', () => {
   it('should get selected asset from cache', () => {
     const mockAsset: Asset = {
       id: 1,
-      org_id: 100,
+      surrogate_id: 1,
       identifier: 'LAP-001',
       name: 'Test Laptop',
-      type: 'device',
-      description: 'Test device',
+      asset_type: 'item',
+      description: 'Test item',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     };
 
     const { addAsset, selectAsset, getSelectedAsset } = useAssetStore.getState();
@@ -327,18 +328,18 @@ describe('AssetStore - LocalStorage Persistence', () => {
   it('should serialize cache to LocalStorage', () => {
     const mockAsset: Asset = {
       id: 1,
-      org_id: 100,
+      surrogate_id: 1,
       identifier: 'LAP-001',
       name: 'Test Laptop',
-      type: 'device',
-      description: 'Test device',
+      asset_type: 'item',
+      description: 'Test item',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     };
 
     useAssetStore.getState().addAsset(mockAsset);
@@ -357,7 +358,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
     const mockCache = {
       byId: [[1, { id: 1, name: 'Test' }]],
       byIdentifier: [['TEST-001', { id: 1, name: 'Test' }]],
-      byType: [['device', [1]]],
+      byType: [['item', [1]]],
       activeIds: [1],
       allIds: [1],
       lastFetched: Date.now(),
@@ -367,7 +368,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
     const stored = {
       state: {
         cache: mockCache,
-        filters: { type: 'all', is_active: 'all', search: '' },
+        filters: { asset_type: 'all', is_active: 'all', search: '' },
         pagination: { currentPage: 1, pageSize: 25, totalCount: 0, totalPages: 0 },
         sort: { field: 'created_at', direction: 'desc' },
       },
@@ -389,18 +390,18 @@ describe('AssetStore - LocalStorage Persistence', () => {
     // Test that fresh cache is not expired
     const mockAsset: Asset = {
       id: 1,
-      org_id: 100,
+      surrogate_id: 1,
       identifier: 'LAP-001',
       name: 'Test Laptop',
-      type: 'device',
-      description: 'Test device',
+      asset_type: 'item',
+      description: 'Test item',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     };
 
     useAssetStore.getState().addAsset(mockAsset);
@@ -421,7 +422,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
   it('should persist filters, pagination, sort', () => {
     const { setFilters, setSort, setPageSize } = useAssetStore.getState();
 
-    setFilters({ type: 'device' });
+    setFilters({ asset_type: 'item' });
     setSort('name', 'asc');
     setPageSize(50);
 
@@ -431,7 +432,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
 
     if (stored) {
       const parsed = JSON.parse(stored);
-      expect(parsed.state.filters.type).toBe('device');
+      expect(parsed.state.filters.asset_type).toBe('item');
       expect(parsed.state.sort.field).toBe('name');
       expect(parsed.state.pagination.pageSize).toBe(50);
     }

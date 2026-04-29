@@ -23,7 +23,7 @@ const apiLocation = {
   identifier: 'usa',
   name: 'United States',
   description: 'Main country location',
-  parent: null,
+  parent_location_identifier: null,
   path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',

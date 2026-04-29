@@ -20,18 +20,18 @@ vi.mock('@/stores/orgStore', () => ({
 
 const mockAsset: Asset = {
   id: 1,
-  org_id: 100,
+  surrogate_id: 1,
   identifier: 'LAP-001',
   name: 'Test Laptop',
-  type: 'device',
-  description: 'Test device',
+  asset_type: 'item',
+  description: 'Test item',
   valid_from: '2024-01-01T00:00:00Z',
   valid_to: null,
   metadata: {},
   is_active: true,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
-  deleted_at: null,
+  tags: [],
 };
 
 const createWrapper = () => {
@@ -51,7 +51,7 @@ describe('useAssets', () => {
 
   it('should fetch and return assets with pagination params', async () => {
     vi.mocked(assetsApi.list).mockResolvedValue({
-      data: { data: [mockAsset], count: 1, offset: 0, total_count: 1 },
+      data: { data: [mockAsset], limit: 1, offset: 0, total_count: 1 },
     } as any);
 
     const { result } = renderHook(() => useAssets(), { wrapper: createWrapper() });

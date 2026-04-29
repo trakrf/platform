@@ -20,10 +20,10 @@ describe('AssetFormModal', () => {
 
   const mockAsset: Asset = {
     id: 1,
-    org_id: 1,
+    surrogate_id: 1,
     identifier: 'LAP-001',
     name: 'Test Laptop',
-    type: 'device',
+    asset_type: 'item',
     description: 'Test description',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
@@ -31,7 +31,7 @@ describe('AssetFormModal', () => {
     is_active: true,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    deleted_at: null,
+    tags: [],
   };
 
   beforeEach(() => {

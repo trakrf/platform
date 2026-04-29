@@ -29,16 +29,14 @@ describe('Asset Types', () => {
   describe('AssetType union', () => {
     it('should accept valid asset types', () => {
       const validTypes: AssetType[] = [
+        'item',
         'person',
-        'device',
-        'asset',
         'inventory',
-        'other',
       ];
 
-      validTypes.forEach((type) => {
-        const asset: Partial<Asset> = { type };
-        expect(asset.type).toBe(type);
+      validTypes.forEach((asset_type) => {
+        const asset: Partial<Asset> = { asset_type };
+        expect(asset.asset_type).toBe(asset_type);
       });
     });
   });
@@ -47,10 +45,10 @@ describe('Asset Types', () => {
     it('should allow valid asset object', () => {
       const asset: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'LAPTOP-001',
         name: 'Dell XPS 15',
-        type: 'device',
+        asset_type: 'item',
         description: 'Development laptop',
         valid_from: '2024-01-15',
         valid_to: '2026-12-31',
@@ -58,10 +56,11 @@ describe('Asset Types', () => {
         is_active: true,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
-        deleted_at: null,
+        tags: [],
       };
 
       expect(asset.identifier).toBe('LAPTOP-001');
+      expect(asset.asset_type).toBe('item');
     });
 
     it('should allow null valid_to', () => {
@@ -78,10 +77,7 @@ describe('Asset Types', () => {
       const request: CreateAssetRequest = {
         identifier: 'TEST-001',
         name: 'Test Asset',
-        type: 'device',
-        valid_from: '2024-01-01',
-        valid_to: '2025-01-01',
-        is_active: true,
+        asset_type: 'item',
       };
 
       expect(request.identifier).toBe('TEST-001');
@@ -91,10 +87,7 @@ describe('Asset Types', () => {
       const request: CreateAssetRequest = {
         identifier: 'TEST-001',
         name: 'Test Asset',
-        type: 'device',
-        valid_from: '2024-01-01',
-        valid_to: '2025-01-01',
-        is_active: true,
+        asset_type: 'item',
         description: 'Optional description',
         metadata: { key: 'value' },
       };

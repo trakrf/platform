@@ -13,83 +13,75 @@ describe('Filters', () => {
   const mockAssets: Asset[] = [
     {
       id: 1,
-      org_id: 1,
+      surrogate_id: 1,
       identifier: 'LAP-001',
       name: 'Dell Laptop',
-      type: 'device',
+      asset_type: 'item',
       description: 'Work laptop for software development',
-      current_location_id: null,
       valid_from: '2024-01-01',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
       tags: [
-        { id: 1, type: 'rfid', value: 'E200000000010018', is_active: true },
+        { surrogate_id: 1, tag_type: 'rfid', value: 'E200000000010018', is_active: true },
       ],
     },
     {
       id: 2,
-      org_id: 1,
+      surrogate_id: 2,
       identifier: 'PER-001',
       name: 'John Doe',
-      type: 'person',
+      asset_type: 'person',
       description: 'Senior engineer in platform team',
-      current_location_id: null,
       valid_from: '2024-01-15',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-01-15T00:00:00Z',
       updated_at: '2024-01-15T00:00:00Z',
-      deleted_at: null,
       tags: [
-        { id: 2, type: 'rfid', value: 'ABC12345678', is_active: true },
+        { surrogate_id: 2, tag_type: 'rfid', value: 'ABC12345678', is_active: true },
       ],
     },
     {
       id: 3,
-      org_id: 1,
+      surrogate_id: 3,
       identifier: 'LAP-002',
       name: 'HP Laptop',
-      type: 'device',
+      asset_type: 'item',
       description: 'Backup device for presentations',
-      current_location_id: null,
       valid_from: '2024-02-01',
       valid_to: null,
       metadata: {},
       is_active: false,
       created_at: '2024-02-01T00:00:00Z',
       updated_at: '2024-02-01T00:00:00Z',
-      deleted_at: null,
       tags: [],
     },
     {
       id: 4,
-      org_id: 1,
+      surrogate_id: 4,
       identifier: 'A1B2C3D4',
-      name: 'Test Device',
-      type: 'device',
-      description: 'Device with hex-like identifier',
-      current_location_id: null,
+      name: 'Test Item',
+      asset_type: 'item',
+      description: 'Item with hex-like identifier',
       valid_from: '2024-03-01',
       valid_to: null,
       metadata: {},
       is_active: true,
       created_at: '2024-03-01T00:00:00Z',
       updated_at: '2024-03-01T00:00:00Z',
-      deleted_at: null,
       tags: [],
     },
   ];
 
   describe('filterAssets()', () => {
     it('should filter by type', () => {
-      const result = filterAssets(mockAssets, { type: 'device' });
+      const result = filterAssets(mockAssets, { asset_type: 'item' });
       expect(result).toHaveLength(3); // LAP-001, LAP-002, A1B2C3D4
-      expect(result.every((a) => a.type === 'device')).toBe(true);
+      expect(result.every((a) => a.asset_type === 'item')).toBe(true);
     });
 
     it('should filter by is_active', () => {
@@ -100,7 +92,7 @@ describe('Filters', () => {
 
     it('should filter by both type and is_active', () => {
       const result = filterAssets(mockAssets, {
-        type: 'device',
+        asset_type: 'item',
         is_active: true,
       });
       expect(result).toHaveLength(2); // LAP-001, A1B2C3D4
@@ -108,7 +100,7 @@ describe('Filters', () => {
     });
 
     it('should return all when type is "all"', () => {
-      const result = filterAssets(mockAssets, { type: 'all' });
+      const result = filterAssets(mockAssets, { asset_type: 'all' });
       expect(result).toHaveLength(4);
     });
 
@@ -124,7 +116,7 @@ describe('Filters', () => {
 
     it('should return empty array when no matches', () => {
       const result = filterAssets(mockAssets, {
-        type: 'device',
+        asset_type: 'item',
         is_active: false,
       });
       expect(result).toHaveLength(1);
@@ -162,7 +154,7 @@ describe('Filters', () => {
       expect(result[0].name).toBe('Dell Laptop');
       expect(result[1].name).toBe('HP Laptop');
       expect(result[2].name).toBe('John Doe');
-      expect(result[3].name).toBe('Test Device');
+      expect(result[3].name).toBe('Test Item');
     });
 
     it('should sort by created_at descending', () => {
@@ -238,6 +230,7 @@ describe('Filters', () => {
     const manyAssets: Asset[] = Array.from({ length: 100 }, (_, i) => ({
       ...mockAssets[0],
       id: i + 1,
+      surrogate_id: i + 1,
       identifier: `ASSET-${String(i + 1).padStart(3, '0')}`,
     }));
 

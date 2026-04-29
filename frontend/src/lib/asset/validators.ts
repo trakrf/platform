@@ -45,7 +45,7 @@ export function validateDateRange(
  * @returns true if valid, false if invalid
  *
  * @example
- * validateAssetType('device')     // true
+ * validateAssetType('item')       // true
  * validateAssetType('person')     // true
  * validateAssetType('computer')   // false
  */

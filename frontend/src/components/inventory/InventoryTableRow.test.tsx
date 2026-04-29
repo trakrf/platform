@@ -20,18 +20,18 @@ describe('InventoryTableRow - Asset Actions', () => {
 
   const mockAsset: Asset = {
     id: 1,
-    org_id: 1,
+    surrogate_id: 1,
     identifier: 'TEST-001',
     name: 'Test Asset',
-    type: 'device',
+    asset_type: 'item',
     description: 'Test description',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: '2099-12-31T00:00:00Z',
     is_active: true,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    deleted_at: null,
     metadata: {},
+    tags: [],
   };
 
   beforeEach(() => {

@@ -16,10 +16,10 @@ describe('AssetFilters', () => {
   const mockAssets: Asset[] = [
     {
       id: 1,
-      org_id: 1,
+      surrogate_id: 1,
       identifier: 'DEV-001',
-      name: 'Device 1',
-      type: 'device',
+      name: 'Item 1',
+      asset_type: 'item',
       description: '',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
@@ -27,14 +27,14 @@ describe('AssetFilters', () => {
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
     {
       id: 2,
-      org_id: 1,
+      surrogate_id: 2,
       identifier: 'PER-001',
       name: 'Person 1',
-      type: 'person',
+      asset_type: 'person',
       description: '',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
@@ -42,7 +42,7 @@ describe('AssetFilters', () => {
       is_active: false,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
   ];
 
@@ -50,7 +50,7 @@ describe('AssetFilters', () => {
     vi.clearAllMocks();
     const mockByIdMap = new Map(mockAssets.map((asset) => [asset.id, asset]));
     const mockStore = {
-      filters: { type: 'all', is_active: 'all', search: '' },
+      filters: { asset_type: 'all', is_active: 'all', search: '' },
       setFilters: mockSetFilters,
       cache: { byId: mockByIdMap },
     };
@@ -67,7 +67,7 @@ describe('AssetFilters', () => {
     render(<AssetFilters />);
 
     expect(screen.getByText('Asset Type')).toBeInTheDocument();
-    expect(screen.getByText('Devices')).toBeInTheDocument();
+    expect(screen.getByText('Items')).toBeInTheDocument();
     expect(screen.getByText('People')).toBeInTheDocument();
 
     // Check that counts are rendered (may appear multiple times)
@@ -87,15 +87,15 @@ describe('AssetFilters', () => {
   it('calls setFilters when type checkbox is clicked', () => {
     render(<AssetFilters />);
 
-    const deviceCheckbox = screen.getByLabelText(/Devices/);
-    fireEvent.click(deviceCheckbox);
+    const itemCheckbox = screen.getByLabelText(/Items/);
+    fireEvent.click(itemCheckbox);
 
-    expect(mockSetFilters).toHaveBeenCalledWith({ type: 'device' });
+    expect(mockSetFilters).toHaveBeenCalledWith({ asset_type: 'item' });
   });
 
   it('toggles type filter when clicking same type again', () => {
     const mockStore = {
-      filters: { type: 'device', is_active: 'all', search: '' },
+      filters: { asset_type: 'item', is_active: 'all', search: '' },
       setFilters: mockSetFilters,
       cache: { byId: new Map(mockAssets.map((asset) => [asset.id, asset])) },
     };
@@ -103,10 +103,10 @@ describe('AssetFilters', () => {
 
     render(<AssetFilters />);
 
-    const deviceCheckbox = screen.getByLabelText(/Devices/);
-    fireEvent.click(deviceCheckbox);
+    const itemCheckbox = screen.getByLabelText(/Items/);
+    fireEvent.click(itemCheckbox);
 
-    expect(mockSetFilters).toHaveBeenCalledWith({ type: 'all' });
+    expect(mockSetFilters).toHaveBeenCalledWith({ asset_type: 'all' });
   });
 
   it('calls setFilters when status radio is clicked', () => {
@@ -120,7 +120,7 @@ describe('AssetFilters', () => {
 
   it('shows active filter count badge', () => {
     const mockStore = {
-      filters: { type: 'device', is_active: true, search: 'test' },
+      filters: { asset_type: 'item', is_active: true, search: 'test' },
       setFilters: mockSetFilters,
       cache: { byId: new Map(mockAssets.map((asset) => [asset.id, asset])) },
     };
@@ -133,7 +133,7 @@ describe('AssetFilters', () => {
 
   it('shows clear all button when filters are active', () => {
     const mockStore = {
-      filters: { type: 'device', is_active: 'all', search: '' },
+      filters: { asset_type: 'item', is_active: 'all', search: '' },
       setFilters: mockSetFilters,
       cache: { byId: new Map(mockAssets.map((asset) => [asset.id, asset])) },
     };
@@ -146,7 +146,7 @@ describe('AssetFilters', () => {
 
   it('clears all filters when clear all button is clicked', () => {
     const mockStore = {
-      filters: { type: 'device', is_active: true, search: 'test' },
+      filters: { asset_type: 'item', is_active: true, search: 'test' },
       setFilters: mockSetFilters,
       cache: { byId: new Map(mockAssets.map((asset) => [asset.id, asset])) },
     };
@@ -157,7 +157,7 @@ describe('AssetFilters', () => {
     const clearButton = screen.getByText('Clear All');
     fireEvent.click(clearButton);
 
-    expect(mockSetFilters).toHaveBeenCalledWith({ type: 'all', is_active: 'all', search: '' });
+    expect(mockSetFilters).toHaveBeenCalledWith({ asset_type: 'all', is_active: 'all', search: '' });
   });
 
   it('does not render when isOpen is false', () => {

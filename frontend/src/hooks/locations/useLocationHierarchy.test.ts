@@ -11,7 +11,7 @@ vi.mock('@/lib/api/locations');
 
 const mockRoot: Location = {
   id: 1,
-  org_id: 100,
+  surrogate_id: 1,
   identifier: 'usa',
   name: 'United States',
   description: '',
@@ -28,7 +28,7 @@ const mockRoot: Location = {
 
 const mockChild: Location = {
   id: 2,
-  org_id: 100,
+  surrogate_id: 2,
   identifier: 'california',
   name: 'California',
   description: '',
@@ -45,7 +45,7 @@ const mockChild: Location = {
 
 const mockGrandchild: Location = {
   id: 3,
-  org_id: 100,
+  surrogate_id: 3,
   identifier: 'warehouse1',
   name: 'Warehouse 1',
   description: '',
@@ -177,11 +177,10 @@ describe('useLocationHierarchy', () => {
     // fall back to surrogate_id when id is absent.
     const ancestorRaw = {
       surrogate_id: 42,
-      org_id: 100,
       identifier: 'usa',
       name: 'United States',
       description: '',
-      parent: null,
+      parent_location_identifier: null,
       path: 'usa',
       depth: 1,
       valid_from: '2024-01-01',
@@ -215,11 +214,10 @@ describe('useLocationHierarchy', () => {
   it('should populate byId cache from surrogate_id when API returns descendants without id', async () => {
     const descendantRaw = {
       surrogate_id: 99,
-      org_id: 100,
       identifier: 'california',
       name: 'California',
       description: '',
-      parent: null,
+      parent_location_identifier: null,
       path: 'usa.california',
       depth: 2,
       valid_from: '2024-01-01',

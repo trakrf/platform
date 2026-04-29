@@ -17,7 +17,7 @@ const apiLocation = {
   identifier: 'usa',
   name: 'United States',
   description: '',
-  parent: null,
+  parent_location_identifier: null,
   path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
@@ -113,12 +113,12 @@ describe('useLocationMutations', () => {
       surrogate_id: 2,
       id: 2,
       identifier: 'parent-loc',
-      parent: null,
+      parent_location_identifier: null,
       parent_location_id: null,
     } as Location;
     useLocationStore.getState().addLocation(parentLocation);
 
-    const moved = { ...apiLocation, parent: 'parent-loc', path: 'parent-loc.usa' };
+    const moved = { ...apiLocation, parent_location_identifier: 'parent-loc', path: 'parent-loc.usa' };
     vi.mocked(locationsApi.move).mockResolvedValue({
       data: { data: moved },
     } as any);

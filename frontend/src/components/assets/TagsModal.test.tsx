@@ -22,9 +22,9 @@ vi.mock('react-hot-toast', () => ({
 
 describe('TagsModal', () => {
   const mockTags: Tag[] = [
-    { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
-    { id: 2, type: 'rfid', value: 'TAG-002', is_active: true },
-    { id: 3, type: 'rfid', value: 'TAG-003', is_active: false },
+    { surrogate_id: 1, tag_type: 'rfid', value: 'TAG-001', is_active: true },
+    { surrogate_id: 2, tag_type: 'rfid', value: 'TAG-002', is_active: true },
+    { surrogate_id: 3, tag_type: 'rfid', value: 'TAG-003', is_active: false },
   ];
 
   const defaultProps = {

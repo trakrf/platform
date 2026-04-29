@@ -13,18 +13,18 @@ vi.mock('@/lib/auth/orgContext');
 
 const mockAsset: Asset = {
   id: 1,
-  org_id: 100,
+  surrogate_id: 1,
   identifier: 'LAP-001',
   name: 'Test Laptop',
-  type: 'device',
-  description: 'Test device',
+  asset_type: 'item',
+  description: 'Test item',
   valid_from: '2024-01-01T00:00:00Z',
   valid_to: null,
   metadata: {},
   is_active: true,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
-  deleted_at: null,
+  tags: [],
 };
 
 const createWrapper = () => {
@@ -55,10 +55,7 @@ describe('useAssetMutations', () => {
     const createData: CreateAssetRequest = {
       identifier: 'LAP-001',
       name: 'Test Laptop',
-      type: 'device',
-      valid_from: '2024-01-01',
-      valid_to: '2025-01-01',
-      is_active: true,
+      asset_type: 'item',
     };
 
     await result.current.create(createData);

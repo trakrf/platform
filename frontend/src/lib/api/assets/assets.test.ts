@@ -27,7 +27,7 @@ describe('assetsApi', () => {
     it('should call GET /assets with no params when options empty', async () => {
       const mockResponse: ListAssetsResponse = {
         data: [],
-        count: 0,
+        limit: 0,
         offset: 0,
         total_count: 0,
       };
@@ -42,7 +42,7 @@ describe('assetsApi', () => {
     it('should call GET /assets with limit param', async () => {
       const mockResponse: ListAssetsResponse = {
         data: [],
-        count: 0,
+        limit: 0,
         offset: 0,
         total_count: 0,
       };
@@ -57,7 +57,7 @@ describe('assetsApi', () => {
     it('should call GET /assets with both limit and offset params', async () => {
       const mockResponse: ListAssetsResponse = {
         data: [],
-        count: 0,
+        limit: 0,
         offset: 50,
         total_count: 100,
       };
@@ -72,10 +72,10 @@ describe('assetsApi', () => {
     it('should return list response with assets', async () => {
       const mockAsset: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'LAPTOP-001',
         name: 'Dell XPS 15',
-        type: 'device',
+        asset_type: 'item',
         description: 'Dev laptop',
         valid_from: '2024-01-15',
         valid_to: '2026-12-31',
@@ -83,12 +83,12 @@ describe('assetsApi', () => {
         is_active: true,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
-        deleted_at: null,
+        tags: [],
       };
 
       const mockResponse: ListAssetsResponse = {
         data: [mockAsset],
-        count: 1,
+        limit: 1,
         offset: 0,
         total_count: 1,
       };
@@ -113,10 +113,10 @@ describe('assetsApi', () => {
     it('should call GET /assets/by-id/:id', async () => {
       const mockAsset: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'LAPTOP-001',
         name: 'Dell XPS 15',
-        type: 'device',
+        asset_type: 'item',
         description: 'Dev laptop',
         valid_from: '2024-01-15',
         valid_to: null,
@@ -124,7 +124,7 @@ describe('assetsApi', () => {
         is_active: true,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
-        deleted_at: null,
+        tags: [],
       };
 
       vi.mocked(apiClient.get).mockResolvedValue({ data: { data: mockAsset } });
@@ -149,21 +149,20 @@ describe('assetsApi', () => {
       const requestData = {
         identifier: 'NEW-001',
         name: 'New Asset',
-        type: 'device' as const,
-        valid_from: '2024-01-01',
-        valid_to: '2025-01-01',
-        is_active: true,
+        asset_type: 'item' as const,
       };
 
       const mockAsset: Asset = {
         id: 2,
-        org_id: 1,
+        surrogate_id: 2,
         ...requestData,
         description: '',
+        valid_from: '2024-01-01T00:00:00Z',
         metadata: {},
+        is_active: true,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T10:00:00Z',
-        deleted_at: null,
+        tags: [],
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({
@@ -179,10 +178,6 @@ describe('assetsApi', () => {
       const requestData = {
         identifier: '', // Invalid - empty
         name: 'Test',
-        type: 'device' as const,
-        valid_from: '2024-01-01',
-        valid_to: '2025-01-01',
-        is_active: true,
       };
 
       const mockError = {
@@ -209,10 +204,10 @@ describe('assetsApi', () => {
 
       const mockAsset: Asset = {
         id: 1,
-        org_id: 1,
+        surrogate_id: 1,
         identifier: 'LAPTOP-001',
         name: 'Updated Name',
-        type: 'device',
+        asset_type: 'item',
         description: 'Dev laptop',
         valid_from: '2024-01-15',
         valid_to: null,
@@ -220,7 +215,7 @@ describe('assetsApi', () => {
         is_active: false,
         created_at: '2024-01-15T10:00:00Z',
         updated_at: '2024-01-15T11:00:00Z',
-        deleted_at: null,
+        tags: [],
       };
 
       vi.mocked(apiClient.put).mockResolvedValue({ data: { data: mockAsset } });
@@ -349,32 +344,32 @@ describe('assetsApi', () => {
   describe('addTag()', () => {
     it('should call POST /assets/by-id/:assetId/tags with tag data', async () => {
       const mockResponse = {
-        data: { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
+        data: { surrogate_id: 1, tag_type: 'rfid', value: 'TAG-001', is_active: true },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
 
-      await assetsApi.addTag(1, { type: 'rfid', value: 'TAG-001' });
+      await assetsApi.addTag(1, { tag_type: 'rfid', value: 'TAG-001' });
 
       expect(apiClient.post).toHaveBeenCalledWith('/assets/by-id/1/tags', {
-        type: 'rfid',
+        tag_type: 'rfid',
         value: 'TAG-001',
       });
     });
 
     it('should return the created tag', async () => {
       const mockResponse = {
-        data: { id: 42, type: 'rfid', value: 'NEW-TAG', is_active: true },
+        data: { surrogate_id: 42, tag_type: 'rfid', value: 'NEW-TAG', is_active: true },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
 
       const result = await assetsApi.addTag(5, {
-        type: 'rfid',
+        tag_type: 'rfid',
         value: 'NEW-TAG',
       });
 
-      expect(result.data.data.id).toBe(42);
+      expect(result.data.data.surrogate_id).toBe(42);
       expect(result.data.data.value).toBe('NEW-TAG');
       expect(result.data.data.is_active).toBe(true);
     });
@@ -390,7 +385,7 @@ describe('assetsApi', () => {
       vi.mocked(apiClient.post).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.addTag(1, { type: 'rfid', value: 'DUP-TAG' })
+        assetsApi.addTag(1, { tag_type: 'rfid', value: 'DUP-TAG' })
       ).rejects.toMatchObject(mockError);
     });
 
@@ -405,7 +400,7 @@ describe('assetsApi', () => {
       vi.mocked(apiClient.post).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.addTag(999, { type: 'rfid', value: 'TAG-001' })
+        assetsApi.addTag(999, { tag_type: 'rfid', value: 'TAG-001' })
       ).rejects.toMatchObject(mockError);
     });
   });

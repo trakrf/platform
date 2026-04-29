@@ -42,13 +42,14 @@ describe('Validators', () => {
   describe('validateAssetType()', () => {
     it('should return true for valid asset types', () => {
       expect(validateAssetType('person')).toBe(true);
-      expect(validateAssetType('device')).toBe(true);
-      expect(validateAssetType('asset')).toBe(true);
+      expect(validateAssetType('item')).toBe(true);
       expect(validateAssetType('inventory')).toBe(true);
-      expect(validateAssetType('other')).toBe(true);
     });
 
     it('should return false for invalid asset type', () => {
+      expect(validateAssetType('device')).toBe(false);
+      expect(validateAssetType('asset')).toBe(false);
+      expect(validateAssetType('other')).toBe(false);
       expect(validateAssetType('computer')).toBe(false);
       expect(validateAssetType('machine')).toBe(false);
       expect(validateAssetType('equipment')).toBe(false);

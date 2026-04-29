@@ -17,10 +17,10 @@ describe('AssetsScreen', () => {
   const mockAssets: Asset[] = [
     {
       id: 1,
-      org_id: 1,
+      surrogate_id: 1,
       identifier: 'LAP-001',
       name: 'Laptop 1',
-      type: 'device',
+      asset_type: 'item',
       description: '',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
@@ -28,7 +28,7 @@ describe('AssetsScreen', () => {
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
   ];
 
@@ -48,7 +48,7 @@ describe('AssetsScreen', () => {
     const mockStore = {
       cache: { byId: mockByIdMap },
       getFilteredAssets: vi.fn(() => mockAssets),
-      filters: { type: 'all', is_active: 'all', search: '' },
+      filters: { asset_type: 'all', is_active: 'all', search: '' },
       setFilters: vi.fn(),
       sort: { field: 'identifier', direction: 'asc' as const },
       setSort: vi.fn(),
@@ -90,7 +90,7 @@ describe('AssetsScreen', () => {
     const mockStore = {
       cache: { byId: new Map() },
       getFilteredAssets: vi.fn(() => []),
-      filters: { type: 'all', is_active: 'all', search: '' },
+      filters: { asset_type: 'all', is_active: 'all', search: '' },
       setFilters: vi.fn(),
       sort: { field: 'identifier', direction: 'asc' as const },
       setSort: vi.fn(),
@@ -106,7 +106,7 @@ describe('AssetsScreen', () => {
     const mockStore = {
       cache: { byId: new Map() },
       getFilteredAssets: vi.fn(() => []),
-      filters: { type: 'device', is_active: 'all', search: '' },
+      filters: { asset_type: 'item', is_active: 'all', search: '' },
       setFilters: vi.fn(),
       sort: { field: 'identifier', direction: 'asc' as const },
       setSort: vi.fn(),

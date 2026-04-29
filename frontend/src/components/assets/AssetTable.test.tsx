@@ -16,10 +16,10 @@ describe('AssetTable', () => {
   const mockAssets: Asset[] = [
     {
       id: 1,
-      org_id: 1,
+      surrogate_id: 1,
       identifier: 'LAP-001',
       name: 'Engineering Laptop',
-      type: 'device',
+      asset_type: 'item',
       description: 'Test laptop',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
@@ -27,14 +27,14 @@ describe('AssetTable', () => {
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
     {
       id: 2,
-      org_id: 1,
+      surrogate_id: 2,
       identifier: 'LAP-002',
       name: 'Sales Laptop',
-      type: 'device',
+      asset_type: 'item',
       description: 'Test laptop',
       valid_from: '2024-01-01T00:00:00Z',
       valid_to: null,
@@ -42,7 +42,7 @@ describe('AssetTable', () => {
       is_active: false,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
+      tags: [],
     },
   ];
 
@@ -61,7 +61,7 @@ describe('AssetTable', () => {
         ttl: 60 * 60 * 1000,
       },
       filters: {
-        type: 'all',
+        asset_type: 'all',
         is_active: 'all',
         search: '',
         location_id: 'all',
@@ -112,7 +112,7 @@ describe('AssetTable', () => {
         ttl: 60 * 60 * 1000,
       },
       filters: {
-        type: 'all',
+        asset_type: 'all',
         is_active: 'all',
         search: '',
         location_id: 'all',
@@ -145,7 +145,7 @@ describe('AssetTable', () => {
         ttl: 60 * 60 * 1000,
       },
       filters: {
-        type: 'all',
+        asset_type: 'all',
         is_active: 'all',
         search: '',
         location_id: 'all',
@@ -187,7 +187,7 @@ describe('AssetTable', () => {
         ttl: 60 * 60 * 1000,
       },
       filters: {
-        type: 'all',
+        asset_type: 'all',
         is_active: 'all',
         search: '',
         location_id: 'all',

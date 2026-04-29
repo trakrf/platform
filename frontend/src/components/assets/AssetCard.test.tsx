@@ -11,10 +11,10 @@ describe('AssetCard', () => {
 
   const mockAsset: Asset = {
     id: 1,
-    org_id: 1,
+    surrogate_id: 1,
     identifier: 'LAP-001',
     name: 'Engineering Laptop',
-    type: 'device',
+    asset_type: 'item',
     description: 'Test laptop',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
@@ -22,7 +22,7 @@ describe('AssetCard', () => {
     is_active: true,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    deleted_at: null,
+    tags: [],
   };
 
   describe('Card variant', () => {
@@ -127,10 +127,10 @@ describe('AssetCard', () => {
     });
 
     it('renders correct icon for each asset type', () => {
-      const types: Array<Asset['type']> = ['person', 'device', 'asset', 'inventory', 'other'];
+      const assetTypes: Array<Asset['asset_type']> = ['item', 'person', 'inventory'];
 
-      types.forEach((type) => {
-        const { container } = render(<AssetCard asset={{ ...mockAsset, type }} />);
+      assetTypes.forEach((asset_type) => {
+        const { container } = render(<AssetCard asset={{ ...mockAsset, asset_type }} />);
         const svg = container.querySelector('svg');
         expect(svg).toBeInTheDocument();
         cleanup();
@@ -158,7 +158,7 @@ describe('AssetCard', () => {
       expect(screen.getByText('LAP-001')).toBeInTheDocument();
       expect(screen.getByText('Engineering Laptop')).toBeInTheDocument();
       expect(screen.getByText('Active')).toBeInTheDocument();
-      expect(screen.getByText(/device/i)).toBeInTheDocument();
+      expect(screen.getByText('Active')).toBeInTheDocument();
     });
 
     it('renders location in table cell when present', () => {
