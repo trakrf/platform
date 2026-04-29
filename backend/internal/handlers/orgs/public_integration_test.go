@@ -60,7 +60,8 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	require.True(t, ok, "expected top-level `data` object, got %s", w.Body.String())
 	assert.Equal(t, float64(orgID), data["surrogate_id"])
 	assert.Equal(t, "Test Organization", data["name"])
-	assert.NotContains(t, body, "surrogate_id", "bare-object shape must be gone")
+	assert.NotContains(t, body, "id", "legacy bare-object shape (pre-envelope) must be gone")
+	assert.NotContains(t, body, "surrogate_id", "surrogate_id only lives under data")
 	assert.NotContains(t, body, "name", "bare-object shape must be gone")
 }
 
