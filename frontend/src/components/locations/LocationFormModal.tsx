@@ -51,7 +51,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         for (const tag of validTags) {
           try {
             await locationsApi.addTag(newLocationId, {
-              type: tag.type,
+              tag_type: tag.type,
               value: tag.value,
             });
           } catch (tagErr) {
@@ -93,7 +93,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
         for (const tag of newTags) {
           try {
             await locationsApi.addTag(location.id, {
-              type: tag.type,
+              tag_type: tag.type,
               value: tag.value,
             });
           } catch (tagErr) {

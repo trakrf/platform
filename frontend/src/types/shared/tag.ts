@@ -16,7 +16,7 @@ export type TagType = 'rfid' | 'ble' | 'nfc' | 'barcode';
  */
 export interface Tag {
   id: number;
-  type: TagType;
+  tag_type: TagType;
   value: string;
   is_active: boolean;
 }

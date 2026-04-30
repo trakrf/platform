@@ -42,8 +42,8 @@ const mockAssets: Asset[] = [
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     tags: [
-      { id: 1, type: 'rfid', value: 'E280001234567890', is_active: true },
-      { id: 2, type: 'rfid', value: 'E280001234567891', is_active: true },
+      { id: 1, tag_type: 'rfid', value: 'E280001234567890', is_active: true },
+      { id: 2, tag_type: 'rfid', value: 'E280001234567891', is_active: true },
     ],
   },
   {
@@ -76,7 +76,7 @@ const mockAssets: Asset[] = [
     is_active: true,
     created_at: '2024-02-01T00:00:00Z',
     updated_at: '2024-02-01T00:00:00Z',
-    tags: [{ id: 3, type: 'rfid', value: 'E280009999999999', is_active: true }],
+    tags: [{ id: 3, tag_type: 'rfid', value: 'E280009999999999', is_active: true }],
   },
 ];
 

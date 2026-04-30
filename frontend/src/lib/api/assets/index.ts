@@ -106,8 +106,8 @@ export const assetsApi = {
    * Add a tag to an asset
    * POST /api/v1/assets/by-id/:assetId/tags
    */
-  addTag: (assetId: number, tag: { type: string; value: string }) =>
-    apiClient.post<{ data: { id: number; type: string; value: string; is_active: boolean } }>(
+  addTag: (assetId: number, tag: { tag_type: string; value: string }) =>
+    apiClient.post<{ data: { id: number; tag_type: string; value: string; is_active: boolean } }>(
       `/assets/by-id/${assetId}/tags`,
       tag
     ),

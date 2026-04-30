@@ -349,28 +349,28 @@ describe('assetsApi', () => {
   describe('addTag()', () => {
     it('should call POST /assets/by-id/:assetId/tags with tag data', async () => {
       const mockResponse = {
-        data: { id: 1, type: 'rfid', value: 'TAG-001', is_active: true },
+        data: { id: 1, tag_type: 'rfid', value: 'TAG-001', is_active: true },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
 
-      await assetsApi.addTag(1, { type: 'rfid', value: 'TAG-001' });
+      await assetsApi.addTag(1, { tag_type: 'rfid', value: 'TAG-001' });
 
       expect(apiClient.post).toHaveBeenCalledWith('/assets/by-id/1/tags', {
-        type: 'rfid',
+        tag_type: 'rfid',
         value: 'TAG-001',
       });
     });
 
     it('should return the created tag', async () => {
       const mockResponse = {
-        data: { id: 42, type: 'rfid', value: 'NEW-TAG', is_active: true },
+        data: { id: 42, tag_type: 'rfid', value: 'NEW-TAG', is_active: true },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
 
       const result = await assetsApi.addTag(5, {
-        type: 'rfid',
+        tag_type: 'rfid',
         value: 'NEW-TAG',
       });
 
@@ -390,7 +390,7 @@ describe('assetsApi', () => {
       vi.mocked(apiClient.post).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.addTag(1, { type: 'rfid', value: 'DUP-TAG' })
+        assetsApi.addTag(1, { tag_type: 'rfid', value: 'DUP-TAG' })
       ).rejects.toMatchObject(mockError);
     });
 
@@ -405,7 +405,7 @@ describe('assetsApi', () => {
       vi.mocked(apiClient.post).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.addTag(999, { type: 'rfid', value: 'TAG-001' })
+        assetsApi.addTag(999, { tag_type: 'rfid', value: 'TAG-001' })
       ).rejects.toMatchObject(mockError);
     });
   });
