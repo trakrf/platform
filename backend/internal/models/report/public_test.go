@@ -77,6 +77,20 @@ func TestToPublicAssetHistoryItem_ClosedPeriodEmitsDuration(t *testing.T) {
 	assert.EqualValues(t, 3600, parsed["duration_seconds"])
 }
 
+// TRA-547 §2.3: PublicCurrentLocationItem.asset_deleted_at is omitted for live assets.
+func TestPublicCurrentLocationItem_AssetDeletedAtAbsentWhenNil(t *testing.T) {
+	it := PublicCurrentLocationItem{
+		Asset:    "A1",
+		Location: "L1",
+	}
+	data, err := json.Marshal(it)
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	_, present := parsed["asset_deleted_at"]
+	assert.False(t, present, "asset_deleted_at must be omitted when nil per TRA-547 §2.3")
+}
+
 func TestToPublicCurrentLocationItem_DeletedAsset(t *testing.T) {
 	loc := "BAY-3"
 	deletedAt := time.Date(2026, 4, 20, 14, 0, 0, 0, time.UTC)
