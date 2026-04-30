@@ -35,9 +35,9 @@ type InventoryAccessError struct {
 func (e *InventoryAccessError) Error() string {
 	switch e.Reason {
 	case "location":
-		return fmt.Sprintf("location not found or access denied (org_id=%d, location_id=%d)", e.OrgID, e.LocationID)
+		return "location not found or access denied"
 	case "assets":
-		return fmt.Sprintf("assets not found or access denied (org_id=%d, valid=%d/%d)", e.OrgID, e.ValidCount, e.TotalCount)
+		return fmt.Sprintf("assets not found or access denied (valid=%d/%d)", e.ValidCount, e.TotalCount)
 	default:
 		return "access denied"
 	}

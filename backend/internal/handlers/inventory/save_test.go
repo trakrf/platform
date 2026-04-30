@@ -347,20 +347,18 @@ func TestSave_AccessErrorDetection(t *testing.T) {
 		name            string
 		err             error
 		expectForbidden bool
-		expectOrgInMsg  bool
 	}{
 		{
-			name: "typed location error includes org context",
+			name: "typed location error is forbidden, no surrogate IDs in message",
 			err: &storage.InventoryAccessError{
 				Reason:     "location",
 				OrgID:      123,
 				LocationID: 456,
 			},
 			expectForbidden: true,
-			expectOrgInMsg:  true,
 		},
 		{
-			name: "typed asset error includes org context",
+			name: "typed asset error is forbidden, no surrogate IDs in message",
 			err: &storage.InventoryAccessError{
 				Reason:     "assets",
 				OrgID:      123,
@@ -369,13 +367,11 @@ func TestSave_AccessErrorDetection(t *testing.T) {
 				TotalCount: 3,
 			},
 			expectForbidden: true,
-			expectOrgInMsg:  true,
 		},
 		{
 			name:            "internal error is not forbidden",
 			err:             errors.New("database connection failed"),
 			expectForbidden: false,
-			expectOrgInMsg:  false,
 		},
 	}
 
@@ -384,9 +380,11 @@ func TestSave_AccessErrorDetection(t *testing.T) {
 			errStr := tt.err.Error()
 			isForbidden := strings.Contains(errStr, "not found or access denied")
 			assert.Equal(t, tt.expectForbidden, isForbidden)
-			if tt.expectOrgInMsg {
-				assert.Contains(t, errStr, "org_id=123")
-			}
+			// Sanitize check: InventoryAccessError must not expose integer surrogate IDs.
+			assert.NotContains(t, errStr, "org_id=",
+				"InventoryAccessError.Error() must not leak org_id surrogate")
+			assert.NotContains(t, errStr, "location_id=",
+				"InventoryAccessError.Error() must not leak location_id surrogate")
 		})
 	}
 }

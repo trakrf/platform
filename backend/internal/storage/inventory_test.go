@@ -14,8 +14,11 @@ func TestInventoryErrorTypes(t *testing.T) {
 			LocationID: 456,
 		}
 		assert.Contains(t, err.Error(), "location not found or access denied")
-		assert.Contains(t, err.Error(), "org_id=123")
-		assert.Contains(t, err.Error(), "location_id=456")
+		// Sanitize check: integer surrogate IDs must not appear in Error() output.
+		assert.NotContains(t, err.Error(), "org_id=123",
+			"InventoryAccessError.Error() must not leak org_id surrogate")
+		assert.NotContains(t, err.Error(), "location_id=456",
+			"InventoryAccessError.Error() must not leak location_id surrogate")
 		assert.True(t, err.IsAccessDenied())
 	})
 
@@ -28,7 +31,9 @@ func TestInventoryErrorTypes(t *testing.T) {
 			TotalCount: 3,
 		}
 		assert.Contains(t, err.Error(), "assets not found or access denied")
-		assert.Contains(t, err.Error(), "org_id=123")
+		// Sanitize check: integer surrogate IDs must not appear in Error() output.
+		assert.NotContains(t, err.Error(), "org_id=123",
+			"InventoryAccessError.Error() must not leak org_id surrogate")
 		assert.Contains(t, err.Error(), "valid=2/3")
 		assert.True(t, err.IsAccessDenied())
 	})

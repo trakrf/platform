@@ -60,7 +60,7 @@ type SaveResponse struct {
 // Save handles POST /api/v1/inventory/save
 // @Summary Save inventory scans
 // @Description Persist scanned RFID assets to the asset_scans hypertable
-// @Tags inventory,public
+// @Tags inventory,internal
 // @ID inventory.save
 // @Accept json
 // @Produce json
