@@ -213,6 +213,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-LOC-ABC-123", data["value"])
+	assert.Equal(t, true, data["is_active"])
 }
 
 func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
@@ -418,6 +419,7 @@ func TestLocationsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-TRA407-ADD-1", data["value"])
+	assert.Equal(t, true, data["is_active"])
 }
 
 func TestLocationsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
