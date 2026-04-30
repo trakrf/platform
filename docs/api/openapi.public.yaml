@@ -274,29 +274,6 @@ components:
                     additionalProperties: {}
                     type: object
             type: object
-        inventory.SaveRequest:
-            properties:
-                asset_identifiers:
-                    example:
-                        - ASSET-0001
-                    items:
-                        type: string
-                    minItems: 1
-                    type: array
-                location_identifier:
-                    example: WH-01
-                    maxLength: 255
-                    minLength: 1
-                    type: string
-            required:
-                - asset_identifiers
-                - location_identifier
-            type: object
-        inventory.SaveResponse:
-            properties:
-                data:
-                    $ref: '#/components/schemas/storage.SaveInventoryResult'
-            type: object
         location.CreateLocationWithTagsRequest:
             properties:
                 description:
@@ -618,18 +595,6 @@ components:
                     type: string
             required:
                 - value
-            type: object
-        storage.SaveInventoryResult:
-            properties:
-                count:
-                    type: integer
-                location_id:
-                    type: integer
-                location_name:
-                    type: string
-                timestamp:
-                    format: date-time
-                    type: string
             type: object
     securitySchemes:
         APIKey:
@@ -1251,66 +1216,6 @@ paths:
             summary: Remove a tag from an asset
             tags:
                 - assets
-    /api/v1/inventory/save:
-        post:
-            description: Persist scanned RFID assets to the asset_scans hypertable
-            operationId: inventory.save
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/inventory.SaveRequest'
-                description: Save request with location and asset identifiers
-                required: true
-                x-originalParamName: request
-            responses:
-                "201":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/inventory.SaveResponse'
-                    description: Created
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Invalid request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Location or assets not owned by org
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                    headers:
-                        Retry-After:
-                            description: Seconds to wait before retrying
-                            schema:
-                                type: integer
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Internal server error
-            security:
-                - APIKey:
-                    - scans:write
-            summary: Save inventory scans
-            tags:
-                - inventory
     /api/v1/locations:
         get:
             operationId: locations.list
@@ -2311,6 +2216,8 @@ paths:
             summary: Get the org associated with the authenticated API key
             tags:
                 - orgs
+security:
+    - APIKey: []
 servers:
     - description: Preview (per-PR deploys). Preview-scoped API keys authenticate here only — they will fail with 401 against Production, and Production keys will fail here.
       url: https://app.preview.trakrf.id
