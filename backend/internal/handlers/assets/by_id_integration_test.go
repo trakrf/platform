@@ -265,7 +265,7 @@ func TestAddIdentifierByID_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	body := `{"type":"rfid","value":"EPC-BYID-ADD-1"}`
+	body := `{"tag_type":"rfid","value":"EPC-BYID-ADD-1"}`
 	req := httptest.NewRequest(http.MethodPost,
 		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
@@ -279,7 +279,7 @@ func TestAddIdentifierByID_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-BYID-ADD-1", data["value"])
 }
 
@@ -301,7 +301,7 @@ func TestAddIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	body := `{"type":"rfid","value":"EPC-CROSS"}`
+	body := `{"tag_type":"rfid","value":"EPC-CROSS"}`
 	req := httptest.NewRequest(http.MethodPost,
 		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
@@ -331,7 +331,7 @@ func TestAddIdentifierByID_InvalidBody_Returns400(t *testing.T) {
 	require.NoError(t, err)
 
 	// Missing required value field.
-	body := `{"type":"rfid"}`
+	body := `{"tag_type":"rfid"}`
 	req := httptest.NewRequest(http.MethodPost,
 		"/api/v1/assets/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
@@ -361,7 +361,7 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgID, created.ID, shared.TagIdentifierRequest{
-		Type: "rfid", Value: "EPC-BYID-RM",
+		TagType: "rfid", Value: "EPC-BYID-RM",
 	})
 	require.NoError(t, err)
 
@@ -397,7 +397,7 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
-		Type: "rfid", Value: "EPC-CROSS-RM",
+		TagType: "rfid", Value: "EPC-CROSS-RM",
 	})
 	require.NoError(t, err)
 

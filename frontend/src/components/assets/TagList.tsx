@@ -173,7 +173,7 @@ export function TagRow({ tag, size = 'sm', entityId, entityType, onDelete }: Tag
     <div className={containerClasses}>
       <div className="flex items-center gap-1.5 min-w-0 flex-1">
         <Radio className={iconClasses} />
-        <span className={typeBadgeClasses}>{getTypeLabel(tag.type)}</span>
+        <span className={typeBadgeClasses}>{getTypeLabel(tag.tag_type)}</span>
         <span className={textClasses} title={tag.value}>
           {tag.value}
         </span>

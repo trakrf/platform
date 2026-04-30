@@ -558,6 +558,12 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 	})
 }
 
+// AddTagResponse is the typed envelope returned by POST /api/v1/assets/{identifier}/tags
+// and POST /api/v1/assets/by-id/{id}/tags (TRA-547 §2.4).
+type AddTagResponse struct {
+	Data shared.TagIdentifier `json:"data"`
+}
+
 // @Summary      Add a tag to an asset
 // @Description  Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
 // @Description  The tag must be unique within the organization.
@@ -567,7 +573,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 // @Produce      json
 // @Param        identifier  path  string                         true  "Asset identifier"
 // @Param        request     body  shared.TagIdentifierRequest    true  "Tag to attach"
-// @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
+// @Success      201  {object}  assets.AddTagResponse         "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -631,7 +637,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tag})
+	httputil.WriteJSON(w, http.StatusCreated, AddTagResponse{Data: *tag})
 }
 
 // @Summary      Remove a tag from an asset

@@ -187,7 +187,6 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
 				"current_location": stringProp(""),
-				"valid_to":         stringProp("date-time"),
 				"name":             stringProp(""), // not on the allowlist
 			},
 		}},
@@ -195,14 +194,7 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
 				"created_by_key_id": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
-				"expires_at":        stringProp("date-time"),
 				"last_used_at":      stringProp("date-time"),
-			},
-		}},
-		"apikey.APIKeyCreateResponse": &openapi3.SchemaRef{Value: &openapi3.Schema{
-			Type: &openapi3.Types{openapi3.TypeObject},
-			Properties: openapi3.Schemas{
-				"expires_at": stringProp("date-time"),
 			},
 		}},
 		"report.PublicAssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
@@ -220,11 +212,8 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		field  string
 	}{
 		{"asset.PublicAssetView", "current_location"},
-		{"asset.PublicAssetView", "valid_to"},
 		{"apikey.APIKeyListItem", "created_by_key_id"},
-		{"apikey.APIKeyListItem", "expires_at"},
 		{"apikey.APIKeyListItem", "last_used_at"},
-		{"apikey.APIKeyCreateResponse", "expires_at"},
 		{"report.PublicAssetHistoryItem", "duration_seconds"},
 	}
 	for _, tc := range cases {
@@ -267,6 +256,24 @@ func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
 	}
 	assert.Equal(t, "", props["name"].Value.Format, "non-timestamp fields must stay formatless")
 	assert.Equal(t, "date", props["birth_date"].Value.Format, "pre-existing format must not be overwritten")
+}
+
+func TestInjectTopLevelSecurity_AddsDefaultWhenAbsent(t *testing.T) {
+	doc := &openapi3.T{}
+	injectTopLevelSecurity(doc)
+	require.Len(t, doc.Security, 1)
+	assert.Equal(t, []string{}, doc.Security[0]["APIKey"])
+}
+
+func TestInjectTopLevelSecurity_PreservesExisting(t *testing.T) {
+	doc := &openapi3.T{
+		Security: openapi3.SecurityRequirements{
+			openapi3.SecurityRequirement{"BearerAuth": []string{"read"}},
+		},
+	}
+	injectTopLevelSecurity(doc)
+	require.Len(t, doc.Security, 1)
+	assert.Equal(t, []string{"read"}, doc.Security[0]["BearerAuth"])
 }
 
 func docWithSchemas(schemas openapi3.Schemas) *openapi3.T {

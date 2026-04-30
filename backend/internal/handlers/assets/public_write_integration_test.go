@@ -205,8 +205,8 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	// TagIdentifierRequest.Type accepts only rfid/ble/barcode; use rfid.
-	body := `{"type":"rfid","value":"EPC-ABC-123"}`
+	// TagIdentifierRequest.TagType accepts only rfid/ble/barcode; use rfid.
+	body := `{"tag_type":"rfid","value":"EPC-ABC-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/ident-host/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -219,8 +219,10 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	// §2.4 wire-shape: typed 201 envelope; tag_type (not "type") on wire
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-ABC-123", data["value"])
+	assert.Equal(t, true, data["is_active"])
 }
 
 func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
@@ -238,8 +240,8 @@ func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-HAPPY-1",
+		TagType: "rfid",
+		Value:   "EPC-HAPPY-1",
 	})
 	require.NoError(t, err)
 
@@ -281,8 +283,8 @@ func TestRemoveAssetTag_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgID, owningAsset.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-WRONG-1",
+		TagType: "rfid",
+		Value:   "EPC-WRONG-1",
 	})
 	require.NoError(t, err)
 
@@ -484,8 +486,8 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-407B-REMOVE",
+		TagType: "rfid",
+		Value:   "EPC-407B-REMOVE",
 	})
 	require.NoError(t, err)
 

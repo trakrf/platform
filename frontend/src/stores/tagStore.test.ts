@@ -32,7 +32,7 @@ const createMockLocation = (id: number, name: string, tagEpc?: string): Location
   metadata: {},
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
-  tags: tagEpc ? [{ id: 1, type: 'rfid', value: tagEpc, is_active: true }] : [],
+  tags: tagEpc ? [{ id: 1, tag_type: 'rfid', value: tagEpc, is_active: true }] : [],
 });
 
 describe('TagStore - Leading Zero Trimming', () => {

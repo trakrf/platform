@@ -23,11 +23,16 @@ type SaveInventoryResult struct {
 }
 
 // InventoryAccessError provides diagnostic context for 403 responses.
+//
+// OrgID, LocationID, and AssetIDs are internal-only: used for structured
+// logging in the handler and must never appear in Error() output or be
+// serialised to the wire. The json:"-" tags enforce this at the type
+// level — Error() handles the human-readable side. (TRA-547)
 type InventoryAccessError struct {
 	Reason     string // "location" or "assets"
-	OrgID      int
-	LocationID int
-	AssetIDs   []int
+	OrgID      int    `json:"-"`
+	LocationID int    `json:"-"`
+	AssetIDs   []int  `json:"-"`
 	ValidCount int
 	TotalCount int
 }
@@ -35,9 +40,9 @@ type InventoryAccessError struct {
 func (e *InventoryAccessError) Error() string {
 	switch e.Reason {
 	case "location":
-		return fmt.Sprintf("location not found or access denied (org_id=%d, location_id=%d)", e.OrgID, e.LocationID)
+		return "location not found or access denied"
 	case "assets":
-		return fmt.Sprintf("assets not found or access denied (org_id=%d, valid=%d/%d)", e.OrgID, e.ValidCount, e.TotalCount)
+		return fmt.Sprintf("assets not found or access denied (valid=%d/%d)", e.ValidCount, e.TotalCount)
 	default:
 		return "access denied"
 	}

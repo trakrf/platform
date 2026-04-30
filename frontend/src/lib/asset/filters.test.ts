@@ -27,7 +27,7 @@ describe('Filters', () => {
       updated_at: '2024-01-01T00:00:00Z',
       deleted_at: null,
       tags: [
-        { id: 1, type: 'rfid', value: 'E200000000010018', is_active: true },
+        { id: 1, tag_type: 'rfid', value: 'E200000000010018', is_active: true },
       ],
     },
     {
@@ -46,7 +46,7 @@ describe('Filters', () => {
       updated_at: '2024-01-15T00:00:00Z',
       deleted_at: null,
       tags: [
-        { id: 2, type: 'rfid', value: 'ABC12345678', is_active: true },
+        { id: 2, tag_type: 'rfid', value: 'ABC12345678', is_active: true },
       ],
     },
     {

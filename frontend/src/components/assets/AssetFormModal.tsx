@@ -75,7 +75,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         for (const tag of validTags) {
           try {
             await assetsApi.addTag(newAssetId, {
-              type: tag.type,
+              tag_type: tag.type,
               value: tag.value,
             });
           } catch (tagErr: any) {
@@ -116,7 +116,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         for (const tag of newTags) {
           try {
             await assetsApi.addTag(asset.id, {
-              type: tag.type,
+              tag_type: tag.type,
               value: tag.value,
             });
           } catch (tagErr: any) {

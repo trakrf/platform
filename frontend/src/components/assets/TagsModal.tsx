@@ -112,7 +112,7 @@ export function TagsModal({
                     className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                   >
                     <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 flex-shrink-0">
-                      {TAG_TYPE_LABELS[tag.type] || tag.type.toUpperCase()}
+                      {TAG_TYPE_LABELS[tag.tag_type] || tag.tag_type.toUpperCase()}
                     </span>
                     <span className="flex-1 text-sm font-mono text-gray-900 dark:text-gray-100 truncate min-w-0">
                       {tag.value}

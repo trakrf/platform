@@ -16,6 +16,7 @@ import type {
   DeleteResponse,
   ListLocationsResponse,
 } from '@/types/locations';
+import type { Tag, TagType } from '@/types/shared/tag';
 
 /**
  * Options for listing locations with pagination
@@ -138,11 +139,11 @@ export const locationsApi = {
    * POST /api/v1/locations/by-id/:locationId/tags
    *
    * @param locationId - Location ID to add tag to
-   * @param tag - Tag data (type and value)
+   * @param tag - Tag data (tag_type and value)
    * @returns Promise with created tag
    */
-  addTag: (locationId: number, tag: { type: string; value: string }) =>
-    apiClient.post<{ data: { id: number; type: string; value: string; is_active: boolean } }>(
+  addTag: (locationId: number, tag: { tag_type: TagType; value: string }) =>
+    apiClient.post<{ data: Tag }>(
       `/locations/by-id/${locationId}/tags`,
       tag
     ),

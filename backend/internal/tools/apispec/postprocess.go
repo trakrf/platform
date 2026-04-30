@@ -23,6 +23,7 @@ func postprocessPublic(doc *openapi3.T) {
 	markNullableFields(doc)
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
+	injectTopLevelSecurity(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -79,14 +80,29 @@ func rewriteBearerSchemes(doc *openapi3.T) {
 	}
 }
 
+// injectTopLevelSecurity sets the document-level security requirement to
+// [{APIKey: []}] (TRA-539 §2.6). This declares that every operation
+// requires the APIKey scheme by default, so generated SDK clients
+// authenticate every call automatically. Per-operation security
+// overrides (e.g. security: [] on public or login endpoints) are
+// respected by generators and are not disturbed here — we only set the
+// document-level default if it is currently absent.
+func injectTopLevelSecurity(doc *openapi3.T) {
+	if len(doc.Security) > 0 {
+		return
+	}
+	doc.Security = openapi3.SecurityRequirements{
+		openapi3.SecurityRequirement{"APIKey": []string{}},
+	}
+}
+
 // nullableFields names schema/field pairs whose response payload may be
 // null (or omitted when also non-required). swaggo doesn't emit
 // nullable:true for Go *Type pointers, so we add it here. The list is
 // curated from BB10/BB11 audit findings (TRA-517 AC2, AC9, AC11).
 var nullableFields = map[string][]string{
-	"asset.PublicAssetView":         {"current_location", "valid_to"},
-	"apikey.APIKeyListItem":         {"created_by_key_id", "expires_at", "last_used_at"},
-	"apikey.APIKeyCreateResponse":   {"expires_at"},
+	"asset.PublicAssetView":         {"current_location"},
+	"apikey.APIKeyListItem":         {"created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem": {"duration_seconds"},
 }
 

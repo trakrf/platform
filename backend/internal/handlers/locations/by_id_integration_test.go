@@ -250,7 +250,7 @@ func TestAddLocationIdentifierByID_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	body := `{"type":"rfid","value":"EPC-LOC-BYID-1"}`
+	body := `{"tag_type":"rfid","value":"EPC-LOC-BYID-1"}`
 	req := httptest.NewRequest(http.MethodPost,
 		"/api/v1/locations/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
@@ -264,7 +264,7 @@ func TestAddLocationIdentifierByID_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-LOC-BYID-1", data["value"])
 }
 
@@ -285,7 +285,7 @@ func TestAddLocationIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	body := `{"type":"rfid","value":"EPC-LOC-CROSS"}`
+	body := `{"tag_type":"rfid","value":"EPC-LOC-CROSS"}`
 	req := httptest.NewRequest(http.MethodPost,
 		"/api/v1/locations/by-id/"+strconv.Itoa(created.ID)+"/tags",
 		bytes.NewBufferString(body))
@@ -342,7 +342,7 @@ func TestRemoveLocationTagByID_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToLocation(context.Background(), orgID, created.ID, shared.TagIdentifierRequest{
-		Type: "rfid", Value: "EPC-LOC-RM",
+		TagType: "rfid", Value: "EPC-LOC-RM",
 	})
 	require.NoError(t, err)
 
@@ -377,7 +377,7 @@ func TestRemoveLocationTagByID_CrossOrg_Returns404(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToLocation(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
-		Type: "rfid", Value: "EPC-LOC-CROSS-RM",
+		TagType: "rfid", Value: "EPC-LOC-CROSS-RM",
 	})
 	require.NoError(t, err)
 

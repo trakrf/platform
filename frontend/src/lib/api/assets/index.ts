@@ -8,6 +8,7 @@ import type {
   BulkUploadResponse,
   JobStatusResponse,
 } from '@/types/assets';
+import type { Tag, TagType } from '@/types/shared/tag';
 
 export interface ListAssetsOptions {
   limit?: number;
@@ -106,8 +107,8 @@ export const assetsApi = {
    * Add a tag to an asset
    * POST /api/v1/assets/by-id/:assetId/tags
    */
-  addTag: (assetId: number, tag: { type: string; value: string }) =>
-    apiClient.post<{ data: { id: number; type: string; value: string; is_active: boolean } }>(
+  addTag: (assetId: number, tag: { tag_type: TagType; value: string }) =>
+    apiClient.post<{ data: Tag }>(
       `/assets/by-id/${assetId}/tags`,
       tag
     ),

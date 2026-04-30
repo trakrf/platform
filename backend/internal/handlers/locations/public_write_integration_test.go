@@ -197,8 +197,8 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	// TagIdentifierRequest.Type accepts only rfid/ble/barcode; use rfid.
-	body := `{"type":"rfid","value":"EPC-LOC-ABC-123"}`
+	// TagIdentifierRequest.TagType accepts only rfid/ble/barcode; use rfid.
+	body := `{"tag_type":"rfid","value":"EPC-LOC-ABC-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ident-host-loc/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -211,8 +211,9 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-LOC-ABC-123", data["value"])
+	assert.Equal(t, true, data["is_active"])
 }
 
 func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
@@ -230,8 +231,8 @@ func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-LOC-HAPPY-1",
+		TagType: "rfid",
+		Value:   "EPC-LOC-HAPPY-1",
 	})
 	require.NoError(t, err)
 
@@ -273,8 +274,8 @@ func TestRemoveLocationTag_WrongLocationID_DoesNotDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToLocation(context.Background(), orgID, owningLoc.ID, shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "EPC-LOC-WRONG-1",
+		TagType: "rfid",
+		Value:   "EPC-LOC-WRONG-1",
 	})
 	require.NoError(t, err)
 
@@ -404,7 +405,7 @@ func TestLocationsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.NoError(t, err)
 
 	r := buildLocationsPublicWriteRouter(store)
-	body := `{"type":"rfid","value":"EPC-TRA407-ADD-1"}`
+	body := `{"tag_type":"rfid","value":"EPC-TRA407-ADD-1"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/addident-target/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -416,8 +417,9 @@ func TestLocationsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "rfid", data["type"])
+	assert.Equal(t, "rfid", data["tag_type"])
 	assert.Equal(t, "EPC-TRA407-ADD-1", data["value"])
+	assert.Equal(t, true, data["is_active"])
 }
 
 func TestLocationsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
@@ -429,7 +431,7 @@ func TestLocationsAddIdentifier_UnknownParent_Returns404(t *testing.T) {
 	_, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
 	r := buildLocationsPublicWriteRouter(store)
-	body := `{"type":"rfid","value":"EPC-GHOST"}`
+	body := `{"tag_type":"rfid","value":"EPC-GHOST"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ghost-parent/tags",
 		bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -454,7 +456,7 @@ func TestLocationsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	require.NoError(t, err)
 
 	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
-		Type: "rfid", Value: "EPC-TRA407-REMOVE-1",
+		TagType: "rfid", Value: "EPC-TRA407-REMOVE-1",
 	})
 	require.NoError(t, err)
 

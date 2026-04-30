@@ -756,6 +756,12 @@ func toPublicLocationViews(locs []location.LocationWithParent) []location.Public
 	return views
 }
 
+// AddTagResponse is the typed envelope returned by POST /api/v1/locations/{identifier}/tags
+// and POST /api/v1/locations/by-id/{id}/tags (TRA-547 §2.4).
+type AddTagResponse struct {
+	Data shared.TagIdentifier `json:"data"`
+}
+
 // @Summary      Add a tag to a location
 // @Description  Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.
 // @Description  The tag must be unique within the organization.
@@ -765,7 +771,7 @@ func toPublicLocationViews(locs []location.LocationWithParent) []location.Public
 // @Produce      json
 // @Param        identifier  path  string                         true  "Location identifier"
 // @Param        request     body  shared.TagIdentifierRequest    true  "Tag to attach"
-// @Success      201  {object}  map[string]any                "data: shared.TagIdentifier"
+// @Success      201  {object}  locations.AddTagResponse      "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -829,7 +835,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": tag})
+	httputil.WriteJSON(w, http.StatusCreated, AddTagResponse{Data: *tag})
 }
 
 // @Summary      Remove a tag from a location
