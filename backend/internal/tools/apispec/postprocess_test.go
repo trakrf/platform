@@ -187,7 +187,6 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
 				"current_location": stringProp(""),
-				"valid_to":         stringProp("date-time"),
 				"name":             stringProp(""), // not on the allowlist
 			},
 		}},
@@ -213,7 +212,6 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		field  string
 	}{
 		{"asset.PublicAssetView", "current_location"},
-		{"asset.PublicAssetView", "valid_to"},
 		{"apikey.APIKeyListItem", "created_by_key_id"},
 		{"apikey.APIKeyListItem", "last_used_at"},
 		{"report.PublicAssetHistoryItem", "duration_seconds"},

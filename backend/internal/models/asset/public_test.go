@@ -56,3 +56,37 @@ func TestToPublicAssetView_PopulatedMetadataPreserved(t *testing.T) {
 
 	assert.Equal(t, map[string]any{"color": "red"}, parsed["metadata"])
 }
+
+// TRA-547 §2.2: PublicAssetView.description is omitted when empty.
+func TestPublicAssetView_DescriptionAbsentWhenEmpty(t *testing.T) {
+	v := PublicAssetView{
+		Identifier: "A1",
+		Name:       "n",
+	}
+
+	data, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	_, present := parsed["description"]
+	assert.False(t, present, "description must be omitted when empty per TRA-547 §2.2")
+}
+
+// TRA-547 §2.2: PublicAssetView.valid_to is omitted when nil.
+func TestPublicAssetView_ValidToAbsentWhenNil(t *testing.T) {
+	v := PublicAssetView{
+		Identifier: "A1",
+		Name:       "n",
+	}
+
+	data, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	_, present := parsed["valid_to"]
+	assert.False(t, present, "valid_to must be omitted when nil per TRA-547 §2.2")
+}
