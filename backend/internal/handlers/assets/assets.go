@@ -78,9 +78,6 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// Apply API-consumer defaults for fields the UI always sends explicitly
 	// but API consumers commonly omit. Absence is distinguishable from zero
 	// because these fields are pointer-typed.
-	if request.Type == "" {
-		request.Type = "asset"
-	}
 	if request.IsActive == nil {
 		t := true
 		request.IsActive = &t
@@ -429,7 +426,6 @@ type UpdateAssetResponse struct {
 // @Param offset   query int    false "min 0"    default(0)
 // @Param location query string false "filter by location natural key (may repeat)"
 // @Param is_active query bool  false "filter by active flag"
-// @Param type     query string false "filter by type"
 // @Param q        query string false "substring search (case-insensitive) on name, identifier, description, and active tag values"
 // @Param sort     query string false "comma-separated; prefix '-' for DESC"
 // @Success 200 {object} assets.ListAssetsResponse
@@ -454,7 +450,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"location", "is_active", "type", "q"},
+		Filters:     []string{"location", "is_active", "q"},
 		BoolFilters: []string{"is_active"},
 		Sorts:       []string{"identifier", "name", "created_at", "updated_at"},
 	})
@@ -471,9 +467,6 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	if vs, ok := params.Filters["is_active"]; ok && len(vs) > 0 {
 		b := vs[0] == "true"
 		f.IsActive = &b
-	}
-	if vs, ok := params.Filters["type"]; ok && len(vs) > 0 {
-		f.Type = &vs[0]
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
 		f.Q = &vs[0]

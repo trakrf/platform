@@ -8,29 +8,17 @@ import type {
 import { useLocationStore } from '@/stores/locations/locationStore';
 
 /**
- * Filters assets by type and active status
+ * Filters assets by active status and location
  *
  * @param assets - Array of assets to filter
  * @param filters - Filter criteria
  * @returns Filtered array
- *
- * @example
- * filterAssets(assets, { type: 'device' })
- * filterAssets(assets, { is_active: true })
- * filterAssets(assets, { type: 'person', is_active: false })
  */
 export function filterAssets(
   assets: Asset[],
   filters: AssetFilters
 ): Asset[] {
   return assets.filter((asset) => {
-    // Filter by type
-    if (filters.type && filters.type !== 'all') {
-      if (asset.type !== filters.type) {
-        return false;
-      }
-    }
-
     // Filter by active status
     if (filters.is_active !== undefined && filters.is_active !== 'all') {
       if (asset.is_active !== filters.is_active) {
@@ -85,10 +73,6 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
       case 'name':
         aValue = a.name;
         bValue = b.name;
-        break;
-      case 'type':
-        aValue = a.type;
-        bValue = b.type;
         break;
       case 'valid_from':
         aValue = a.valid_from;

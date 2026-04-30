@@ -109,7 +109,6 @@ func ParseCSVTags(tagsStr string) []string {
 var requiredCSVHeaders = []string{
 	"identifier",
 	"name",
-	"type",
 	"valid_from",
 	"valid_to",
 	"is_active",
@@ -184,14 +183,6 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 		return nil, fmt.Errorf("name cannot be empty")
 	}
 
-	assetType, err := getCol("type")
-	if err != nil {
-		return nil, err
-	}
-	if assetType == "" {
-		return nil, fmt.Errorf("type cannot be empty")
-	}
-
 	validFromStr, err := getCol("valid_from")
 	if err != nil {
 		return nil, err
@@ -235,7 +226,6 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 		OrgID:       orgID,
 		Identifier:  identifier,
 		Name:        name,
-		Type:        assetType,
 		Description: description,
 		ValidFrom:   validFrom,
 		ValidTo:     &validTo,

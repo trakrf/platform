@@ -3,7 +3,6 @@ import type {
   Asset,
   AssetCache,
   AssetFilters,
-  AssetType,
   PaginationState,
   SortState,
 } from '@/types/assets';
@@ -52,7 +51,6 @@ export interface AssetStore {
   // ============ Cache Queries ============
   getAssetById: (id: number) => Asset | undefined;
   getAssetByIdentifier: (identifier: string) => Asset | undefined;
-  getAssetsByType: (type: AssetType) => Asset[];
   getActiveAssets: () => Asset[];
   getFilteredAssets: () => Asset[];
   getPaginatedAssets: () => Asset[];
@@ -80,7 +78,6 @@ export interface AssetStore {
 const initialCache: AssetCache = {
   byId: new Map(),
   byIdentifier: new Map(),
-  byType: new Map(),
   activeIds: new Set(),
   allIds: [],
   lastFetched: 0,
@@ -91,7 +88,6 @@ const initialCache: AssetCache = {
  * Initial filters state
  */
 const initialFilters: AssetFilters = {
-  type: 'all',
   is_active: 'all',
   search: '',
   location_id: 'all',
@@ -151,17 +147,6 @@ export const useAssetStore = create<AssetStore>()(
      */
     getAssetByIdentifier: (identifier) => {
       return get().cache.byIdentifier.get(identifier);
-    },
-
-    /**
-     * Get all assets of a specific type
-     */
-    getAssetsByType: (type) => {
-      const ids = get().cache.byType.get(type) ?? new Set();
-      const { cache } = get();
-      return Array.from(ids)
-        .map((id) => cache.byId.get(id))
-        .filter((asset): asset is Asset => asset !== undefined);
     },
 
     /**

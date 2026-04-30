@@ -212,31 +212,31 @@ func TestValidateCSVHeaders_ValidHeaders(t *testing.T) {
 	}{
 		{
 			name:    "exact order",
-			headers: []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active"},
+			headers: []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "different order",
-			headers: []string{"name", "identifier", "type", "valid_from", "valid_to", "is_active"},
+			headers: []string{"name", "identifier", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "required only (no description)",
-			headers: []string{"identifier", "name", "type", "valid_from", "valid_to", "is_active"},
+			headers: []string{"identifier", "name", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "uppercase headers",
-			headers: []string{"IDENTIFIER", "NAME", "TYPE", "VALID_FROM", "VALID_TO", "IS_ACTIVE"},
+			headers: []string{"IDENTIFIER", "NAME", "VALID_FROM", "VALID_TO", "IS_ACTIVE"},
 		},
 		{
 			name:    "mixed case headers",
-			headers: []string{"Identifier", "Name", "Type", "Valid_From", "Valid_To", "Is_Active"},
+			headers: []string{"Identifier", "Name", "Valid_From", "Valid_To", "Is_Active"},
 		},
 		{
 			name:    "headers with spaces",
-			headers: []string{"  identifier  ", "name", "type", "valid_from", "valid_to", "is_active"},
+			headers: []string{"  identifier  ", "name", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "extra columns (should be ignored)",
-			headers: []string{"identifier", "name", "type", "valid_from", "valid_to", "is_active", "extra_column", "another_column"},
+			headers: []string{"identifier", "name", "valid_from", "valid_to", "is_active", "extra_column", "another_column"},
 		},
 	}
 
@@ -263,12 +263,12 @@ func TestValidateCSVHeaders_InvalidHeaders(t *testing.T) {
 		},
 		{
 			name:          "missing identifier",
-			headers:       []string{"name", "type", "valid_from", "valid_to", "is_active"},
+			headers:       []string{"name", "valid_from", "valid_to", "is_active"},
 			errorContains: "missing required columns: identifier",
 		},
 		{
 			name:          "missing name",
-			headers:       []string{"identifier", "type", "valid_from", "valid_to", "is_active"},
+			headers:       []string{"identifier", "valid_from", "valid_to", "is_active"},
 			errorContains: "missing required columns: name",
 		},
 		{
@@ -299,8 +299,8 @@ func TestValidateCSVHeaders_InvalidHeaders(t *testing.T) {
 }
 
 func TestMapCSVRowToAsset_ValidRow(t *testing.T) {
-	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active"}
-	row := []string{"ASSET-001", "Test Asset", "device", "Test description", "2024-01-01", "2024-12-31", "true"}
+	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active"}
+	row := []string{"ASSET-001", "Test Asset", "Test description", "2024-01-01", "2024-12-31", "true"}
 	orgID := 1
 
 	asset, err := MapCSVRowToAsset(row, headers, orgID)
@@ -313,9 +313,6 @@ func TestMapCSVRowToAsset_ValidRow(t *testing.T) {
 	}
 	if asset.Name != "Test Asset" {
 		t.Errorf("Expected name 'Test Asset', got %s", asset.Name)
-	}
-	if asset.Type != "device" {
-		t.Errorf("Expected type 'device', got %s", asset.Type)
 	}
 	if !asset.IsActive {
 		t.Errorf("Expected is_active true, got false")
@@ -336,13 +333,13 @@ func TestMapCSVRowToAsset_MissingRequired(t *testing.T) {
 	}{
 		{
 			name:    "missing identifier",
-			headers: []string{"name", "type", "valid_from", "valid_to", "is_active"},
-			row:     []string{"Test", "device", "2024-01-01", "2024-12-31", "true"},
+			headers: []string{"name", "valid_from", "valid_to", "is_active"},
+			row:     []string{"Test", "2024-01-01", "2024-12-31", "true"},
 		},
 		{
 			name:    "missing name",
-			headers: []string{"identifier", "type", "valid_from", "valid_to", "is_active"},
-			row:     []string{"ASSET-001", "device", "2024-01-01", "2024-12-31", "true"},
+			headers: []string{"identifier", "valid_from", "valid_to", "is_active"},
+			row:     []string{"ASSET-001", "2024-01-01", "2024-12-31", "true"},
 		},
 	}
 
@@ -357,8 +354,8 @@ func TestMapCSVRowToAsset_MissingRequired(t *testing.T) {
 }
 
 func TestMapCSVRowToAsset_InvalidDates(t *testing.T) {
-	headers := []string{"identifier", "name", "type", "valid_from", "valid_to", "is_active"}
-	row := []string{"ASSET-001", "Test", "device", "2024-12-31", "2024-01-01", "true"}
+	headers := []string{"identifier", "name", "valid_from", "valid_to", "is_active"}
+	row := []string{"ASSET-001", "Test", "2024-12-31", "2024-01-01", "true"}
 
 	_, err := MapCSVRowToAsset(row, headers, 1)
 	if err == nil {
@@ -402,8 +399,8 @@ func TestParseCSVTags(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_WithTags(t *testing.T) {
-	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active", "tags"}
-	row := []string{"ASSET-001", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1,TAG2"}
+	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
+	row := []string{"ASSET-001", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1,TAG2"}
 
 	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
 	if err != nil {
@@ -423,8 +420,8 @@ func TestMapCSVRowToAssetWithTags_WithTags(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_NoTagsColumn(t *testing.T) {
-	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active"}
-	row := []string{"ASSET-001", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true"}
+	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active"}
+	row := []string{"ASSET-001", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true"}
 
 	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
 	if err != nil {
@@ -441,8 +438,8 @@ func TestMapCSVRowToAssetWithTags_NoTagsColumn(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_EmptyTags(t *testing.T) {
-	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active", "tags"}
-	row := []string{"ASSET-001", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true", ""}
+	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
+	row := []string{"ASSET-001", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true", ""}
 
 	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
 	if err != nil {
@@ -455,8 +452,8 @@ func TestMapCSVRowToAssetWithTags_EmptyTags(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_InvalidAssetData(t *testing.T) {
-	headers := []string{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active", "tags"}
-	row := []string{"", "Test Asset", "device", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1"}
+	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
+	row := []string{"", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1"}
 
 	_, err := MapCSVRowToAssetWithTags(row, headers, 1)
 	if err == nil {

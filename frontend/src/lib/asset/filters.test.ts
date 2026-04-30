@@ -16,7 +16,6 @@ describe('Filters', () => {
       org_id: 1,
       identifier: 'LAP-001',
       name: 'Dell Laptop',
-      type: 'device',
       description: 'Work laptop for software development',
       current_location_id: null,
       valid_from: '2024-01-01',
@@ -35,7 +34,6 @@ describe('Filters', () => {
       org_id: 1,
       identifier: 'PER-001',
       name: 'John Doe',
-      type: 'person',
       description: 'Senior engineer in platform team',
       current_location_id: null,
       valid_from: '2024-01-15',
@@ -54,7 +52,6 @@ describe('Filters', () => {
       org_id: 1,
       identifier: 'LAP-002',
       name: 'HP Laptop',
-      type: 'device',
       description: 'Backup device for presentations',
       current_location_id: null,
       valid_from: '2024-02-01',
@@ -71,7 +68,6 @@ describe('Filters', () => {
       org_id: 1,
       identifier: 'A1B2C3D4',
       name: 'Test Device',
-      type: 'device',
       description: 'Device with hex-like identifier',
       current_location_id: null,
       valid_from: '2024-03-01',
@@ -86,30 +82,10 @@ describe('Filters', () => {
   ];
 
   describe('filterAssets()', () => {
-    it('should filter by type', () => {
-      const result = filterAssets(mockAssets, { type: 'device' });
-      expect(result).toHaveLength(3); // LAP-001, LAP-002, A1B2C3D4
-      expect(result.every((a) => a.type === 'device')).toBe(true);
-    });
-
     it('should filter by is_active', () => {
       const result = filterAssets(mockAssets, { is_active: true });
       expect(result).toHaveLength(3); // LAP-001, PER-001, A1B2C3D4
       expect(result.every((a) => a.is_active === true)).toBe(true);
-    });
-
-    it('should filter by both type and is_active', () => {
-      const result = filterAssets(mockAssets, {
-        type: 'device',
-        is_active: true,
-      });
-      expect(result).toHaveLength(2); // LAP-001, A1B2C3D4
-      expect(result.map((r) => r.identifier).sort()).toEqual(['A1B2C3D4', 'LAP-001']);
-    });
-
-    it('should return all when type is "all"', () => {
-      const result = filterAssets(mockAssets, { type: 'all' });
-      expect(result).toHaveLength(4);
     });
 
     it('should return all when is_active is "all"', () => {
@@ -124,7 +100,6 @@ describe('Filters', () => {
 
     it('should return empty array when no matches', () => {
       const result = filterAssets(mockAssets, {
-        type: 'device',
         is_active: false,
       });
       expect(result).toHaveLength(1);

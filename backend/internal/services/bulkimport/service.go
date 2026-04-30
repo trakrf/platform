@@ -230,7 +230,6 @@ func (s *Service) processCSVAsync(
 				OrgID:       pr.asset.OrgID,
 				Identifier:  pr.asset.Identifier,
 				Name:        pr.asset.Name,
-				Type:        pr.asset.Type,
 				Description: pr.asset.Description,
 				ValidFrom:   &validFrom,
 				IsActive:    &isActive,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Pencil, Trash2, User, Laptop, Package, Archive, HelpCircle, MapPin } from 'lucide-react';
+import { Pencil, Trash2, Package, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
@@ -17,14 +17,6 @@ interface AssetCardProps {
   className?: string;
 }
 
-const TYPE_ICONS = {
-  person: User,
-  device: Laptop,
-  asset: Package,
-  inventory: Archive,
-  other: HelpCircle,
-} as const;
-
 export function AssetCard({
   asset,
   onClick,
@@ -34,7 +26,6 @@ export function AssetCard({
   showActions = true,
   className = '',
 }: AssetCardProps) {
-  const TypeIcon = TYPE_ICONS[asset.type] || HelpCircle;
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
   const locationData = asset.current_location ? getLocationByIdentifier(asset.current_location) : null;
   const locationName = locationData?.name ?? asset.current_location ?? undefined;
@@ -215,7 +206,7 @@ export function AssetCard({
       >
         {/* Header: Icon + Identifier */}
         <div className="flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3">
-          <TypeIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-500 dark:text-gray-400 mt-0.5 sm:mt-1 flex-shrink-0" />
+          <Package className="h-5 w-5 sm:h-6 sm:w-6 text-gray-500 dark:text-gray-400 mt-0.5 sm:mt-1 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white truncate">

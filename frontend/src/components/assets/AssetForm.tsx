@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Asset, CreateAssetRequest, UpdateAssetRequest, AssetType, TagInput } from '@/types/assets';
-import { validateDateRange, validateAssetType } from '@/lib/asset/validators';
+import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagInput } from '@/types/assets';
+import { validateDateRange } from '@/lib/asset/validators';
 import { ErrorBanner } from '@/components/shared';
 import { useDeviceStore, useLocationStore } from '@/stores';
 import { useLocations } from '@/hooks/locations';
@@ -32,7 +32,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   const [formData, setFormData] = useState({
     identifier: asset?.identifier || initialIdentifier || '',
     name: asset?.name || '',
-    type: asset?.type || ('asset' as AssetType),
     description: asset?.description || '',
     current_location_id: resolvedLocationId as number | null,
     valid_from: asset?.valid_from?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -88,7 +87,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       setFormData({
         identifier: asset.identifier,
         name: asset.name,
-        type: asset.type,
         description: asset.description,
         current_location_id: asset.current_location
           ? (getLocationByIdentifier(asset.current_location)?.id ?? null)
@@ -221,10 +219,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       errors.name = 'Name must be at least 2 characters';
     }
 
-    if (!validateAssetType(formData.type)) {
-      errors.type = 'Invalid asset type';
-    }
-
     // Date range validation
     const dateError = validateDateRange(formData.valid_from, formData.valid_to || null);
     if (dateError) {
@@ -256,7 +250,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     const data: CreateAssetRequest | UpdateAssetRequest = {
       identifier: formData.identifier,
       name: formData.name,
-      type: formData.type,
       description: formData.description,
       current_location_id: formData.current_location_id,
       valid_from: toRFC3339(formData.valid_from),

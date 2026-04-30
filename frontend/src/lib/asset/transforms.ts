@@ -100,12 +100,6 @@ export function serializeCache(cache: AssetCache): string {
   const serializable = {
     byId: Array.from(cache.byId.entries()),
     byIdentifier: Array.from(cache.byIdentifier.entries()),
-    byType: Object.fromEntries(
-      Array.from(cache.byType.entries()).map(([type, ids]) => [
-        type,
-        Array.from(ids),
-      ])
-    ),
     activeIds: Array.from(cache.activeIds),
     allIds: cache.allIds,
     lastFetched: cache.lastFetched,
@@ -128,7 +122,6 @@ export function deserializeCache(data: string): AssetCache | null {
     if (
       !parsed.byId ||
       !parsed.byIdentifier ||
-      !parsed.byType ||
       !parsed.activeIds ||
       !parsed.allIds
     ) {
@@ -147,12 +140,6 @@ export function deserializeCache(data: string): AssetCache | null {
     return {
       byId: new Map(byIdEntries as [number, import('@/types/assets').Asset][]),
       byIdentifier: new Map(parsed.byIdentifier),
-      byType: new Map(
-        Object.entries(parsed.byType).map(([type, ids]) => [
-          type as import('@/types/assets').AssetType,
-          new Set((ids as number[]).filter((id) => validIds.has(id))),
-        ])
-      ),
       activeIds: new Set(
         (parsed.activeIds as number[]).filter((id) => validIds.has(id))
       ),

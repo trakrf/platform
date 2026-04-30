@@ -16,7 +16,6 @@ describe('deserializeCache() self-heal', () => {
     surrogate_id: 1,
     identifier: 'TEST-001',
     name: 'Test Asset',
-    type: 'asset',
     description: '',
     current_location: null,
     valid_from: '2026-04-21T00:00:00Z',
@@ -37,7 +36,6 @@ describe('deserializeCache() self-heal', () => {
         [1, validAsset],
       ],
       byIdentifier: [['TEST-001', validAsset]],
-      byType: { asset: [1] },
       activeIds: [1],
       allIds: [null, 1],
       lastFetched: Date.now(),
@@ -53,11 +51,10 @@ describe('deserializeCache() self-heal', () => {
     expect(deserialized?.allIds).toEqual([1]);
   });
 
-  it('filters null ids out of byType and activeIds', () => {
+  it('filters null ids out of activeIds', () => {
     const serialized = JSON.stringify({
       byId: [[1, validAsset]],
       byIdentifier: [['TEST-001', validAsset]],
-      byType: { asset: [null, 1] },
       activeIds: [null, 1],
       allIds: [null, 1],
       lastFetched: Date.now(),
@@ -66,7 +63,6 @@ describe('deserializeCache() self-heal', () => {
 
     const deserialized = deserializeCache(serialized);
 
-    expect(deserialized?.byType.get('asset')).toEqual(new Set([1]));
     expect(deserialized?.activeIds).toEqual(new Set([1]));
     expect(deserialized?.allIds).toEqual([1]);
   });
@@ -75,7 +71,6 @@ describe('deserializeCache() self-heal', () => {
     const serialized = JSON.stringify({
       byId: [[1, validAsset]],
       byIdentifier: [['TEST-001', validAsset]],
-      byType: { asset: [1] },
       activeIds: [1],
       allIds: [1],
       lastFetched: 123,

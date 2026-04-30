@@ -13,7 +13,6 @@ type Asset struct {
 	Org               *org.Org   `json:"org"`
 	Identifier        string     `json:"identifier"`
 	Name              string     `json:"name"`
-	Type              string     `json:"type" example:"asset" enums:"asset,person,inventory" extensions:"x-extensible-enum=true"`
 	Description       string     `json:"description"`
 	CurrentLocationID *int       `json:"current_location_id"`
 	ValidFrom         time.Time  `json:"valid_from"`
@@ -29,7 +28,6 @@ type CreateAssetRequest struct {
 	OrgID             int                  `json:"-" swaggerignore:"true"`
 	Identifier        string               `json:"identifier,omitempty" validate:"omitempty,max=255"`
 	Name              string               `json:"name" validate:"required,min=1,max=255"`
-	Type              string               `json:"type,omitempty" validate:"omitempty,oneof=asset person inventory" enums:"asset,person,inventory" example:"asset"`
 	Description       string               `json:"description,omitempty" validate:"omitempty,max=1024"`
 	CurrentLocationID *int                 `json:"current_location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
 	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
@@ -42,7 +40,6 @@ type CreateAssetRequest struct {
 type UpdateAssetRequest struct {
 	Identifier        *string              `json:"identifier" validate:"omitempty,min=1,max=255"`
 	Name              *string              `json:"name" validate:"omitempty,min=1,max=255"`
-	Type              *string              `json:"type,omitempty" validate:"omitempty,oneof=asset person inventory" enums:"asset,person,inventory"`
 	Description       *string              `json:"description" validate:"omitempty,max=1024"`
 	CurrentLocationID *int                 `json:"current_location_id" swaggerignore:"true"`
 	CurrentLocation   *string              `json:"current_location,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
@@ -87,7 +84,6 @@ type AssetWithLocation struct {
 type ListFilter struct {
 	LocationIdentifiers []string // OR semantics when multi-valued
 	IsActive            *bool
-	Type                *string
 	Q                   *string // substring match (case-insensitive) on name, identifier, description, and active identifier values
 	Sorts               []ListSort
 	Limit               int

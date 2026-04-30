@@ -23,18 +23,12 @@ export function createCacheActions(
 
         newCache.byId = new Map(state.cache.byId);
         newCache.byIdentifier = new Map(state.cache.byIdentifier);
-        newCache.byType = new Map(state.cache.byType);
         newCache.activeIds = new Set(state.cache.activeIds);
         newCache.allIds = [...state.cache.allIds];
 
         assets.forEach((asset) => {
           newCache.byId.set(asset.id, asset);
           newCache.byIdentifier.set(asset.identifier, asset);
-
-          const typeSet = newCache.byType.get(asset.type) ?? new Set();
-          const newTypeSet = new Set(typeSet);
-          newTypeSet.add(asset.id);
-          newCache.byType.set(asset.type, newTypeSet);
 
           if (asset.is_active) {
             newCache.activeIds.add(asset.id);
@@ -59,7 +53,6 @@ export function createCacheActions(
 
     /**
      * Update asset in cache
-     * Handles type changes and active status changes
      */
     updateCachedAsset: (id: number, updates: Partial<Asset>) =>
       set((state: any) => {
@@ -73,7 +66,6 @@ export function createCacheActions(
 
         newCache.byId = new Map(state.cache.byId);
         newCache.byIdentifier = new Map(state.cache.byIdentifier);
-        newCache.byType = new Map(state.cache.byType);
         newCache.activeIds = new Set(state.cache.activeIds);
         newCache.allIds = [...state.cache.allIds];
 
@@ -85,24 +77,6 @@ export function createCacheActions(
           newCache.byIdentifier.set(updates.identifier, updated);
         } else {
           newCache.byIdentifier.set(current.identifier, updated);
-        }
-
-        if (updates.type && updates.type !== current.type) {
-          const oldTypeSet = newCache.byType.get(current.type);
-          if (oldTypeSet) {
-            const newOldTypeSet = new Set(oldTypeSet);
-            newOldTypeSet.delete(id);
-            if (newOldTypeSet.size === 0) {
-              newCache.byType.delete(current.type);
-            } else {
-              newCache.byType.set(current.type, newOldTypeSet);
-            }
-          }
-
-          const newTypeSet = newCache.byType.get(updates.type) ?? new Set();
-          const updatedNewTypeSet = new Set(newTypeSet);
-          updatedNewTypeSet.add(id);
-          newCache.byType.set(updates.type, updatedNewTypeSet);
         }
 
         if (updates.is_active !== undefined) {
@@ -132,22 +106,10 @@ export function createCacheActions(
 
         newCache.byId = new Map(state.cache.byId);
         newCache.byIdentifier = new Map(state.cache.byIdentifier);
-        newCache.byType = new Map(state.cache.byType);
         newCache.activeIds = new Set(state.cache.activeIds);
 
         newCache.byId.delete(id);
         newCache.byIdentifier.delete(asset.identifier);
-
-        const typeSet = newCache.byType.get(asset.type);
-        if (typeSet) {
-          const newTypeSet = new Set(typeSet);
-          newTypeSet.delete(id);
-          if (newTypeSet.size === 0) {
-            newCache.byType.delete(asset.type);
-          } else {
-            newCache.byType.set(asset.type, newTypeSet);
-          }
-        }
 
         newCache.activeIds.delete(id);
         newCache.allIds = state.cache.allIds.filter((aid: number) => aid !== id);
@@ -166,14 +128,12 @@ export function createCacheActions(
         cache: {
           byId: new Map(),
           byIdentifier: new Map(),
-          byType: new Map(),
           activeIds: new Set(),
           allIds: [],
           lastFetched: 0,
           ttl: 60 * 60 * 1000,
         },
         filters: {
-          type: 'all',
           is_active: 'all',
           search: '',
           location_id: 'all',
