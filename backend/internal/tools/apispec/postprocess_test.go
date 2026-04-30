@@ -195,14 +195,7 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
 				"created_by_key_id": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
-				"expires_at":        stringProp("date-time"),
 				"last_used_at":      stringProp("date-time"),
-			},
-		}},
-		"apikey.APIKeyCreateResponse": &openapi3.SchemaRef{Value: &openapi3.Schema{
-			Type: &openapi3.Types{openapi3.TypeObject},
-			Properties: openapi3.Schemas{
-				"expires_at": stringProp("date-time"),
 			},
 		}},
 		"report.PublicAssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
@@ -222,9 +215,7 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		{"asset.PublicAssetView", "current_location"},
 		{"asset.PublicAssetView", "valid_to"},
 		{"apikey.APIKeyListItem", "created_by_key_id"},
-		{"apikey.APIKeyListItem", "expires_at"},
 		{"apikey.APIKeyListItem", "last_used_at"},
-		{"apikey.APIKeyCreateResponse", "expires_at"},
 		{"report.PublicAssetHistoryItem", "duration_seconds"},
 	}
 	for _, tc := range cases {
