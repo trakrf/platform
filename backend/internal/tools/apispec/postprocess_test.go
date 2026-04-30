@@ -258,6 +258,24 @@ func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
 	assert.Equal(t, "date", props["birth_date"].Value.Format, "pre-existing format must not be overwritten")
 }
 
+func TestInjectTopLevelSecurity_AddsDefaultWhenAbsent(t *testing.T) {
+	doc := &openapi3.T{}
+	injectTopLevelSecurity(doc)
+	require.Len(t, doc.Security, 1)
+	assert.Equal(t, []string{}, doc.Security[0]["APIKey"])
+}
+
+func TestInjectTopLevelSecurity_PreservesExisting(t *testing.T) {
+	doc := &openapi3.T{
+		Security: openapi3.SecurityRequirements{
+			openapi3.SecurityRequirement{"BearerAuth": []string{"read"}},
+		},
+	}
+	injectTopLevelSecurity(doc)
+	require.Len(t, doc.Security, 1)
+	assert.Equal(t, []string{"read"}, doc.Security[0]["BearerAuth"])
+}
+
 func docWithSchemas(schemas openapi3.Schemas) *openapi3.T {
 	return &openapi3.T{
 		OpenAPI: "3.0.0",

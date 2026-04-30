@@ -23,6 +23,7 @@ func postprocessPublic(doc *openapi3.T) {
 	markNullableFields(doc)
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
+	injectTopLevelSecurity(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -76,6 +77,22 @@ func rewriteBearerSchemes(doc *openapi3.T) {
 			BearerFormat: "JWT",
 			Description:  desc,
 		}
+	}
+}
+
+// injectTopLevelSecurity sets the document-level security requirement to
+// [{APIKey: []}] (TRA-539 §2.6). This declares that every operation
+// requires the APIKey scheme by default, so generated SDK clients
+// authenticate every call automatically. Per-operation security
+// overrides (e.g. security: [] on public or login endpoints) are
+// respected by generators and are not disturbed here — we only set the
+// document-level default if it is currently absent.
+func injectTopLevelSecurity(doc *openapi3.T) {
+	if len(doc.Security) > 0 {
+		return
+	}
+	doc.Security = openapi3.SecurityRequirements{
+		openapi3.SecurityRequirement{"APIKey": []string{}},
 	}
 }
 
