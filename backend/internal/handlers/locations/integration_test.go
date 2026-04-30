@@ -125,7 +125,7 @@ func TestCreateLocationWithTags_DuplicateReturns409(t *testing.T) {
 			IsActive:   &active2,
 		},
 		Tags: []shared.TagIdentifierRequest{
-			{Type: "rfid", Value: "E2000000DEADBEEF"},
+			{TagType: "rfid", Value: "E2000000DEADBEEF"},
 		},
 	})
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 	router := setupTestRouter(handler)
 
 	// Attach an identifier to loc host2 via the handler.
-	body := `{"type":"rfid","value":"TRA-482-LOC-IDENT-DUP"}`
+	body := `{"tag_type":"rfid","value":"TRA-482-LOC-IDENT-DUP"}`
 	reqHost2 := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-host2/tags", bytes.NewBufferString(body))
 	reqHost2.Header.Set("Content-Type", "application/json")
 	reqHost2 = withOrgContext(reqHost2, orgID)
@@ -476,7 +476,7 @@ func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	body := `{"type":"rfid","value":"TRA-482-LOC-REUSE"}`
+	body := `{"tag_type":"rfid","value":"TRA-482-LOC-REUSE"}`
 	reqAdd := httptest.NewRequest(http.MethodPost, "/api/v1/locations/tra482-loc-reuse/tags", bytes.NewBufferString(body))
 	reqAdd.Header.Set("Content-Type", "application/json")
 	reqAdd = withOrgContext(reqAdd, orgID)
@@ -548,7 +548,7 @@ func TestLocationsAddIdentifier_CollidesWithAssetIdentifier_Returns409(t *testin
 	handler := NewHandler(store)
 	router := setupTestRouter(handler)
 
-	body := `{"type":"rfid","value":"TRA-482-CROSS"}`
+	body := `{"tag_type":"rfid","value":"TRA-482-CROSS"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/cross-loc/tags", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withOrgContext(req, orgID)

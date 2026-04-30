@@ -9,7 +9,6 @@
           },
           "expires_at": {
             "format": "date-time",
-            "nullable": true,
             "type": "string"
           },
           "id": {
@@ -48,7 +47,6 @@
           },
           "expires_at": {
             "format": "date-time",
-            "nullable": true,
             "type": "string"
           },
           "id": {
@@ -207,7 +205,6 @@
           },
           "valid_to": {
             "format": "date-time",
-            "nullable": true,
             "type": "string"
           }
         },
@@ -259,6 +256,14 @@
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "assets.AddTagResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/shared.TagIdentifier"
           }
         },
         "type": "object"
@@ -558,6 +563,14 @@
         },
         "type": "object"
       },
+      "locations.AddTagResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/shared.TagIdentifier"
+          }
+        },
+        "type": "object"
+      },
       "locations.CreateLocationResponse": {
         "properties": {
           "data": {
@@ -815,7 +828,7 @@
           "is_active": {
             "type": "boolean"
           },
-          "type": {
+          "tag_type": {
             "enum": [
               "rfid",
               "ble",
@@ -832,14 +845,14 @@
           }
         },
         "required": [
-          "type",
+          "tag_type",
           "value"
         ],
         "type": "object"
       },
       "shared.TagIdentifierRequest": {
         "properties": {
-          "type": {
+          "tag_type": {
             "enum": [
               "rfid",
               "ble",
@@ -1688,12 +1701,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/assets.AddTagResponse"
                 }
               }
             },
-            "description": "data: shared.TagIdentifier"
+            "description": "tag attached"
           },
           "400": {
             "content": {
@@ -3082,12 +3094,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/locations.AddTagResponse"
                 }
               }
             },
-            "description": "data: shared.TagIdentifier"
+            "description": "tag attached"
           },
           "400": {
             "content": {

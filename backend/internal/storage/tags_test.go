@@ -37,9 +37,9 @@ func TestGetTagsByAssetID(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, results)
 	assert.Len(t, results, 2)
-	assert.Equal(t, "rfid", results[0].Type)
+	assert.Equal(t, "rfid", results[0].TagType)
 	assert.Equal(t, "E20000001234", results[0].Value)
-	assert.Equal(t, "ble", results[1].Type)
+	assert.Equal(t, "ble", results[1].TagType)
 	assert.Equal(t, "AA:BB:CC:DD:EE:FF", results[1].Value)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -121,7 +121,7 @@ func TestGetTagsByLocationID(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, results)
 	assert.Len(t, results, 1)
-	assert.Equal(t, "barcode", results[0].Type)
+	assert.Equal(t, "barcode", results[0].TagType)
 	assert.Equal(t, "LOC-001", results[0].Value)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -163,8 +163,8 @@ func TestAddTagToAsset(t *testing.T) {
 	orgID := 1
 	assetID := 10
 	req := shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "E20000009999",
+		TagType: "rfid",
+		Value:   "E20000009999",
 	}
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
@@ -174,7 +174,7 @@ func TestAddTagToAsset(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
-		WithArgs(orgID, req.Type, req.Value, assetID).
+		WithArgs(orgID, req.TagType, req.Value, assetID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
@@ -183,7 +183,7 @@ func TestAddTagToAsset(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 301, result.ID)
-	assert.Equal(t, "rfid", result.Type)
+	assert.Equal(t, "rfid", result.TagType)
 	assert.Equal(t, "E20000009999", result.Value)
 	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -199,15 +199,15 @@ func TestAddTagToAsset_Duplicate(t *testing.T) {
 	orgID := 1
 	assetID := 10
 	req := shared.TagIdentifierRequest{
-		Type:  "rfid",
-		Value: "E20000009999",
+		TagType: "rfid",
+		Value:   "E20000009999",
 	}
 
 	// Expect transaction flow for RLS context - with rollback on error
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
-		WithArgs(orgID, req.Type, req.Value, assetID).
+		WithArgs(orgID, req.TagType, req.Value, assetID).
 		WillReturnError(errors.New("duplicate key value violates unique constraint"))
 	mock.ExpectRollback()
 
@@ -229,8 +229,8 @@ func TestAddTagToLocation(t *testing.T) {
 	orgID := 1
 	locationID := 20
 	req := shared.TagIdentifierRequest{
-		Type:  "barcode",
-		Value: "LOC-SHELF-01",
+		TagType: "barcode",
+		Value:   "LOC-SHELF-01",
 	}
 
 	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
@@ -240,7 +240,7 @@ func TestAddTagToLocation(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
-		WithArgs(orgID, req.Type, req.Value, locationID).
+		WithArgs(orgID, req.TagType, req.Value, locationID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
@@ -249,7 +249,7 @@ func TestAddTagToLocation(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 401, result.ID)
-	assert.Equal(t, "barcode", result.Type)
+	assert.Equal(t, "barcode", result.TagType)
 	assert.Equal(t, "LOC-SHELF-01", result.Value)
 	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -432,7 +432,7 @@ func TestGetTagByID(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 101, result.ID)
-	assert.Equal(t, "rfid", result.Type)
+	assert.Equal(t, "rfid", result.TagType)
 	assert.Equal(t, "E20000001234", result.Value)
 	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -492,12 +492,12 @@ func TestGetTagsForAssets_Batch(t *testing.T) {
 
 	// Asset 1 has 2 tags
 	assert.Len(t, result[1], 2)
-	assert.Equal(t, "rfid", result[1][0].Type)
-	assert.Equal(t, "ble", result[1][1].Type)
+	assert.Equal(t, "rfid", result[1][0].TagType)
+	assert.Equal(t, "ble", result[1][1].TagType)
 
 	// Asset 2 has 1 tag
 	assert.Len(t, result[2], 1)
-	assert.Equal(t, "barcode", result[2][0].Type)
+	assert.Equal(t, "barcode", result[2][0].TagType)
 
 	// Asset 3 has empty slice (not nil)
 	assert.Len(t, result[3], 0)
@@ -535,12 +535,12 @@ func TestGetTagsForLocations_Batch(t *testing.T) {
 
 	// Location 10 has 1 tag
 	assert.Len(t, result[10], 1)
-	assert.Equal(t, "barcode", result[10][0].Type)
+	assert.Equal(t, "barcode", result[10][0].TagType)
 
 	// Location 20 has 2 tags
 	assert.Len(t, result[20], 2)
-	assert.Equal(t, "rfid", result[20][0].Type)
-	assert.Equal(t, "barcode", result[20][1].Type)
+	assert.Equal(t, "rfid", result[20][0].TagType)
+	assert.Equal(t, "barcode", result[20][1].TagType)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -560,20 +560,22 @@ func TestTagsToJSON(t *testing.T) {
 
 	t.Run("single tag", func(t *testing.T) {
 		input := []shared.TagIdentifierRequest{
-			{Type: "rfid", Value: "E20000001234"},
+			{TagType: "rfid", Value: "E20000001234"},
 		}
 		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
+		// DB contract: stored-proc JSON uses "type" (not "tag_type")
 		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"}]`, string(result))
 	})
 
 	t.Run("multiple tags", func(t *testing.T) {
 		input := []shared.TagIdentifierRequest{
-			{Type: "rfid", Value: "E20000001234"},
-			{Type: "ble", Value: "AA:BB:CC:DD:EE:FF"},
+			{TagType: "rfid", Value: "E20000001234"},
+			{TagType: "ble", Value: "AA:BB:CC:DD:EE:FF"},
 		}
 		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
+		// DB contract: stored-proc JSON uses "type" (not "tag_type")
 		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"},{"type":"ble","value":"AA:BB:CC:DD:EE:FF"}]`, string(result))
 	})
 
@@ -583,23 +585,25 @@ func TestTagsToJSON(t *testing.T) {
 		}
 		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
+		// DB contract: stored-proc JSON uses "type" (not "tag_type")
 		assert.JSONEq(t, `[{"type":"rfid","value":"E20000001234"}]`, string(result)) // defaults to rfid
 	})
 
 	t.Run("mixed explicit and default types", func(t *testing.T) {
 		input := []shared.TagIdentifierRequest{
-			{Type: "ble", Value: "AA:BB:CC:DD:EE:FF"},
+			{TagType: "ble", Value: "AA:BB:CC:DD:EE:FF"},
 			{Value: "E20000001234"}, // no type, defaults to rfid
 		}
 		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
+		// DB contract: stored-proc JSON uses "type" (not "tag_type")
 		assert.JSONEq(t, `[{"type":"ble","value":"AA:BB:CC:DD:EE:FF"},{"type":"rfid","value":"E20000001234"}]`, string(result))
 	})
 }
 
 func TestTagIdentifierRequestGetType(t *testing.T) {
 	t.Run("returns explicit type", func(t *testing.T) {
-		req := shared.TagIdentifierRequest{Type: "ble", Value: "test"}
+		req := shared.TagIdentifierRequest{TagType: "ble", Value: "test"}
 		assert.Equal(t, "ble", req.GetType())
 	})
 

@@ -7,7 +7,6 @@ components:
                     type: string
                 expires_at:
                     format: date-time
-                    nullable: true
                     type: string
                 id:
                     type: integer
@@ -34,7 +33,6 @@ components:
                     type: integer
                 expires_at:
                     format: date-time
-                    nullable: true
                     type: string
                 id:
                     type: integer
@@ -149,7 +147,6 @@ components:
                     type: string
                 valid_to:
                     format: date-time
-                    nullable: true
                     type: string
             type: object
         asset.UpdateAssetRequest:
@@ -189,6 +186,11 @@ components:
                     example: "2026-01-01T00:00:00Z"
                     format: date-time
                     type: string
+            type: object
+        assets.AddTagResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/shared.TagIdentifier'
             type: object
         assets.CreateAssetResponse:
             properties:
@@ -403,6 +405,11 @@ components:
                     format: date-time
                     type: string
             type: object
+        locations.AddTagResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/shared.TagIdentifier'
+            type: object
         locations.CreateLocationResponse:
             properties:
                 data:
@@ -579,7 +586,7 @@ components:
                     type: integer
                 is_active:
                     type: boolean
-                type:
+                tag_type:
                     enum:
                         - rfid
                         - ble
@@ -592,12 +599,12 @@ components:
                     minLength: 1
                     type: string
             required:
-                - type
+                - tag_type
                 - value
             type: object
         shared.TagIdentifierRequest:
             properties:
-                type:
+                tag_type:
                     enum:
                         - rfid
                         - ble
@@ -1138,9 +1145,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: shared.TagIdentifier'
+                                $ref: '#/components/schemas/assets.AddTagResponse'
+                    description: tag attached
                 "400":
                     content:
                         application/json:
@@ -1900,9 +1906,8 @@ paths:
                     content:
                         application/json:
                             schema:
-                                additionalProperties: true
-                                type: object
-                    description: 'data: shared.TagIdentifier'
+                                $ref: '#/components/schemas/locations.AddTagResponse'
+                    description: tag attached
                 "400":
                     content:
                         application/json:
