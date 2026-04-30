@@ -10,11 +10,6 @@ import type { Tag } from '@/types/shared';
 // ============ Core Entity Types ============
 
 /**
- * Asset type union - matches backend validation: oneof=person device asset inventory other
- */
-export type AssetType = 'person' | 'device' | 'asset' | 'inventory' | 'other';
-
-/**
  * Core Asset entity - matches backend PublicAssetView struct
  * Reference: backend/internal/models/asset/public.go
  */
@@ -23,7 +18,6 @@ export interface Asset {
   surrogate_id: number; // Go: int — public API field name
   identifier: string; // Go: string - Customer identifier (e.g., "LAP-001")
   name: string; // Go: string
-  type: AssetType; // Go: string with validation
   description: string; // Go: string
   current_location: string | null; // Natural key of current location (was current_location_id int)
   valid_from: string; // Go: time.Time → ISO 8601 string
@@ -44,7 +38,6 @@ export interface Asset {
 export interface CreateAssetRequest {
   identifier?: string; // optional - auto-generated as ASSET-XXXX if not provided
   name: string; // required, max 255
-  type: AssetType; // required, oneof
   description?: string; // optional, max 1024
   current_location_id?: number | null; // optional location FK (write path, unchanged)
   valid_from: string; // ISO 8601 date
@@ -60,7 +53,6 @@ export interface CreateAssetRequest {
 export interface UpdateAssetRequest {
   identifier?: string;
   name?: string;
-  type?: AssetType;
   description?: string;
   current_location_id?: number | null; // write path, unchanged
   valid_from?: string;
@@ -154,7 +146,6 @@ export interface BulkErrorDetail {
  * Filter criteria for asset list
  */
 export interface AssetFilters {
-  type?: AssetType | 'all';
   is_active?: boolean | 'all';
   search?: string;
   location_id?: number | null | 'all'; // null = unassigned, 'all' = all locations
@@ -173,7 +164,7 @@ export interface PaginationState {
 /**
  * Sort field options
  */
-export type SortField = 'identifier' | 'name' | 'type' | 'is_active' | 'valid_from' | 'created_at';
+export type SortField = 'identifier' | 'name' | 'is_active' | 'valid_from' | 'created_at';
 
 /**
  * Sort direction
@@ -196,7 +187,6 @@ export interface SortState {
 export interface AssetCache {
   byId: Map<number, Asset>;
   byIdentifier: Map<string, Asset>;
-  byType: Map<AssetType, Set<number>>;
   activeIds: Set<number>;
   allIds: number[];
   lastFetched: number;

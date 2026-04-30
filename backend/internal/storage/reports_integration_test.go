@@ -31,13 +31,13 @@ func TestCurrentLocations_QMatchesActiveIdentifierOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	activeAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-current-active", Name: "ActiveCur", Type: "asset",
+		OrgID: orgID, Identifier: "asset-current-active", Name: "ActiveCur",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	deletedIDAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-current-deleted", Name: "DeletedCur", Type: "asset",
+		OrgID: orgID, Identifier: "asset-current-deleted", Name: "DeletedCur",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -102,7 +102,7 @@ func TestCurrentLocations_CountExcludesSoftDeletedIdentifier(t *testing.T) {
 	require.NoError(t, err)
 
 	deletedIDAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-count-deleted", Name: "DeletedCount", Type: "asset",
+		OrgID: orgID, Identifier: "asset-count-deleted", Name: "DeletedCount",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -142,13 +142,13 @@ func TestCurrentLocations_DefaultElidesDeletedAsset(t *testing.T) {
 	require.NoError(t, err)
 
 	liveAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-live-elide", Name: "LiveElide", Type: "asset",
+		OrgID: orgID, Identifier: "asset-live-elide", Name: "LiveElide",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	deletedAsset, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "asset-deleted-elide", Name: "DeletedElide", Type: "asset",
+		OrgID: orgID, Identifier: "asset-deleted-elide", Name: "DeletedElide",
 		CurrentLocationID: &loc.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

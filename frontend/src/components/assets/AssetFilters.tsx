@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
-import { X, Filter, User, Laptop, Package, Archive, HelpCircle } from 'lucide-react';
+import { X, Filter } from 'lucide-react';
 import { useAssetStore } from '@/stores';
 import { Container } from '@/components/shared';
-import type { AssetType } from '@/types/assets';
 
 interface AssetFiltersProps {
   isOpen?: boolean;
@@ -10,41 +9,19 @@ interface AssetFiltersProps {
   className?: string;
 }
 
-const TYPE_OPTIONS: Array<{ value: AssetType; label: string; icon: typeof User }> = [
-  { value: 'person', label: 'People', icon: User },
-  { value: 'device', label: 'Devices', icon: Laptop },
-  { value: 'asset', label: 'Assets', icon: Package },
-  { value: 'inventory', label: 'Inventory', icon: Archive },
-  { value: 'other', label: 'Other', icon: HelpCircle },
-];
-
 export function AssetFilters({ isOpen = true, onToggle, className = '' }: AssetFiltersProps) {
   const filters = useAssetStore((state) => state.filters);
   const setFilters = useAssetStore((state) => state.setFilters);
-  const cache = useAssetStore((state) => state.cache);
-
-  const typeCounts = useMemo(() => {
-    const assets = Array.from(cache.byId.values());
-    return TYPE_OPTIONS.map((option) => ({
-      ...option,
-      count: assets.filter((a) => a.type === option.value).length,
-    }));
-  }, [cache.byId.size]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (filters.type && filters.type !== 'all') count++;
     if (filters.is_active !== 'all' && filters.is_active !== undefined) count++;
     if (filters.search && filters.search.trim() !== '') count++;
     return count;
   }, [filters]);
 
   const handleClearFilters = () => {
-    setFilters({ type: 'all', is_active: 'all', search: '' });
-  };
-
-  const handleTypeChange = (type: AssetType) => {
-    setFilters({ type: filters.type === type ? 'all' : type });
+    setFilters({ is_active: 'all', search: '' });
   };
 
   const handleStatusChange = (status: boolean | 'all') => {
@@ -85,31 +62,6 @@ export function AssetFilters({ isOpen = true, onToggle, className = '' }: AssetF
               <X className="h-5 w-5" />
             </button>
           )}
-        </div>
-
-        {/* Asset Type Filter */}
-        <div className="mb-6">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-            Asset Type
-          </h4>
-          <div className="space-y-2">
-            {typeCounts.map(({ value, label, icon: Icon, count }) => (
-              <label
-                key={value}
-                className="flex items-center gap-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 p-2 rounded-lg transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.type === value}
-                  onChange={() => handleTypeChange(value)}
-                  className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 dark:focus:ring-blue-400"
-                />
-                <Icon className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{label}</span>
-                <span className="text-sm text-gray-500 dark:text-gray-400">({count})</span>
-              </label>
-            ))}
-          </div>
         </div>
 
         {/* Status Filter */}

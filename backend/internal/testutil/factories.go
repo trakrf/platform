@@ -15,7 +15,6 @@ type AssetFactory struct {
 	OrgID       int
 	Identifier  string
 	Name        string
-	Type        string
 	Description string
 	ValidFrom   time.Time
 	ValidTo     *time.Time
@@ -29,7 +28,6 @@ func NewAssetFactory(orgID int) *AssetFactory {
 		OrgID:       orgID,
 		Identifier:  fmt.Sprintf("TEST-%d", time.Now().UnixNano()%1000000),
 		Name:        "Test Asset",
-		Type:        "asset",
 		Description: "Test description",
 		ValidFrom:   now,
 		ValidTo:     &validTo,
@@ -44,11 +42,6 @@ func (f *AssetFactory) WithIdentifier(id string) *AssetFactory {
 
 func (f *AssetFactory) WithName(name string) *AssetFactory {
 	f.Name = name
-	return f
-}
-
-func (f *AssetFactory) WithType(t string) *AssetFactory {
-	f.Type = t
 	return f
 }
 
@@ -67,7 +60,6 @@ func (f *AssetFactory) Build() asset.Asset {
 		OrgID:       f.OrgID,
 		Identifier:  f.Identifier,
 		Name:        f.Name,
-		Type:        f.Type,
 		Description: f.Description,
 		ValidFrom:   f.ValidFrom,
 		ValidTo:     f.ValidTo,
@@ -84,7 +76,6 @@ func (f *AssetFactory) BuildCreateRequest() asset.CreateAssetRequest {
 	req := asset.CreateAssetRequest{
 		Identifier:  f.Identifier,
 		Name:        f.Name,
-		Type:        f.Type,
 		Description: f.Description,
 		ValidFrom:   &validFrom,
 		IsActive:    &f.IsActive,
@@ -103,7 +94,6 @@ func (f *AssetFactory) BuildBatch(count int) []asset.Asset {
 			OrgID:       f.OrgID,
 			Identifier:  fmt.Sprintf("%s-%d", f.Identifier, i),
 			Name:        fmt.Sprintf("%s %d", f.Name, i),
-			Type:        f.Type,
 			Description: f.Description,
 			ValidFrom:   f.ValidFrom,
 			ValidTo:     f.ValidTo,
@@ -121,7 +111,7 @@ type CSVFactory struct {
 func NewCSVFactory() *CSVFactory {
 	return &CSVFactory{
 		rows: [][]string{
-			{"identifier", "name", "type", "description", "valid_from", "valid_to", "is_active"},
+			{"identifier", "name", "description", "valid_from", "valid_to", "is_active"},
 		},
 		withTags: false,
 	}
@@ -135,8 +125,8 @@ func (f *CSVFactory) WithTags() *CSVFactory {
 	return f
 }
 
-func (f *CSVFactory) AddRow(identifier, name, assetType, description, validFrom, validTo, isActive string) *CSVFactory {
-	row := []string{identifier, name, assetType, description, validFrom, validTo, isActive}
+func (f *CSVFactory) AddRow(identifier, name, description, validFrom, validTo, isActive string) *CSVFactory {
+	row := []string{identifier, name, description, validFrom, validTo, isActive}
 	if f.withTags {
 		row = append(row, "") // Empty tags by default
 	}
@@ -144,11 +134,11 @@ func (f *CSVFactory) AddRow(identifier, name, assetType, description, validFrom,
 	return f
 }
 
-func (f *CSVFactory) AddRowWithTags(identifier, name, assetType, description, validFrom, validTo, isActive, tags string) *CSVFactory {
+func (f *CSVFactory) AddRowWithTags(identifier, name, description, validFrom, validTo, isActive, tags string) *CSVFactory {
 	if !f.withTags {
 		f.WithTags()
 	}
-	f.rows = append(f.rows, []string{identifier, name, assetType, description, validFrom, validTo, isActive, tags})
+	f.rows = append(f.rows, []string{identifier, name, description, validFrom, validTo, isActive, tags})
 	return f
 }
 
@@ -163,10 +153,10 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier str
 	now := time.Now()
 	var id int
 	err := pool.QueryRow(ctx, `
-		INSERT INTO trakrf.assets (org_id, identifier, name, type, description, valid_from, valid_to, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO trakrf.assets (org_id, identifier, name, description, valid_from, valid_to, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, orgID, identifier, "Test Asset", "asset", "Test description", now, now.Add(24*time.Hour), true).Scan(&id)
+	`, orgID, identifier, "Test Asset", "Test description", now, now.Add(24*time.Hour), true).Scan(&id)
 
 	if err != nil {
 		t.Fatalf("Failed to create test asset: %v", err)
@@ -178,7 +168,6 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier str
 		OrgID:       orgID,
 		Identifier:  identifier,
 		Name:        "Test Asset",
-		Type:        "asset",
 		Description: "Test description",
 		ValidFrom:   now,
 		ValidTo:     &validTo,

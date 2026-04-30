@@ -46,7 +46,6 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
   const tableData = assets.map((asset) => [
     asset.identifier,
     asset.name || '',
-    asset.type,
     asset.tags?.map((t) => t.value).join(', ') || '',
     getLocationName(asset.current_location),
     asset.is_active ? 'Active' : 'Inactive',
@@ -55,7 +54,7 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
 
   // Add table
   autoTable(doc, {
-    head: [['Asset ID', 'Name', 'Type', 'Tag ID(s)', 'Location', 'Status', 'Description']],
+    head: [['Asset ID', 'Name', 'Tag ID(s)', 'Location', 'Status', 'Description']],
     body: tableData,
     startY: 55,
     styles: {
@@ -73,11 +72,10 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
     columnStyles: {
       0: { cellWidth: 25 }, // Asset ID
       1: { cellWidth: 30 }, // Name
-      2: { cellWidth: 18 }, // Type
-      3: { cellWidth: 35 }, // Tag ID(s)
-      4: { cellWidth: 25 }, // Location
-      5: { cellWidth: 15 }, // Status
-      6: { cellWidth: 'auto' }, // Description
+      2: { cellWidth: 35 }, // Tag ID(s)
+      3: { cellWidth: 25 }, // Location
+      4: { cellWidth: 15 }, // Status
+      5: { cellWidth: 'auto' }, // Description
     },
   });
 
@@ -110,7 +108,6 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
   const data = assets.map((asset) => ({
     'Asset ID': asset.identifier,
     Name: asset.name || '',
-    Type: asset.type,
     'Tag ID(s)': asset.tags?.map((t) => t.value).join(', ') || '',
     Location: getLocationName(asset.current_location),
     Status: asset.is_active ? 'Active' : 'Inactive',
@@ -122,7 +119,6 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
   ws['!cols'] = [
     { wch: 15 }, // Asset ID
     { wch: 25 }, // Name
-    { wch: 12 }, // Type
     { wch: 40 }, // Tag ID(s)
     { wch: 20 }, // Location
     { wch: 10 }, // Status

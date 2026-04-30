@@ -12,7 +12,6 @@ import (
 type PublicAssetView struct {
 	Identifier      string                 `json:"identifier"`
 	Name            string                 `json:"name"`
-	Type            string                 `json:"type,omitempty"`
 	Description     string                 `json:"description,omitempty"`
 	CurrentLocation *string                `json:"current_location"`
 	Metadata        any                    `json:"metadata"`
@@ -35,7 +34,6 @@ func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
 	return PublicAssetView{
 		Identifier:      a.Identifier,
 		Name:            a.Name,
-		Type:            a.Type,
 		Description:     a.Description,
 		CurrentLocation: a.CurrentLocationIdentifier,
 		Metadata:        metadata,

@@ -25,17 +25,17 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 
 	query := `
 	insert into trakrf.assets
-	(name, identifier, type, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
-	values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	returning id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
+	(name, identifier, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
+	values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	returning id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
 	          metadata, is_active, created_at, updated_at, deleted_at
 	`
 	var asset asset.Asset
 	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, request.Name, request.Identifier, request.Type,
+		return tx.QueryRow(ctx, query, request.Name, request.Identifier,
 			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo, request.Metadata,
 			request.IsActive, request.OrgID,
-		).Scan(&asset.ID, &asset.OrgID, &asset.Identifier, &asset.Name, &asset.Type,
+		).Scan(&asset.ID, &asset.OrgID, &asset.Identifier, &asset.Name,
 			&asset.Description, &asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
 			&asset.IsActive, &asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
@@ -139,7 +139,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 
 func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.Asset, error) {
 	query := `
-	select id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
+	select id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	from trakrf.assets
 	where id = $1 and org_id = $2 and deleted_at is null
@@ -147,7 +147,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.
 	var asset asset.Asset
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(&asset.ID, &asset.OrgID,
-			&asset.Identifier, &asset.Name, &asset.Type, &asset.Description,
+			&asset.Identifier, &asset.Name, &asset.Description,
 			&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
 			&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
@@ -171,7 +171,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 	}
 
 	query := `
-	SELECT id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
+	SELECT id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.assets
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
@@ -187,7 +187,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 
 		for rows.Next() {
 			var a asset.Asset
-			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
+			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name,
 				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
@@ -206,7 +206,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 
 func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offset int) ([]asset.Asset, error) {
 	query := `
-		select id, org_id, identifier, name, type, description, current_location_id, valid_from, valid_to,
+		select id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
 		       metadata, is_active, created_at, updated_at, deleted_at
 		from trakrf.assets
 		where org_id = $1 and deleted_at is null
@@ -223,7 +223,7 @@ func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offse
 
 		for rows.Next() {
 			var a asset.Asset
-			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type,
+			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name,
 				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
@@ -320,14 +320,14 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 	// is intentionally out of scope (see TRA-475 spec).
 	query := `
 		INSERT INTO trakrf.assets
-		(name, identifier, type, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		(name, identifier, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		for i, a := range assets {
 			if _, err := tx.Exec(ctx, query,
-				a.Name, a.Identifier, a.Type, a.Description, a.CurrentLocationID,
+				a.Name, a.Identifier, a.Description, a.CurrentLocationID,
 				a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
 			); err != nil {
 				if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -394,9 +394,6 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
-	if req.Type != nil {
-		fields["type"] = *req.Type
-	}
 	if req.Description != nil {
 		fields["description"] = *req.Description
 	}
@@ -453,12 +450,8 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 	if request.IsActive != nil {
 		isActive = *request.IsActive
 	}
-	assetType := request.Type
-	if assetType == "" {
-		assetType = "asset"
-	}
 
-	query := `SELECT * FROM trakrf.create_asset_with_tags($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	query := `SELECT * FROM trakrf.create_asset_with_tags($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
 
 	var assetID int
 	var tagIDs []int
@@ -468,7 +461,6 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 			request.OrgID,
 			request.Identifier,
 			request.Name,
-			assetType,
 			request.Description,
 			request.CurrentLocationID,
 			validFrom,
@@ -524,7 +516,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 			LIMIT 1
 		)
 		SELECT
-			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
+			a.id, a.org_id, a.identifier, a.name, a.description,
 			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.identifier
@@ -542,7 +534,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 	)
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(
-			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Description,
 			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			&locIdt,
@@ -626,7 +618,7 @@ func (s *Storage) GetAssetByIdentifier(
 			LIMIT 1
 		)
 		SELECT
-			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
+			a.id, a.org_id, a.identifier, a.name, a.description,
 			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.identifier
@@ -644,7 +636,7 @@ func (s *Storage) GetAssetByIdentifier(
 	)
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, identifier).Scan(
-			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Description,
 			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			&locIdt,
@@ -741,7 +733,7 @@ func (s *Storage) ListAssetsFiltered(
 			ORDER BY s.asset_id, s.timestamp DESC
 		)
 		SELECT
-			a.id, a.org_id, a.identifier, a.name, a.type, a.description,
+			a.id, a.org_id, a.identifier, a.name, a.description,
 			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
@@ -772,7 +764,7 @@ func (s *Storage) ListAssetsFiltered(
 				locIdt *string
 			)
 			if err := rows.Scan(
-				&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Type, &a.Description,
+				&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Description,
 				&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 				&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 				&locIdt,
@@ -856,10 +848,6 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 		args = append(args, *f.IsActive)
 		clauses = append(clauses, fmt.Sprintf("a.is_active = $%d", len(args)))
 	}
-	if f.Type != nil {
-		args = append(args, *f.Type)
-		clauses = append(clauses, fmt.Sprintf("a.type = $%d", len(args)))
-	}
 	if f.Q != nil {
 		args = append(args, "%"+*f.Q+"%")
 		idx := len(args)
@@ -913,10 +901,6 @@ func parseAssetWithTagsError(err error, identifier string) error {
 
 	if strings.Contains(errStr, "current_location_id_fkey") {
 		return fmt.Errorf("invalid current_location_id: location does not exist")
-	}
-
-	if strings.Contains(errStr, "assets_type_check") {
-		return fmt.Errorf("invalid asset type: type must be 'asset'")
 	}
 
 	return fmt.Errorf("failed to create asset with tags: %w", err)

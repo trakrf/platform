@@ -66,7 +66,7 @@ func TestUpdateAssetByID_HappyPath(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "byid-update-1", Name: "Before", Type: "asset",
+		OrgID: orgID, Identifier: "byid-update-1", Name: "Before",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestUpdateAssetByID_CrossOrg_Returns404(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgA, Identifier: "byid-cross-org", Name: "OrgA Asset", Type: "asset",
+		OrgID: orgA, Identifier: "byid-cross-org", Name: "OrgA Asset",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -196,7 +196,7 @@ func TestDeleteAssetByID_HappyPath(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "byid-delete-1", Name: "Doomed", Type: "asset",
+		OrgID: orgID, Identifier: "byid-delete-1", Name: "Doomed",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestDeleteAssetByID_CrossOrg_Returns404(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgA, Identifier: "byid-del-crossorg", Name: "Survivor", Type: "asset",
+		OrgID: orgA, Identifier: "byid-del-crossorg", Name: "Survivor",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestAddIdentifierByID_HappyPath(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "byid-add-ident", Name: "Host", Type: "asset",
+		OrgID: orgID, Identifier: "byid-add-ident", Name: "Host",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -296,7 +296,7 @@ func TestAddIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgA, Identifier: "byid-add-ident-crossorg", Name: "A", Type: "asset",
+		OrgID: orgA, Identifier: "byid-add-ident-crossorg", Name: "A",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -325,7 +325,7 @@ func TestAddIdentifierByID_InvalidBody_Returns400(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "byid-add-ident-badbody", Name: "A", Type: "asset",
+		OrgID: orgID, Identifier: "byid-add-ident-badbody", Name: "A",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -355,7 +355,7 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgID, Identifier: "byid-rm-ident", Name: "Host", Type: "asset",
+		OrgID: orgID, Identifier: "byid-rm-ident", Name: "Host",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -391,7 +391,7 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	router := setupByIDRouter(handler)
 
 	created, err := store.CreateAsset(context.Background(), asset.Asset{
-		OrgID: orgA, Identifier: "byid-rm-ident-cross", Name: "A", Type: "asset",
+		OrgID: orgA, Identifier: "byid-rm-ident-cross", Name: "A",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

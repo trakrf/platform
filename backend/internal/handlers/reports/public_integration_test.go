@@ -105,7 +105,6 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 		OrgID:      orgID,
 		Identifier: "curr-asset-1",
 		Name:       "Current Asset 1",
-		Type:       "asset",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -175,7 +174,6 @@ func TestGetAssetHistory_ByIdentifier(t *testing.T) {
 		OrgID:      orgID,
 		Identifier: "hist-asset-1",
 		Name:       "History Asset 1",
-		Type:       "asset",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -238,7 +236,7 @@ func TestSessionJWT_PassesThroughRequireScope(t *testing.T) {
 	})
 	require.NoError(t, err)
 	a, err := store.CreateAsset(context.Background(), assetmodel.Asset{
-		OrgID: orgID, Identifier: "sess-asset", Name: "SA", Type: "asset",
+		OrgID: orgID, Identifier: "sess-asset", Name: "SA",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -289,7 +287,6 @@ func seedDeletedAssetFixture(t *testing.T, store *storage.Storage, pool *pgxpool
 		OrgID:      orgID,
 		Identifier: "del-asset-live",
 		Name:       "LiveDel",
-		Type:       "asset",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})
@@ -299,7 +296,6 @@ func seedDeletedAssetFixture(t *testing.T, store *storage.Storage, pool *pgxpool
 		OrgID:      orgID,
 		Identifier: "del-asset-dead",
 		Name:       "DeadDel",
-		Type:       "asset",
 		ValidFrom:  time.Now(),
 		IsActive:   true,
 	})

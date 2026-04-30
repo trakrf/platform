@@ -94,13 +94,6 @@ components:
                     items:
                         $ref: '#/components/schemas/shared.TagIdentifierRequest'
                     type: array
-                type:
-                    enum:
-                        - asset
-                        - person
-                        - inventory
-                    example: asset
-                    type: string
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
                     format: date-time
@@ -137,8 +130,6 @@ components:
                     items:
                         $ref: '#/components/schemas/shared.TagIdentifier'
                     type: array
-                type:
-                    type: string
                 updated_at:
                     format: date-time
                     type: string
@@ -171,12 +162,6 @@ components:
                 name:
                     maxLength: 255
                     minLength: 1
-                    type: string
-                type:
-                    enum:
-                        - asset
-                        - person
-                        - inventory
                     type: string
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
@@ -646,11 +631,6 @@ paths:
                   name: is_active
                   schema:
                     type: boolean
-                - description: filter by type
-                  in: query
-                  name: type
-                  schema:
-                    type: string
                 - description: substring search (case-insensitive) on name, identifier, description, and active tag values
                   in: query
                   name: q

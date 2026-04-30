@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateDateRange, validateAssetType } from './validators';
+import { validateDateRange } from './validators';
 
 describe('Validators', () => {
   describe('validateDateRange()', () => {
@@ -36,31 +36,6 @@ describe('Validators', () => {
       expect(
         validateDateRange('2024-01-15T10:00:00Z', '2024-12-31T23:59:59Z')
       ).toBeNull();
-    });
-  });
-
-  describe('validateAssetType()', () => {
-    it('should return true for valid asset types', () => {
-      expect(validateAssetType('person')).toBe(true);
-      expect(validateAssetType('device')).toBe(true);
-      expect(validateAssetType('asset')).toBe(true);
-      expect(validateAssetType('inventory')).toBe(true);
-      expect(validateAssetType('other')).toBe(true);
-    });
-
-    it('should return false for invalid asset type', () => {
-      expect(validateAssetType('computer')).toBe(false);
-      expect(validateAssetType('machine')).toBe(false);
-      expect(validateAssetType('equipment')).toBe(false);
-    });
-
-    it('should be case-sensitive', () => {
-      expect(validateAssetType('Device')).toBe(false);
-      expect(validateAssetType('PERSON')).toBe(false);
-    });
-
-    it('should return false for empty string', () => {
-      expect(validateAssetType('')).toBe(false);
     });
   });
 });
