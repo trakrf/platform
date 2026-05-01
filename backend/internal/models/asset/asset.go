@@ -59,12 +59,12 @@ type AssetListResponse struct {
 
 type AssetView struct {
 	Asset
-	Tags []shared.TagIdentifier `json:"tags"`
+	Tags []shared.Tag `json:"tags"`
 }
 
 type CreateAssetWithTagsRequest struct {
 	CreateAssetRequest
-	Tags []shared.TagIdentifierRequest `json:"tags,omitempty" validate:"omitempty,dive"`
+	Tags []shared.TagRequest `json:"tags,omitempty" validate:"omitempty,dive"`
 }
 
 type AssetViewListResponse struct {

@@ -205,7 +205,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildAssetsPublicWriteRouter(store)
 
-	// TagIdentifierRequest.TagType accepts only rfid/ble/barcode; use rfid.
+	// TagRequest.TagType accepts only rfid/ble/barcode; use rfid.
 	body := `{"tag_type":"rfid","value":"EPC-ABC-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/ident-host/tags",
 		bytes.NewBufferString(body))
@@ -239,7 +239,7 @@ func TestRemoveAssetTag_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagRequest{
 		TagType: "rfid",
 		Value:   "EPC-HAPPY-1",
 	})
@@ -282,7 +282,7 @@ func TestRemoveAssetTag_WrongAssetIdentifier_DoesNotDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToAsset(context.Background(), orgID, owningAsset.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, owningAsset.ID, shared.TagRequest{
 		TagType: "rfid",
 		Value:   "EPC-WRONG-1",
 	})
@@ -485,7 +485,7 @@ func TestAssetsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, seededAsset.ID, shared.TagRequest{
 		TagType: "rfid",
 		Value:   "EPC-407B-REMOVE",
 	})

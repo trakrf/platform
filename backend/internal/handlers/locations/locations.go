@@ -759,7 +759,7 @@ func toPublicLocationViews(locs []location.LocationWithParent) []location.Public
 // AddTagResponse is the typed envelope returned by POST /api/v1/locations/{identifier}/tags
 // and POST /api/v1/locations/by-id/{id}/tags (TRA-547 §2.4).
 type AddTagResponse struct {
-	Data shared.TagIdentifier `json:"data"`
+	Data shared.Tag `json:"data"`
 }
 
 // @Summary      Add a tag to a location
@@ -770,7 +770,7 @@ type AddTagResponse struct {
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string                         true  "Location identifier"
-// @Param        request     body  shared.TagIdentifierRequest    true  "Tag to attach"
+// @Param        request     body  shared.TagRequest    true  "Tag to attach"
 // @Success      201  {object}  locations.AddTagResponse      "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -813,7 +813,7 @@ func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	var request shared.TagIdentifierRequest
+	var request shared.TagRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return

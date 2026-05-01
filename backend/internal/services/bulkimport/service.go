@@ -212,10 +212,10 @@ func (s *Service) processCSVAsync(
 	var insertErrors []bulkimport.ErrorDetail
 
 	for _, pr := range validRows {
-		// Convert tag values to TagIdentifierRequest with type "rfid"
-		identifiers := make([]shared.TagIdentifierRequest, len(pr.tagValues))
+		// Convert tag values to TagRequest with type "rfid"
+		identifiers := make([]shared.TagRequest, len(pr.tagValues))
 		for i, tag := range pr.tagValues {
-			identifiers[i] = shared.TagIdentifierRequest{
+			identifiers[i] = shared.TagRequest{
 				TagType: "rfid",
 				Value:   tag,
 			}

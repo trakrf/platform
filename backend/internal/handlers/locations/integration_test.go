@@ -124,7 +124,7 @@ func TestCreateLocationWithTags_DuplicateReturns409(t *testing.T) {
 			ValidFrom:  &vfFD2,
 			IsActive:   &active2,
 		},
-		Tags: []shared.TagIdentifierRequest{
+		Tags: []shared.TagRequest{
 			{TagType: "rfid", Value: "E2000000DEADBEEF"},
 		},
 	})

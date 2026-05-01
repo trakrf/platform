@@ -162,7 +162,7 @@ func TestAddTagToAsset(t *testing.T) {
 
 	orgID := 1
 	assetID := 10
-	req := shared.TagIdentifierRequest{
+	req := shared.TagRequest{
 		TagType: "rfid",
 		Value:   "E20000009999",
 	}
@@ -198,7 +198,7 @@ func TestAddTagToAsset_Duplicate(t *testing.T) {
 
 	orgID := 1
 	assetID := 10
-	req := shared.TagIdentifierRequest{
+	req := shared.TagRequest{
 		TagType: "rfid",
 		Value:   "E20000009999",
 	}
@@ -228,7 +228,7 @@ func TestAddTagToLocation(t *testing.T) {
 
 	orgID := 1
 	locationID := 20
-	req := shared.TagIdentifierRequest{
+	req := shared.TagRequest{
 		TagType: "barcode",
 		Value:   "LOC-SHELF-01",
 	}
@@ -547,7 +547,7 @@ func TestGetTagsForLocations_Batch(t *testing.T) {
 
 func TestTagsToJSON(t *testing.T) {
 	t.Run("empty slice returns empty array", func(t *testing.T) {
-		result, err := tagsToJSON([]shared.TagIdentifierRequest{})
+		result, err := tagsToJSON([]shared.TagRequest{})
 		assert.NoError(t, err)
 		assert.Equal(t, "[]", string(result))
 	})
@@ -559,7 +559,7 @@ func TestTagsToJSON(t *testing.T) {
 	})
 
 	t.Run("single tag", func(t *testing.T) {
-		input := []shared.TagIdentifierRequest{
+		input := []shared.TagRequest{
 			{TagType: "rfid", Value: "E20000001234"},
 		}
 		result, err := tagsToJSON(input)
@@ -569,7 +569,7 @@ func TestTagsToJSON(t *testing.T) {
 	})
 
 	t.Run("multiple tags", func(t *testing.T) {
-		input := []shared.TagIdentifierRequest{
+		input := []shared.TagRequest{
 			{TagType: "rfid", Value: "E20000001234"},
 			{TagType: "ble", Value: "AA:BB:CC:DD:EE:FF"},
 		}
@@ -580,7 +580,7 @@ func TestTagsToJSON(t *testing.T) {
 	})
 
 	t.Run("applies default type when empty", func(t *testing.T) {
-		input := []shared.TagIdentifierRequest{
+		input := []shared.TagRequest{
 			{Value: "E20000001234"}, // no type specified
 		}
 		result, err := tagsToJSON(input)
@@ -590,7 +590,7 @@ func TestTagsToJSON(t *testing.T) {
 	})
 
 	t.Run("mixed explicit and default types", func(t *testing.T) {
-		input := []shared.TagIdentifierRequest{
+		input := []shared.TagRequest{
 			{TagType: "ble", Value: "AA:BB:CC:DD:EE:FF"},
 			{Value: "E20000001234"}, // no type, defaults to rfid
 		}
@@ -603,12 +603,12 @@ func TestTagsToJSON(t *testing.T) {
 
 func TestTagIdentifierRequestGetType(t *testing.T) {
 	t.Run("returns explicit type", func(t *testing.T) {
-		req := shared.TagIdentifierRequest{TagType: "ble", Value: "test"}
+		req := shared.TagRequest{TagType: "ble", Value: "test"}
 		assert.Equal(t, "ble", req.GetType())
 	})
 
 	t.Run("returns default rfid when empty", func(t *testing.T) {
-		req := shared.TagIdentifierRequest{Value: "test"}
+		req := shared.TagRequest{Value: "test"}
 		assert.Equal(t, "rfid", req.GetType())
 	})
 }

@@ -549,7 +549,7 @@ func (s *Storage) scanHierarchyRows(
 		for i := range out {
 			out[i].Tags = idMap[out[i].ID]
 			if out[i].Tags == nil {
-				out[i].Tags = []shared.TagIdentifier{}
+				out[i].Tags = []shared.Tag{}
 			}
 		}
 	}
@@ -704,7 +704,7 @@ func (s *Storage) ListLocationViews(ctx context.Context, orgID, limit, offset in
 	for i, loc := range locations {
 		ids := tagMap[loc.ID]
 		if ids == nil {
-			ids = []shared.TagIdentifier{}
+			ids = []shared.Tag{}
 		}
 		views[i] = location.LocationView{
 			Location: loc,
@@ -857,7 +857,7 @@ func (s *Storage) ListLocationsFiltered(
 		for i := range out {
 			out[i].Tags = idMap[out[i].ID]
 			if out[i].Tags == nil {
-				out[i].Tags = []shared.TagIdentifier{}
+				out[i].Tags = []shared.Tag{}
 			}
 		}
 	}

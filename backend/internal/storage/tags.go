@@ -13,7 +13,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
-func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]shared.TagIdentifier, error) {
+func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]shared.Tag, error) {
 	query := `
 		SELECT id, type, value, is_active
 		FROM trakrf.tags
@@ -21,7 +21,7 @@ func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]s
 		ORDER BY created_at ASC
 	`
 
-	var tags []shared.TagIdentifier
+	var tags []shared.Tag
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, assetID, orgID)
 		if err != nil {
@@ -29,9 +29,9 @@ func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]s
 		}
 		defer rows.Close()
 
-		tags = []shared.TagIdentifier{}
+		tags = []shared.Tag{}
 		for rows.Next() {
-			var tag shared.TagIdentifier
+			var tag shared.Tag
 			if err := rows.Scan(&tag.ID, &tag.TagType, &tag.Value, &tag.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}
@@ -46,7 +46,7 @@ func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]s
 	return tags, nil
 }
 
-func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int) ([]shared.TagIdentifier, error) {
+func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int) ([]shared.Tag, error) {
 	query := `
 		SELECT id, type, value, is_active
 		FROM trakrf.tags
@@ -54,7 +54,7 @@ func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int
 		ORDER BY created_at ASC
 	`
 
-	var tags []shared.TagIdentifier
+	var tags []shared.Tag
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, locationID, orgID)
 		if err != nil {
@@ -62,9 +62,9 @@ func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int
 		}
 		defer rows.Close()
 
-		tags = []shared.TagIdentifier{}
+		tags = []shared.Tag{}
 		for rows.Next() {
-			var tag shared.TagIdentifier
+			var tag shared.Tag
 			if err := rows.Scan(&tag.ID, &tag.TagType, &tag.Value, &tag.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}
@@ -79,7 +79,7 @@ func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int
 	return tags, nil
 }
 
-func (s *Storage) AddTagToAsset(ctx context.Context, orgID, assetID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
+func (s *Storage) AddTagToAsset(ctx context.Context, orgID, assetID int, req shared.TagRequest) (*shared.Tag, error) {
 	query := `
 		INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
 		VALUES ($1, $2, $3, $4, TRUE)
@@ -87,7 +87,7 @@ func (s *Storage) AddTagToAsset(ctx context.Context, orgID, assetID int, req sha
 	`
 
 	tagType := req.GetType()
-	var tag shared.TagIdentifier
+	var tag shared.Tag
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, tagType, req.Value, assetID).Scan(
@@ -102,7 +102,7 @@ func (s *Storage) AddTagToAsset(ctx context.Context, orgID, assetID int, req sha
 	return &tag, nil
 }
 
-func (s *Storage) AddTagToLocation(ctx context.Context, orgID, locationID int, req shared.TagIdentifierRequest) (*shared.TagIdentifier, error) {
+func (s *Storage) AddTagToLocation(ctx context.Context, orgID, locationID int, req shared.TagRequest) (*shared.Tag, error) {
 	query := `
 		INSERT INTO trakrf.tags (org_id, type, value, location_id, is_active)
 		VALUES ($1, $2, $3, $4, TRUE)
@@ -110,7 +110,7 @@ func (s *Storage) AddTagToLocation(ctx context.Context, orgID, locationID int, r
 	`
 
 	tagType := req.GetType()
-	var tag shared.TagIdentifier
+	var tag shared.Tag
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, tagType, req.Value, locationID).Scan(
@@ -186,14 +186,14 @@ func (s *Storage) RemoveLocationTag(ctx context.Context, orgID, locationID, tagI
 	return affected > 0, nil
 }
 
-func (s *Storage) GetTagByID(ctx context.Context, orgID, tagID int) (*shared.TagIdentifier, error) {
+func (s *Storage) GetTagByID(ctx context.Context, orgID, tagID int) (*shared.Tag, error) {
 	query := `
 		SELECT id, type, value, is_active
 		FROM trakrf.tags
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	`
 
-	var tag shared.TagIdentifier
+	var tag shared.Tag
 	found := false
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, query, tagID, orgID).Scan(
@@ -235,14 +235,14 @@ func parseTagError(err error, tagType, value string) error {
 	return fmt.Errorf("failed to create tag: %w", err)
 }
 
-func tagsToJSON(tags []shared.TagIdentifierRequest) ([]byte, error) {
+func tagsToJSON(tags []shared.TagRequest) ([]byte, error) {
 	if len(tags) == 0 {
 		return []byte("[]"), nil
 	}
 
 	// dbTagEntry uses the DB-native "type" key that create_asset_with_tags
 	// and create_location_with_tags stored procedures read via ->>'type'.
-	// Intentionally decoupled from TagIdentifierRequest.TagType (which uses
+	// Intentionally decoupled from TagRequest.TagType (which uses
 	// json:"tag_type" for the public API surface) so wire-level renames
 	// don't perturb the DB contract.
 	type dbTagEntry struct {
@@ -261,7 +261,7 @@ func tagsToJSON(tags []shared.TagIdentifierRequest) ([]byte, error) {
 	return json.Marshal(normalized)
 }
 
-func (s *Storage) getTagsForAssets(ctx context.Context, orgID int, assetIDs []int) (map[int][]shared.TagIdentifier, error) {
+func (s *Storage) getTagsForAssets(ctx context.Context, orgID int, assetIDs []int) (map[int][]shared.Tag, error) {
 	query := `
 		SELECT asset_id, id, type, value, is_active
 		FROM trakrf.tags
@@ -269,7 +269,7 @@ func (s *Storage) getTagsForAssets(ctx context.Context, orgID int, assetIDs []in
 		ORDER BY asset_id, created_at ASC
 	`
 
-	var result map[int][]shared.TagIdentifier
+	var result map[int][]shared.Tag
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, assetIDs, orgID)
 		if err != nil {
@@ -277,14 +277,14 @@ func (s *Storage) getTagsForAssets(ctx context.Context, orgID int, assetIDs []in
 		}
 		defer rows.Close()
 
-		result = make(map[int][]shared.TagIdentifier)
+		result = make(map[int][]shared.Tag)
 		for _, id := range assetIDs {
-			result[id] = []shared.TagIdentifier{}
+			result[id] = []shared.Tag{}
 		}
 
 		for rows.Next() {
 			var assetID int
-			var id shared.TagIdentifier
+			var id shared.Tag
 			if err := rows.Scan(&assetID, &id.ID, &id.TagType, &id.Value, &id.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}
@@ -299,7 +299,7 @@ func (s *Storage) getTagsForAssets(ctx context.Context, orgID int, assetIDs []in
 	return result, nil
 }
 
-func (s *Storage) getTagsForLocations(ctx context.Context, orgID int, locationIDs []int) (map[int][]shared.TagIdentifier, error) {
+func (s *Storage) getTagsForLocations(ctx context.Context, orgID int, locationIDs []int) (map[int][]shared.Tag, error) {
 	query := `
 		SELECT location_id, id, type, value, is_active
 		FROM trakrf.tags
@@ -307,7 +307,7 @@ func (s *Storage) getTagsForLocations(ctx context.Context, orgID int, locationID
 		ORDER BY location_id, created_at ASC
 	`
 
-	var result map[int][]shared.TagIdentifier
+	var result map[int][]shared.Tag
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, locationIDs, orgID)
 		if err != nil {
@@ -315,14 +315,14 @@ func (s *Storage) getTagsForLocations(ctx context.Context, orgID int, locationID
 		}
 		defer rows.Close()
 
-		result = make(map[int][]shared.TagIdentifier)
+		result = make(map[int][]shared.Tag)
 		for _, id := range locationIDs {
-			result[id] = []shared.TagIdentifier{}
+			result[id] = []shared.Tag{}
 		}
 
 		for rows.Next() {
 			var locationID int
-			var id shared.TagIdentifier
+			var id shared.Tag
 			if err := rows.Scan(&locationID, &id.ID, &id.TagType, &id.Value, &id.IsActive); err != nil {
 				return fmt.Errorf("failed to scan tag: %w", err)
 			}

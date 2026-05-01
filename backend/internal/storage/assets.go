@@ -585,7 +585,7 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 	for i, a := range assets {
 		ids := tagMap[a.ID]
 		if ids == nil {
-			ids = []shared.TagIdentifier{}
+			ids = []shared.Tag{}
 		}
 		views[i] = asset.AssetView{
 			Asset: a,
@@ -795,7 +795,7 @@ func (s *Storage) ListAssetsFiltered(
 		for i := range out {
 			out[i].Tags = idMap[out[i].ID]
 			if out[i].Tags == nil {
-				out[i].Tags = []shared.TagIdentifier{}
+				out[i].Tags = []shared.Tag{}
 			}
 		}
 	}

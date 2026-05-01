@@ -67,13 +67,13 @@ type LocationListResponse struct {
 // LocationView includes tags for API responses
 type LocationView struct {
 	Location
-	Tags []shared.TagIdentifier `json:"tags"`
+	Tags []shared.Tag `json:"tags"`
 }
 
 // CreateLocationWithTagsRequest extends CreateLocationRequest with optional tags
 type CreateLocationWithTagsRequest struct {
 	CreateLocationRequest
-	Tags []shared.TagIdentifierRequest `json:"tags,omitempty" validate:"omitempty,dive"`
+	Tags []shared.TagRequest `json:"tags,omitempty" validate:"omitempty,dive"`
 }
 
 // LocationViewListResponse is paginated list of LocationViews
