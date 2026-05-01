@@ -36,9 +36,9 @@ func TestNormalizeValidDatesMigration(t *testing.T) {
 	var assetID int64
 	err := pool.QueryRow(ctx, `
 		INSERT INTO trakrf.assets
-			(name, identifier, type, description, org_id, valid_from, valid_to, is_active, metadata)
+			(name, external_key, description, org_id, valid_from, valid_to, is_active, metadata)
 		VALUES
-			($1, $2, 'asset', '', $3,
+			($1, $2, '', $3,
 			 TIMESTAMPTZ '0001-01-01', TIMESTAMPTZ '2099-12-31',
 			 true, '{}'::jsonb)
 		RETURNING id
@@ -53,7 +53,7 @@ func TestNormalizeValidDatesMigration(t *testing.T) {
 	var locID int64
 	err = pool.QueryRow(ctx, `
 		INSERT INTO trakrf.locations
-			(org_id, identifier, name, is_active, valid_from, valid_to)
+			(org_id, external_key, name, is_active, valid_from, valid_to)
 		VALUES
 			($1, $2, $3, true,
 			 TIMESTAMPTZ '0001-01-01', TIMESTAMPTZ '2099-12-31')

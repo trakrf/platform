@@ -15,9 +15,9 @@ func TestToPublicAssetView_NilMetadataSerializesAsEmptyObject(t *testing.T) {
 	in := AssetWithLocation{
 		AssetView: AssetView{
 			Asset: Asset{
-				Identifier: "FORK-007",
-				Name:       "Forklift 7",
-				Metadata:   nil,
+				ExternalKey: "FORK-007",
+				Name:        "Forklift 7",
+				Metadata:    nil,
 			},
 		},
 	}
@@ -39,9 +39,9 @@ func TestToPublicAssetView_PopulatedMetadataPreserved(t *testing.T) {
 	in := AssetWithLocation{
 		AssetView: AssetView{
 			Asset: Asset{
-				Identifier: "FORK-007",
-				Name:       "Forklift 7",
-				Metadata:   map[string]any{"color": "red"},
+				ExternalKey: "FORK-007",
+				Name:        "Forklift 7",
+				Metadata:    map[string]any{"color": "red"},
 			},
 		},
 	}
@@ -60,8 +60,8 @@ func TestToPublicAssetView_PopulatedMetadataPreserved(t *testing.T) {
 // TRA-547 §2.2: PublicAssetView.description is omitted when empty.
 func TestPublicAssetView_DescriptionAbsentWhenEmpty(t *testing.T) {
 	v := PublicAssetView{
-		Identifier: "A1",
-		Name:       "n",
+		ExternalKey: "A1",
+		Name:        "n",
 	}
 
 	data, err := json.Marshal(v)
@@ -77,8 +77,8 @@ func TestPublicAssetView_DescriptionAbsentWhenEmpty(t *testing.T) {
 // TRA-547 §2.2: PublicAssetView.valid_to is omitted when nil.
 func TestPublicAssetView_ValidToAbsentWhenNil(t *testing.T) {
 	v := PublicAssetView{
-		Identifier: "A1",
-		Name:       "n",
+		ExternalKey: "A1",
+		Name:        "n",
 	}
 
 	data, err := json.Marshal(v)

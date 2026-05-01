@@ -83,7 +83,7 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
       assetsData.flatMap((a) => {
         const asset = getAssetByIdentifier(a.asset);
         if (!asset) return [];
-        return [{ id: asset.id, name: asset.name, identifier: asset.identifier }];
+        return [{ id: asset.id, name: asset.name, identifier: asset.external_key }];
       }),
     [assetsData, getAssetByIdentifier]
   );

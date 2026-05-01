@@ -22,13 +22,13 @@ export function createCacheActions(
         const newCache = { ...state.cache };
 
         newCache.byId = new Map(state.cache.byId);
-        newCache.byIdentifier = new Map(state.cache.byIdentifier);
+        newCache.byExternalKey = new Map(state.cache.byExternalKey);
         newCache.activeIds = new Set(state.cache.activeIds);
         newCache.allIds = [...state.cache.allIds];
 
         assets.forEach((asset) => {
           newCache.byId.set(asset.id, asset);
-          newCache.byIdentifier.set(asset.identifier, asset);
+          newCache.byExternalKey.set(asset.external_key, asset);
 
           if (asset.is_active) {
             newCache.activeIds.add(asset.id);
@@ -65,18 +65,18 @@ export function createCacheActions(
         const newCache = { ...state.cache };
 
         newCache.byId = new Map(state.cache.byId);
-        newCache.byIdentifier = new Map(state.cache.byIdentifier);
+        newCache.byExternalKey = new Map(state.cache.byExternalKey);
         newCache.activeIds = new Set(state.cache.activeIds);
         newCache.allIds = [...state.cache.allIds];
 
         newCache.byId.set(id, updated);
 
         // Handle identifier change (remove old, add new)
-        if (updates.identifier && updates.identifier !== current.identifier) {
-          newCache.byIdentifier.delete(current.identifier);
-          newCache.byIdentifier.set(updates.identifier, updated);
+        if (updates.external_key && updates.external_key !== current.external_key) {
+          newCache.byExternalKey.delete(current.external_key);
+          newCache.byExternalKey.set(updates.external_key, updated);
         } else {
-          newCache.byIdentifier.set(current.identifier, updated);
+          newCache.byExternalKey.set(current.external_key, updated);
         }
 
         if (updates.is_active !== undefined) {
@@ -105,11 +105,11 @@ export function createCacheActions(
         const newCache = { ...state.cache };
 
         newCache.byId = new Map(state.cache.byId);
-        newCache.byIdentifier = new Map(state.cache.byIdentifier);
+        newCache.byExternalKey = new Map(state.cache.byExternalKey);
         newCache.activeIds = new Set(state.cache.activeIds);
 
         newCache.byId.delete(id);
-        newCache.byIdentifier.delete(asset.identifier);
+        newCache.byExternalKey.delete(asset.external_key);
 
         newCache.activeIds.delete(id);
         newCache.allIds = state.cache.allIds.filter((aid: number) => aid !== id);
@@ -127,7 +127,7 @@ export function createCacheActions(
       set({
         cache: {
           byId: new Map(),
-          byIdentifier: new Map(),
+          byExternalKey: new Map(),
           activeIds: new Set(),
           allIds: [],
           lastFetched: 0,

@@ -436,7 +436,7 @@ export const useTagStore = create<TagState>()(
               type: 'asset' as TagType,
               assetId: result.asset.id,
               assetName: result.asset.name,
-              assetIdentifier: result.asset.identifier,
+              assetIdentifier: result.asset.external_key,
               description: result.asset.description || undefined,
             };
           } else if (result?.location) {

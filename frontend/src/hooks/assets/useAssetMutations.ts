@@ -6,7 +6,7 @@ import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest } from '@/types/assets';
 
 function normalizeAsset(raw: Asset): Asset {
-  return { ...raw, id: raw.surrogate_id };
+  return { ...raw, id: raw.id };
 }
 
 export function useAssetMutations() {

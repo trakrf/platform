@@ -27,8 +27,8 @@ export function AssetCard({
   className = '',
 }: AssetCardProps) {
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const locationData = asset.current_location ? getLocationByIdentifier(asset.current_location) : null;
-  const locationName = locationData?.name ?? asset.current_location ?? undefined;
+  const locationData = asset.current_location_external_key ? getLocationByIdentifier(asset.current_location_external_key) : null;
+  const locationName = locationData?.name ?? asset.current_location_external_key ?? undefined;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localTags, setLocalTags] = useState<Tag[]>(asset.tags || []);
@@ -89,7 +89,7 @@ export function AssetCard({
           {/* Asset ID */}
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate block max-w-[100px] sm:max-w-none">
-              {asset.identifier}
+              {asset.external_key}
             </span>
           </td>
 
@@ -155,21 +155,21 @@ export function AssetCard({
               <div className="flex items-center gap-1 sm:gap-2">
                 <LocateTagPopover
                   tags={localTags}
-                  entityIdentifier={asset.identifier}
+                  entityIdentifier={asset.external_key}
                   isActive={asset.is_active}
                   variant="icon"
                 />
                 <button
                   onClick={handleEdit}
                   className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
-                  aria-label={`Edit ${asset.identifier}`}
+                  aria-label={`Edit ${asset.external_key}`}
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
                 <button
                   onClick={handleDelete}
                   className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
-                  aria-label={`Delete ${asset.identifier}`}
+                  aria-label={`Delete ${asset.external_key}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -182,7 +182,7 @@ export function AssetCard({
         <TagsModal
           tags={localTags}
           entityId={asset.id}
-          entityName={asset.identifier}
+          entityName={asset.external_key}
           entityType="asset"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
@@ -210,7 +210,7 @@ export function AssetCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white truncate">
-                {asset.identifier}
+                {asset.external_key}
               </h3>
               {localTags.length > 0 && (
                 <TagCountBadge
@@ -254,7 +254,7 @@ export function AssetCard({
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
             <LocateTagPopover
               tags={localTags}
-              entityIdentifier={asset.identifier}
+              entityIdentifier={asset.external_key}
               isActive={asset.is_active}
               variant="button"
             />
@@ -280,7 +280,7 @@ export function AssetCard({
       <TagsModal
         tags={localTags}
         entityId={asset.id}
-        entityName={asset.identifier}
+        entityName={asset.external_key}
         entityType="asset"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}

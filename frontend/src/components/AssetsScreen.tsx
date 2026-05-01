@@ -73,7 +73,7 @@ export default function AssetsScreen() {
     if (deletingAsset) {
       try {
         await deleteAsset(deletingAsset.id);
-        toast.success(`Asset "${deletingAsset.identifier}" deleted successfully`);
+        toast.success(`Asset "${deletingAsset.external_key}" deleted successfully`);
         setDeletingAsset(null);
       } catch (error: any) {
         console.error('Delete error:', error);
@@ -211,7 +211,7 @@ export default function AssetsScreen() {
         <ConfirmModal
           isOpen={!!deletingAsset}
           title="Delete Asset"
-          message={`Are you sure you want to delete "${deletingAsset?.identifier}"? This action cannot be undone.`}
+          message={`Are you sure you want to delete "${deletingAsset?.external_key}"? This action cannot be undone.`}
           onConfirm={confirmDelete}
           onCancel={() => setDeletingAsset(null)}
         />

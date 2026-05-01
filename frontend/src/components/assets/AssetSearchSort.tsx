@@ -11,7 +11,7 @@ interface AssetSearchSortProps {
 }
 
 const SORT_OPTIONS: Array<{ value: SortState['field']; label: string }> = [
-  { value: 'identifier', label: 'Identifier' },
+  { value: 'external_key', label: 'Identifier' },
   { value: 'name', label: 'Name' },
   { value: 'is_active', label: 'Status' },
   { value: 'created_at', label: 'Created Date' },
