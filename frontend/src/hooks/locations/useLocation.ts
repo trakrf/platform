@@ -5,15 +5,13 @@ import { locationsApi } from '@/lib/api/locations';
 import type { Location } from '@/types/locations';
 
 function normalizeLocation(raw: Location): Location {
-  const byIdentifier = useLocationStore.getState().cache?.byIdentifier;
-  const parentId = raw.parent
-    ? (byIdentifier?.get(raw.parent)?.id ?? null)
+  const byExternalKey = useLocationStore.getState().cache?.byExternalKey;
+  const parentId = raw.parent_external_key
+    ? (byExternalKey?.get(raw.parent_external_key)?.id ?? null)
     : null;
   return {
     ...raw,
-    id: raw.surrogate_id ?? raw.id,
-    surrogate_id: raw.surrogate_id ?? raw.id,
-    parent_location_id: parentId,
+    parent_id: parentId,
   };
 }
 

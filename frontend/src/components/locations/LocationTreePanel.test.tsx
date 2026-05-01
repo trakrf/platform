@@ -7,10 +7,10 @@ import type { Location } from '@/types/locations';
 const createMockLocation = (id: number, overrides = {}): Location => ({
   id,
   org_id: 1,
-  identifier: `loc_${id}`,
+  external_key: `loc_${id}`,
   name: `Location ${id}`,
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',
@@ -32,8 +32,8 @@ describe('LocationTreePanel', () => {
   });
 
   it('should render root locations at top level', () => {
-    const root1 = createMockLocation(1, { identifier: 'warehouse-a', name: 'Warehouse A' });
-    const root2 = createMockLocation(2, { identifier: 'warehouse-b', name: 'Warehouse B' });
+    const root1 = createMockLocation(1, { external_key: 'warehouse-a', name: 'Warehouse A' });
+    const root2 = createMockLocation(2, { external_key: 'warehouse-b', name: 'Warehouse B' });
     useLocationStore.getState().setLocations([root1, root2]);
 
     render(<LocationTreePanel onSelect={vi.fn()} selectedId={null} />);
@@ -43,8 +43,8 @@ describe('LocationTreePanel', () => {
   });
 
   it('should render children indented under parents', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child = createMockLocation(2, { identifier: 'child', parent_location_id: 1 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child = createMockLocation(2, { external_key: 'child', parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
 
     // Expand root to see child
@@ -57,7 +57,7 @@ describe('LocationTreePanel', () => {
   });
 
   it('should call onSelect when location clicked', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
+    const root = createMockLocation(1, { external_key: 'root' });
     useLocationStore.getState().setLocations([root]);
 
     const onSelect = vi.fn();
@@ -70,7 +70,7 @@ describe('LocationTreePanel', () => {
   });
 
   it('should highlight selected location with blue background', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
+    const root = createMockLocation(1, { external_key: 'root' });
     useLocationStore.getState().setLocations([root]);
 
     render(<LocationTreePanel onSelect={vi.fn()} selectedId={1} />);
@@ -80,8 +80,8 @@ describe('LocationTreePanel', () => {
   });
 
   it('should toggle expansion on chevron click', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child = createMockLocation(2, { identifier: 'child', parent_location_id: 1 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child = createMockLocation(2, { external_key: 'child', parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
 
     render(<LocationTreePanel onSelect={vi.fn()} selectedId={null} />);
@@ -98,8 +98,8 @@ describe('LocationTreePanel', () => {
   });
 
   it('should show chevron-down for expanded nodes', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child = createMockLocation(2, { identifier: 'child', parent_location_id: 1 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child = createMockLocation(2, { external_key: 'child', parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
     useLocationStore.getState().toggleNodeExpanded(1);
 
@@ -109,8 +109,8 @@ describe('LocationTreePanel', () => {
   });
 
   it('should show active/inactive status badge', () => {
-    const active = createMockLocation(1, { identifier: 'active-loc', is_active: true });
-    const inactive = createMockLocation(2, { identifier: 'inactive-loc', is_active: false });
+    const active = createMockLocation(1, { external_key: 'active-loc', is_active: true });
+    const inactive = createMockLocation(2, { external_key: 'inactive-loc', is_active: false });
     useLocationStore.getState().setLocations([active, inactive]);
 
     render(<LocationTreePanel onSelect={vi.fn()} selectedId={null} />);
@@ -120,8 +120,8 @@ describe('LocationTreePanel', () => {
   });
 
   it('should filter locations by search term', () => {
-    const loc1 = createMockLocation(1, { identifier: 'warehouse', name: 'Main Warehouse' });
-    const loc2 = createMockLocation(2, { identifier: 'office', name: 'Office Building' });
+    const loc1 = createMockLocation(1, { external_key: 'warehouse', name: 'Main Warehouse' });
+    const loc2 = createMockLocation(2, { external_key: 'office', name: 'Office Building' });
     useLocationStore.getState().setLocations([loc1, loc2]);
 
     render(<LocationTreePanel onSelect={vi.fn()} selectedId={null} searchTerm="warehouse" />);
@@ -137,7 +137,7 @@ describe('LocationTreePanel', () => {
   });
 
   it('should show no matches state when search returns no results', () => {
-    const loc = createMockLocation(1, { identifier: 'warehouse' });
+    const loc = createMockLocation(1, { external_key: 'warehouse' });
     useLocationStore.getState().setLocations([loc]);
 
     render(<LocationTreePanel onSelect={vi.fn()} selectedId={null} searchTerm="nonexistent" />);
@@ -146,9 +146,9 @@ describe('LocationTreePanel', () => {
   });
 
   it('should show ancestors when filtering', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child = createMockLocation(2, { identifier: 'child', parent_location_id: 1 });
-    const grandchild = createMockLocation(3, { identifier: 'match-this', parent_location_id: 2 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child = createMockLocation(2, { external_key: 'child', parent_id: 1 });
+    const grandchild = createMockLocation(3, { external_key: 'match-this', parent_id: 2 });
     useLocationStore.getState().setLocations([root, child, grandchild]);
     useLocationStore.getState().toggleNodeExpanded(1);
     useLocationStore.getState().toggleNodeExpanded(2);
@@ -163,9 +163,9 @@ describe('LocationTreePanel', () => {
 
   describe('keyboard navigation', () => {
     beforeEach(() => {
-      const root = createMockLocation(1, { identifier: 'root' });
-      const child1 = createMockLocation(2, { identifier: 'child1', parent_location_id: 1 });
-      const child2 = createMockLocation(3, { identifier: 'child2', parent_location_id: 1 });
+      const root = createMockLocation(1, { external_key: 'root' });
+      const child1 = createMockLocation(2, { external_key: 'child1', parent_id: 1 });
+      const child2 = createMockLocation(3, { external_key: 'child2', parent_id: 1 });
       useLocationStore.getState().setLocations([root, child1, child2]);
       useLocationStore.getState().toggleNodeExpanded(1);
     });

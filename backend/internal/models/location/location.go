@@ -8,24 +8,24 @@ import (
 )
 
 type Location struct {
-	ID               int        `json:"id"`
-	Name             string     `json:"name"`
-	OrgID            int        `json:"org_id"`
-	Org              *org.Org   `json:"org,omitempty"`
-	Identifier       string     `json:"identifier" validate:"required,min=1,max=255"`
-	Path             string     `json:"path"`
-	Depth            int        `json:"depth"`
-	ParentLocationID *int       `json:"parent_location_id"`
-	Parent           *Location  `json:"parent,omitempty"`
-	Children         []Location `json:"children,omitempty"`
-	Ancestors        []Location `json:"ancestors,omitempty"`
-	ValidFrom        time.Time  `json:"valid_from"`
-	ValidTo          *time.Time `json:"valid_to,omitempty"`
-	IsActive         bool       `json:"is_active"`
-	Description      string     `json:"description"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        *time.Time `json:"updated_at,omitempty"`
-	DeletedAt        *time.Time `json:"deleted_at,omitempty"`
+	ID          int        `json:"id"`
+	Name        string     `json:"name"`
+	OrgID       int        `json:"org_id"`
+	Org         *org.Org   `json:"org,omitempty"`
+	ExternalKey string     `json:"external_key" validate:"required,min=1,max=255"`
+	Path        string     `json:"path"`
+	Depth       int        `json:"depth"`
+	ParentID    *int       `json:"parent_id"`
+	Parent      *Location  `json:"parent,omitempty"`
+	Children    []Location `json:"children,omitempty"`
+	Ancestors   []Location `json:"ancestors,omitempty"`
+	ValidFrom   time.Time  `json:"valid_from"`
+	ValidTo     *time.Time `json:"valid_to,omitempty"`
+	IsActive    bool       `json:"is_active"`
+	Description string     `json:"description"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
 
 type LocationWithRelations struct {
@@ -35,24 +35,24 @@ type LocationWithRelations struct {
 }
 
 type CreateLocationRequest struct {
-	Name             string               `json:"name" validate:"required,min=1,max=255" example:"Warehouse 1"`
-	Identifier       string               `json:"identifier" validate:"required,min=1,max=255" example:"wh1"`
-	ParentLocationID *int                 `json:"parent_location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
-	ParentIdentifier *string              `json:"parent_identifier,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
-	Description      string               `json:"description,omitempty" validate:"omitempty,max=1024" example:"Main warehouse location"`
-	ValidFrom        *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
-	ValidTo          *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
-	IsActive         *bool                `json:"is_active,omitempty" example:"true"`
+	Name              string               `json:"name" validate:"required,min=1,max=255" example:"Warehouse 1"`
+	ExternalKey       string               `json:"external_key" validate:"required,min=1,max=255" example:"wh1"`
+	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
+	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
+	Description       string               `json:"description,omitempty" validate:"omitempty,max=1024" example:"Main warehouse location"`
+	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
+	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
+	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
 }
 
 type UpdateLocationRequest struct {
-	Name             *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
-	Identifier       *string              `json:"identifier,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
-	ParentLocationID *int                 `json:"parent_location_id,omitempty" swaggerignore:"true" validate:"omitempty,min=1"`
-	ParentIdentifier *string              `json:"parent_identifier,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
-	Description      *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
-	ValidFrom        *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
-	ValidTo          *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
+	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
+	ExternalKey       *string              `json:"external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
+	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
+	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
+	Description       *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
+	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
+	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	// Set by the PUT handler when the body had `"valid_to": null`, to request
 	// an SQL NULL write. Not decoded from JSON directly.
 	ClearValidTo bool  `json:"-" swaggerignore:"true"`
@@ -85,17 +85,17 @@ type LocationViewListResponse struct {
 // LocationWithParent is LocationView plus the resolved parent's natural key.
 type LocationWithParent struct {
 	LocationView
-	ParentIdentifier *string `json:"parent_identifier,omitempty"`
+	ParentExternalKey *string `json:"parent_external_key,omitempty"`
 }
 
 // ListFilter carries the optional filters the locations list endpoint supports.
 type ListFilter struct {
-	ParentIdentifiers []string
-	IsActive          *bool
-	Q                 *string
-	Sorts             []ListSort
-	Limit             int
-	Offset            int
+	ParentExternalKeys []string
+	IsActive           *bool
+	Q                  *string
+	Sorts              []ListSort
+	Limit              int
+	Offset             int
 }
 
 type ListSort struct {

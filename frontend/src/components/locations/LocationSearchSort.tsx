@@ -8,7 +8,7 @@ interface LocationSearchSortProps {
 }
 
 const SORT_OPTIONS: Array<{ value: LocationSort['field']; label: string }> = [
-  { value: 'identifier', label: 'Identifier' },
+  { value: 'external_key', label: 'Identifier' },
   { value: 'name', label: 'Name' },
   { value: 'created_at', label: 'Created Date' },
 ];

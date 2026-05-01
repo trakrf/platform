@@ -15,10 +15,10 @@ vi.mock('./LocationBreadcrumb', () => ({
 const createMockLocation = (id: number, overrides = {}): Location => ({
   id,
   org_id: 1,
-  identifier: `loc_${id}`,
+  external_key: `loc_${id}`,
   name: `Location ${id}`,
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',
@@ -40,7 +40,7 @@ describe('LocationExpandableCard', () => {
   });
 
   it('should show identifier and name when collapsed', () => {
-    const location = createMockLocation(1, { identifier: 'warehouse-a', name: 'Main Warehouse' });
+    const location = createMockLocation(1, { external_key: 'warehouse-a', name: 'Main Warehouse' });
     useLocationStore.getState().setLocations([location]);
 
     render(
@@ -190,8 +190,8 @@ describe('LocationExpandableCard', () => {
   });
 
   it('should show children when expanded', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child = createMockLocation(2, { identifier: 'child', parent_location_id: 1 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child = createMockLocation(2, { external_key: 'child', parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
     useLocationStore.getState().toggleCardExpanded(1);
 
@@ -211,7 +211,7 @@ describe('LocationExpandableCard', () => {
 
   it('should show Root Location type for root location when expanded', () => {
     const root = createMockLocation(1);
-    const child = createMockLocation(2, { parent_location_id: 1 });
+    const child = createMockLocation(2, { parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
     useLocationStore.getState().toggleCardExpanded(1);
 
@@ -230,7 +230,7 @@ describe('LocationExpandableCard', () => {
   });
 
   it('should show Subsidiary Location type for child location when expanded', () => {
-    const child = createMockLocation(2, { parent_location_id: 1 });
+    const child = createMockLocation(2, { parent_id: 1 });
     useLocationStore.getState().setLocations([
       createMockLocation(1),
       child,
@@ -331,7 +331,7 @@ describe('LocationExpandableCard', () => {
   });
 
   it('should filter location by search term', () => {
-    const location = createMockLocation(1, { identifier: 'warehouse' });
+    const location = createMockLocation(1, { external_key: 'warehouse' });
     useLocationStore.getState().setLocations([location]);
 
     const { rerender } = render(

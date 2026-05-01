@@ -13,27 +13,25 @@ const PAGE_SIZE = 100;
 
 /**
  * Normalize a raw Location from the public API to the internal shape.
- * Maps surrogate_id → id. parent_location_id is resolved in a second pass
+ * Maps id → id. parent_id is resolved in a second pass
  * after all locations are fetched (we need the full list to resolve parent
  * natural key → surrogate ID).
  */
 function normalizeLocation(raw: Location): Location {
   return {
     ...raw,
-    id: raw.surrogate_id ?? raw.id,
-    surrogate_id: raw.surrogate_id ?? raw.id,
   };
 }
 
 /**
- * Resolve parent_location_id for each location after the full list is known.
+ * Resolve parent_id for each location after the full list is known.
  * Builds a natural-key → surrogate-id index then patches each item.
  */
 function resolveParentIds(locations: Location[]): Location[] {
-  const byIdentifier = new Map(locations.map((l) => [l.identifier, l.id]));
+  const byExternalKey = new Map(locations.map((l) => [l.external_key, l.id]));
   return locations.map((l) => ({
     ...l,
-    parent_location_id: l.parent ? (byIdentifier.get(l.parent) ?? null) : null,
+    parent_id: l.parent_external_key ? (byExternalKey.get(l.parent_external_key) ?? null) : null,
   }));
 }
 
@@ -67,7 +65,7 @@ async function fetchAllLocations(): Promise<{ data: Location[]; total_count: num
     );
   }
 
-  // Resolve parent_location_id using natural key → surrogate ID lookup
+  // Resolve parent_id using natural key → surrogate ID lookup
   const resolved = resolveParentIds(allLocations);
 
   return { data: resolved, total_count: totalCount };

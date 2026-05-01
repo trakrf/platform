@@ -48,7 +48,7 @@ describe('Asset Types', () => {
       const asset: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'LAPTOP-001',
+        external_key: 'LAPTOP-001',
         name: 'Dell XPS 15',
         type: 'device',
         description: 'Development laptop',
@@ -61,7 +61,7 @@ describe('Asset Types', () => {
         deleted_at: null,
       };
 
-      expect(asset.identifier).toBe('LAPTOP-001');
+      expect(asset.external_key).toBe('LAPTOP-001');
     });
 
     it('should allow null valid_to', () => {
@@ -76,7 +76,7 @@ describe('Asset Types', () => {
   describe('CreateAssetRequest interface', () => {
     it('should require all mandatory fields', () => {
       const request: CreateAssetRequest = {
-        identifier: 'TEST-001',
+        external_key: 'TEST-001',
         name: 'Test Asset',
         type: 'device',
         valid_from: '2024-01-01',
@@ -84,12 +84,12 @@ describe('Asset Types', () => {
         is_active: true,
       };
 
-      expect(request.identifier).toBe('TEST-001');
+      expect(request.external_key).toBe('TEST-001');
     });
 
     it('should allow optional fields', () => {
       const request: CreateAssetRequest = {
-        identifier: 'TEST-001',
+        external_key: 'TEST-001',
         name: 'Test Asset',
         type: 'device',
         valid_from: '2024-01-01',

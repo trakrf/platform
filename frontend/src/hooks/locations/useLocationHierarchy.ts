@@ -12,11 +12,11 @@ import type { Location } from '@/types/locations';
  * locationStore.addLocation keys by .id.
  */
 function normalizeLocation(raw: Location): Location {
-  const byIdentifier = useLocationStore.getState().cache?.byIdentifier;
-  const parentId = raw.parent
-    ? (byIdentifier?.get(raw.parent)?.id ?? null)
+  const byExternalKey = useLocationStore.getState().cache?.byExternalKey;
+  const parentId = raw.parent_external_key
+    ? (byExternalKey?.get(raw.parent_external_key)?.id ?? null)
     : null;
-  return { ...raw, id: raw.surrogate_id ?? raw.id, parent_location_id: parentId };
+  return { ...raw, id: raw.id ?? raw.id, parent_id: parentId };
 }
 
 export function useLocationHierarchy(locationId: number | null) {
@@ -25,8 +25,8 @@ export function useLocationHierarchy(locationId: number | null) {
   );
 
   const parentLocation = useLocationStore((state) =>
-    location?.parent_location_id
-      ? state.getLocationById(location.parent_location_id)
+    location?.parent_id
+      ? state.getLocationById(location.parent_id)
       : undefined
   );
 
@@ -56,7 +56,7 @@ export function useLocationHierarchy(locationId: number | null) {
       const response = await locationsApi.getAncestors(locationId);
       // Ancestors arrive root-first. Normalize and write each entry to the
       // store in order so the next entry's parent_location_id can resolve
-      // through byIdentifier — required for non-root ancestors whose parent
+      // through byExternalKey — required for non-root ancestors whose parent
       // is also part of the response.
       return response.data.data.map((raw) => {
         const loc = normalizeLocation(raw);
@@ -90,7 +90,7 @@ export function useLocationHierarchy(locationId: number | null) {
     subsidiaries: subsidiaries.length > 0 ? subsidiaries : (subsidiariesQuery.data ?? []),
     allSubsidiaries,
     locationPath: locationPath.length > 0 ? locationPath : (parentsQuery.data ?? []),
-    isRoot: location ? location.parent_location_id === null : false,
+    isRoot: location ? location.parent_id === null : false,
     hasSubsidiaries: subsidiaries.length > 0 || allSubsidiaries.length > 0,
     fetchParents: parentsQuery.refetch,
     fetchSubsidiaries: subsidiariesQuery.refetch,

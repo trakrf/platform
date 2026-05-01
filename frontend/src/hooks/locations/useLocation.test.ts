@@ -19,11 +19,11 @@ vi.mock('@/stores/orgStore', () => ({
 
 // Raw API shape
 const apiLocation = {
-  surrogate_id: 1,
-  identifier: 'usa',
+  id: 1,
+  external_key: 'usa',
   name: 'United States',
   description: 'Main country location',
-  parent: null,
+  parent_external_key: null,
   path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
@@ -35,7 +35,7 @@ const apiLocation = {
 };
 
 // Normalized shape (id = surrogate_id, parent_location_id resolved)
-const mockLocation: Location = { ...apiLocation, id: 1, parent_location_id: null } as Location;
+const mockLocation: Location = { ...apiLocation, id: 1, parent_id: null } as Location;
 
 const createWrapper = () => {
   const queryClient = new QueryClient({

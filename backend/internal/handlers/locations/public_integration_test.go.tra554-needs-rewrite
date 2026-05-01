@@ -71,7 +71,7 @@ func buildLocationsPublicReadRouter(store *storage.Storage) *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.EitherAuth(store))
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", handler.ListLocations)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", handler.GetLocationByIdentifier)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", handler.GetLocationByExternalKey)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/ancestors", handler.GetAncestors)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/children", handler.GetChildren)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/descendants", handler.GetDescendants)
@@ -89,19 +89,19 @@ func TestListLocations_APIKey_HappyPath(t *testing.T) {
 
 	// Create root location
 	root, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "root-loc",
-		Name:       "Root Location",
-		Path:       "root-loc",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "root-loc",
+		Name:        "Root Location",
+		Path:        "root-loc",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
 	// Create child location
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
 		OrgID:            orgID,
-		Identifier:       "child-loc",
+		ExternalKey:      "child-loc",
 		Name:             "Child Location",
 		Path:             "root-loc.child-loc",
 		ParentLocationID: &root.ID,
@@ -158,7 +158,7 @@ func TestListLocations_WrongScope(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 }
 
-func TestGetLocationByIdentifier_CrossOrgReturns404(t *testing.T) {
+func TestGetLocationByExternalKey_CrossOrgReturns404(t *testing.T) {
 	t.Setenv("JWT_SECRET", "pub-locations")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -167,12 +167,12 @@ func TestGetLocationByIdentifier_CrossOrgReturns404(t *testing.T) {
 	// orgA: create location
 	orgAID, _ := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgAID,
-		Identifier: "loc-in-orga",
-		Name:       "OrgA Location",
-		Path:       "loc-in-orga",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgAID,
+		ExternalKey: "loc-in-orga",
+		Name:        "OrgA Location",
+		Path:        "loc-in-orga",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -199,12 +199,12 @@ func TestLocationsHierarchy_WrongScope_Returns403(t *testing.T) {
 
 	// Seed a location so the handler has something to resolve if auth were to pass.
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "scope-test",
-		Name:       "Scope Test",
-		Path:       "scope-test",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "scope-test",
+		Name:        "Scope Test",
+		Path:        "scope-test",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 

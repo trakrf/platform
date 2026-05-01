@@ -16,7 +16,7 @@ vi.mock('@/lib/auth/orgContext');
 
 const mockAsset: Asset = {
   id: 1,
-  surrogate_id: 1,
+  id: 1,
   identifier: 'LAP-001',
   name: 'Test Laptop',
   type: 'device',

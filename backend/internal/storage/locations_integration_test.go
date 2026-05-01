@@ -15,7 +15,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
-func TestGetLocationByIdentifier_Found(t *testing.T) {
+func TestGetLocationByExternalKey_Found(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -23,34 +23,34 @@ func TestGetLocationByIdentifier_Found(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", Path: "wh-1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1.bay-3", Name: "Bay 3",
-		ParentLocationID: &parent.ID,
-		Path:             "wh-1.bay-3", ValidFrom: time.Now(), IsActive: true,
+		OrgID: orgID, ExternalKey: "wh-1.bay-3", Name: "Bay 3",
+		ParentID: &parent.ID,
+		Path:     "wh-1.bay-3", ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
-	view, err := store.GetLocationByIdentifier(context.Background(), orgID, "wh-1.bay-3")
+	view, err := store.GetLocationByExternalKey(context.Background(), orgID, "wh-1.bay-3")
 	require.NoError(t, err)
 	require.NotNil(t, view)
-	assert.Equal(t, "wh-1.bay-3", view.Identifier)
-	require.NotNil(t, view.ParentIdentifier)
-	assert.Equal(t, "wh-1", *view.ParentIdentifier)
+	assert.Equal(t, "wh-1.bay-3", view.ExternalKey)
+	require.NotNil(t, view.ParentExternalKey)
+	assert.Equal(t, "wh-1", *view.ParentExternalKey)
 }
 
-func TestGetLocationByIdentifier_NotFound(t *testing.T) {
+func TestGetLocationByExternalKey_NotFound(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
 	pool := store.Pool().(*pgxpool.Pool)
 	orgID := testutil.CreateTestAccount(t, pool)
 
-	view, err := store.GetLocationByIdentifier(context.Background(), orgID, "missing")
+	view, err := store.GetLocationByExternalKey(context.Background(), orgID, "missing")
 	require.NoError(t, err)
 	assert.Nil(t, view)
 }
@@ -63,32 +63,32 @@ func TestListLocationsFiltered_Parent(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	root, _ := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "root", Name: "R", Path: "root",
+		OrgID: orgID, ExternalKey: "root", Name: "R", Path: "root",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	_, _ = store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "root.a", Name: "A", ParentLocationID: &root.ID,
+		OrgID: orgID, ExternalKey: "root.a", Name: "A", ParentID: &root.ID,
 		Path: "root.a", ValidFrom: time.Now(), IsActive: true,
 	})
 	_, _ = store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "root.b", Name: "B", ParentLocationID: &root.ID,
+		OrgID: orgID, ExternalKey: "root.b", Name: "B", ParentID: &root.ID,
 		Path: "root.b", ValidFrom: time.Now(), IsActive: true,
 	})
 
 	items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
-		ParentIdentifiers: []string{"root"},
-		Sorts:             []location.ListSort{{Field: "identifier"}},
-		Limit:             50,
+		ParentExternalKeys: []string{"root"},
+		Sorts:              []location.ListSort{{Field: "external_key"}},
+		Limit:              50,
 	})
 	require.NoError(t, err)
 	require.Len(t, items, 2)
-	assert.Equal(t, "root.a", items[0].Identifier)
-	assert.Equal(t, "root.b", items[1].Identifier)
-	require.NotNil(t, items[0].ParentIdentifier)
-	assert.Equal(t, "root", *items[0].ParentIdentifier)
+	assert.Equal(t, "root.a", items[0].ExternalKey)
+	assert.Equal(t, "root.b", items[1].ExternalKey)
+	require.NotNil(t, items[0].ParentExternalKey)
+	assert.Equal(t, "root", *items[0].ParentExternalKey)
 }
 
-func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
+func TestListLocationsFiltered_Integration_ExternalKeysNeverNil(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -97,13 +97,13 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 
 	// One location with no tags, one with a tag.
 	_, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "loc-empty", Name: "Empty", Path: "loc-empty",
+		OrgID: orgID, ExternalKey: "loc-empty", Name: "Empty", Path: "loc-empty",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	withTag, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "loc-tagged", Name: "Tagged", Path: "loc-tagged",
+		OrgID: orgID, ExternalKey: "loc-tagged", Name: "Tagged", Path: "loc-tagged",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 	require.NoError(t, err)
 
 	items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
-		Sorts: []location.ListSort{{Field: "identifier"}},
+		Sorts: []location.ListSort{{Field: "external_key"}},
 		Limit: 50,
 	})
 	require.NoError(t, err)
@@ -125,12 +125,12 @@ func TestListLocationsFiltered_Integration_IdentifiersNeverNil(t *testing.T) {
 
 	for _, item := range items {
 		require.NotNil(t, item.Tags,
-			"location %q Identifiers should not be nil (JSON would marshal to null)", item.Identifier)
+			"location %q ExternalKeys should not be nil (JSON would marshal to null)", item.ExternalKey)
 	}
 
 	var empty, tagged *location.LocationWithParent
 	for i := range items {
-		switch items[i].Identifier {
+		switch items[i].ExternalKey {
 		case "loc-empty":
 			empty = &items[i]
 		case "loc-tagged":
@@ -158,16 +158,16 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 
 	// Create parent location inline
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", Path: "wh-1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	// Create child with parent
 	child, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1.bay-3", Name: "Bay 3",
-		ParentLocationID: &parent.ID,
-		Path:             "wh-1.bay-3", ValidFrom: time.Now(), IsActive: true,
+		OrgID: orgID, ExternalKey: "wh-1.bay-3", Name: "Bay 3",
+		ParentID: &parent.ID,
+		Path:     "wh-1.bay-3", ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
@@ -175,13 +175,13 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, child.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.NotNil(t, got.ParentIdentifier)
-	assert.Equal(t, "wh-1", *got.ParentIdentifier)
-	assert.Equal(t, "wh-1.bay-3", got.Identifier)
+	require.NotNil(t, got.ParentExternalKey)
+	assert.Equal(t, "wh-1", *got.ParentExternalKey)
+	assert.Equal(t, "wh-1.bay-3", got.ExternalKey)
 
 	// Create a root-level location (no parent)
 	root, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-2", Name: "Warehouse 2", Path: "wh-2",
+		OrgID: orgID, ExternalKey: "wh-2", Name: "Warehouse 2", Path: "wh-2",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -190,12 +190,12 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 	got2, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, root.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got2)
-	assert.Nil(t, got2.ParentIdentifier)
+	assert.Nil(t, got2.ParentExternalKey)
 }
 
 // TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil verifies the
 // helper honors the `l.deleted_at IS NULL` predicate — a tombstoned location
-// must surface as (nil, nil), matching GetLocationByIdentifier's semantics.
+// must surface as (nil, nil), matching GetLocationByExternalKey's semantics.
 func TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -204,7 +204,7 @@ func TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "tra429-loc-doomed", Name: "Doomed",
+		OrgID: orgID, ExternalKey: "tra429-loc-doomed", Name: "Doomed",
 		Path: "tra429-loc-doomed", ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -231,15 +231,15 @@ func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testi
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "tra429-parent-tombstone", Name: "ParentTombstone",
+		OrgID: orgID, ExternalKey: "tra429-parent-tombstone", Name: "ParentTombstone",
 		Path: "tra429-parent-tombstone", ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	child, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "tra429-stale-child", Name: "StaleChild",
-		ParentLocationID: &parent.ID,
-		Path:             "tra429-stale-child", ValidFrom: time.Now(), IsActive: true,
+		OrgID: orgID, ExternalKey: "tra429-stale-child", Name: "StaleChild",
+		ParentID: &parent.ID,
+		Path:     "tra429-stale-child", ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
@@ -251,7 +251,7 @@ func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testi
 	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, child.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Nil(t, got.ParentIdentifier,
+	assert.Nil(t, got.ParentExternalKey,
 		"LEFT JOIN's deleted_at IS NULL predicate must suppress the stale parent identifier")
 }
 
@@ -277,14 +277,14 @@ func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", Path: "wh-1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	child, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1.bay-3", Name: "Bay 3",
-		Path: "wh-1.bay-3", ParentLocationID: &parent.ID,
+		OrgID: orgID, ExternalKey: "wh-1.bay-3", Name: "Bay 3",
+		Path: "wh-1.bay-3", ParentID: &parent.ID,
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -295,8 +295,8 @@ func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.NotNil(t, result.ParentIdentifier)
-	assert.Equal(t, "wh-1", *result.ParentIdentifier)
+	require.NotNil(t, result.ParentExternalKey)
+	assert.Equal(t, "wh-1", *result.ParentExternalKey)
 	assert.Equal(t, newName, result.Name)
 	assert.NotNil(t, result.Tags, "Tags slice must be non-nil (empty is OK)")
 }
@@ -309,19 +309,19 @@ func TestListLocationsFiltered_Q(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	activeLoc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "loc-active", Name: "Warehouse Active", Path: "loc-active",
+		OrgID: orgID, ExternalKey: "loc-active", Name: "Warehouse Active", Path: "loc-active",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	inactiveIDLoc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "loc-inactive-id", Name: "InactiveID", Path: "loc-inactive-id",
+		OrgID: orgID, ExternalKey: "loc-inactive-id", Name: "InactiveID", Path: "loc-inactive-id",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	deletedIDLoc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "loc-deleted-id", Name: "DeletedID", Path: "loc-deleted-id",
+		OrgID: orgID, ExternalKey: "loc-deleted-id", Name: "DeletedID", Path: "loc-deleted-id",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -351,7 +351,7 @@ func TestListLocationsFiltered_Q(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, items, 1)
-		assert.Equal(t, "loc-active", items[0].Identifier)
+		assert.Equal(t, "loc-active", items[0].ExternalKey)
 	})
 
 	t.Run("active identifier value matches", func(t *testing.T) {
@@ -361,7 +361,7 @@ func TestListLocationsFiltered_Q(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, items, 1)
-		assert.Equal(t, "loc-active", items[0].Identifier)
+		assert.Equal(t, "loc-active", items[0].ExternalKey)
 	})
 
 	t.Run("inactive identifier value does not match", func(t *testing.T) {
@@ -393,7 +393,7 @@ func TestLocationsPartialUniqueIndex_BlocksLiveDuplicates(t *testing.T) {
 
 	insert := func(identifier string) error {
 		_, err := pool.Exec(ctx, `
-			INSERT INTO trakrf.locations (org_id, identifier, name, valid_from)
+			INSERT INTO trakrf.locations (org_id, external_key, name, valid_from)
 			VALUES ($1, $2, 'name', now())
 		`, orgID, identifier)
 		return err
@@ -407,7 +407,7 @@ func TestLocationsPartialUniqueIndex_BlocksLiveDuplicates(t *testing.T) {
 
 	_, err = pool.Exec(ctx, `
 		UPDATE trakrf.locations SET deleted_at = now()
-		 WHERE org_id = $1 AND identifier = $2
+		 WHERE org_id = $1 AND external_key = $2
 	`, orgID, "part-idx-loc-1")
 	require.NoError(t, err)
 

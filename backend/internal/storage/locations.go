@@ -15,16 +15,16 @@ import (
 func (s *Storage) CreateLocation(ctx context.Context, request location.Location) (*location.Location, error) {
 	query := `
 	INSERT INTO trakrf.locations
-	(name, identifier, parent_location_id, description, valid_from, valid_to, is_active, org_id)
+	(name, external_key, parent_location_id, description, valid_from, valid_to, is_active, org_id)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	RETURNING id, org_id, name, identifier, parent_location_id, path, depth,
+	RETURNING id, org_id, name, external_key, parent_location_id, path, depth,
 	          description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	`
 	var loc location.Location
 	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, request.Name, request.Identifier, request.ParentLocationID,
+		return tx.QueryRow(ctx, query, request.Name, request.ExternalKey, request.ParentID,
 			request.Description, request.ValidFrom, request.ValidTo, request.IsActive, request.OrgID,
-		).Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+		).Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
 			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 		)
@@ -32,7 +32,7 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, fmt.Errorf("location with identifier %s already exists", request.Identifier)
+			return nil, fmt.Errorf("location with external_key %s already exists", request.ExternalKey)
 		}
 		if strings.Contains(err.Error(), "parent_location_id_fkey") {
 			return nil, fmt.Errorf("invalid parent_location_id: parent location does not exist")
@@ -81,11 +81,11 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 			return nil, nil
 		}
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			identifier := "unknown"
-			if request.Identifier != nil {
-				identifier = *request.Identifier
+			externalKey := "unknown"
+			if request.ExternalKey != nil {
+				externalKey = *request.ExternalKey
 			}
-			return nil, fmt.Errorf("location with identifier %s already exists", identifier)
+			return nil, fmt.Errorf("location with external_key %s already exists", externalKey)
 		}
 		if strings.Contains(err.Error(), "parent_location_id_fkey") {
 			return nil, fmt.Errorf("invalid parent_location_id: parent location does not exist")
@@ -98,7 +98,7 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 
 func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location.Location, error) {
 	query := `
-	SELECT id, org_id, name, identifier, parent_location_id, path, depth,
+	SELECT id, org_id, name, external_key, parent_location_id, path, depth,
 	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.locations
 	WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
@@ -106,7 +106,7 @@ func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location
 	var loc location.Location
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(&loc.ID, &loc.OrgID, &loc.Name,
-			&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+			&loc.ExternalKey, &loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
 			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 		)
 	})
@@ -129,7 +129,7 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 	}
 
 	query := `
-	SELECT id, org_id, name, identifier, parent_location_id, path, depth,
+	SELECT id, org_id, name, external_key, parent_location_id, path, depth,
 	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.locations
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
@@ -146,7 +146,7 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 		for rows.Next() {
 			var loc location.Location
 			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name,
-				&loc.Identifier, &loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ExternalKey, &loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan location: %w", err)
@@ -165,13 +165,13 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (*location.Location, error) {
 	query := `
 	WITH target AS (
-		SELECT id, org_id, name, identifier, parent_location_id, path, depth,
+		SELECT id, org_id, name, external_key, parent_location_id, path, depth,
 		       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
 		       'target' as relation_type
 		FROM trakrf.locations
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	)
-	SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+	SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
 	       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 	       CASE
 	           WHEN l.id = $1 THEN 'target'
@@ -210,8 +210,8 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 			var loc location.Location
 			var relationType string
 
-			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
+				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
 				&loc.UpdatedAt, &loc.DeletedAt, &relationType,
 			); err != nil {
@@ -246,7 +246,7 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 
 func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, offset int) ([]location.Location, error) {
 	query := `
-		SELECT id, org_id, name, identifier, parent_location_id, path, depth,
+		SELECT id, org_id, name, external_key, parent_location_id, path, depth,
 		       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 		FROM trakrf.locations
 		WHERE org_id = $1 AND deleted_at IS NULL
@@ -263,8 +263,8 @@ func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, of
 
 		for rows.Next() {
 			var loc location.Location
-			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
+				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
 				&loc.UpdatedAt, &loc.DeletedAt,
 			); err != nil {
@@ -325,9 +325,9 @@ func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, erro
 // that happen to share an identifier (e.g. two orgs both using "whs-01") stay isolated.
 func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
-		       p.identifier
+		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
@@ -345,9 +345,9 @@ func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.L
 // fully-deterministic paging across requests with the same offset.
 func (s *Storage) ListAncestorsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
-		       p.identifier
+		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
@@ -387,9 +387,9 @@ func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error
 // with identical identifier hierarchies would see each other's subtrees.
 func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
-		       p.identifier
+		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
@@ -407,9 +407,9 @@ func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location
 // keeps paging deterministic across calls.
 func (s *Storage) ListDescendantsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
-		       p.identifier
+		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
@@ -448,9 +448,9 @@ func (s *Storage) CountDescendants(ctx context.Context, orgID, id int) (int, err
 // line with GetAncestors/GetDescendants.
 func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
-		       p.identifier
+		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
@@ -467,9 +467,9 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 // The id ASC tiebreaker keeps paging deterministic when sibling names collide.
 func (s *Storage) ListChildrenPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.identifier, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
 		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
-		       p.identifier
+		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
@@ -498,7 +498,7 @@ func (s *Storage) CountChildren(ctx context.Context, orgID, id int) (int, error)
 	return n, err
 }
 
-// scanHierarchyRows runs a hierarchy query whose projection ends in p.identifier
+// scanHierarchyRows runs a hierarchy query whose projection ends in p.external_key
 // (LEFT JOIN parent) and then bulk-fetches tags for the returned locations.
 // kind ("ancestor"/"descendant"/"child") is interpolated into error messages.
 func (s *Storage) scanHierarchyRows(
@@ -514,21 +514,21 @@ func (s *Storage) scanHierarchyRows(
 
 		for rows.Next() {
 			var (
-				loc    location.Location
-				parIdt *string
+				loc       location.Location
+				parExtKey *string
 			)
 			if err := rows.Scan(
-				&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
+				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
 				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-				&parIdt,
+				&parExtKey,
 			); err != nil {
 				return fmt.Errorf("failed to scan %s: %w", kind, err)
 			}
 			out = append(out, location.LocationWithParent{
-				LocationView:     location.LocationView{Location: loc},
-				ParentIdentifier: parIdt,
+				LocationView:      location.LocationView{Location: loc},
+				ParentExternalKey: parExtKey,
 			})
 		}
 		return rows.Err()
@@ -589,10 +589,10 @@ func (s *Storage) CreateLocationWithTags(ctx context.Context, orgID int, request
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			orgID,
-			request.Identifier,
+			request.ExternalKey,
 			request.Name,
 			request.Description,
-			request.ParentLocationID,
+			request.ParentID,
 			validFrom,
 			validTo,
 			isActive,
@@ -602,7 +602,7 @@ func (s *Storage) CreateLocationWithTags(ctx context.Context, orgID int, request
 	})
 
 	if err != nil {
-		return nil, parseLocationWithTagsError(err, request.Identifier)
+		return nil, parseLocationWithTagsError(err, request.ExternalKey)
 	}
 
 	return s.getLocationWithParentByID(ctx, orgID, locationID)
@@ -637,25 +637,25 @@ func (s *Storage) GetLocationViewByID(ctx context.Context, orgID, id int) (*loca
 func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) (*location.LocationWithParent, error) {
 	query := `
 		SELECT
-			l.id, l.org_id, l.name, l.identifier, l.parent_location_id,
+			l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 			l.path, l.depth, l.description, l.valid_from, l.valid_to,
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
-			p.identifier
+			p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
 		WHERE l.id = $1 AND l.org_id = $2 AND l.deleted_at IS NULL
 		LIMIT 1
 	`
 	var (
-		loc    location.Location
-		parIdt *string
+		loc       location.Location
+		parExtKey *string
 	)
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(
-			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+			&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
 			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-			&parIdt,
+			&parExtKey,
 		)
 	})
 	if err != nil {
@@ -675,7 +675,7 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 			Location: loc,
 			Tags:     tags,
 		},
-		ParentIdentifier: parIdt,
+		ParentExternalKey: parExtKey,
 	}, nil
 }
 
@@ -715,12 +715,12 @@ func (s *Storage) ListLocationViews(ctx context.Context, orgID, limit, offset in
 	return views, nil
 }
 
-func parseLocationWithTagsError(err error, identifier string) error {
+func parseLocationWithTagsError(err error, externalKey string) error {
 	errStr := err.Error()
 
-	if strings.Contains(errStr, "locations_org_id_identifier") ||
+	if strings.Contains(errStr, "locations_org_id_external_key") ||
 		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "locations")) {
-		return fmt.Errorf("location with identifier %s already exists", identifier)
+		return fmt.Errorf("location with external_key %s already exists", externalKey)
 	}
 
 	if strings.Contains(errStr, "tags_org_id_type_value") ||
@@ -735,40 +735,40 @@ func parseLocationWithTagsError(err error, identifier string) error {
 	return fmt.Errorf("failed to create location with tags: %w", err)
 }
 
-// GetLocationByIdentifier returns the live location with the given natural key
+// GetLocationByExternalKey returns the live location with the given natural key
 // for the given org, plus the parent location's natural key. Returns (nil, nil)
 // if no match.
-func (s *Storage) GetLocationByIdentifier(
+func (s *Storage) GetLocationByExternalKey(
 	ctx context.Context, orgID int, identifier string,
 ) (*location.LocationWithParent, error) {
 	query := `
 		SELECT
-			l.id, l.org_id, l.name, l.identifier, l.parent_location_id,
+			l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 			l.path, l.depth, l.description, l.valid_from, l.valid_to,
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
-			p.identifier
+			p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
-		WHERE l.org_id = $1 AND l.identifier = $2 AND l.deleted_at IS NULL
+		WHERE l.org_id = $1 AND l.external_key = $2 AND l.deleted_at IS NULL
 		LIMIT 1
 	`
 	var (
-		loc    location.Location
-		parIdt *string
+		loc       location.Location
+		parExtKey *string
 	)
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, identifier).Scan(
-			&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier, &loc.ParentLocationID,
+			&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
 			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-			&parIdt,
+			&parExtKey,
 		)
 	})
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get location by identifier: %w", err)
+		return nil, fmt.Errorf("get location by external_key: %w", err)
 	}
 
 	tags, err := s.GetTagsByLocationID(ctx, orgID, loc.ID)
@@ -781,7 +781,7 @@ func (s *Storage) GetLocationByIdentifier(
 			Location: loc,
 			Tags:     tags,
 		},
-		ParentIdentifier: parIdt,
+		ParentExternalKey: parExtKey,
 	}, nil
 }
 
@@ -795,11 +795,11 @@ func (s *Storage) ListLocationsFiltered(
 
 	query := fmt.Sprintf(`
 		SELECT
-			l.id, l.org_id, l.name, l.identifier,
+			l.id, l.org_id, l.name, l.external_key,
 			l.parent_location_id, l.path, l.depth, l.description,
 			l.valid_from, l.valid_to, l.is_active,
 			l.created_at, l.updated_at, l.deleted_at,
-			p.identifier
+			p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
@@ -820,21 +820,21 @@ func (s *Storage) ListLocationsFiltered(
 
 		for rows.Next() {
 			var (
-				loc    location.Location
-				parIdt *string
+				loc       location.Location
+				parExtKey *string
 			)
 			if err := rows.Scan(
-				&loc.ID, &loc.OrgID, &loc.Name, &loc.Identifier,
-				&loc.ParentLocationID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
+				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
 				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
-				&parIdt,
+				&parExtKey,
 			); err != nil {
 				return fmt.Errorf("scan location: %w", err)
 			}
 			out = append(out, location.LocationWithParent{
-				LocationView:     location.LocationView{Location: loc},
-				ParentIdentifier: parIdt,
+				LocationView:      location.LocationView{Location: loc},
+				ParentExternalKey: parExtKey,
 			})
 		}
 		return rows.Err()
@@ -891,9 +891,9 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 	clauses := []string{"l.org_id = $1", "l.deleted_at IS NULL"}
 	args := []any{orgID}
 
-	if len(f.ParentIdentifiers) > 0 {
-		args = append(args, f.ParentIdentifiers)
-		clauses = append(clauses, fmt.Sprintf("p.identifier = ANY($%d::text[])", len(args)))
+	if len(f.ParentExternalKeys) > 0 {
+		args = append(args, f.ParentExternalKeys)
+		clauses = append(clauses, fmt.Sprintf("p.external_key = ANY($%d::text[])", len(args)))
 	}
 	if f.IsActive != nil {
 		args = append(args, *f.IsActive)
@@ -903,7 +903,7 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 		args = append(args, "%"+*f.Q+"%")
 		idx := len(args)
 		clauses = append(clauses, fmt.Sprintf(
-			"(l.name ILIKE $%d OR l.identifier ILIKE $%d OR l.description ILIKE $%d "+
+			"(l.name ILIKE $%d OR l.external_key ILIKE $%d OR l.description ILIKE $%d "+
 				"OR EXISTS (SELECT 1 FROM trakrf.tags i "+
 				"WHERE i.location_id = l.id AND i.is_active = true "+
 				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
@@ -943,11 +943,11 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
-	if req.Identifier != nil {
-		fields["identifier"] = *req.Identifier
+	if req.ExternalKey != nil {
+		fields["external_key"] = *req.ExternalKey
 	}
-	if req.ParentLocationID != nil {
-		fields["parent_location_id"] = *req.ParentLocationID
+	if req.ParentID != nil {
+		fields["parent_location_id"] = *req.ParentID
 	}
 	if req.Description != nil {
 		fields["description"] = *req.Description
@@ -969,7 +969,7 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 
 // GetLocationWithParentByIDForTest exposes getLocationWithParentByID to
 // integration tests in the same package. Production code must use
-// GetLocationByIdentifier or the CreateLocationWithTags /
+// GetLocationByExternalKey or the CreateLocationWithTags /
 // UpdateLocation return values.
 func (s *Storage) GetLocationWithParentByIDForTest(ctx context.Context, orgID, id int) (*location.LocationWithParent, error) {
 	return s.getLocationWithParentByID(ctx, orgID, id)

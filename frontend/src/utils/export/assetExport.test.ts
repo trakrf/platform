@@ -6,12 +6,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateAssetCSV, generateAssetExcel, generateAssetPDF } from './assetExport';
 import type { Asset } from '@/types/assets';
 
-// Mock the location store — export now uses byIdentifier (natural key)
+// Mock the location store — export now uses byExternalKey (natural key)
 vi.mock('@/stores/locations/locationStore', () => ({
   useLocationStore: {
     getState: () => ({
       cache: {
-        byIdentifier: new Map([
+        byExternalKey: new Map([
           ['WH-A', { id: 1, name: 'Warehouse A', identifier: 'WH-A' }],
           ['OFF-B', { id: 2, name: 'Office B', identifier: 'OFF-B' }],
         ]),
@@ -29,7 +29,7 @@ vi.mock('@/utils/shareUtils', () => ({
 const mockAssets: Asset[] = [
   {
     id: 1,
-    surrogate_id: 1,
+    id: 1,
     identifier: 'ASSET-001',
     name: 'Laptop Dell XPS',
     type: 'device',
@@ -48,7 +48,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: 2,
-    surrogate_id: 2,
+    id: 2,
     identifier: 'ASSET-002',
     name: 'Office Chair',
     type: 'asset',
@@ -64,7 +64,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: 3,
-    surrogate_id: 3,
+    id: 3,
     identifier: 'ASSET-003',
     name: 'Asset without location',
     type: 'inventory',

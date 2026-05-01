@@ -9,9 +9,9 @@ afterEach(cleanup);
 function makeLocation(overrides: Partial<Location> & { id: number; name: string; path: string; depth: number }): Location {
   return {
     org_id: 1,
-    identifier: `loc-${overrides.id}`,
+    external_key: `loc-${overrides.id}`,
     description: '',
-    parent_location_id: null,
+    parent_id: null,
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     is_active: true,

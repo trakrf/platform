@@ -20,11 +20,11 @@ vi.mock('@/stores/orgStore', () => ({
 // Raw API shapes returned by the backend (public API response shape)
 const apiLocations = [
   {
-    surrogate_id: 1,
-    identifier: 'usa',
+    id: 1,
+    external_key: 'usa',
     name: 'United States',
     description: '',
-    parent: null,
+    parent_external_key: null,
     path: 'usa',
     depth: 1,
     valid_from: '2024-01-01',
@@ -35,11 +35,11 @@ const apiLocations = [
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    surrogate_id: 2,
-    identifier: 'california',
+    id: 2,
+    external_key: 'california',
     name: 'California',
     description: '',
-    parent: 'usa',
+    parent_external_key: 'usa',
     path: 'usa.california',
     depth: 2,
     valid_from: '2024-01-01',
@@ -53,8 +53,8 @@ const apiLocations = [
 
 // Normalized shape (what the hook stores/returns after normalization)
 const mockLocations: Location[] = [
-  { ...apiLocations[0], id: 1, parent_location_id: null } as Location,
-  { ...apiLocations[1], id: 2, parent_location_id: 1 } as Location,
+  { ...apiLocations[0], id: 1, parent_id: null } as Location,
+  { ...apiLocations[1], id: 2, parent_id: 1 } as Location,
 ];
 
 const createWrapper = () => {

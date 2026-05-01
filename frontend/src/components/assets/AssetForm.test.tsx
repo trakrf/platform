@@ -17,7 +17,7 @@ describe('AssetForm', () => {
   const mockAsset: Asset = {
     id: 1,
     org_id: 1,
-    identifier: 'LAP-001',
+    external_key: 'LAP-001',
     name: 'Test Laptop',
     type: 'device',
     description: 'Test description',
@@ -219,7 +219,7 @@ describe('AssetForm - Scanner Integration', () => {
     const mockAsset: Asset = {
       id: 1,
       org_id: 1,
-      identifier: 'TEST-001',
+      external_key: 'TEST-001',
       name: 'Test Asset',
       type: 'device',
       description: '',

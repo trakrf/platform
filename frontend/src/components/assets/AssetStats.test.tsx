@@ -16,7 +16,7 @@ describe('AssetStats', () => {
     {
       id: 1,
       org_id: 1,
-      identifier: 'DEV-001',
+      external_key: 'DEV-001',
       name: 'Device 1',
       type: 'device',
       description: '',
@@ -31,7 +31,7 @@ describe('AssetStats', () => {
     {
       id: 2,
       org_id: 1,
-      identifier: 'DEV-002',
+      external_key: 'DEV-002',
       name: 'Device 2',
       type: 'device',
       description: '',
@@ -46,7 +46,7 @@ describe('AssetStats', () => {
     {
       id: 3,
       org_id: 1,
-      identifier: 'PER-001',
+      external_key: 'PER-001',
       name: 'Person 1',
       type: 'person',
       description: '',

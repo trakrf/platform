@@ -21,7 +21,7 @@ vi.mock('@/stores/orgStore', () => ({
 const mockAsset: Asset = {
   id: 1,
   org_id: 100,
-  identifier: 'LAP-001',
+  external_key: 'LAP-001',
   name: 'Test Laptop',
   type: 'device',
   description: 'Test device',

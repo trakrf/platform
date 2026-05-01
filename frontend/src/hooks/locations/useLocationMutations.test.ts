@@ -13,11 +13,11 @@ vi.mock('@/lib/auth/orgContext');
 
 // Raw API shape (public API response)
 const apiLocation = {
-  surrogate_id: 1,
-  identifier: 'usa',
+  id: 1,
+  external_key: 'usa',
   name: 'United States',
   description: '',
-  parent: null,
+  parent_external_key: null,
   path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
@@ -29,7 +29,7 @@ const apiLocation = {
 };
 
 // Normalized shape (what is stored and returned)
-const mockLocation: Location = { ...apiLocation, id: 1, parent_location_id: null } as Location;
+const mockLocation: Location = { ...apiLocation, id: 1, parent_id: null } as Location;
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -57,7 +57,7 @@ describe('useLocationMutations', () => {
     });
 
     const createData: CreateLocationRequest = {
-      identifier: 'usa',
+      external_key: 'usa',
       name: 'United States',
       description: '',
     };
@@ -110,15 +110,15 @@ describe('useLocationMutations', () => {
     // Pre-populate parent location so normalizeLocation can resolve parent_location_id
     const parentLocation: Location = {
       ...apiLocation,
-      surrogate_id: 2,
       id: 2,
-      identifier: 'parent-loc',
-      parent: null,
-      parent_location_id: null,
+      id: 2,
+      external_key: 'parent-loc',
+      parent_external_key: null,
+      parent_id: null,
     } as Location;
     useLocationStore.getState().addLocation(parentLocation);
 
-    const moved = { ...apiLocation, parent: 'parent-loc', path: 'parent-loc.usa' };
+    const moved = { ...apiLocation, parent_external_key: 'parent-loc', path: 'parent-loc.usa' };
     vi.mocked(locationsApi.move).mockResolvedValue({
       data: { data: moved },
     } as any);
@@ -133,7 +133,7 @@ describe('useLocationMutations', () => {
 
     expect(locationsApi.move).toHaveBeenCalledWith(1, { new_parent_id: 2 });
     const cached = useLocationStore.getState().getLocationById(1);
-    expect(cached?.parent_location_id).toBe(2);
+    expect(cached?.parent_id).toBe(2);
   });
 
   it('should expose loading states', () => {

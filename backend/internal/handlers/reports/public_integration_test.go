@@ -92,12 +92,12 @@ func TestListCurrentLocations_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"scans:read"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "curr-loc-1",
-		Name:       "Current Location 1",
-		Path:       "curr-loc-1",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "curr-loc-1",
+		Name:        "Current Location 1",
+		Path:        "curr-loc-1",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -151,22 +151,22 @@ func TestGetAssetHistory_ByIdentifier(t *testing.T) {
 	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"scans:read"})
 
 	loc1, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "hist-loc-1",
-		Name:       "History Location 1",
-		Path:       "hist-loc-1",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "hist-loc-1",
+		Name:        "History Location 1",
+		Path:        "hist-loc-1",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
 	loc2, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "hist-loc-2",
-		Name:       "History Location 2",
-		Path:       "hist-loc-2",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "hist-loc-2",
+		Name:        "History Location 2",
+		Path:        "hist-loc-2",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -231,7 +231,7 @@ func TestSessionJWT_PassesThroughRequireScope(t *testing.T) {
 
 	// Seed minimum data so the handlers don't bail on empty results.
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "sess-loc", Name: "SL", Path: "sess-loc",
+		OrgID: orgID, ExternalKey: "sess-loc", Name: "SL", Path: "sess-loc",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -274,12 +274,12 @@ func seedDeletedAssetFixture(t *testing.T, store *storage.Storage, pool *pgxpool
 	orgID, token := seedReportsOrgAndKey(t, pool, store, "", []string{"scans:read"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "del-loc",
-		Name:       "Del Loc",
-		Path:       "del-loc",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "del-loc",
+		Name:        "Del Loc",
+		Path:        "del-loc",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 

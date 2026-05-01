@@ -17,7 +17,7 @@ describe('AssetTable', () => {
     {
       id: 1,
       org_id: 1,
-      identifier: 'LAP-001',
+      external_key: 'LAP-001',
       name: 'Engineering Laptop',
       type: 'device',
       description: 'Test laptop',
@@ -32,7 +32,7 @@ describe('AssetTable', () => {
     {
       id: 2,
       org_id: 1,
-      identifier: 'LAP-002',
+      external_key: 'LAP-002',
       name: 'Sales Laptop',
       type: 'device',
       description: 'Test laptop',
@@ -53,7 +53,7 @@ describe('AssetTable', () => {
       setSort: vi.fn(),
       cache: {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set(),
         allIds: [],
@@ -104,7 +104,7 @@ describe('AssetTable', () => {
       setSort: mockSetSort,
       cache: {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set(),
         allIds: [],
@@ -137,7 +137,7 @@ describe('AssetTable', () => {
       setSort: mockSetSort,
       cache: {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set(),
         allIds: [],
@@ -179,7 +179,7 @@ describe('AssetTable', () => {
       setSort: vi.fn(),
       cache: {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set(),
         allIds: [],

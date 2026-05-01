@@ -13,7 +13,7 @@ import { deserializeCache } from './transforms';
 describe('deserializeCache() self-heal', () => {
   const validAsset = {
     id: 1,
-    surrogate_id: 1,
+    id: 1,
     identifier: 'TEST-001',
     name: 'Test Asset',
     description: '',
@@ -35,7 +35,7 @@ describe('deserializeCache() self-heal', () => {
         [null, phantom],
         [1, validAsset],
       ],
-      byIdentifier: [['TEST-001', validAsset]],
+      byExternalKey: [['TEST-001', validAsset]],
       activeIds: [1],
       allIds: [null, 1],
       lastFetched: Date.now(),
@@ -54,7 +54,7 @@ describe('deserializeCache() self-heal', () => {
   it('filters null ids out of activeIds', () => {
     const serialized = JSON.stringify({
       byId: [[1, validAsset]],
-      byIdentifier: [['TEST-001', validAsset]],
+      byExternalKey: [['TEST-001', validAsset]],
       activeIds: [null, 1],
       allIds: [null, 1],
       lastFetched: Date.now(),
@@ -70,7 +70,7 @@ describe('deserializeCache() self-heal', () => {
   it('leaves a clean cache untouched', () => {
     const serialized = JSON.stringify({
       byId: [[1, validAsset]],
-      byIdentifier: [['TEST-001', validAsset]],
+      byExternalKey: [['TEST-001', validAsset]],
       activeIds: [1],
       allIds: [1],
       lastFetched: 123,

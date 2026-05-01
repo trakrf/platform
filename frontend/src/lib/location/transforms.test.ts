@@ -77,14 +77,14 @@ describe('Transforms', () => {
   describe('serializeCache() / deserializeCache()', () => {
     it('should serialize and deserialize cache with all fields', () => {
       const mockCache: LocationCache = {
-        byId: new Map([[1, { id: 1, identifier: 'test' } as any]]),
-        byIdentifier: new Map([['test', { id: 1, identifier: 'test' } as any]]),
+        byId: new Map([[1, { id: 1, external_key: 'test' } as any]]),
+        byExternalKey: new Map([['test', { id: 1, external_key: 'test' } as any]]),
         byTagEpc: new Map(),
         byParentId: new Map([[null, new Set([1])]]),
         rootIds: new Set([1]),
         activeIds: new Set([1]),
         allIds: [1],
-        allIdentifiers: ['test'],
+        allExternalKeys: ['test'],
         lastFetched: Date.now(),
         ttl: 3600000,
       };
@@ -96,22 +96,22 @@ describe('Transforms', () => {
       expect(deserialized!.allIds).toEqual([1]);
       expect(deserialized!.rootIds).toEqual(new Set([1]));
       expect(deserialized!.activeIds).toEqual(new Set([1]));
-      expect(deserialized!.allIdentifiers).toEqual(['test']);
+      expect(deserialized!.allExternalKeys).toEqual(['test']);
       expect(deserialized!.byId.size).toBe(1);
-      expect(deserialized!.byIdentifier.size).toBe(1);
+      expect(deserialized!.byExternalKey.size).toBe(1);
       expect(deserialized!.byParentId.size).toBe(1);
     });
 
     it('should handle empty cache', () => {
       const emptyCache: LocationCache = {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byTagEpc: new Map(),
         byParentId: new Map(),
         rootIds: new Set(),
         activeIds: new Set(),
         allIds: [],
-        allIdentifiers: [],
+        allExternalKeys: [],
         lastFetched: 0,
         ttl: 3600000,
       };
@@ -123,7 +123,7 @@ describe('Transforms', () => {
       expect(deserialized!.allIds).toEqual([]);
       expect(deserialized!.rootIds.size).toBe(0);
       expect(deserialized!.activeIds.size).toBe(0);
-      expect(deserialized!.allIdentifiers).toEqual([]);
+      expect(deserialized!.allExternalKeys).toEqual([]);
     });
 
     it('should handle invalid JSON', () => {
@@ -139,13 +139,13 @@ describe('Transforms', () => {
     it('should preserve numeric values (lastFetched, ttl)', () => {
       const mockCache: LocationCache = {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byTagEpc: new Map(),
         byParentId: new Map(),
         rootIds: new Set(),
         activeIds: new Set(),
         allIds: [],
-        allIdentifiers: [],
+        allExternalKeys: [],
         lastFetched: 1234567890,
         ttl: 7200000,
       };
@@ -160,7 +160,7 @@ describe('Transforms', () => {
     it('should serialize/deserialize multiple byParentId entries', () => {
       const mockCache: LocationCache = {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byTagEpc: new Map(),
         byParentId: new Map([
           [null, new Set([1, 2])],
@@ -170,7 +170,7 @@ describe('Transforms', () => {
         rootIds: new Set([1, 2]),
         activeIds: new Set([1, 3, 4]),
         allIds: [1, 2, 3, 4, 5, 6],
-        allIdentifiers: ['a', 'b', 'c', 'd', 'e', 'f'],
+        allExternalKeys: ['a', 'b', 'c', 'd', 'e', 'f'],
         lastFetched: Date.now(),
         ttl: 3600000,
       };
@@ -187,13 +187,13 @@ describe('Transforms', () => {
     it('should preserve cached identifier list', () => {
       const mockCache: LocationCache = {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byTagEpc: new Map(),
         byParentId: new Map(),
         rootIds: new Set(),
         activeIds: new Set(),
         allIds: [1, 2, 3],
-        allIdentifiers: ['usa', 'warehouse_1', 'warehouse_2'],
+        allExternalKeys: ['usa', 'warehouse_1', 'warehouse_2'],
         lastFetched: Date.now(),
         ttl: 3600000,
       };
@@ -201,7 +201,7 @@ describe('Transforms', () => {
       const serialized = serializeCache(mockCache);
       const deserialized = deserializeCache(serialized);
 
-      expect(deserialized!.allIdentifiers).toEqual(['usa', 'warehouse_1', 'warehouse_2']);
+      expect(deserialized!.allExternalKeys).toEqual(['usa', 'warehouse_1', 'warehouse_2']);
     });
   });
 });

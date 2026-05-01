@@ -26,7 +26,7 @@ var validate = func() *validator.Validate {
 // InventoryStorage defines the storage operations needed by the inventory handler.
 type InventoryStorage interface {
 	SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error)
-	GetLocationByIdentifier(ctx context.Context, orgID int, identifier string) (*location.LocationWithParent, error)
+	GetLocationByExternalKey(ctx context.Context, orgID int, identifier string) (*location.LocationWithParent, error)
 	GetAssetIDsByIdentifiers(ctx context.Context, orgID int, identifiers []string) (map[string]int, error)
 }
 
@@ -95,7 +95,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve location_identifier → numeric.
-	loc, err := h.storage.GetLocationByIdentifier(r.Context(), orgID, *request.LocationIdentifier)
+	loc, err := h.storage.GetLocationByExternalKey(r.Context(), orgID, *request.LocationIdentifier)
 	if err != nil {
 		httputil.RespondStorageError(w, r, err, requestID)
 		return

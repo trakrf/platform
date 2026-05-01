@@ -372,7 +372,7 @@
             "maxLength": 1024,
             "type": "string"
           },
-          "identifier": {
+          "external_key": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
@@ -388,11 +388,16 @@
             "minLength": 1,
             "type": "string"
           },
-          "parent_identifier": {
+          "parent_external_key": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
+          },
+          "parent_id": {
+            "example": 42,
+            "minimum": 1,
+            "type": "integer"
           },
           "tags": {
             "items": {
@@ -412,7 +417,7 @@
           }
         },
         "required": [
-          "identifier",
+          "external_key",
           "name"
         ],
         "type": "object"
@@ -429,8 +434,11 @@
           "description": {
             "type": "string"
           },
-          "identifier": {
+          "external_key": {
             "type": "string"
+          },
+          "id": {
+            "type": "integer"
           },
           "is_active": {
             "type": "boolean"
@@ -438,14 +446,16 @@
           "name": {
             "type": "string"
           },
-          "parent": {
+          "parent_external_key": {
+            "nullable": true,
             "type": "string"
+          },
+          "parent_id": {
+            "nullable": true,
+            "type": "integer"
           },
           "path": {
             "type": "string"
-          },
-          "surrogate_id": {
-            "type": "integer"
           },
           "tags": {
             "items": {
@@ -475,7 +485,7 @@
             "maxLength": 1024,
             "type": "string"
           },
-          "identifier": {
+          "external_key": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
@@ -491,11 +501,16 @@
             "minLength": 1,
             "type": "string"
           },
-          "parent_identifier": {
+          "parent_external_key": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
+          },
+          "parent_id": {
+            "example": 42,
+            "minimum": 1,
+            "type": "integer"
           },
           "valid_from": {
             "example": "2025-12-14T00:00:00Z",
@@ -1827,9 +1842,9 @@
             }
           },
           {
-            "description": "filter by parent identifier (may repeat)",
+            "description": "filter by parent's external_key (may repeat)",
             "in": "query",
-            "name": "parent",
+            "name": "parent_external_key",
             "schema": {
               "type": "string"
             }
@@ -1843,7 +1858,7 @@
             }
           },
           {
-            "description": "substring search (case-insensitive) on name, identifier, description, and active tag values",
+            "description": "substring search on name, external_key, description, and active tag values",
             "in": "query",
             "name": "q",
             "schema": {
@@ -1868,27 +1883,7 @@
                 }
               }
             },
-            "description": "OK",
-            "headers": {
-              "X-RateLimit-Limit": {
-                "description": "Steady-state requests/min for this API key",
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Requests remaining before throttling; bounded by X-RateLimit-Limit",
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit",
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "content": {
@@ -1928,15 +1923,7 @@
                 }
               }
             },
-            "description": "rate_limited",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds to wait before retrying",
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
+            "description": "rate_limited"
           }
         },
         "security": [
@@ -1952,7 +1939,7 @@
         ]
       },
       "post": {
-        "description": "Create a new location in the hierarchy, optionally with one or more tags.\nSet ParentLocationID to nest the location under an existing parent. The Location response header contains the canonical URL.",
+        "description": "Create a new location in the hierarchy, optionally with one or more tags.\nSet parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.",
         "operationId": "locations.create",
         "requestBody": {
           "content": {
@@ -2201,18 +2188,108 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}": {
-      "delete": {
-        "description": "Delete a location by its natural identifier. The location is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the location does not exist or has already been deleted.",
-        "operationId": "locations.delete",
+    "/api/v1/locations/lookup": {
+      "get": {
+        "description": "Find a single live location by its external_key. Returns 404 if no match.\nExactly one natural-key parameter is required; multiple or none returns 400.",
+        "operationId": "locations.lookup",
         "parameters": [
           {
-            "description": "Location identifier",
-            "in": "path",
-            "name": "identifier",
+            "description": "Location external_key (natural key)",
+            "in": "query",
+            "name": "external_key",
             "required": true,
             "schema": {
               "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/locations.GetLocationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
+          }
+        },
+        "security": [
+          {
+            "APIKey": [
+              "locations:read"
+            ]
+          }
+        ],
+        "summary": "Lookup location by external_key",
+        "tags": [
+          "locations"
+        ]
+      }
+    },
+    "/api/v1/locations/{id}": {
+      "delete": {
+        "description": "Delete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.",
+        "operationId": "locations.delete",
+        "parameters": [
+          {
+            "description": "Location ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
             }
           }
         ],
@@ -2294,16 +2371,16 @@
         ]
       },
       "get": {
-        "description": "Retrieve a location by its natural identifier. Returns 404 if the location does not exist.",
+        "description": "Retrieve a location by its canonical ID. Returns 404 if not found.",
         "operationId": "locations.get",
         "parameters": [
           {
-            "description": "Location identifier (natural key)",
+            "description": "Location ID",
             "in": "path",
-            "name": "identifier",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           }
         ],
@@ -2316,27 +2393,7 @@
                 }
               }
             },
-            "description": "OK",
-            "headers": {
-              "X-RateLimit-Limit": {
-                "description": "Steady-state requests/min for this API key",
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Requests remaining before throttling; bounded by X-RateLimit-Limit",
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit",
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "content": {
@@ -2386,15 +2443,7 @@
                 }
               }
             },
-            "description": "rate_limited",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds to wait before retrying",
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
+            "description": "Too Many Requests"
           }
         },
         "security": [
@@ -2404,7 +2453,7 @@
             ]
           }
         ],
-        "summary": "Get location by natural identifier",
+        "summary": "Get location by ID",
         "tags": [
           "locations"
         ]
@@ -2414,12 +2463,12 @@
         "operationId": "locations.update",
         "parameters": [
           {
-            "description": "Location identifier",
+            "description": "Location ID",
             "in": "path",
-            "name": "identifier",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           }
         ],
@@ -2530,18 +2579,17 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}/ancestors": {
+    "/api/v1/locations/{id}/ancestors": {
       "get": {
-        "description": "Return all ancestor locations from the root of the hierarchy down to the immediate parent of the specified location.",
         "operationId": "locations.ancestors",
         "parameters": [
           {
-            "description": "Location identifier",
+            "description": "Location ID",
             "in": "path",
-            "name": "identifier",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           },
           {
@@ -2648,18 +2696,17 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}/children": {
+    "/api/v1/locations/{id}/children": {
       "get": {
-        "description": "Return the immediate child locations of the specified location (one level deep only).",
         "operationId": "locations.children",
         "parameters": [
           {
-            "description": "Location identifier",
+            "description": "Location ID",
             "in": "path",
-            "name": "identifier",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           },
           {
@@ -2766,18 +2813,17 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}/descendants": {
+    "/api/v1/locations/{id}/descendants": {
       "get": {
-        "description": "Return all descendant locations (children, grandchildren, etc.) beneath the specified location in the hierarchy.",
         "operationId": "locations.descendants",
         "parameters": [
           {
-            "description": "Location identifier",
+            "description": "Location ID",
             "in": "path",
-            "name": "identifier",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           },
           {
@@ -2884,24 +2930,23 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}/tags": {
+    "/api/v1/locations/{id}/tags": {
       "post": {
-        "description": "Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing location.\nThe tag must be unique within the organization.",
         "operationId": "locations.tags.add",
         "parameters": [
           {
-            "description": "Location identifier",
+            "description": "Location ID",
             "in": "path",
-            "name": "identifier",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           }
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "*/*": {
               "schema": {
                 "$ref": "#/components/schemas/shared.TagRequest"
               }
@@ -2996,24 +3041,23 @@
         ]
       }
     },
-    "/api/v1/locations/{identifier}/tags/{tagId}": {
+    "/api/v1/locations/{location_id}/tags/{tag_id}": {
       "delete": {
-        "description": "Detach a tag from a location by its tag record ID.",
         "operationId": "locations.tags.remove",
         "parameters": [
           {
-            "description": "Location identifier",
+            "description": "Location ID",
             "in": "path",
-            "name": "identifier",
+            "name": "location_id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           },
           {
             "description": "Tag ID",
             "in": "path",
-            "name": "tagId",
+            "name": "tag_id",
             "required": true,
             "schema": {
               "type": "integer"

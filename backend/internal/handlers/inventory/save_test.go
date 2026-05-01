@@ -38,7 +38,7 @@ func (m *mockInventoryStorage) SaveInventoryScans(ctx context.Context, orgID int
 	return m.saveResult, m.saveError
 }
 
-func (m *mockInventoryStorage) GetLocationByIdentifier(ctx context.Context, orgID int, identifier string) (*location.LocationWithParent, error) {
+func (m *mockInventoryStorage) GetLocationByExternalKey(ctx context.Context, orgID int, identifier string) (*location.LocationWithParent, error) {
 	if m.locationByIdentifierError != nil {
 		return nil, m.locationByIdentifierError
 	}
@@ -468,7 +468,7 @@ func TestSave_LocationAccessDenied(t *testing.T) {
 			LocationID: 999,
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-99": {LocationView: location.LocationView{Location: location.Location{ID: 999, Identifier: "WH-99"}}},
+			"WH-99": {LocationView: location.LocationView{Location: location.Location{ID: 999, ExternalKey: "WH-99"}}},
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100, "ASSET-0002": 101},
 	}
@@ -496,7 +496,7 @@ func TestSave_AssetAccessDenied(t *testing.T) {
 			TotalCount: 3,
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, Identifier: "WH-01"}}},
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
@@ -518,7 +518,7 @@ func TestSave_InternalStorageError(t *testing.T) {
 	mock := &mockInventoryStorage{
 		saveError: errors.New("database connection failed"),
 		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, Identifier: "WH-01"}}},
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100},
 	}
@@ -547,7 +547,7 @@ func TestSave_Success(t *testing.T) {
 			Timestamp:    ts,
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-B": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-B"}}},
+			"WH-B": {LocationView: location.LocationView{Location: location.Location{ID: 42, ExternalKey: "WH-B"}}},
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
@@ -614,7 +614,7 @@ func TestSave_LocationIdentifierNotFound_Rejected(t *testing.T) {
 func TestSave_AssetIdentifierNotFound_Rejected(t *testing.T) {
 	mock := &mockInventoryStorage{
 		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-01"}}},
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, ExternalKey: "WH-01"}}},
 		},
 		assetIDsByIdentifiers: map[string]int{
 			"ASSET-1": 7,
@@ -641,7 +641,7 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 			Count: 2, LocationID: 42, LocationName: "WH-01", Timestamp: ts,
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
-			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, Identifier: "WH-01", Name: "WH-01"}}},
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 42, ExternalKey: "WH-01", Name: "WH-01"}}},
 		},
 		assetIDsByIdentifiers: map[string]int{
 			"ASSET-1": 7,

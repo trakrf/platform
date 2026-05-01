@@ -75,7 +75,7 @@ export function detectCircularReference(
     const location = locations.find((l) => l.id === current);
     if (!location) break;
 
-    current = location.parent_location_id || 0;
+    current = location.parent_id || 0;
     if (current === 0) break;
   }
 

@@ -24,7 +24,7 @@ func TestGetAssetByIdentifier_Found(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", Path: "wh-1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -98,11 +98,11 @@ func TestListAssetsFiltered_LocationAndSort(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	locA, _ := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-A", Name: "A", Path: "wh-A",
+		OrgID: orgID, ExternalKey: "wh-A", Name: "A", Path: "wh-A",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	locB, _ := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-B", Name: "B", Path: "wh-B",
+		OrgID: orgID, ExternalKey: "wh-B", Name: "B", Path: "wh-B",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 
@@ -265,7 +265,7 @@ func TestGetAssetByIdentifier_CrossOrgLocationFenced(t *testing.T) {
 
 	// Location lives in org B.
 	locB, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgB, Identifier: "org-b-location", Name: "B", Path: "org-b-location",
+		OrgID: orgB, ExternalKey: "org-b-location", Name: "B", Path: "org-b-location",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -311,7 +311,7 @@ func TestGetAssetWithLocationByID_ResolvesParent(t *testing.T) {
 
 	// Create parent location inline
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", Path: "wh-1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -383,7 +383,7 @@ func TestGetAssetWithLocationByID_SoftDeletedLocationYieldsNilIdentifier(t *test
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "tra429-loc-tombstone", Name: "Tombstone",
+		OrgID: orgID, ExternalKey: "tra429-loc-tombstone", Name: "Tombstone",
 		Path: "tra429-loc-tombstone", ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -429,7 +429,7 @@ func TestUpdateAsset_PopulatesCurrentLocationIdentifier(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-1", Name: "Warehouse 1", Path: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", Path: "wh-1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

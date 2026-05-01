@@ -135,7 +135,7 @@ describe('Transforms', () => {
     it('should serialize and deserialize cache correctly', () => {
       const cache: AssetCache = {
         byId: new Map([[1, mockAsset]]),
-        byIdentifier: new Map([['TEST-001', mockAsset]]),
+        byExternalKey: new Map([['TEST-001', mockAsset]]),
         byType: new Map([['device', new Set([1])]]),
         activeIds: new Set([1]),
         allIds: [1],
@@ -148,7 +148,7 @@ describe('Transforms', () => {
 
       expect(deserialized).not.toBeNull();
       expect(deserialized?.byId.get(1)).toEqual(mockAsset);
-      expect(deserialized?.byIdentifier.get('TEST-001')).toEqual(mockAsset);
+      expect(deserialized?.byExternalKey.get('TEST-001')).toEqual(mockAsset);
       expect(deserialized?.byType.get('device')).toEqual(new Set([1]));
       expect(deserialized?.activeIds).toEqual(new Set([1]));
       expect(deserialized?.allIds).toEqual([1]);
@@ -157,7 +157,7 @@ describe('Transforms', () => {
     it('should handle empty cache', () => {
       const cache: AssetCache = {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set(),
         allIds: [],
@@ -170,7 +170,7 @@ describe('Transforms', () => {
 
       expect(deserialized).not.toBeNull();
       expect(deserialized?.byId.size).toBe(0);
-      expect(deserialized?.byIdentifier.size).toBe(0);
+      expect(deserialized?.byExternalKey.size).toBe(0);
       expect(deserialized?.byType.size).toBe(0);
       expect(deserialized?.activeIds.size).toBe(0);
       expect(deserialized?.allIds).toEqual([]);
@@ -193,7 +193,7 @@ describe('Transforms', () => {
           [1, mockAsset],
           [2, asset2],
         ]),
-        byIdentifier: new Map([
+        byExternalKey: new Map([
           ['TEST-001', mockAsset],
           ['TEST-002', asset2],
         ]),

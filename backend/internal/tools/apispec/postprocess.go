@@ -104,6 +104,7 @@ var nullableFields = map[string][]string{
 	"asset.PublicAssetView":         {"current_location"},
 	"apikey.APIKeyListItem":         {"created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem": {"duration_seconds"},
+	"location.PublicLocationView":   {"parent_id", "parent_external_key"},
 }
 
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse

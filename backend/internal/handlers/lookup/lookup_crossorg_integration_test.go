@@ -161,12 +161,12 @@ func TestLookupByTags_CrossOrg_LocationNoLeak(t *testing.T) {
 	orgB, _ := seedLookupOrgAndSession(t, pool, "tra431-orgB-location")
 
 	orgBLoc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgB,
-		Identifier: "orgB-secret-location",
-		Name:       "OrgB Secret Location",
-		Path:       "orgB-secret-location",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgB,
+		ExternalKey: "orgB-secret-location",
+		Name:        "OrgB Secret Location",
+		Path:        "orgB-secret-location",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 

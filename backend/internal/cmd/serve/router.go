@@ -151,10 +151,13 @@ func setupRouter(
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}", assetsHandler.GetAssetByIdentifier)
 
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}", locationsHandler.GetLocationByIdentifier)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/ancestors", locationsHandler.GetAncestors)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/children", locationsHandler.GetChildren)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{identifier}/descendants", locationsHandler.GetDescendants)
+		// /lookup must be registered BEFORE /{id} so chi resolves it as a literal,
+		// not as a {id} match with value "lookup".
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/lookup", locationsHandler.Lookup)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}", locationsHandler.GetLocation)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}/ancestors", locationsHandler.GetAncestors)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}/children", locationsHandler.GetChildren)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}/descendants", locationsHandler.GetDescendants)
 
 		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
 		// require scans:read per TRA-392 — they moved under /locations/ and /assets/ for URL
@@ -184,10 +187,10 @@ func setupRouter(
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
-		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{identifier}", locationsHandler.Update)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}", locationsHandler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{identifier}/tags", locationsHandler.AddTag)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{identifier}/tags/{tagId}", locationsHandler.RemoveTag)
+		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{id}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}", locationsHandler.Delete)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{id}/tags", locationsHandler.AddTag)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}/tags/{tag_id}", locationsHandler.RemoveTag)
 
 		// Inventory (scan writes)
 		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)
@@ -208,11 +211,9 @@ func setupRouter(
 		r.Post("/api/v1/assets/by-id/{id}/tags", assetsHandler.AddTagByID)
 		r.Delete("/api/v1/assets/by-id/{id}/tags/{tagId}", assetsHandler.RemoveTagByID)
 
-		r.Get("/api/v1/locations/by-id/{id}", locationsHandler.GetLocationByID)
-		r.Put("/api/v1/locations/by-id/{id}", locationsHandler.UpdateByID)
-		r.Delete("/api/v1/locations/by-id/{id}", locationsHandler.DeleteByID)
-		r.Post("/api/v1/locations/by-id/{id}/tags", locationsHandler.AddTagByID)
-		r.Delete("/api/v1/locations/by-id/{id}/tags/{tagId}", locationsHandler.RemoveTagByID)
+		// Locations /by-id/ family removed in TRA-554. Public /api/v1/locations/{id}
+		// already accepts session JWT via EitherAuth, so frontend session-auth
+		// flows hit the canonical route directly.
 	})
 
 	if os.Getenv("APP_ENV") != "production" {

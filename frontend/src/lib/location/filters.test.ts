@@ -22,10 +22,10 @@ describe('Filters', () => {
     {
       id: 1,
       org_id: 1,
-      identifier: 'usa',
+      external_key: 'usa',
       name: 'United States',
       description: '',
-      parent_location_id: null,
+      parent_id: null,
       path: 'usa',
       depth: 1,
       valid_from: '2024-01-01',
@@ -38,10 +38,10 @@ describe('Filters', () => {
     {
       id: 2,
       org_id: 1,
-      identifier: 'warehouse_1',
+      external_key: 'warehouse_1',
       name: 'Warehouse 1',
       description: '',
-      parent_location_id: 1,
+      parent_id: 1,
       path: 'usa.warehouse_1',
       depth: 2,
       valid_from: '2024-01-15',
@@ -54,10 +54,10 @@ describe('Filters', () => {
     {
       id: 3,
       org_id: 1,
-      identifier: 'old_building',
+      external_key: 'old_building',
       name: 'Old Building',
       description: '',
-      parent_location_id: 1,
+      parent_id: 1,
       path: 'usa.old_building',
       depth: 2,
       valid_from: '2024-02-01',
@@ -73,7 +73,7 @@ describe('Filters', () => {
     it('should search by identifier (case-insensitive)', () => {
       const result = searchLocations(mockLocations, 'warehouse');
       expect(result).toHaveLength(1);
-      expect(result[0].identifier).toBe('warehouse_1');
+      expect(result[0].external_key).toBe('warehouse_1');
     });
 
     it('should search by name (case-insensitive)', () => {
@@ -85,7 +85,7 @@ describe('Filters', () => {
     it('should match partial strings', () => {
       const result = searchLocations(mockLocations, 'build');
       expect(result).toHaveLength(1);
-      expect(result[0].identifier).toBe('old_building');
+      expect(result[0].external_key).toBe('old_building');
     });
 
     it('should return all when empty search', () => {
@@ -189,7 +189,7 @@ describe('Filters', () => {
     it('should apply search filter', () => {
       const result = filterLocations(mockLocations, {
         search: 'warehouse',
-        identifier: '',
+        external_key: '',
         is_active: 'all',
       });
       expect(result).toHaveLength(1);
@@ -198,7 +198,7 @@ describe('Filters', () => {
     it('should apply identifier filter', () => {
       const result = filterLocations(mockLocations, {
         search: '',
-        identifier: 'usa',
+        external_key: 'usa',
         is_active: 'all',
       });
       expect(result).toHaveLength(1);
@@ -207,7 +207,7 @@ describe('Filters', () => {
     it('should apply date range filter', () => {
       const result = filterLocations(mockLocations, {
         search: '',
-        identifier: '',
+        external_key: '',
         is_active: 'all',
         created_after: '2024-01-10',
       });
@@ -217,7 +217,7 @@ describe('Filters', () => {
     it('should apply active status filter', () => {
       const result = filterLocations(mockLocations, {
         search: '',
-        identifier: '',
+        external_key: '',
         is_active: 'active',
       });
       expect(result).toHaveLength(2);
@@ -226,17 +226,17 @@ describe('Filters', () => {
     it('should combine multiple filters', () => {
       const result = filterLocations(mockLocations, {
         search: 'warehouse',
-        identifier: '',
+        external_key: '',
         is_active: 'active',
       });
       expect(result).toHaveLength(1);
-      expect(result[0].identifier).toBe('warehouse_1');
+      expect(result[0].external_key).toBe('warehouse_1');
     });
 
     it('should return empty array when no matches', () => {
       const result = filterLocations(mockLocations, {
         search: 'nonexistent',
-        identifier: '',
+        external_key: '',
         is_active: 'all',
       });
       expect(result).toHaveLength(0);
@@ -249,9 +249,9 @@ describe('Filters', () => {
         field: 'identifier',
         direction: 'asc',
       });
-      expect(result[0].identifier).toBe('old_building');
-      expect(result[1].identifier).toBe('usa');
-      expect(result[2].identifier).toBe('warehouse_1');
+      expect(result[0].external_key).toBe('old_building');
+      expect(result[1].external_key).toBe('usa');
+      expect(result[2].external_key).toBe('warehouse_1');
     });
 
     it('should sort by identifier descending', () => {
@@ -259,9 +259,9 @@ describe('Filters', () => {
         field: 'identifier',
         direction: 'desc',
       });
-      expect(result[0].identifier).toBe('warehouse_1');
-      expect(result[1].identifier).toBe('usa');
-      expect(result[2].identifier).toBe('old_building');
+      expect(result[0].external_key).toBe('warehouse_1');
+      expect(result[1].external_key).toBe('usa');
+      expect(result[2].external_key).toBe('old_building');
     });
 
     it('should sort by name ascending', () => {
@@ -383,9 +383,9 @@ describe('Filters', () => {
 
     it('should return sorted identifiers', () => {
       const unsortedLocations: Location[] = [
-        { ...mockLocations[0], identifier: 'zebra' },
-        { ...mockLocations[1], identifier: 'apple' },
-        { ...mockLocations[2], identifier: 'mango' },
+        { ...mockLocations[0], external_key: 'zebra' },
+        { ...mockLocations[1], external_key: 'apple' },
+        { ...mockLocations[2], external_key: 'mango' },
       ];
       const result = extractUniqueIdentifiers(unsortedLocations);
       expect(result).toEqual(['apple', 'mango', 'zebra']);

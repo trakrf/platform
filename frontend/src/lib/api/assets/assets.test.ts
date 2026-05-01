@@ -73,7 +73,7 @@ describe('assetsApi', () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'LAPTOP-001',
+        external_key: 'LAPTOP-001',
         name: 'Dell XPS 15',
         type: 'device',
         description: 'Dev laptop',
@@ -98,7 +98,7 @@ describe('assetsApi', () => {
       const result = await assetsApi.list();
 
       expect(result.data.data).toHaveLength(1);
-      expect(result.data.data[0].identifier).toBe('LAPTOP-001');
+      expect(result.data.data[0].external_key).toBe('LAPTOP-001');
     });
 
     it('should propagate errors unchanged', async () => {
@@ -114,7 +114,7 @@ describe('assetsApi', () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'LAPTOP-001',
+        external_key: 'LAPTOP-001',
         name: 'Dell XPS 15',
         type: 'device',
         description: 'Dev laptop',
@@ -147,7 +147,7 @@ describe('assetsApi', () => {
   describe('create()', () => {
     it('should call POST /assets with request data', async () => {
       const requestData = {
-        identifier: 'NEW-001',
+        external_key: 'NEW-001',
         name: 'New Asset',
         type: 'device' as const,
         valid_from: '2024-01-01',
@@ -177,7 +177,7 @@ describe('assetsApi', () => {
 
     it('should handle validation errors', async () => {
       const requestData = {
-        identifier: '', // Invalid - empty
+        external_key: '', // Invalid - empty
         name: 'Test',
         type: 'device' as const,
         valid_from: '2024-01-01',
@@ -210,7 +210,7 @@ describe('assetsApi', () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'LAPTOP-001',
+        external_key: 'LAPTOP-001',
         name: 'Updated Name',
         type: 'device',
         description: 'Dev laptop',
@@ -241,7 +241,7 @@ describe('assetsApi', () => {
       vi.mocked(apiClient.put).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.update(1, { identifier: 'DUP-001' })
+        assetsApi.update(1, { external_key: 'DUP-001' })
       ).rejects.toMatchObject(mockError);
     });
   });

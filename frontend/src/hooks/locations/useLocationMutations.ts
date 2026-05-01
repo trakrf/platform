@@ -8,17 +8,15 @@ import type {
   UpdateLocationRequest,
 } from '@/types/locations';
 
-/** Normalize raw public API location to internal shape. Resolves parent_location_id from store cache. */
+/** Normalize raw public API location to internal shape. Resolves parent_id from store cache. */
 function normalizeLocation(raw: Location): Location {
-  const byIdentifier = useLocationStore.getState().cache?.byIdentifier;
-  const parentId = raw.parent
-    ? (byIdentifier?.get(raw.parent)?.id ?? null)
+  const byExternalKey = useLocationStore.getState().cache?.byExternalKey;
+  const parentId = raw.parent_external_key
+    ? (byExternalKey?.get(raw.parent_external_key)?.id ?? null)
     : null;
   return {
     ...raw,
-    id: raw.surrogate_id ?? raw.id,
-    surrogate_id: raw.surrogate_id ?? raw.id,
-    parent_location_id: parentId,
+    parent_id: parentId,
   };
 }
 

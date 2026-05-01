@@ -5,10 +5,10 @@ import type { Location } from '@/types/locations';
 const createMockLocation = (id: number, overrides = {}): Location => ({
   id,
   org_id: 1,
-  identifier: `loc_${id}`,
+  external_key: `loc_${id}`,
   name: `Location ${id}`,
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',
@@ -31,16 +31,16 @@ describe('LocationStore - Cache Operations', () => {
     const { cache } = useLocationStore.getState();
 
     expect(cache.byId.has(1)).toBe(true);
-    expect(cache.byIdentifier.has('loc_1')).toBe(true);
+    expect(cache.byExternalKey.has('loc_1')).toBe(true);
     expect(cache.rootIds.has(1)).toBe(true);
     expect(cache.activeIds.has(1)).toBe(true);
     expect(cache.allIds).toContain(1);
-    expect(cache.allIdentifiers).toContain('loc_1');
+    expect(cache.allExternalKeys).toContain('loc_1');
   });
 
   it('should add child location to byParentId index', () => {
     const root = createMockLocation(1);
-    const child = createMockLocation(2, { parent_location_id: 1 });
+    const child = createMockLocation(2, { parent_id: 1 });
 
     useLocationStore.getState().addLocation(root);
     useLocationStore.getState().addLocation(child);
@@ -57,7 +57,7 @@ describe('LocationStore - Cache Operations', () => {
   // and the tree/card-list selectors don't see them until a full refetch.
   it('should add a root location when parent_location_id is absent (public API shape)', () => {
     const fromCreateResponse = createMockLocation(42, {
-      parent_location_id: undefined,
+      parent_id: undefined,
       parent: undefined,
     });
 
@@ -69,40 +69,40 @@ describe('LocationStore - Cache Operations', () => {
   });
 
   it('should resolve parent_location_id from natural-key parent on add', () => {
-    const parent = createMockLocation(1, { identifier: 'warehouse' });
+    const parent = createMockLocation(1, { external_key: 'warehouse' });
     useLocationStore.getState().addLocation(parent);
 
     const childFromCreateResponse = createMockLocation(2, {
-      parent_location_id: undefined,
-      parent: 'warehouse',
+      parent_id: undefined,
+      parent_external_key: 'warehouse',
     });
     useLocationStore.getState().addLocation(childFromCreateResponse);
 
     const { cache } = useLocationStore.getState();
     expect(cache.byParentId.get(1)?.has(2)).toBe(true);
     expect(cache.rootIds.has(2)).toBe(false);
-    expect(cache.byId.get(2)?.parent_location_id).toBe(1);
+    expect(cache.byId.get(2)?.parent_id).toBe(1);
   });
 
   it('should update location identifier correctly', () => {
     const location = createMockLocation(1);
     useLocationStore.getState().addLocation(location);
-    useLocationStore.getState().updateLocation(1, { identifier: 'new_id' });
+    useLocationStore.getState().updateLocation(1, { external_key: 'new_id' });
 
     const { cache } = useLocationStore.getState();
-    expect(cache.byIdentifier.has('loc_1')).toBe(false);
-    expect(cache.byIdentifier.has('new_id')).toBe(true);
-    expect(cache.allIdentifiers).toContain('new_id');
-    expect(cache.allIdentifiers).not.toContain('loc_1');
+    expect(cache.byExternalKey.has('loc_1')).toBe(false);
+    expect(cache.byExternalKey.has('new_id')).toBe(true);
+    expect(cache.allExternalKeys).toContain('new_id');
+    expect(cache.allExternalKeys).not.toContain('loc_1');
   });
 
   it('should handle re-parenting correctly', () => {
     const root = createMockLocation(1);
-    const child = createMockLocation(2, { parent_location_id: 1 });
+    const child = createMockLocation(2, { parent_id: 1 });
 
     useLocationStore.getState().addLocation(root);
     useLocationStore.getState().addLocation(child);
-    useLocationStore.getState().updateLocation(2, { parent_location_id: null });
+    useLocationStore.getState().updateLocation(2, { parent_id: null });
 
     const { cache } = useLocationStore.getState();
     expect(cache.rootIds.has(2)).toBe(true);
@@ -132,11 +132,11 @@ describe('LocationStore - Cache Operations', () => {
 
     const { cache } = useLocationStore.getState();
     expect(cache.byId.has(1)).toBe(false);
-    expect(cache.byIdentifier.has('loc_1')).toBe(false);
+    expect(cache.byExternalKey.has('loc_1')).toBe(false);
     expect(cache.rootIds.has(1)).toBe(false);
     expect(cache.activeIds.has(1)).toBe(false);
     expect(cache.allIds).not.toContain(1);
-    expect(cache.allIdentifiers).not.toContain('loc_1');
+    expect(cache.allExternalKeys).not.toContain('loc_1');
   });
 
   it('should throw error when deleting non-existent location', () => {
@@ -166,23 +166,23 @@ describe('LocationStore - Cache Operations', () => {
 
     const { cache } = useLocationStore.getState();
     expect(cache.byId.size).toBe(0);
-    expect(cache.byIdentifier.size).toBe(0);
+    expect(cache.byExternalKey.size).toBe(0);
     expect(cache.byParentId.size).toBe(0);
     expect(cache.rootIds.size).toBe(0);
     expect(cache.activeIds.size).toBe(0);
     expect(cache.allIds).toHaveLength(0);
-    expect(cache.allIdentifiers).toHaveLength(0);
+    expect(cache.allExternalKeys).toHaveLength(0);
   });
 
-  it('should maintain allIdentifiers in sorted order', () => {
-    const loc1 = createMockLocation(1, { identifier: 'zebra' });
-    const loc2 = createMockLocation(2, { identifier: 'alpha' });
-    const loc3 = createMockLocation(3, { identifier: 'beta' });
+  it('should maintain allExternalKeys in sorted order', () => {
+    const loc1 = createMockLocation(1, { external_key: 'zebra' });
+    const loc2 = createMockLocation(2, { external_key: 'alpha' });
+    const loc3 = createMockLocation(3, { external_key: 'beta' });
 
     useLocationStore.getState().setLocations([loc1, loc2, loc3]);
 
     const { cache } = useLocationStore.getState();
-    expect(cache.allIdentifiers).toEqual(['alpha', 'beta', 'zebra']);
+    expect(cache.allExternalKeys).toEqual(['alpha', 'beta', 'zebra']);
   });
 });
 
@@ -190,17 +190,17 @@ describe('LocationStore - Hierarchy Queries', () => {
   beforeEach(() => {
     useLocationStore.getState().invalidateCache();
 
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child1 = createMockLocation(2, { identifier: 'child1', parent_location_id: 1 });
-    const child2 = createMockLocation(3, { identifier: 'child2', parent_location_id: 1 });
-    const grandchild = createMockLocation(4, { identifier: 'grandchild', parent_location_id: 2 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child1 = createMockLocation(2, { external_key: 'child1', parent_id: 1 });
+    const child2 = createMockLocation(3, { external_key: 'child2', parent_id: 1 });
+    const grandchild = createMockLocation(4, { external_key: 'grandchild', parent_id: 2 });
 
     useLocationStore.getState().setLocations([root, child1, child2, grandchild]);
   });
 
   it('should return location by ID', () => {
     const location = useLocationStore.getState().getLocationById(1);
-    expect(location?.identifier).toBe('root');
+    expect(location?.external_key).toBe('root');
   });
 
   it('should return undefined for non-existent ID', () => {
@@ -259,7 +259,7 @@ describe('LocationStore - Hierarchy Queries', () => {
   });
 
   it('should return multiple roots', () => {
-    const newRoot = createMockLocation(5, { identifier: 'root2' });
+    const newRoot = createMockLocation(5, { external_key: 'root2' });
     useLocationStore.getState().addLocation(newRoot);
 
     const roots = useLocationStore.getState().getRootLocations();
@@ -320,13 +320,13 @@ describe('LocationStore - UI State', () => {
   });
 
   it('should reset all filters', () => {
-    useLocationStore.getState().setFilters({ search: 'test', identifier: 'id1' });
+    useLocationStore.getState().setFilters({ search: 'test', external_key: 'id1' });
     useLocationStore.getState().setPagination({ currentPage: 3 });
     useLocationStore.getState().resetFilters();
 
     const { filters, pagination } = useLocationStore.getState();
     expect(filters.search).toBe('');
-    expect(filters.identifier).toBe('');
+    expect(filters.external_key).toBe('');
     expect(filters.is_active).toBe('all');
     expect(pagination.currentPage).toBe(1);
   });
@@ -355,7 +355,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
 
   it('should return location by RFID tag EPC', () => {
     const location = createMockLocation(1, {
-      identifier: 'WH-A',
+      external_key: 'WH-A',
       name: 'Warehouse A',
       tags: [{ id: 1, tag_type: 'rfid', value: '300833B2DDD9014000000001', is_active: true }],
     });
@@ -376,7 +376,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
 
   it('should not index inactive tags', () => {
     const location = createMockLocation(1, {
-      identifier: 'WH-B',
+      external_key: 'WH-B',
       name: 'Warehouse B',
       tags: [{ id: 1, tag_type: 'rfid', value: 'INACTIVE123', is_active: false }],
     });
@@ -388,7 +388,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
 
   it('should clear byTagEpc index on cache invalidation', () => {
     const location = createMockLocation(1, {
-      identifier: 'WH-C',
+      external_key: 'WH-C',
       tags: [{ id: 1, tag_type: 'rfid', value: 'CLEAREDTAG', is_active: true }],
     });
     useLocationStore.getState().setLocations([location]);
@@ -405,7 +405,7 @@ describe('LocationStore - Tag EPC Lookup (TRA-312)', () => {
 
   it('should handle multiple tags per location', () => {
     const location = createMockLocation(1, {
-      identifier: 'MULTI-TAG',
+      external_key: 'MULTI-TAG',
       name: 'Multi-Tag Location',
       tags: [
         { id: 1, tag_type: 'rfid', value: 'TAG001', is_active: true },
@@ -429,9 +429,9 @@ describe('LocationStore - Filtering and Pagination', () => {
     useLocationStore.getState().invalidateCache();
 
     const locations = [
-      createMockLocation(1, { identifier: 'usa', name: 'United States', is_active: true }),
-      createMockLocation(2, { identifier: 'canada', name: 'Canada', is_active: true }),
-      createMockLocation(3, { identifier: 'mexico', name: 'Mexico', is_active: false }),
+      createMockLocation(1, { external_key: 'usa', name: 'United States', is_active: true }),
+      createMockLocation(2, { external_key: 'canada', name: 'Canada', is_active: true }),
+      createMockLocation(3, { external_key: 'mexico', name: 'Mexico', is_active: false }),
     ];
 
     useLocationStore.getState().setLocations(locations);
@@ -441,14 +441,14 @@ describe('LocationStore - Filtering and Pagination', () => {
     useLocationStore.getState().setFilters({ search: 'can' });
     const filtered = useLocationStore.getState().getFilteredLocations();
     expect(filtered).toHaveLength(1);
-    expect(filtered[0].identifier).toBe('canada');
+    expect(filtered[0].external_key).toBe('canada');
   });
 
   it('should filter locations by active status', () => {
-    useLocationStore.getState().setFilters({ is_active: 'active', search: '', identifier: '' });
+    useLocationStore.getState().setFilters({ is_active: 'active', search: '', external_key: '' });
     const filtered = useLocationStore.getState().getFilteredLocations();
     expect(filtered).toHaveLength(2);
-    expect(filtered.map((f) => f.identifier).sort()).toEqual(['canada', 'usa']);
+    expect(filtered.map((f) => f.external_key).sort()).toEqual(['canada', 'usa']);
   });
 
   it('should sort locations', () => {
@@ -458,7 +458,7 @@ describe('LocationStore - Filtering and Pagination', () => {
     useLocationStore.getState().setSort({ field: 'identifier', direction: 'asc' });
     const sorted = useLocationStore.getState().getSortedLocations(all);
 
-    const sortedIdentifiers = sorted.map(s => s.identifier);
+    const sortedIdentifiers = sorted.map(s => s.external_key);
     expect(sortedIdentifiers).toEqual(['canada', 'mexico', 'usa']);
   });
 
@@ -477,9 +477,9 @@ describe('LocationStore - Split Pane UI State', () => {
     useLocationStore.getState().invalidateCache();
 
     // Set up a hierarchy: root -> child -> grandchild
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child = createMockLocation(2, { identifier: 'child', parent_location_id: 1 });
-    const grandchild = createMockLocation(3, { identifier: 'grandchild', parent_location_id: 2 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child = createMockLocation(2, { external_key: 'child', parent_id: 1 });
+    const grandchild = createMockLocation(3, { external_key: 'grandchild', parent_id: 2 });
 
     useLocationStore.getState().setLocations([root, child, grandchild]);
   });

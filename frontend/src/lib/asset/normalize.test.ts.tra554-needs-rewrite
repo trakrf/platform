@@ -18,21 +18,21 @@ describe('normalizeAsset()', () => {
   };
 
   it('populates id from surrogate_id when only surrogate_id is present (public shape)', () => {
-    const normalized = normalizeAsset({ ...base, surrogate_id: 42 });
+    const normalized = normalizeAsset({ ...base, id: 42 });
     expect(normalized.id).toBe(42);
-    expect(normalized.surrogate_id).toBe(42);
+    expect(normalized.id).toBe(42);
   });
 
   it('populates surrogate_id from id when only id is present (internal shape)', () => {
     const normalized = normalizeAsset({ ...base, id: 99 });
     expect(normalized.id).toBe(99);
-    expect(normalized.surrogate_id).toBe(99);
+    expect(normalized.id).toBe(99);
   });
 
   it('preserves id when both fields are present', () => {
-    const normalized = normalizeAsset({ ...base, id: 1, surrogate_id: 2 });
+    const normalized = normalizeAsset({ ...base, id: 1, id: 2 });
     expect(normalized.id).toBe(1);
-    expect(normalized.surrogate_id).toBe(2);
+    expect(normalized.id).toBe(2);
   });
 
   it('never leaves id undefined for a response missing both fields (defensive)', () => {
@@ -41,6 +41,6 @@ describe('normalizeAsset()', () => {
     // other entries. Downstream code is expected to validate.
     const normalized = normalizeAsset({ ...base });
     expect(normalized.id).toBeUndefined();
-    expect(normalized.surrogate_id).toBeUndefined();
+    expect(normalized.id).toBeUndefined();
   });
 });

@@ -10,7 +10,7 @@ describe('AssetStore - Cache Operations', () => {
   const mockAsset: Asset = {
     id: 1,
     org_id: 100,
-    identifier: 'LAP-001',
+    external_key: 'LAP-001',
     name: 'Test Laptop',
     description: 'Test device',
     valid_from: '2024-01-01T00:00:00Z',
@@ -25,7 +25,7 @@ describe('AssetStore - Cache Operations', () => {
   const mockAsset2: Asset = {
     ...mockAsset,
     id: 2,
-    identifier: 'LAP-002',
+    external_key: 'LAP-002',
     name: 'Test Laptop 2',
     is_active: false,
   };
@@ -56,7 +56,7 @@ describe('AssetStore - Cache Operations', () => {
 
     const updated = getAssetById(mockAsset.id);
     expect(updated?.name).toBe('Updated Name');
-    expect(updated?.identifier).toBe(mockAsset.identifier);
+    expect(updated?.external_key).toBe(mockAsset.external_key);
   });
 
   it('should handle active status change when updating', () => {
@@ -84,7 +84,7 @@ describe('AssetStore - Cache Operations', () => {
     removeAsset(mockAsset.id);
 
     expect(getAssetById(mockAsset.id)).toBeUndefined();
-    expect(getAssetByIdentifier(mockAsset.identifier)).toBeUndefined();
+    expect(getAssetByIdentifier(mockAsset.external_key)).toBeUndefined();
     expect(getActiveAssets()).toHaveLength(0);
     expect(cache.allIds).not.toContain(mockAsset.id);
   });
@@ -96,7 +96,7 @@ describe('AssetStore - Cache Operations', () => {
     invalidateCache();
 
     expect(cache.byId.size).toBe(0);
-    expect(cache.byIdentifier.size).toBe(0);
+    expect(cache.byExternalKey.size).toBe(0);
     expect(cache.activeIds.size).toBe(0);
     expect(cache.allIds).toHaveLength(0);
   });
@@ -111,7 +111,7 @@ describe('AssetStore - Cache Queries', () => {
     {
       id: 1,
       org_id: 100,
-      identifier: 'LAP-001',
+      external_key: 'LAP-001',
       name: 'Laptop Alpha',
       description: 'Device 1',
       valid_from: '2024-01-01T00:00:00Z',
@@ -125,7 +125,7 @@ describe('AssetStore - Cache Queries', () => {
     {
       id: 2,
       org_id: 100,
-      identifier: 'PER-001',
+      external_key: 'PER-001',
       name: 'Person Beta',
       description: 'Person 1',
       valid_from: '2024-01-02T00:00:00Z',
@@ -139,7 +139,7 @@ describe('AssetStore - Cache Queries', () => {
     {
       id: 3,
       org_id: 100,
-      identifier: 'LAP-002',
+      external_key: 'LAP-002',
       name: 'Laptop Gamma',
       description: 'Device 2',
       valid_from: '2024-01-03T00:00:00Z',
@@ -265,7 +265,7 @@ describe('AssetStore - UI State', () => {
     const mockAsset: Asset = {
       id: 1,
       org_id: 100,
-      identifier: 'LAP-001',
+      external_key: 'LAP-001',
       name: 'Test Laptop',
       description: 'Test device',
       valid_from: '2024-01-01T00:00:00Z',
@@ -297,7 +297,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
     const mockAsset: Asset = {
       id: 1,
       org_id: 100,
-      identifier: 'LAP-001',
+      external_key: 'LAP-001',
       name: 'Test Laptop',
       description: 'Test device',
       valid_from: '2024-01-01T00:00:00Z',
@@ -324,7 +324,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
   it('should deserialize cache from LocalStorage', () => {
     const mockCache = {
       byId: [[1, { id: 1, name: 'Test' }]],
-      byIdentifier: [['TEST-001', { id: 1, name: 'Test' }]],
+      byExternalKey: [['TEST-001', { id: 1, name: 'Test' }]],
       activeIds: [1],
       allIds: [1],
       lastFetched: Date.now(),
@@ -347,7 +347,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
     const { cache } = useAssetStore.getState();
 
     expect(cache.byId).toBeInstanceOf(Map);
-    expect(cache.byIdentifier).toBeInstanceOf(Map);
+    expect(cache.byExternalKey).toBeInstanceOf(Map);
     expect(cache.activeIds).toBeInstanceOf(Set);
   });
 
@@ -356,7 +356,7 @@ describe('AssetStore - LocalStorage Persistence', () => {
     const mockAsset: Asset = {
       id: 1,
       org_id: 100,
-      identifier: 'LAP-001',
+      external_key: 'LAP-001',
       name: 'Test Laptop',
       description: 'Test device',
       valid_from: '2024-01-01T00:00:00Z',

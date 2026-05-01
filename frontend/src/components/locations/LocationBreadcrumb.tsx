@@ -38,7 +38,7 @@ export function LocationBreadcrumb({
                 onClick={() => onLocationClick(loc)}
                 className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               >
-                {loc.identifier}
+                {loc.external_key}
               </button>
             ) : (
               <span
@@ -48,7 +48,7 @@ export function LocationBreadcrumb({
                     : 'text-gray-600 dark:text-gray-400'
                 }`}
               >
-                {loc.identifier}
+                {loc.external_key}
               </span>
             )}
             {!isLast && <ChevronRight className="h-4 w-4 text-gray-400 dark:text-gray-500" />}

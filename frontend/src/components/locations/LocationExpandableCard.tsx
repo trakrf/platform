@@ -31,7 +31,7 @@ export function LocationExpandableCard({
   const children = getChildren(location.id);
   const descendants = getDescendants(location.id);
   const hasChildren = children.length > 0;
-  const isRoot = location.parent_location_id === null;
+  const isRoot = location.parent_id === null;
   const Icon = isRoot ? Building2 : MapPin;
 
   // Filter visibility when searching
@@ -40,7 +40,7 @@ export function LocationExpandableCard({
 
     const term = searchTerm.toLowerCase();
     const matches =
-      location.identifier.toLowerCase().includes(term) ||
+      location.external_key.toLowerCase().includes(term) ||
       location.name.toLowerCase().includes(term);
 
     if (matches) return true;
@@ -48,7 +48,7 @@ export function LocationExpandableCard({
     // Check if any descendant matches
     const hasMatchingDescendant = descendants.some(
       (d) =>
-        d.identifier.toLowerCase().includes(term) ||
+        d.external_key.toLowerCase().includes(term) ||
         d.name.toLowerCase().includes(term)
     );
 
@@ -66,7 +66,7 @@ export function LocationExpandableCard({
     const term = searchTerm.toLowerCase();
     return children.filter((child) => {
       const childMatches =
-        child.identifier.toLowerCase().includes(term) ||
+        child.external_key.toLowerCase().includes(term) ||
         child.name.toLowerCase().includes(term);
 
       if (childMatches) return true;
@@ -75,7 +75,7 @@ export function LocationExpandableCard({
       const childDescendants = getDescendants(child.id);
       return childDescendants.some(
         (d) =>
-          d.identifier.toLowerCase().includes(term) ||
+          d.external_key.toLowerCase().includes(term) ||
           d.name.toLowerCase().includes(term)
       );
     });
@@ -146,7 +146,7 @@ export function LocationExpandableCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium text-gray-900 dark:text-white truncate">
-              {location.identifier}
+              {location.external_key}
             </span>
             <span className="text-sm text-gray-500 dark:text-gray-400 truncate">
               {location.name}
