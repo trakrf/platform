@@ -557,7 +557,7 @@ func TestRevokeAPIKey_ByJTI_ByAPIKeyPrincipal(t *testing.T) {
 	r := newAdminRouter(t, store)
 
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, dataKey.JTI), nil)
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/by-jti/%s", orgID, dataKey.JTI), nil)
 	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -619,7 +619,7 @@ func TestRevokeAPIKey_ByJTI(t *testing.T) {
 	r := newAdminRouter(t, store)
 
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, key.JTI), nil)
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/by-jti/%s", orgID, key.JTI), nil)
 	req.Header.Set("Authorization", "Bearer "+sessionToken)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -628,7 +628,7 @@ func TestRevokeAPIKey_ByJTI(t *testing.T) {
 
 	// Second delete on same jti → 404
 	req2 := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, key.JTI), nil)
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/by-jti/%s", orgID, key.JTI), nil)
 	req2.Header.Set("Authorization", "Bearer "+sessionToken)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
@@ -660,7 +660,7 @@ func TestRevokeAPIKey_ByJTI_CrossOrgReturns404(t *testing.T) {
 
 	// org2 admin tries to revoke an org1 key by jti.
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", org2, key.JTI), nil)
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/by-jti/%s", org2, key.JTI), nil)
 	req.Header.Set("Authorization", "Bearer "+sessionToken2)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -780,7 +780,7 @@ func TestRevokeAPIKey_KeyRevokesItself_ByJTI(t *testing.T) {
 
 	// 1. Revoke self by jti — should succeed.
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, claims.Subject), nil)
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys/by-jti/%s", orgID, claims.Subject), nil)
 	req.Header.Set("Authorization", "Bearer "+adminKeyJWT)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

@@ -218,7 +218,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Organization id"
-// @Param key_id path string true "Either the integer surrogate id or the UUID jti"
+// @Param key_id path int true "API key id (canonical)"
 // @Success 204 "No Content"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -229,6 +229,9 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys/{key_id} [delete]
 // RevokeAPIKey handles DELETE /api/v1/orgs/{id}/api-keys/{key_id}.
+// key_id is the integer id; UUID jti revocation lives at /by-jti/{jti}
+// so OpenAPI generators don't flatten a string|integer union to string
+// and silently break int-path lookups in typed clients.
 func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -237,23 +240,60 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 			"Invalid org id", "", reqID)
 		return
 	}
-	rawKeyID := chi.URLParam(r, "key_id")
-	// Dispatch by format: UUID first (stricter parser), then integer.
-	// jti.String() canonicalizes the URL-supplied value to lowercase
-	// hyphenated form, matching what the DB stores.
-	var revokeErr error
-	if jti, parseErr := uuid.Parse(rawKeyID); parseErr == nil {
-		revokeErr = h.storage.RevokeAPIKeyByJTI(r.Context(), orgID, jti.String())
-	} else if intID, parseErr := strconv.Atoi(rawKeyID); parseErr == nil {
-		revokeErr = h.storage.RevokeAPIKey(r.Context(), orgID, intID)
-	} else {
+	keyID, err := strconv.Atoi(chi.URLParam(r, "key_id"))
+	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
 			"Invalid key id", "", reqID)
 		return
 	}
 
-	if revokeErr != nil {
-		if stderrors.Is(revokeErr, storage.ErrAPIKeyNotFound) {
+	if err := h.storage.RevokeAPIKey(r.Context(), orgID, keyID); err != nil {
+		if stderrors.Is(err, storage.ErrAPIKeyNotFound) {
+			httputil.Respond404(w, r, "API key not found", reqID)
+			return
+		}
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			"Failed to revoke api key", "", reqID)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// @Summary Revoke an API key by jti
+// @Description Revoke an API key by its UUID jti (stable identifier embedded in the JWT).
+// @Tags api-keys,public
+// @ID api_keys.revoke_by_jti
+// @Accept json
+// @Produce json
+// @Param id path int true "Organization id"
+// @Param jti path string true "API key jti (UUID)" format(uuid)
+// @Success 204 "No Content"
+// @Failure 400 {object} modelerrors.ErrorResponse
+// @Failure 401 {object} modelerrors.ErrorResponse
+// @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse
+// @Security BearerAuth
+// @Security APIKey[keys:admin]
+// @Router /api/v1/orgs/{id}/api-keys/by-jti/{jti} [delete]
+// RevokeAPIKeyByJTI handles DELETE /api/v1/orgs/{id}/api-keys/by-jti/{jti}.
+func (h *Handler) RevokeAPIKeyByJTI(w http.ResponseWriter, r *http.Request) {
+	reqID := middleware.GetRequestID(r.Context())
+	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			"Invalid org id", "", reqID)
+		return
+	}
+	jti, err := uuid.Parse(chi.URLParam(r, "jti"))
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			"Invalid jti", "", reqID)
+		return
+	}
+
+	if err := h.storage.RevokeAPIKeyByJTI(r.Context(), orgID, jti.String()); err != nil {
+		if stderrors.Is(err, storage.ErrAPIKeyNotFound) {
 			httputil.Respond404(w, r, "API key not found", reqID)
 			return
 		}
