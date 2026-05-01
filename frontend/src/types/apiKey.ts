@@ -28,6 +28,7 @@ export interface CreateAPIKeyRequest {
 export interface APIKeyCreateResponse {
   key: string; // full JWT — shown once
   id: number;
+  jti: string;
   name: string;
   scopes: Scope[];
   created_at: string;

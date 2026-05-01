@@ -2253,12 +2253,12 @@ paths:
                   required: true
                   schema:
                     type: integer
-                - description: Either the integer surrogate id or the UUID jti
+                - description: API key id (canonical)
                   in: path
                   name: key_id
                   required: true
                   schema:
-                    type: string
+                    type: integer
             responses:
                 "204":
                     description: No Content
@@ -2297,6 +2297,64 @@ paths:
                 - APIKey:
                     - keys:admin
             summary: Revoke an API key
+            tags:
+                - api-keys
+    /api/v1/orgs/{id}/api-keys/by-jti/{jti}:
+        delete:
+            description: Revoke an API key by its UUID jti (stable identifier embedded in the JWT).
+            operationId: api_keys.revoke_by_jti
+            parameters:
+                - description: Organization id
+                  in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: integer
+                - description: API key jti (UUID)
+                  in: path
+                  name: jti
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Not Found
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Internal Server Error
+            security:
+                - BearerAuth: []
+                - APIKey:
+                    - keys:admin
+            summary: Revoke an API key by jti
             tags:
                 - api-keys
     /api/v1/orgs/me:
