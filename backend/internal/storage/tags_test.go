@@ -601,7 +601,7 @@ func TestTagsToJSON(t *testing.T) {
 	})
 }
 
-func TestTagIdentifierRequestGetType(t *testing.T) {
+func TestTagRequestGetType(t *testing.T) {
 	t.Run("returns explicit type", func(t *testing.T) {
 		req := shared.TagRequest{TagType: "ble", Value: "test"}
 		assert.Equal(t, "ble", req.GetType())
