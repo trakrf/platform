@@ -4,40 +4,40 @@ import "time"
 
 // PublicCurrentLocationItem is the public shape for /api/v1/locations/current items.
 type PublicCurrentLocationItem struct {
-	Asset          string     `json:"asset"`
-	Location       string     `json:"location"`
-	LastSeen       time.Time  `json:"last_seen"`
-	AssetDeletedAt *time.Time `json:"asset_deleted_at,omitempty"`
+	AssetID             *int       `json:"asset_id"`
+	AssetExternalKey    *string    `json:"asset_external_key"`
+	LocationID          *int       `json:"location_id"`
+	LocationExternalKey *string    `json:"location_external_key"`
+	LastSeen            time.Time  `json:"last_seen"`
+	AssetDeletedAt      *time.Time `json:"asset_deleted_at,omitempty"`
 }
 
 func ToPublicCurrentLocationItem(it CurrentLocationItem) PublicCurrentLocationItem {
+	assetID := it.AssetID
+	assetKey := it.AssetExternalKey
 	return PublicCurrentLocationItem{
-		Asset:          it.AssetIdentifier,
-		Location:       derefString(it.LocationIdentifier),
-		LastSeen:       it.LastSeen,
-		AssetDeletedAt: it.AssetDeletedAt,
+		AssetID:             &assetID,
+		AssetExternalKey:    &assetKey,
+		LocationID:          it.LocationID,
+		LocationExternalKey: it.LocationExternalKey,
+		LastSeen:            it.LastSeen,
+		AssetDeletedAt:      it.AssetDeletedAt,
 	}
 }
 
 // PublicAssetHistoryItem is the public shape for asset-history list items.
 type PublicAssetHistoryItem struct {
-	Timestamp       time.Time `json:"timestamp"`
-	Location        string    `json:"location"`
-	DurationSeconds *int      `json:"duration_seconds"`
+	Timestamp           time.Time `json:"timestamp"`
+	LocationID          *int      `json:"location_id"`
+	LocationExternalKey *string   `json:"location_external_key"`
+	DurationSeconds     *int      `json:"duration_seconds"`
 }
 
 func ToPublicAssetHistoryItem(it AssetHistoryItem) PublicAssetHistoryItem {
 	return PublicAssetHistoryItem{
-		Timestamp:       it.Timestamp,
-		Location:        derefString(it.LocationIdentifier),
-		DurationSeconds: it.DurationSeconds,
+		Timestamp:           it.Timestamp,
+		LocationID:          it.LocationID,
+		LocationExternalKey: it.LocationExternalKey,
+		DurationSeconds:     it.DurationSeconds,
 	}
-}
-
-// derefString safely dereferences a *string, returning empty string if nil.
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

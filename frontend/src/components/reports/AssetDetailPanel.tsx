@@ -34,7 +34,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Asset ID</p>
           <p className="font-medium text-gray-900 dark:text-white">
-            {asset.asset || '—'}
+            {asset.asset_external_key ?? '—'}
           </p>
         </div>
         <div>
@@ -44,7 +44,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Current Location</p>
           <p className="font-medium text-blue-600 dark:text-blue-400">
-            {asset.location || 'Unknown'}
+            {asset.location_external_key || 'Unknown'}
           </p>
         </div>
         <div>
@@ -115,7 +115,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
           text-white font-medium py-3 px-4 rounded-lg transition-colors"
         onClick={() => {
           // TODO: Implement CSV download
-          console.log('Download history CSV for asset:', asset.asset);
+          console.log('Download history CSV for asset:', asset.asset_external_key);
         }}
       >
         <Download className="w-4 h-4" />
@@ -143,7 +143,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
-            {asset.asset}
+            {asset.asset_external_key ?? ''}
           </h2>
           <button
             onClick={handleClose}
@@ -170,7 +170,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
           {/* Header */}
           <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
-              {asset.asset}
+              {asset.asset_external_key ?? ''}
             </h2>
             <button
               onClick={handleClose}

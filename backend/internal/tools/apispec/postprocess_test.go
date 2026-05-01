@@ -201,8 +201,20 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		"report.PublicAssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
-				"duration_seconds": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
-				"timestamp":        stringProp("date-time"), // not on the allowlist
+				"duration_seconds":      &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"location_id":           &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"location_external_key": stringProp(""),
+				"timestamp":             stringProp("date-time"), // not on the allowlist
+			},
+		}},
+		"report.PublicCurrentLocationItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"asset_id":              &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"asset_external_key":    stringProp(""),
+				"location_id":           &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"location_external_key": stringProp(""),
+				"last_seen":             stringProp("date-time"), // not on the allowlist
 			},
 		}},
 	})
@@ -217,6 +229,12 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		{"apikey.APIKeyListItem", "created_by_key_id"},
 		{"apikey.APIKeyListItem", "last_used_at"},
 		{"report.PublicAssetHistoryItem", "duration_seconds"},
+		{"report.PublicAssetHistoryItem", "location_id"},
+		{"report.PublicAssetHistoryItem", "location_external_key"},
+		{"report.PublicCurrentLocationItem", "asset_id"},
+		{"report.PublicCurrentLocationItem", "asset_external_key"},
+		{"report.PublicCurrentLocationItem", "location_id"},
+		{"report.PublicCurrentLocationItem", "location_external_key"},
 	}
 	for _, tc := range cases {
 		prop := doc.Components.Schemas[tc.schema].Value.Properties[tc.field]
@@ -230,6 +248,9 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 	assert.False(t,
 		doc.Components.Schemas["report.PublicAssetHistoryItem"].Value.Properties["timestamp"].Value.Nullable,
 		"timestamp is not nullable")
+	assert.False(t,
+		doc.Components.Schemas["report.PublicCurrentLocationItem"].Value.Properties["last_seen"].Value.Nullable,
+		"last_seen is not nullable")
 }
 
 func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {

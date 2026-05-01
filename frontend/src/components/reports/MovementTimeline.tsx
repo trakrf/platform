@@ -138,7 +138,7 @@ export function MovementTimeline({
                             : 'text-gray-700 dark:text-gray-300'
                         }`}
                       >
-                        {item.location || 'Unknown Location'}
+                        {item.location_external_key || 'Unknown Location'}
                       </p>
 
                       {/* Duration bar */}

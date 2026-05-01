@@ -69,9 +69,9 @@ export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): Export
 
   // Table data
   const tableData = data.map((item) => [
-    item.asset,
-    item.asset,
-    item.location || 'Unknown',
+    item.asset_external_key ?? '',
+    item.asset_external_key ?? '',
+    item.location_external_key || 'Unknown',
     formatRelativeTime(item.last_seen),
     getFreshnessLabel(item.last_seen),
   ]);
@@ -129,9 +129,9 @@ export function generateCurrentLocationsExcel(data: CurrentLocationItem[]): Expo
 
   // Main data sheet
   const sheetData = data.map((item) => ({
-    'Asset ID': item.asset,
-    Name: item.asset,
-    Location: item.location || 'Unknown',
+    'Asset ID': item.asset_external_key ?? '',
+    Name: item.asset_external_key ?? '',
+    Location: item.location_external_key || 'Unknown',
     'Last Seen': formatTimestampForExport(item.last_seen),
     Status: getFreshnessLabel(item.last_seen),
   }));
@@ -187,10 +187,11 @@ export function generateCurrentLocationsCSV(data: CurrentLocationItem[]): Export
   let content = headers.join(',') + '\n';
 
   data.forEach((item) => {
+    const key = item.asset_external_key ?? '';
     const row = [
-      `"${item.asset}"`,
-      `"${(item.asset || '').replace(/"/g, '""')}"`,
-      `"${(item.location || 'Unknown').replace(/"/g, '""')}"`,
+      `"${key.replace(/"/g, '""')}"`,
+      `"${key.replace(/"/g, '""')}"`,
+      `"${(item.location_external_key || 'Unknown').replace(/"/g, '""')}"`,
       formatTimestampForExport(item.last_seen),
       getFreshnessLabel(item.last_seen),
     ];
@@ -237,7 +238,7 @@ export function generateAssetHistoryPDF(
   // Table data
   const tableData = data.map((item) => [
     formatTimestampForExport(item.timestamp),
-    item.location || 'Unknown',
+    item.location_external_key || 'Unknown',
     item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   ]);
 
@@ -298,7 +299,7 @@ export function generateAssetHistoryExcel(
   // Main data sheet
   const sheetData = data.map((item) => ({
     Timestamp: formatTimestampForExport(item.timestamp),
-    Location: item.location || 'Unknown',
+    Location: item.location_external_key || 'Unknown',
     Duration: item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   }));
 
@@ -312,7 +313,7 @@ export function generateAssetHistoryExcel(
   XLSX.utils.book_append_sheet(wb, ws, 'Movement History');
 
   // Summary sheet
-  const uniqueLocations = new Set(data.map((d) => d.location || 'Unknown')).size;
+  const uniqueLocations = new Set(data.map((d) => d.location_external_key || 'Unknown')).size;
   const totalDuration = data.reduce((sum, d) => sum + (d.duration_seconds || 0), 0);
 
   const summaryData = [
@@ -355,7 +356,7 @@ export function generateAssetHistoryCSV(
     const row = [
       `"${assetName.replace(/"/g, '""')}"`,
       formatTimestampForExport(item.timestamp),
-      `"${(item.location || 'Unknown').replace(/"/g, '""')}"`,
+      `"${(item.location_external_key || 'Unknown').replace(/"/g, '""')}"`,
       item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
     ];
     content += row.join(',') + '\n';

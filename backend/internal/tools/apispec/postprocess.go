@@ -101,10 +101,11 @@ func injectTopLevelSecurity(doc *openapi3.T) {
 // nullable:true for Go *Type pointers, so we add it here. The list is
 // curated from BB10/BB11 audit findings (TRA-517 AC2, AC9, AC11).
 var nullableFields = map[string][]string{
-	"asset.PublicAssetView":         {"current_location_id", "current_location_external_key"},
-	"apikey.APIKeyListItem":         {"created_by_key_id", "last_used_at"},
-	"report.PublicAssetHistoryItem": {"duration_seconds"},
-	"location.PublicLocationView":   {"parent_id", "parent_external_key"},
+	"asset.PublicAssetView":            {"current_location_id", "current_location_external_key"},
+	"apikey.APIKeyListItem":            {"created_by_key_id", "last_used_at"},
+	"report.PublicAssetHistoryItem":    {"duration_seconds", "location_id", "location_external_key"},
+	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key"},
+	"location.PublicLocationView":      {"parent_id", "parent_external_key"},
 }
 
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse

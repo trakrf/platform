@@ -293,7 +293,7 @@ export default function ReportsScreen() {
                   ) : (
                     filteredData.map((item) => (
                       <CurrentLocationCard
-                        key={item.asset}
+                        key={String(item.asset_id ?? item.asset_external_key ?? '')}
                         item={item}
                         onClick={() => handleRowClick(item)}
                       />

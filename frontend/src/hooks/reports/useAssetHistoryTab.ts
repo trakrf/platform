@@ -77,13 +77,23 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
   });
   const getAssetByIdentifier = useAssetStore((s) => s.getAssetByIdentifier);
 
-  // Transform to AssetOption[] — look up surrogate ID from asset store by identifier
+  // Transform to AssetOption[] — current-locations now exposes asset_id directly
+  // (TRA-556); fall back to the asset store only to enrich with asset.name, which
+  // the public report response intentionally omits.
   const assetOptions = useMemo<AssetOption[]>(
     () =>
       assetsData.flatMap((a) => {
-        const asset = getAssetByIdentifier(a.asset);
-        if (!asset) return [];
-        return [{ id: asset.id, name: asset.name, identifier: asset.external_key }];
+        if (a.asset_id == null) return [];
+        const enriched = a.asset_external_key
+          ? getAssetByIdentifier(a.asset_external_key)
+          : null;
+        return [
+          {
+            id: a.asset_id,
+            name: enriched?.name ?? a.asset_external_key ?? '',
+            identifier: a.asset_external_key ?? '',
+          },
+        ];
       }),
     [assetsData, getAssetByIdentifier]
   );
@@ -131,7 +141,9 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
     if (accumulatedData.length === 0) return null;
 
     const uniqueLocations = new Set(
-      accumulatedData.filter((d) => d.location).map((d) => d.location)
+      accumulatedData
+        .filter((d) => d.location_external_key)
+        .map((d) => d.location_external_key)
     );
 
     const totalSeconds = accumulatedData.reduce(
@@ -142,7 +154,7 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
     return {
       locationsVisited: uniqueLocations.size,
       timeTracked: formatDuration(totalSeconds),
-      currentLocation: accumulatedData[0]?.location || null,
+      currentLocation: accumulatedData[0]?.location_external_key || null,
     };
   }, [accumulatedData]);
 

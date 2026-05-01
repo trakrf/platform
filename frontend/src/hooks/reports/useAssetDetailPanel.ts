@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAssetHistory } from './useAssetHistory';
 import { getDateRangeStart, type DateRange } from '@/lib/reports/utils';
-import { useAssetStore } from '@/stores/assets/assetStore';
 import type { CurrentLocationItem, AssetHistoryItem } from '@/types/reports';
 
 const PAGE_SIZE = 20;
@@ -42,9 +41,8 @@ export function useAssetDetailPanel({
   const [accumulatedData, setAccumulatedData] = useState<AssetHistoryItem[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Look up surrogate ID from asset store using natural key from CurrentLocationItem
-  const getAssetByIdentifier = useAssetStore((s) => s.getAssetByIdentifier);
-  const assetSurrogateId = asset ? (getAssetByIdentifier(asset.asset)?.id ?? null) : null;
+  // CurrentLocationItem now carries asset_id directly (TRA-556).
+  const assetSurrogateId = asset?.asset_id ?? null;
 
   // Memoize params to prevent infinite refetching
   const historyParams = useMemo(
