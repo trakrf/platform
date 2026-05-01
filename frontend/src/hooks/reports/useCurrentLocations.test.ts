@@ -96,4 +96,73 @@ describe('useCurrentLocations', () => {
     expect(reportsApi.getCurrentLocations).not.toHaveBeenCalled();
     expect(result.current.isLoading).toBe(false);
   });
+
+  describe('fetchAll', () => {
+    function makePage(count: number, startId: number): CurrentLocationItem[] {
+      return Array.from({ length: count }, (_, i) => ({
+        asset_id: startId + i,
+        asset_external_key: `AST-${startId + i}`,
+        location_id: 1,
+        location_external_key: 'ROOM-101',
+        last_seen: '2025-01-27T10:30:00Z',
+      }));
+    }
+
+    it('pages until total_count is reached and concatenates results', async () => {
+      const page1 = makePage(200, 1);
+      const page2 = makePage(150, 201);
+
+      vi.mocked(reportsApi.getCurrentLocations)
+        .mockResolvedValueOnce({
+          data: { data: page1, limit: 200, offset: 0, total_count: 350 },
+        } as ReturnType<typeof reportsApi.getCurrentLocations>)
+        .mockResolvedValueOnce({
+          data: { data: page2, limit: 200, offset: 200, total_count: 350 },
+        } as ReturnType<typeof reportsApi.getCurrentLocations>);
+
+      const { result } = renderHook(
+        () => useCurrentLocations({ fetchAll: true, q: 'foo' }),
+        { wrapper: createWrapper() }
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(reportsApi.getCurrentLocations).toHaveBeenCalledTimes(2);
+      expect(reportsApi.getCurrentLocations).toHaveBeenNthCalledWith(1, {
+        q: 'foo',
+        limit: 200,
+        offset: 0,
+      });
+      expect(reportsApi.getCurrentLocations).toHaveBeenNthCalledWith(2, {
+        q: 'foo',
+        limit: 200,
+        offset: 200,
+      });
+      expect(result.current.data).toHaveLength(350);
+      expect(result.current.totalCount).toBe(350);
+    });
+
+    it('stops after a single page when total_count fits in one page', async () => {
+      const page1 = makePage(50, 1);
+
+      vi.mocked(reportsApi.getCurrentLocations).mockResolvedValueOnce({
+        data: { data: page1, limit: 200, offset: 0, total_count: 50 },
+      } as ReturnType<typeof reportsApi.getCurrentLocations>);
+
+      const { result } = renderHook(
+        () => useCurrentLocations({ fetchAll: true }),
+        { wrapper: createWrapper() }
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(reportsApi.getCurrentLocations).toHaveBeenCalledTimes(1);
+      expect(result.current.data).toHaveLength(50);
+      expect(result.current.totalCount).toBe(50);
+    });
+  });
 });

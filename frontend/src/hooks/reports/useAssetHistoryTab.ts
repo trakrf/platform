@@ -71,9 +71,10 @@ export function useAssetHistoryTab(): UseAssetHistoryTabReturn {
   );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Fetch asset list for dropdown via current-locations (natural keys only)
+  // Fetch asset list for dropdown via current-locations (natural keys only).
+  // fetchAll pages internally — backend caps a single request at 200.
   const { data: assetsData, isLoading: isLoadingAssets } = useCurrentLocations({
-    limit: 1000,
+    fetchAll: true,
   });
   const getAssetByIdentifier = useAssetStore((s) => s.getAssetByIdentifier);
 

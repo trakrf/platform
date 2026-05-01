@@ -56,10 +56,9 @@ export default function ReportsScreen() {
     setCurrentPage(1);
   }, [selectedLocationId, selectedTimeRange, search]);
 
-  // Fetch all data for stats (no pagination)
+  // Fetch all data for stats — fetchAll pages internally (backend cap is 200).
   const { data: allData } = useCurrentLocations({
-    limit: 1000,
-    offset: 0,
+    fetchAll: true,
   });
 
   // Calculate stats from all data
