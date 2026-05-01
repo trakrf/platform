@@ -18,7 +18,8 @@ const mockResponse = {
   data: [
     {
       timestamp: '2025-01-27T10:30:00Z',
-      location: 'room-101',
+      location_id: 1,
+      location_external_key: 'ROOM-101',
       duration_seconds: null,
     },
   ],

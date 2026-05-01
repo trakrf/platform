@@ -719,8 +719,13 @@
             "nullable": true,
             "type": "integer"
           },
-          "location": {
+          "location_external_key": {
+            "nullable": true,
             "type": "string"
+          },
+          "location_id": {
+            "nullable": true,
+            "type": "integer"
           },
           "timestamp": {
             "format": "date-time",
@@ -731,19 +736,29 @@
       },
       "report.PublicCurrentLocationItem": {
         "properties": {
-          "asset": {
-            "type": "string"
-          },
           "asset_deleted_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "asset_external_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "asset_id": {
+            "nullable": true,
+            "type": "integer"
           },
           "last_seen": {
             "format": "date-time",
             "type": "string"
           },
-          "location": {
+          "location_external_key": {
+            "nullable": true,
             "type": "string"
+          },
+          "location_id": {
+            "nullable": true,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -2178,7 +2193,7 @@
     },
     "/api/v1/locations/current": {
       "get": {
-        "description": "Snapshot of each asset's most recent location, filterable by natural key. Because this view is derived from immutable scan history, it can resolve identifiers for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.",
+        "description": "Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.",
         "operationId": "locations.current",
         "parameters": [
           {
@@ -2200,15 +2215,23 @@
             }
           },
           {
-            "description": "filter by location identifier (may repeat)",
+            "description": "filter by location id (canonical, may repeat)",
             "in": "query",
-            "name": "location",
+            "name": "location_id",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "filter by location external_key (may repeat)",
+            "in": "query",
+            "name": "location_external_key",
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "substring search (case-insensitive) on asset name, identifier, and active tag values",
+            "description": "substring search (case-insensitive) on asset name, external_key, and active tag values",
             "in": "query",
             "name": "q",
             "schema": {

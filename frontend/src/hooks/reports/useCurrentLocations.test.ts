@@ -18,10 +18,9 @@ vi.mock('@/stores/orgStore', () => ({
 const mockData: CurrentLocationItem[] = [
   {
     asset_id: 1,
-    asset_name: 'Projector A1',
-    asset_identifier: 'AST-001',
+    asset_external_key: 'AST-001',
     location_id: 1,
-    location_name: 'Room 101',
+    location_external_key: 'ROOM-101',
     last_seen: '2025-01-27T10:30:00Z',
   },
 ];
@@ -62,13 +61,13 @@ describe('useCurrentLocations', () => {
       data: { data: [], count: 0, offset: 0, total_count: 0 },
     } as ReturnType<typeof reportsApi.getCurrentLocations>);
 
-    renderHook(() => useCurrentLocations({ search: 'test', limit: 10 }), {
+    renderHook(() => useCurrentLocations({ q: 'test', limit: 10 }), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => {
       expect(reportsApi.getCurrentLocations).toHaveBeenCalledWith({
-        search: 'test',
+        q: 'test',
         limit: 10,
       });
     });

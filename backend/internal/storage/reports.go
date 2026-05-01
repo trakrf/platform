@@ -26,6 +26,23 @@ func getReportsQueryEngine() QueryEngine {
 	return QueryEngineDistinctOn // default
 }
 
+// currentLocationsArgs prepares the variadic args shared by list + count
+// queries. Each filter short-circuits to NULL when empty so the SQL
+// `$N::T[] IS NULL OR ...` branches behave as no-ops.
+func currentLocationsArgs(filter report.CurrentLocationFilter) (locIDsArg, locKeysArg, qArg any) {
+	if len(filter.LocationIDs) > 0 {
+		locIDsArg = filter.LocationIDs
+	}
+	if len(filter.LocationExternalKeys) > 0 {
+		locKeysArg = filter.LocationExternalKeys
+	}
+	if filter.Q != nil {
+		q := "%" + *filter.Q + "%"
+		qArg = q
+	}
+	return
+}
+
 // ListCurrentLocations returns paginated current asset locations
 func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter report.CurrentLocationFilter) ([]report.CurrentLocationItem, error) {
 	engine := getReportsQueryEngine()
@@ -37,19 +54,11 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 		query = buildCurrentLocationsQueryDistinctOn()
 	}
 
-	var locIdentsArg any
-	if len(filter.LocationIdentifiers) > 0 {
-		locIdentsArg = filter.LocationIdentifiers
-	}
-	var qArg any
-	if filter.Q != nil {
-		q := "%" + *filter.Q + "%"
-		qArg = q
-	}
+	locIDsArg, locKeysArg, qArg := currentLocationsArgs(filter)
 
 	items := []report.CurrentLocationItem{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, orgID, locIdentsArg, qArg, filter.Limit, filter.Offset, filter.IncludeDeleted)
+		rows, err := tx.Query(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.Limit, filter.Offset, filter.IncludeDeleted)
 		if err != nil {
 			return fmt.Errorf("failed to list current locations: %w", err)
 		}
@@ -60,10 +69,10 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 			if err := rows.Scan(
 				&item.AssetID,
 				&item.AssetName,
-				&item.AssetIdentifier,
+				&item.AssetExternalKey,
 				&item.LocationID,
 				&item.LocationName,
-				&item.LocationIdentifier,
+				&item.LocationExternalKey,
 				&item.LastSeen,
 				&item.AssetDeletedAt,
 			); err != nil {
@@ -99,28 +108,21 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		FROM latest_scans ls
 		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
-		WHERE ($2::text[] IS NULL OR l.external_key = ANY($2::text[]))
-		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
+		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
+		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
+		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $4
 			   ))
-		  AND (a.deleted_at IS NULL OR $4::bool)
+		  AND (a.deleted_at IS NULL OR $5::bool)
 	`
 
-	var locIdentsArg any
-	if len(filter.LocationIdentifiers) > 0 {
-		locIdentsArg = filter.LocationIdentifiers
-	}
-	var qArg any
-	if filter.Q != nil {
-		q := "%" + *filter.Q + "%"
-		qArg = q
-	}
+	locIDsArg, locKeysArg, qArg := currentLocationsArgs(filter)
 
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, locIdentsArg, qArg, filter.IncludeDeleted).Scan(&count)
+		return tx.QueryRow(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.IncludeDeleted).Scan(&count)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count current locations: %w", err)
@@ -141,26 +143,27 @@ func buildCurrentLocationsQueryDistinctOn() string {
 			ORDER BY s.asset_id, s.timestamp DESC
 		)
 		SELECT
-			ls.asset_id,
-			a.name AS asset_name,
-			a.identifier AS asset_identifier,
-			ls.location_id,
-			l.name AS location_name,
-			l.external_key AS location_identifier,
+			a.id            AS asset_id,
+			a.name          AS asset_name,
+			a.external_key  AS asset_external_key,
+			l.id            AS location_id,
+			l.name          AS location_name,
+			l.external_key  AS location_external_key,
 			ls.last_seen,
-			a.deleted_at AS asset_deleted_at
+			a.deleted_at    AS asset_deleted_at
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
-		WHERE ($2::text[] IS NULL OR l.external_key = ANY($2::text[]))
-		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
+		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
+		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
+		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $4
 			   ))
-		  AND (a.deleted_at IS NULL OR $6::bool)
+		  AND (a.deleted_at IS NULL OR $7::bool)
 		ORDER BY a.name
-		LIMIT $4 OFFSET $5
+		LIMIT $5 OFFSET $6
 	`
 }
 
@@ -176,26 +179,27 @@ func buildCurrentLocationsQueryTimescale() string {
 			GROUP BY asset_id
 		)
 		SELECT
-			ls.asset_id,
-			a.name AS asset_name,
-			a.identifier AS asset_identifier,
-			ls.location_id,
-			l.name AS location_name,
-			l.external_key AS location_identifier,
+			a.id            AS asset_id,
+			a.name          AS asset_name,
+			a.external_key  AS asset_external_key,
+			l.id            AS location_id,
+			l.name          AS location_name,
+			l.external_key  AS location_external_key,
 			ls.last_seen,
-			a.deleted_at AS asset_deleted_at
+			a.deleted_at    AS asset_deleted_at
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
-		WHERE ($2::text[] IS NULL OR l.external_key = ANY($2::text[]))
-		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
+		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
+		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
+		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $3
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $4
 			   ))
-		  AND (a.deleted_at IS NULL OR $6::bool)
+		  AND (a.deleted_at IS NULL OR $7::bool)
 		ORDER BY a.name
-		LIMIT $4 OFFSET $5
+		LIMIT $5 OFFSET $6
 	`
 }
 
@@ -206,8 +210,8 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			SELECT
 				s.timestamp,
 				s.location_id,
-				l.name AS location_name,
-				l.external_key AS location_identifier,
+				l.name         AS location_name,
+				l.external_key AS location_external_key,
 				LEAD(s.timestamp) OVER (ORDER BY s.timestamp) AS next_timestamp
 			FROM trakrf.asset_scans s
 			LEFT JOIN trakrf.locations l ON l.id = s.location_id AND l.org_id = $2 AND l.deleted_at IS NULL
@@ -220,7 +224,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			timestamp,
 			location_id,
 			location_name,
-			location_identifier,
+			location_external_key,
 			EXTRACT(EPOCH FROM (next_timestamp - timestamp))::INT AS duration_seconds
 		FROM scans
 		ORDER BY timestamp DESC
@@ -240,7 +244,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			&item.Timestamp,
 			&item.LocationID,
 			&item.LocationName,
-			&item.LocationIdentifier,
+			&item.LocationExternalKey,
 			&item.DurationSeconds,
 		)
 		if err != nil {

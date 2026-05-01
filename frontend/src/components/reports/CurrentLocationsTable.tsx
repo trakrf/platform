@@ -20,8 +20,8 @@ interface CurrentLocationsTableProps {
 type TableItem = CurrentLocationItem & { id: string };
 
 const columns: Column<TableItem>[] = [
-  { key: 'asset', label: 'Asset', sortable: true },
-  { key: 'location', label: 'Location', sortable: true },
+  { key: 'asset_external_key', label: 'Asset', sortable: true },
+  { key: 'location_external_key', label: 'Location', sortable: true },
   { key: 'last_seen', label: 'Last Seen', sortable: true },
   { key: 'status', label: 'Status', sortable: false },
 ];
@@ -37,13 +37,16 @@ export function CurrentLocationsTable({
   onRowClick,
 }: CurrentLocationsTableProps) {
   const tableData: TableItem[] = useMemo(
-    () => data.map((item) => ({ ...item, id: item.asset })),
+    () => data.map((item) => ({ ...item, id: String(item.asset_id ?? item.asset_external_key ?? '') })),
     [data]
   );
 
   const originalItems = useMemo(() => {
     const map = new Map<string, CurrentLocationItem>();
-    data.forEach((item) => map.set(item.asset, item));
+    data.forEach((item) => {
+      const key = String(item.asset_id ?? item.asset_external_key ?? '');
+      map.set(key, item);
+    });
     return map;
   }, [data]);
 
@@ -61,50 +64,53 @@ export function CurrentLocationsTable({
       emptyStateTitle="No Location Data"
       emptyStateDescription="No assets have been scanned yet. Assets will appear here once they are detected."
       className="flex-1 min-h-0"
-      renderRow={(item, _index, props) => (
-        <tr
-          key={item.id}
-          className={`${props.className} cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors`}
-          onClick={() => {
-            const original = originalItems.get(item.asset);
-            if (original) onRowClick(original);
-          }}
-        >
-          <td className="px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-10 h-10 rounded-lg ${getAvatarColor(item.asset)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
-              >
-                {getInitials(item.asset)}
-              </div>
-              <div className="min-w-0">
-                <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                  {item.asset}
+      renderRow={(item, _index, props) => {
+        const assetLabel = item.asset_external_key ?? '';
+        return (
+          <tr
+            key={item.id}
+            className={`${props.className} cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors`}
+            onClick={() => {
+              const original = originalItems.get(item.id);
+              if (original) onRowClick(original);
+            }}
+          >
+            <td className="px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-lg ${getAvatarColor(assetLabel)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
+                >
+                  {getInitials(assetLabel)}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {assetLabel}
+                  </div>
                 </div>
               </div>
-            </div>
-          </td>
-          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-            {item.location || (
-              <span className="text-gray-400 dark:text-gray-500">Unknown</span>
-            )}
-          </td>
-          <td className="px-4 py-3">
-            <div className="text-gray-900 dark:text-gray-100">
-              {formatTimestampForExport(item.last_seen)}
-            </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {formatRelativeTime(item.last_seen)}
-            </div>
-          </td>
-          <td className="px-4 py-3">
-            <div className="flex items-center justify-between">
-              <FreshnessBadge lastSeen={item.last_seen} />
-              <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 ml-2" />
-            </div>
-          </td>
-        </tr>
-      )}
+            </td>
+            <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+              {item.location_external_key || (
+                <span className="text-gray-400 dark:text-gray-500">Unknown</span>
+              )}
+            </td>
+            <td className="px-4 py-3">
+              <div className="text-gray-900 dark:text-gray-100">
+                {formatTimestampForExport(item.last_seen)}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {formatRelativeTime(item.last_seen)}
+              </div>
+            </td>
+            <td className="px-4 py-3">
+              <div className="flex items-center justify-between">
+                <FreshnessBadge lastSeen={item.last_seen} />
+                <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 ml-2" />
+              </div>
+            </td>
+          </tr>
+        );
+      }}
     />
   );
 }

@@ -1,7 +1,9 @@
 package reports
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trakrf/platform/backend/internal/apierrors"
@@ -32,15 +34,16 @@ type ListCurrentLocationsResponse struct {
 }
 
 // @Summary List current asset locations
-// @Description Snapshot of each asset's most recent location, filterable by natural key. Because this view is derived from immutable scan history, it can resolve identifiers for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
+// @Description Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 // @Tags reports,public
 // @ID locations.current
-// @Param limit query int false "max 200"   default(50)
-// @Param offset query int false "min 0"    default(0)
-// @Param location query string false "filter by location identifier (may repeat)"
-// @Param q query string false "substring search (case-insensitive) on asset name, identifier, and active tag values"
-// @Param include_deleted query bool false "include rows for soft-deleted assets" default(false)
-// @Param sort query string false "comma-separated sort fields; prefix '-' for DESC"
+// @Param limit                 query int    false "max 200"   default(50)
+// @Param offset                query int    false "min 0"    default(0)
+// @Param location_id           query int    false "filter by location id (canonical, may repeat)"
+// @Param location_external_key query string false "filter by location external_key (may repeat)"
+// @Param q                     query string false "substring search (case-insensitive) on asset name, external_key, and active tag values"
+// @Param include_deleted       query bool   false "include rows for soft-deleted assets" default(false)
+// @Param sort                  query string false "comma-separated sort fields; prefix '-' for DESC"
 // @Success 200 {object} reports.ListCurrentLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
@@ -62,7 +65,7 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
-		Filters:     []string{"location", "q", "include_deleted"},
+		Filters:     []string{"location_id", "location_external_key", "q", "include_deleted"},
 		BoolFilters: []string{"include_deleted"},
 		Sorts:       []string{"last_seen", "asset", "location"},
 	})
@@ -72,9 +75,26 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := report.CurrentLocationFilter{
-		LocationIdentifiers: params.Filters["location"],
-		Limit:               params.Limit,
-		Offset:              params.Offset,
+		LocationExternalKeys: params.Filters["location_external_key"],
+		Limit:                params.Limit,
+		Offset:               params.Offset,
+	}
+	if vs, ok := params.Filters["location_id"]; ok && len(vs) > 0 {
+		filter.LocationIDs = make([]int, 0, len(vs))
+		for _, s := range vs {
+			n, err := strconv.Atoi(s)
+			if err != nil || n < 1 {
+				httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+					apierrors.ReportCurrentLocationsFailed, "invalid location_id", reqID,
+					[]modelerrors.FieldError{{
+						Field:   "location_id",
+						Code:    "invalid_value",
+						Message: fmt.Sprintf("location_id %q must be a positive integer", s),
+					}})
+				return
+			}
+			filter.LocationIDs = append(filter.LocationIDs, n)
+		}
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
 		filter.Q = &vs[0]

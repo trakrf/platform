@@ -2,31 +2,24 @@ package report
 
 import "time"
 
-// CurrentLocationItem represents a single asset's current location
+// CurrentLocationItem represents a single asset's current location (internal projection)
 type CurrentLocationItem struct {
-	AssetID            int        `json:"asset_id"`
-	AssetName          string     `json:"asset_name"`
-	AssetIdentifier    string     `json:"asset_identifier"`
-	LocationID         *int       `json:"location_id"`         // nullable
-	LocationName       *string    `json:"location_name"`       // nullable
-	LocationIdentifier *string    `json:"location_identifier"` // nullable
-	LastSeen           time.Time  `json:"last_seen"`
-	AssetDeletedAt     *time.Time `json:"asset_deleted_at,omitempty"` // populated when include_deleted=true
-}
-
-// CurrentLocationsResponse is the paginated response for current locations
-type CurrentLocationsResponse struct {
-	Data       []CurrentLocationItem `json:"data"`
-	Count      int                   `json:"count"`
-	Offset     int                   `json:"offset"`
-	TotalCount int                   `json:"total_count"`
+	AssetID             int        `json:"asset_id"`
+	AssetName           string     `json:"asset_name"`
+	AssetExternalKey    string     `json:"asset_external_key"`
+	LocationID          *int       `json:"location_id"`
+	LocationName        *string    `json:"location_name"`
+	LocationExternalKey *string    `json:"location_external_key"`
+	LastSeen            time.Time  `json:"last_seen"`
+	AssetDeletedAt      *time.Time `json:"asset_deleted_at,omitempty"`
 }
 
 // CurrentLocationFilter contains query parameters for filtering
 type CurrentLocationFilter struct {
-	LocationIdentifiers []string // filter by location natural key(s)
-	Q                   *string  // substring match (case-insensitive) on asset name, identifier, and active identifier values
-	IncludeDeleted      bool     // when true, includes rows for soft-deleted assets (default false)
-	Limit               int
-	Offset              int
+	LocationIDs          []int    // filter by canonical location id(s)
+	LocationExternalKeys []string // filter by location external_key(s)
+	Q                    *string  // substring search (case-insensitive) on asset name, external_key, and active tag values
+	IncludeDeleted       bool     // when true, includes rows for soft-deleted assets (default false)
+	Limit                int
+	Offset               int
 }

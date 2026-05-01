@@ -12,18 +12,21 @@
  * Backend: report.PublicCurrentLocationItem
  */
 export interface CurrentLocationItem {
-  asset: string; // asset natural key (identifier)
-  location: string; // location natural key (identifier), empty string if unknown
+  asset_id: number | null;
+  asset_external_key: string | null;
+  location_id: number | null;
+  location_external_key: string | null;
   last_seen: string; // ISO 8601
+  asset_deleted_at?: string; // ISO 8601, present only when include_deleted=true and asset is soft-deleted
 }
 
 /**
  * Paginated response for current locations
- * Backend: ListCurrentLocations response envelope
+ * Backend: reports.ListCurrentLocationsResponse
  */
 export interface CurrentLocationsResponse {
   data: CurrentLocationItem[];
-  limit: number; // was `count`
+  limit: number;
   offset: number;
   total_count: number;
 }
@@ -34,8 +37,11 @@ export interface CurrentLocationsResponse {
 export interface CurrentLocationsParams {
   limit?: number;
   offset?: number;
-  location?: string; // location natural key filter (was location_id: number)
-  q?: string; // search query (was search: string)
+  location_id?: number | number[]; // canonical location id filter (may repeat)
+  location_external_key?: string | string[]; // location external_key filter (may repeat)
+  q?: string;
+  include_deleted?: boolean;
+  sort?: string;
 }
 
 // ============ Asset History (TRA-218) ============
@@ -46,17 +52,18 @@ export interface CurrentLocationsParams {
  */
 export interface AssetHistoryItem {
   timestamp: string; // ISO 8601
-  location: string; // location natural key (was location_id + location_name)
+  location_id: number | null;
+  location_external_key: string | null;
   duration_seconds: number | null;
 }
 
 /**
  * Paginated response for asset history
- * Backend: GetAssetHistoryByID response envelope
+ * Backend: reports.AssetHistoryResponse
  */
 export interface AssetHistoryResponse {
   data: AssetHistoryItem[];
-  limit: number; // was `count`
+  limit: number;
   offset: number;
   total_count: number;
 }
@@ -67,8 +74,8 @@ export interface AssetHistoryResponse {
 export interface AssetHistoryParams {
   limit?: number;
   offset?: number;
-  from?: string; // ISO datetime (was start_date)
-  to?: string; // ISO datetime (was end_date)
+  from?: string; // ISO datetime
+  to?: string; // ISO datetime
 }
 
 // ============ UI Types ============
