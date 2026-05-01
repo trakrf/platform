@@ -18,7 +18,7 @@ export function LocationMoveModal({
   onClose,
   onConfirm,
 }: LocationMoveModalProps) {
-  const [newParentId, setNewParentId] = useState<number | null>(location.parent_location_id);
+  const [newParentId, setNewParentId] = useState<number | null>(location.parent_id);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,18 +30,18 @@ export function LocationMoveModal({
 
   useEscapeToClose(isOpen, onClose, loading);
 
-  const hasChanges = newParentId !== location.parent_location_id;
+  const hasChanges = newParentId !== location.parent_id;
   const willAffectDescendants = descendants.length > 0;
 
   const newPath = useMemo(() => {
     if (newParentId === null) {
-      return [location.identifier];
+      return [location.external_key];
     }
     const ancestors = getAncestors(newParentId);
     const parent = getLocationById(newParentId);
-    if (!parent) return [location.identifier];
-    return [...ancestors.map((a) => a.identifier), parent.identifier, location.identifier];
-  }, [newParentId, location.identifier, getAncestors, getLocationById]);
+    if (!parent) return [location.external_key];
+    return [...ancestors.map((a) => a.external_key), parent.external_key, location.external_key];
+  }, [newParentId, location.external_key, getAncestors, getLocationById]);
 
   if (!isOpen) return null;
 
@@ -84,7 +84,7 @@ export function LocationMoveModal({
               <MapPin className="h-5 w-5 text-gray-500 dark:text-gray-400" />
               <div>
                 <span className="font-medium text-gray-900 dark:text-white">
-                  {location.identifier}
+                  {location.external_key}
                 </span>
                 <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
                   ({location.name})

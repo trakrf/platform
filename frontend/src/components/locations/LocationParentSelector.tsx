@@ -43,9 +43,9 @@ export function LocationParentSelector({
 
   const sortedLocations = useMemo(() => {
     return [...availableLocations].sort((a, b) => {
-      if (a.parent_location_id === null && b.parent_location_id !== null) return -1;
-      if (a.parent_location_id !== null && b.parent_location_id === null) return 1;
-      return a.identifier.localeCompare(b.identifier);
+      if (a.parent_id === null && b.parent_id !== null) return -1;
+      if (a.parent_id !== null && b.parent_id === null) return 1;
+      return a.external_key.localeCompare(b.external_key);
     });
   }, [availableLocations]);
 
@@ -54,15 +54,15 @@ export function LocationParentSelector({
     let current: Location | undefined = location;
 
     while (current) {
-      path.unshift(current.identifier);
-      if (current.parent_location_id === null) break;
-      current = cache.byId.get(current.parent_location_id);
+      path.unshift(current.external_key);
+      if (current.parent_id === null) break;
+      current = cache.byId.get(current.parent_id);
     }
 
     if (path.length > 1) {
       return path.join(' > ');
     }
-    return location.identifier;
+    return location.external_key;
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

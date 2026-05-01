@@ -113,12 +113,12 @@ func TestRemoveLocationTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	orgB := createOrg(t, pool, "Org B", "test-org-b-loc-ident")
 
 	loc, err := store.CreateLocation(context.Background(), locationmodel.Location{
-		OrgID:      orgA,
-		Identifier: "LOC-HOST-A",
-		Name:       "Loc A",
-		Path:       "LOC-HOST-A",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgA,
+		ExternalKey: "LOC-HOST-A",
+		Name:        "Loc A",
+		Path:        "LOC-HOST-A",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -148,22 +148,22 @@ func TestRemoveLocationTag_WrongLocationID_ReturnsFalse(t *testing.T) {
 	orgA := testutil.CreateTestAccount(t, pool)
 
 	locOwner, err := store.CreateLocation(context.Background(), locationmodel.Location{
-		OrgID:      orgA,
-		Identifier: "LOC-OWNER",
-		Name:       "Owner",
-		Path:       "LOC-OWNER",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgA,
+		ExternalKey: "LOC-OWNER",
+		Name:        "Owner",
+		Path:        "LOC-OWNER",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
 	locBystander, err := store.CreateLocation(context.Background(), locationmodel.Location{
-		OrgID:      orgA,
-		Identifier: "LOC-BYSTANDER",
-		Name:       "Bystander",
-		Path:       "LOC-BYSTANDER",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgA,
+		ExternalKey: "LOC-BYSTANDER",
+		Name:        "Bystander",
+		Path:        "LOC-BYSTANDER",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 

@@ -191,7 +191,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedOrgAndKey(t, pool, store, "", []string{"assets:write"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "wh", Name: "WH", Path: "wh",
+		OrgID: orgID, ExternalKey: "wh", Name: "WH", Path: "wh",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

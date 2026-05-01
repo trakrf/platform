@@ -24,8 +24,8 @@ export function LocationCard({
   showActions = true,
   className = '',
 }: LocationCardProps) {
-  const Icon = location.parent_location_id === null ? Building2 : MapPin;
-  const isRoot = location.parent_location_id === null;
+  const Icon = location.parent_id === null ? Building2 : MapPin;
+  const isRoot = location.parent_id === null;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localTags, setLocalTags] = useState<Tag[]>(location.tags || []);
@@ -92,7 +92,7 @@ export function LocationCard({
 
           <td className="px-2 sm:px-4 py-2 sm:py-3">
             <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate block max-w-[100px] sm:max-w-none">
-              {location.identifier}
+              {location.external_key}
             </span>
           </td>
 
@@ -139,21 +139,21 @@ export function LocationCard({
               <div className="flex items-center gap-1 sm:gap-2">
                 <LocateTagPopover
                   tags={localTags}
-                  entityIdentifier={location.identifier}
+                  entityIdentifier={location.external_key}
                   isActive={location.is_active}
                   variant="icon"
                 />
                 <button
                   onClick={handleEdit}
                   className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
-                  aria-label={`Edit ${location.identifier}`}
+                  aria-label={`Edit ${location.external_key}`}
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
                 <button
                   onClick={handleDelete}
                   className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
-                  aria-label={`Delete ${location.identifier}`}
+                  aria-label={`Delete ${location.external_key}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -166,7 +166,7 @@ export function LocationCard({
         <TagsModal
           tags={localTags}
           entityId={location.id}
-          entityName={location.identifier}
+          entityName={location.external_key}
           entityType="location"
           isOpen={tagsModalOpen}
           onClose={() => setTagsModalOpen(false)}
@@ -194,7 +194,7 @@ export function LocationCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white truncate">
-                {location.identifier}
+                {location.external_key}
               </h3>
               {localTags.length > 0 && (
                 <TagCountBadge
@@ -236,7 +236,7 @@ export function LocationCard({
           <div className="flex gap-1.5 sm:gap-2 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
             <LocateTagPopover
               tags={localTags}
-              entityIdentifier={location.identifier}
+              entityIdentifier={location.external_key}
               isActive={location.is_active}
               variant="button"
             />
@@ -262,7 +262,7 @@ export function LocationCard({
       <TagsModal
         tags={localTags}
         entityId={location.id}
-        entityName={location.identifier}
+        entityName={location.external_key}
         entityType="location"
         isOpen={tagsModalOpen}
         onClose={() => setTagsModalOpen(false)}

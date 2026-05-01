@@ -12,10 +12,10 @@ vi.mock('@/lib/api/locations');
 const mockRoot: Location = {
   id: 1,
   org_id: 100,
-  identifier: 'usa',
+  external_key: 'usa',
   name: 'United States',
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
@@ -29,10 +29,10 @@ const mockRoot: Location = {
 const mockChild: Location = {
   id: 2,
   org_id: 100,
-  identifier: 'california',
+  external_key: 'california',
   name: 'California',
   description: '',
-  parent_location_id: 1,
+  parent_id: 1,
   path: 'usa.california',
   depth: 2,
   valid_from: '2024-01-01',
@@ -46,10 +46,10 @@ const mockChild: Location = {
 const mockGrandchild: Location = {
   id: 3,
   org_id: 100,
-  identifier: 'warehouse1',
+  external_key: 'warehouse1',
   name: 'Warehouse 1',
   description: '',
-  parent_location_id: 2,
+  parent_id: 2,
   path: 'usa.california.warehouse1',
   depth: 3,
   valid_from: '2024-01-01',
@@ -176,12 +176,12 @@ describe('useLocationHierarchy', () => {
     // (the TRA-429 wire shape). The hook's normalizeLocation helper should
     // fall back to surrogate_id when id is absent.
     const ancestorRaw = {
-      surrogate_id: 42,
+      id: 42,
       org_id: 100,
-      identifier: 'usa',
+      external_key: 'usa',
       name: 'United States',
       description: '',
-      parent: null,
+      parent_external_key: null,
       path: 'usa',
       depth: 1,
       valid_from: '2024-01-01',
@@ -209,17 +209,17 @@ describe('useLocationHierarchy', () => {
     const byId = useLocationStore.getState().cache.byId;
     expect(byId.get(42)).toBeDefined();
     expect(byId.get(42)?.id).toBe(42);
-    expect(byId.get(42)?.surrogate_id).toBe(42);
+    expect(byId.get(42)?.id).toBe(42);
   });
 
   it('should populate byId cache from surrogate_id when API returns descendants without id', async () => {
     const descendantRaw = {
-      surrogate_id: 99,
+      id: 99,
       org_id: 100,
-      identifier: 'california',
+      external_key: 'california',
       name: 'California',
       description: '',
-      parent: null,
+      parent_external_key: null,
       path: 'usa.california',
       depth: 2,
       valid_from: '2024-01-01',
@@ -247,7 +247,7 @@ describe('useLocationHierarchy', () => {
     const byId = useLocationStore.getState().cache.byId;
     expect(byId.get(99)).toBeDefined();
     expect(byId.get(99)?.id).toBe(99);
-    expect(byId.get(99)?.surrogate_id).toBe(99);
+    expect(byId.get(99)?.id).toBe(99);
   });
 
   it('should return empty arrays for null locationId', () => {

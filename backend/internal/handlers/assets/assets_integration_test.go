@@ -67,7 +67,7 @@ func createTestLocation(t *testing.T, pool *pgxpool.Pool, orgID int, name string
 
 // createTestLocationWithDesc is like createTestLocation but writes an empty
 // description so pgx scans succeed in code paths that route the row through
-// GetLocationByIdentifier (which targets a non-nullable string).
+// GetLocationByExternalKey (which targets a non-nullable string).
 func createTestLocationWithDesc(t *testing.T, pool *pgxpool.Pool, orgID int, name string) int {
 	t.Helper()
 	var id int
@@ -680,12 +680,12 @@ func TestAssetWriteResponses_OmitInternalFields(t *testing.T) {
 
 	// Seed a parent location so we can exercise the CurrentLocation path.
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID:      accountID,
-		Identifier: "tra429-parent-loc",
-		Name:       "TRA-429 Parent",
-		Path:       "tra429-parent-loc",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       accountID,
+		ExternalKey: "tra429-parent-loc",
+		Name:        "TRA-429 Parent",
+		Path:        "tra429-parent-loc",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 

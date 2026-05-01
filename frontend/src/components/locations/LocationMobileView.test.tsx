@@ -8,7 +8,7 @@ import type { Location } from '@/types/locations';
 vi.mock('./LocationExpandableCard', () => ({
   LocationExpandableCard: ({ location, searchTerm }: { location: Location; searchTerm: string }) => (
     <div data-testid="expandable-card" data-location-id={location.id} data-search={searchTerm}>
-      Card: {location.identifier}
+      Card: {location.external_key}
     </div>
   ),
 }));
@@ -16,10 +16,10 @@ vi.mock('./LocationExpandableCard', () => ({
 const createMockLocation = (id: number, overrides = {}): Location => ({
   id,
   org_id: 1,
-  identifier: `loc_${id}`,
+  external_key: `loc_${id}`,
   name: `Location ${id}`,
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',
@@ -54,8 +54,8 @@ describe('LocationMobileView', () => {
   });
 
   it('should render root locations as expandable cards', () => {
-    const root1 = createMockLocation(1, { identifier: 'warehouse-a' });
-    const root2 = createMockLocation(2, { identifier: 'warehouse-b' });
+    const root1 = createMockLocation(1, { external_key: 'warehouse-a' });
+    const root2 = createMockLocation(2, { external_key: 'warehouse-b' });
     useLocationStore.getState().setLocations([root1, root2]);
 
     render(
@@ -86,7 +86,7 @@ describe('LocationMobileView', () => {
   });
 
   it('should pass searchTerm to expandable cards', () => {
-    const root = createMockLocation(1, { identifier: 'warehouse' });
+    const root = createMockLocation(1, { external_key: 'warehouse' });
     useLocationStore.getState().setLocations([root]);
 
     render(
@@ -103,7 +103,7 @@ describe('LocationMobileView', () => {
   });
 
   it('should show no matches state when filtering returns no results', () => {
-    const root = createMockLocation(1, { identifier: 'warehouse' });
+    const root = createMockLocation(1, { external_key: 'warehouse' });
     useLocationStore.getState().setLocations([root]);
 
     render(
@@ -120,8 +120,8 @@ describe('LocationMobileView', () => {
   });
 
   it('should show matching locations when filtering', () => {
-    const root1 = createMockLocation(1, { identifier: 'warehouse', name: 'Main Warehouse' });
-    const root2 = createMockLocation(2, { identifier: 'office', name: 'Office Building' });
+    const root1 = createMockLocation(1, { external_key: 'warehouse', name: 'Main Warehouse' });
+    const root2 = createMockLocation(2, { external_key: 'office', name: 'Office Building' });
     useLocationStore.getState().setLocations([root1, root2]);
 
     render(
@@ -138,8 +138,8 @@ describe('LocationMobileView', () => {
   });
 
   it('should show root with matching descendant', () => {
-    const root = createMockLocation(1, { identifier: 'root' });
-    const child = createMockLocation(2, { identifier: 'matching-child', parent_location_id: 1 });
+    const root = createMockLocation(1, { external_key: 'root' });
+    const child = createMockLocation(2, { external_key: 'matching-child', parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
 
     render(

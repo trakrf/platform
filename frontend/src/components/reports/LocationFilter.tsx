@@ -102,7 +102,7 @@ export function LocationFilter({
               >
                 <span className="font-medium">{location.name}</span>
                 <span className="text-gray-500 dark:text-gray-400 ml-1">
-                  ({location.identifier})
+                  ({location.external_key})
                 </span>
               </button>
             ))

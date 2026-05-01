@@ -19,10 +19,10 @@ vi.mock('./LocationBreadcrumb', () => ({
 const createMockLocation = (id: number, overrides = {}): Location => ({
   id,
   org_id: 1,
-  identifier: `loc_${id}`,
+  external_key: `loc_${id}`,
   name: `Location ${id}`,
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',
@@ -74,7 +74,7 @@ describe('LocationDetailsPanel', () => {
   });
 
   it('should show location identifier and name', () => {
-    const location = createMockLocation(1, { identifier: 'warehouse-a', name: 'Main Warehouse' });
+    const location = createMockLocation(1, { external_key: 'warehouse-a', name: 'Main Warehouse' });
     useLocationStore.getState().setLocations([location]);
 
     render(
@@ -157,8 +157,8 @@ describe('LocationDetailsPanel', () => {
 
   it('should show Direct Children section with count when children exist', () => {
     const root = createMockLocation(1);
-    const child1 = createMockLocation(2, { parent_location_id: 1 });
-    const child2 = createMockLocation(3, { parent_location_id: 1 });
+    const child1 = createMockLocation(2, { parent_id: 1 });
+    const child2 = createMockLocation(3, { parent_id: 1 });
     useLocationStore.getState().setLocations([root, child1, child2]);
 
     render(
@@ -176,7 +176,7 @@ describe('LocationDetailsPanel', () => {
 
   it('should NOT show Hierarchy Information heading', () => {
     const root = createMockLocation(1);
-    const child = createMockLocation(2, { parent_location_id: 1 });
+    const child = createMockLocation(2, { parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
 
     render(
@@ -194,7 +194,7 @@ describe('LocationDetailsPanel', () => {
 
   it('should list direct children with click navigation', () => {
     const root = createMockLocation(1);
-    const child = createMockLocation(2, { identifier: 'child-loc', parent_location_id: 1 });
+    const child = createMockLocation(2, { external_key: 'child-loc', parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
 
     const onChildClick = vi.fn();
@@ -213,7 +213,7 @@ describe('LocationDetailsPanel', () => {
 
   it('should call onChildClick when child is clicked', () => {
     const root = createMockLocation(1);
-    const child = createMockLocation(2, { identifier: 'child-loc', parent_location_id: 1 });
+    const child = createMockLocation(2, { external_key: 'child-loc', parent_id: 1 });
     useLocationStore.getState().setLocations([root, child]);
 
     const onChildClick = vi.fn();

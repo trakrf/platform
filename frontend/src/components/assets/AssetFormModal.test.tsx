@@ -21,7 +21,7 @@ describe('AssetFormModal', () => {
   const mockAsset: Asset = {
     id: 1,
     org_id: 1,
-    identifier: 'LAP-001',
+    external_key: 'LAP-001',
     name: 'Test Laptop',
     type: 'device',
     description: 'Test description',
@@ -62,7 +62,7 @@ describe('AssetFormModal', () => {
       <AssetFormModal isOpen={true} mode="edit" asset={mockAsset} onClose={mockOnClose} />
     );
 
-    expect(screen.getByText(`Edit Asset: ${mockAsset.identifier}`)).toBeInTheDocument();
+    expect(screen.getByText(`Edit Asset: ${mockAsset.external_key}`)).toBeInTheDocument();
   });
 
   it('closes modal when close button is clicked', () => {

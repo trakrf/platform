@@ -25,7 +25,7 @@ func TestCurrentLocations_QMatchesActiveIdentifierOnly(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-current", Name: "Current WH", Path: "wh-current",
+		OrgID: orgID, ExternalKey: "wh-current", Name: "Current WH", Path: "wh-current",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestCurrentLocations_CountExcludesSoftDeletedIdentifier(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-count", Name: "Count WH", Path: "wh-count",
+		OrgID: orgID, ExternalKey: "wh-count", Name: "Count WH", Path: "wh-count",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestCurrentLocations_DefaultElidesDeletedAsset(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, Identifier: "wh-elide", Name: "Elide WH", Path: "wh-elide",
+		OrgID: orgID, ExternalKey: "wh-elide", Name: "Elide WH", Path: "wh-elide",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

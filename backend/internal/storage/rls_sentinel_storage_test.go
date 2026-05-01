@@ -129,11 +129,11 @@ func TestRLS_SentinelMode_StorageMethods(t *testing.T) {
 	// ── 7. locations.go: CreateLocation + ListAllLocations. ────────────────────
 	t.Run("locations", func(t *testing.T) {
 		created, err := store.CreateLocation(ctx, location.Location{
-			OrgID:      orgID,
-			Name:       "Sentinel Storage Loc",
-			Identifier: "rls-sentinel-storage-loc",
-			ValidFrom:  time.Now(),
-			IsActive:   true,
+			OrgID:       orgID,
+			Name:        "Sentinel Storage Loc",
+			ExternalKey: "rls-sentinel-storage-loc",
+			ValidFrom:   time.Now(),
+			IsActive:    true,
 		})
 		require.NoError(t, err, "CreateLocation must succeed under sentinel pool")
 		require.NotNil(t, created)

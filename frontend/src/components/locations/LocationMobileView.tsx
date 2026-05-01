@@ -31,7 +31,7 @@ export function LocationMobileView({
     const term = searchTerm.toLowerCase();
     return rootLocations.filter((root) => {
       const matches =
-        root.identifier.toLowerCase().includes(term) ||
+        root.external_key.toLowerCase().includes(term) ||
         root.name.toLowerCase().includes(term);
 
       if (matches) return true;
@@ -40,7 +40,7 @@ export function LocationMobileView({
       const descendants = getDescendants(root.id);
       return descendants.some(
         (d) =>
-          d.identifier.toLowerCase().includes(term) ||
+          d.external_key.toLowerCase().includes(term) ||
           d.name.toLowerCase().includes(term)
       );
     });

@@ -519,7 +519,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 			a.id, a.org_id, a.identifier, a.name, a.description,
 			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
-			l.identifier
+			l.external_key
 		FROM trakrf.assets a
 		LEFT JOIN latest_scan ls ON true
 		LEFT JOIN trakrf.locations l
@@ -621,7 +621,7 @@ func (s *Storage) GetAssetByIdentifier(
 			a.id, a.org_id, a.identifier, a.name, a.description,
 			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
-			l.identifier
+			l.external_key
 		FROM trakrf.assets a
 		LEFT JOIN latest_scan ls ON true
 		LEFT JOIN trakrf.locations l
@@ -737,7 +737,7 @@ func (s *Storage) ListAssetsFiltered(
 			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
-			l.identifier
+			l.external_key
 		FROM trakrf.assets a
 		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
 		LEFT JOIN trakrf.locations l
@@ -842,7 +842,7 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 
 	if len(f.LocationIdentifiers) > 0 {
 		args = append(args, f.LocationIdentifiers)
-		clauses = append(clauses, fmt.Sprintf("l.identifier = ANY($%d::text[])", len(args)))
+		clauses = append(clauses, fmt.Sprintf("l.external_key = ANY($%d::text[])", len(args)))
 	}
 	if f.IsActive != nil {
 		args = append(args, *f.IsActive)

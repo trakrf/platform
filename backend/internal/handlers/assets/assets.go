@@ -90,7 +90,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// Resolve current_location → current_location_id (TRA-477). Empty string
 	// is treated as nil. Parallels parent_identifier handling on locations.
 	if request.CurrentLocation != nil && *request.CurrentLocation != "" {
-		loc, err := handler.storage.GetLocationByIdentifier(r.Context(), orgID, *request.CurrentLocation)
+		loc, err := handler.storage.GetLocationByExternalKey(r.Context(), orgID, *request.CurrentLocation)
 		if err != nil {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 				apierrors.AssetCreateFailed, err.Error(), requestID)
@@ -238,7 +238,7 @@ func (handler *Handler) doUpdateAsset(w http.ResponseWriter, req *http.Request, 
 
 	// Resolve current_location → current_location_id (TRA-477).
 	if request.CurrentLocation != nil && *request.CurrentLocation != "" {
-		loc, err := handler.storage.GetLocationByIdentifier(req.Context(), orgID, *request.CurrentLocation)
+		loc, err := handler.storage.GetLocationByExternalKey(req.Context(), orgID, *request.CurrentLocation)
 		if err != nil {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 				apierrors.AssetUpdateFailed, err.Error(), reqID)

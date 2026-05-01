@@ -122,7 +122,7 @@ export default function InventoryScreen() {
     if (!locationId) return null;
     const location = locations.find(l => l.id === locationId);
     if (!location) return null;
-    return { id: location.id, name: location.name, identifier: location.identifier };
+    return { id: location.id, name: location.name, external_key: location.external_key };
   }, [manualLocationId, detectedLocation, locations]);
 
   // Display detection method
@@ -247,7 +247,7 @@ export default function InventoryScreen() {
 
     try {
       await save({
-        location_identifier: resolvedLocation.identifier,
+        location_identifier: resolvedLocation.external_key,
         asset_identifiers: saveableAssetIdentifiers,
       });
       if (autoClearOnSave) {

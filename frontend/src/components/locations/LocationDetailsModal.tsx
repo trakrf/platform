@@ -50,7 +50,7 @@ export function LocationDetailsModal({
 
   const children = getChildren(location.id);
   const descendants = getDescendants(location.id);
-  const isRoot = location.parent_location_id === null;
+  const isRoot = location.parent_id === null;
   const Icon = isRoot ? Building2 : MapPin;
 
   if (!isOpen) return null;
@@ -89,7 +89,7 @@ export function LocationDetailsModal({
                 Identifier
               </label>
               <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                {location.identifier}
+                {location.external_key}
               </p>
             </div>
 
@@ -197,7 +197,7 @@ export function LocationDetailsModal({
                     >
                       <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                       <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {child.identifier}
+                        {child.external_key}
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         ({child.name})

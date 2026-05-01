@@ -70,7 +70,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
           addLocation(normalized);
         }
 
-        toast.success(`Location "${normalized.identifier}" created successfully`);
+        toast.success(`Location "${normalized.external_key}" created successfully`);
       } else if (mode === 'edit' && location) {
         // New tags (without id) need to be added after update
         const allTags = (data as UpdateLocationRequest & { tags?: TagInput[] }).tags || [];
@@ -108,7 +108,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
           updateLocation(location.id, normalized);
         }
 
-        toast.success(`Location "${normalized.identifier}" updated successfully`);
+        toast.success(`Location "${normalized.external_key}" updated successfully`);
       }
 
       onClose();
@@ -145,7 +145,7 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
       <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {mode === 'create' ? 'Create New Location' : `Edit Location: ${location?.identifier}`}
+            {mode === 'create' ? 'Create New Location' : `Edit Location: ${location?.external_key}`}
           </h2>
           <button
             onClick={onClose}

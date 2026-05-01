@@ -94,7 +94,7 @@ func TestInventorySave_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "inv-wh", Name: "WH", Path: "inv-wh",
+		OrgID: orgID, ExternalKey: "inv-wh", Name: "WH", Path: "inv-wh",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestInventorySave_APIKey_MultiAsset_HappyPath(t *testing.T) {
 	orgID, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "ma-wh", Name: "WH", Path: "ma-wh",
+		OrgID: orgID, ExternalKey: "ma-wh", Name: "WH", Path: "ma-wh",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -244,7 +244,7 @@ func TestInventorySave_SessionAuth_HappyPath(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "sess-inv-wh", Name: "WH", Path: "sess-inv-wh",
+		OrgID: orgID, ExternalKey: "sess-inv-wh", Name: "WH", Path: "sess-inv-wh",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -290,7 +290,7 @@ func TestInventorySave_CrossOrg_Returns400(t *testing.T) {
 	_, tokenB := seedInventoryKeyForOrg(t, pool, store, orgB, []string{"scans:write"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgA, Identifier: "xo-wh", Name: "WH", Path: "xo-wh",
+		OrgID: orgA, ExternalKey: "xo-wh", Name: "WH", Path: "xo-wh",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -350,7 +350,7 @@ func TestInventorySave_APIKey_AssetIdentifierNotFound(t *testing.T) {
 
 	orgID, token := seedInventoryOrgAndKey(t, pool, store, []string{"scans:write"})
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra448-wh-2", Name: "WH", Path: "tra448-wh-2",
+		OrgID: orgID, ExternalKey: "tra448-wh-2", Name: "WH", Path: "tra448-wh-2",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

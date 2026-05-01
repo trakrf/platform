@@ -52,7 +52,7 @@ export function useReportsFilters({
   const debouncedSearch = useDebounce(search, 300);
   // Resolve surrogate location ID to natural key identifier for the API
   const selectedLocationIdentifier = selectedLocationId
-    ? locations.find((l) => l.id === selectedLocationId)?.identifier
+    ? locations.find((l) => l.id === selectedLocationId)?.external_key
     : undefined;
   const { data, totalCount, isLoading, error } = useCurrentLocations({
     q: debouncedSearch || undefined,

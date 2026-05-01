@@ -35,7 +35,7 @@ export function useLocationFilter({
     return locations.filter(
       (loc) =>
         loc.name.toLowerCase().includes(query) ||
-        loc.identifier.toLowerCase().includes(query)
+        loc.external_key.toLowerCase().includes(query)
     );
   }, [locations, search]);
 

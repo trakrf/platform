@@ -89,10 +89,10 @@ describe('LocationForm - Scanner Integration', () => {
     const mockLocation = {
       id: 1,
       org_id: 1,
-      identifier: 'loc-1',
+      external_key: 'loc-1',
       name: 'Test Location',
       description: '',
-      parent_location_id: null,
+      parent_id: null,
       valid_from: '2025-01-01T00:00:00Z',
       valid_to: '2099-12-31T00:00:00Z',
       is_active: true,
@@ -146,10 +146,10 @@ describe('LocationForm - Context-Aware Parent', () => {
   const createMockLocation = (id: number, overrides = {}): Location => ({
     id,
     org_id: 1,
-    identifier: `loc_${id}`,
+    external_key: `loc_${id}`,
     name: `Location ${id}`,
     description: '',
-    parent_location_id: null,
+    parent_id: null,
     path: `loc_${id}`,
     depth: 1,
     valid_from: '2024-01-01',
@@ -194,7 +194,7 @@ describe('LocationForm - Context-Aware Parent', () => {
   });
 
   it('should show "Creating inside: {identifier}" when parentLocationId provided', () => {
-    const parentLocation = createMockLocation(1, { identifier: 'warehouse-a' });
+    const parentLocation = createMockLocation(1, { external_key: 'warehouse-a' });
     useLocationStore.getState().setLocations([parentLocation]);
 
     render(
@@ -224,7 +224,7 @@ describe('LocationForm - Context-Aware Parent', () => {
   });
 
   it('should show LocationParentSelector in edit mode', () => {
-    const location = createMockLocation(1, { identifier: 'test-loc', name: 'Test Location' });
+    const location = createMockLocation(1, { external_key: 'test-loc', name: 'Test Location' });
     useLocationStore.getState().setLocations([location]);
 
     render(

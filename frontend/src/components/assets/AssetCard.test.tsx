@@ -12,7 +12,7 @@ describe('AssetCard', () => {
   const mockAsset: Asset = {
     id: 1,
     org_id: 1,
-    identifier: 'LAP-001',
+    external_key: 'LAP-001',
     name: 'Engineering Laptop',
     type: 'device',
     description: 'Test laptop',
@@ -182,8 +182,8 @@ describe('AssetCard', () => {
         </table>
       );
 
-      expect(screen.getByLabelText(`Edit ${mockAsset.identifier}`)).toBeInTheDocument();
-      expect(screen.getByLabelText(`Delete ${mockAsset.identifier}`)).toBeInTheDocument();
+      expect(screen.getByLabelText(`Edit ${mockAsset.external_key}`)).toBeInTheDocument();
+      expect(screen.getByLabelText(`Delete ${mockAsset.external_key}`)).toBeInTheDocument();
     });
 
     it('calls onClick when row is clicked', () => {

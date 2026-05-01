@@ -24,7 +24,7 @@ export function searchLocations(locations: Location[], searchTerm: string): Loca
   if (!term) return locations;
 
   return locations.filter((location) => {
-    const identifier = location.identifier.toLowerCase();
+    const identifier = location.external_key.toLowerCase();
     const name = location.name.toLowerCase();
     return identifier.includes(term) || name.includes(term);
   });
@@ -39,7 +39,7 @@ export function searchLocations(locations: Location[], searchTerm: string): Loca
  */
 export function filterByIdentifier(locations: Location[], identifier: string): Location[] {
   if (!identifier) return locations;
-  return locations.filter((l) => l.identifier === identifier);
+  return locations.filter((l) => l.external_key === identifier);
 }
 
 /**
@@ -92,8 +92,8 @@ export function filterLocations(locations: Location[], filters: LocationFilters)
     result = searchLocations(result, filters.search);
   }
 
-  if (filters.identifier) {
-    result = filterByIdentifier(result, filters.identifier);
+  if (filters.external_key) {
+    result = filterByIdentifier(result, filters.external_key);
   }
 
   if (filters.created_after || filters.created_before) {
@@ -120,9 +120,9 @@ export function sortLocations(locations: Location[], sort: LocationSort): Locati
     let bValue: string | number;
 
     switch (sort.field) {
-      case 'identifier':
-        aValue = a.identifier;
-        bValue = b.identifier;
+      case 'external_key':
+        aValue = a.external_key;
+        bValue = b.external_key;
         break;
       case 'name':
         aValue = a.name;
@@ -133,8 +133,8 @@ export function sortLocations(locations: Location[], sort: LocationSort): Locati
         bValue = b.created_at;
         break;
       default:
-        aValue = a.identifier;
-        bValue = b.identifier;
+        aValue = a.external_key;
+        bValue = b.external_key;
     }
 
     let comparison = 0;
@@ -173,6 +173,6 @@ export function paginateLocations(
  * @returns Sorted array of unique identifiers
  */
 export function extractUniqueIdentifiers(locations: Location[]): string[] {
-  const identifiers = locations.map((l) => l.identifier);
+  const identifiers = locations.map((l) => l.external_key);
   return Array.from(new Set(identifiers)).sort();
 }

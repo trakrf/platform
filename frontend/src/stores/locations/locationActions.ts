@@ -18,7 +18,7 @@ export function createCacheActions(
 
   const updatePrimaryIndexes = (cache: LocationCache, location: Location) => {
     cache.byId.set(location.id, location);
-    cache.byIdentifier.set(location.identifier, location);
+    cache.byExternalKey.set(location.external_key, location);
   };
 
   const updateParentChildMapping = (cache: LocationCache, locationId: number, parentId: number | null) => {
@@ -40,7 +40,7 @@ export function createCacheActions(
 
   const rebuildOrderedLists = (cache: LocationCache) => {
     cache.allIds = Array.from(cache.byId.keys());
-    cache.allIdentifiers = Array.from(cache.byIdentifier.keys()).sort();
+    cache.allExternalKeys = Array.from(cache.byExternalKey.keys()).sort();
   };
 
   const removeFromParentChildren = (cache: LocationCache, locationId: number, parentId: number | null) => {
@@ -55,26 +55,26 @@ export function createCacheActions(
       set((state: any) => {
         const cache = { ...state.cache };
         cache.byId = new Map(state.cache.byId);
-        cache.byIdentifier = new Map(state.cache.byIdentifier);
+        cache.byExternalKey = new Map(state.cache.byExternalKey);
         cache.byParentId = new Map(state.cache.byParentId);
         cache.rootIds = new Set(state.cache.rootIds);
         cache.activeIds = new Set(state.cache.activeIds);
         cache.allIds = [...state.cache.allIds];
-        cache.allIdentifiers = [...state.cache.allIdentifiers];
+        cache.allExternalKeys = [...state.cache.allExternalKeys];
 
-        // Public API responses (POST /locations) omit parent_location_id and
+        // Public API responses (POST /locations) omit parent_id and
         // only include the natural-key `parent` field — resolve it here so
         // single-item create/refetch payloads land in rootIds / byParentId
         // correctly without waiting for a full list refetch (TRA-484).
         let resolved = location;
-        if (resolved.parent_location_id == null) {
-          const parentId = resolved.parent
-            ? (state.cache.byIdentifier.get(resolved.parent)?.id ?? null)
+        if (resolved.parent_id == null) {
+          const parentId = resolved.parent_external_key
+            ? (state.cache.byExternalKey.get(resolved.parent_external_key)?.id ?? null)
             : null;
-          resolved = { ...resolved, parent_location_id: parentId };
+          resolved = { ...resolved, parent_id: parentId };
         }
 
-        const parentId = resolved.parent_location_id;
+        const parentId = resolved.parent_id;
 
         updatePrimaryIndexes(cache, resolved);
         updateParentChildMapping(cache, resolved.id, parentId);
@@ -95,35 +95,35 @@ export function createCacheActions(
         const updated = { ...existing, ...updates };
         const cache = { ...state.cache };
         cache.byId = new Map(state.cache.byId);
-        cache.byIdentifier = new Map(state.cache.byIdentifier);
+        cache.byExternalKey = new Map(state.cache.byExternalKey);
         cache.byParentId = new Map(state.cache.byParentId);
         cache.rootIds = new Set(state.cache.rootIds);
         cache.activeIds = new Set(state.cache.activeIds);
         cache.allIds = [...state.cache.allIds];
-        cache.allIdentifiers = [...state.cache.allIdentifiers];
+        cache.allExternalKeys = [...state.cache.allExternalKeys];
 
         cache.byId.set(id, updated);
 
-        if (updates.identifier && updates.identifier !== existing.identifier) {
-          cache.byIdentifier.delete(existing.identifier);
-          cache.byIdentifier.set(updates.identifier, updated);
+        if (updates.external_key && updates.external_key !== existing.external_key) {
+          cache.byExternalKey.delete(existing.external_key);
+          cache.byExternalKey.set(updates.external_key, updated);
           rebuildOrderedLists(cache);
         } else {
-          cache.byIdentifier.set(existing.identifier, updated);
+          cache.byExternalKey.set(existing.external_key, updated);
         }
 
         const hasParentChanged =
-          updates.parent_location_id !== undefined &&
-          updates.parent_location_id !== existing.parent_location_id;
+          updates.parent_id !== undefined &&
+          updates.parent_id !== existing.parent_id;
 
         if (hasParentChanged) {
-          removeFromParentChildren(cache, id, existing.parent_location_id);
+          removeFromParentChildren(cache, id, existing.parent_id);
 
-          const newParentId = updates.parent_location_id!;
+          const newParentId = updates.parent_id!;
           ensureParentChildrenSet(cache, newParentId);
           cache.byParentId.get(newParentId)!.add(id);
 
-          if (existing.parent_location_id === null) {
+          if (existing.parent_id === null) {
             cache.rootIds.delete(id);
           }
           if (newParentId === null) {
@@ -161,35 +161,35 @@ export function createCacheActions(
         const updated = { ...existing, ...updates };
         const cache = { ...state.cache };
         cache.byId = new Map(state.cache.byId);
-        cache.byIdentifier = new Map(state.cache.byIdentifier);
+        cache.byExternalKey = new Map(state.cache.byExternalKey);
         cache.byParentId = new Map(state.cache.byParentId);
         cache.rootIds = new Set(state.cache.rootIds);
         cache.activeIds = new Set(state.cache.activeIds);
         cache.allIds = [...state.cache.allIds];
-        cache.allIdentifiers = [...state.cache.allIdentifiers];
+        cache.allExternalKeys = [...state.cache.allExternalKeys];
 
         cache.byId.set(id, updated);
 
-        if (updates.identifier && updates.identifier !== existing.identifier) {
-          cache.byIdentifier.delete(existing.identifier);
-          cache.byIdentifier.set(updates.identifier, updated);
+        if (updates.external_key && updates.external_key !== existing.external_key) {
+          cache.byExternalKey.delete(existing.external_key);
+          cache.byExternalKey.set(updates.external_key, updated);
           rebuildOrderedLists(cache);
         } else {
-          cache.byIdentifier.set(existing.identifier, updated);
+          cache.byExternalKey.set(existing.external_key, updated);
         }
 
         const hasParentChanged =
-          updates.parent_location_id !== undefined &&
-          updates.parent_location_id !== existing.parent_location_id;
+          updates.parent_id !== undefined &&
+          updates.parent_id !== existing.parent_id;
 
         if (hasParentChanged) {
-          removeFromParentChildren(cache, id, existing.parent_location_id);
+          removeFromParentChildren(cache, id, existing.parent_id);
 
-          const newParentId = updates.parent_location_id!;
+          const newParentId = updates.parent_id!;
           ensureParentChildrenSet(cache, newParentId);
           cache.byParentId.get(newParentId)!.add(id);
 
-          if (existing.parent_location_id === null) {
+          if (existing.parent_id === null) {
             cache.rootIds.delete(id);
           }
           if (newParentId === null) {
@@ -220,16 +220,16 @@ export function createCacheActions(
 
         const cache = { ...state.cache };
         cache.byId = new Map(state.cache.byId);
-        cache.byIdentifier = new Map(state.cache.byIdentifier);
+        cache.byExternalKey = new Map(state.cache.byExternalKey);
         cache.byParentId = new Map(state.cache.byParentId);
         cache.rootIds = new Set(state.cache.rootIds);
         cache.activeIds = new Set(state.cache.activeIds);
 
         cache.byId.delete(id);
-        cache.byIdentifier.delete(location.identifier);
-        removeFromParentChildren(cache, id, location.parent_location_id);
+        cache.byExternalKey.delete(location.external_key);
+        removeFromParentChildren(cache, id, location.parent_id);
 
-        if (location.parent_location_id === null) {
+        if (location.parent_id === null) {
           cache.rootIds.delete(id);
         }
         if (location.is_active) {
@@ -245,19 +245,19 @@ export function createCacheActions(
       set(() => {
         const cache: LocationCache = {
           byId: new Map(),
-          byIdentifier: new Map(),
+          byExternalKey: new Map(),
           byTagEpc: new Map(),
           byParentId: new Map(),
           rootIds: new Set(),
           activeIds: new Set(),
           allIds: [],
-          allIdentifiers: [],
+          allExternalKeys: [],
           lastFetched: Date.now(),
           ttl: 0,
         };
 
         for (const location of locations) {
-          const parentId = location.parent_location_id;
+          const parentId = location.parent_id;
           updatePrimaryIndexes(cache, location);
           updateParentChildMapping(cache, location.id, parentId);
           updateRootSet(cache, location.id, parentId);
@@ -277,7 +277,7 @@ export function createCacheActions(
 
         if (typeof window !== 'undefined' && window.localStorage) {
           const metadata = {
-            allIdentifiers: cache.allIdentifiers,
+            allExternalKeys: cache.allExternalKeys,
             lastFetched: cache.lastFetched,
           };
           try {
@@ -298,13 +298,13 @@ export function createCacheActions(
       set(() => ({
         cache: {
           byId: new Map(),
-          byIdentifier: new Map(),
+          byExternalKey: new Map(),
           byTagEpc: new Map(),
           byParentId: new Map(),
           rootIds: new Set(),
           activeIds: new Set(),
           allIds: [],
-          allIdentifiers: [],
+          allExternalKeys: [],
           lastFetched: 0,
           ttl: 0,
         },
@@ -320,7 +320,7 @@ export function createCacheActions(
           totalPages: 0,
         },
         sort: {
-          field: 'identifier',
+          field: 'external_key',
           direction: 'asc',
         },
         selectedLocationId: null,
@@ -343,7 +343,7 @@ export function createHierarchyQueries(
     },
 
     getLocationByIdentifier: (identifier: string) => {
-      return (get() as any).cache.byIdentifier.get(identifier);
+      return (get() as any).cache.byExternalKey.get(identifier);
     },
 
     getLocationByTagEpc: (epc: string) => {
@@ -387,10 +387,10 @@ export function createHierarchyQueries(
 
       let current = cache.byId.get(id);
 
-      while (current && current.parent_location_id !== null) {
-        if (visited.has(current.parent_location_id)) break;
+      while (current && current.parent_id !== null) {
+        if (visited.has(current.parent_id)) break;
 
-        const parent = cache.byId.get(current.parent_location_id);
+        const parent = cache.byId.get(current.parent_id);
         if (!parent) break;
 
         ancestors.unshift(parent);

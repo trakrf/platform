@@ -19,7 +19,7 @@ import { useLocationStore } from '@/stores/locations/locationStore';
  */
 function getLocationName(locationIdentifier: string | null | undefined): string {
   if (!locationIdentifier) return '';
-  const location = useLocationStore.getState().cache.byIdentifier.get(locationIdentifier);
+  const location = useLocationStore.getState().cache.byExternalKey.get(locationIdentifier);
   return location?.name || locationIdentifier;
 }
 

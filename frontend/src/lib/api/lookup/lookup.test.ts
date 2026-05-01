@@ -22,7 +22,7 @@ describe('lookupApi', () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'LAPTOP-001',
+        external_key: 'LAPTOP-001',
         name: 'Dell XPS 15',
         type: 'device',
         description: 'Dev laptop',
@@ -58,7 +58,7 @@ describe('lookupApi', () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'LAPTOP-001',
+        external_key: 'LAPTOP-001',
         name: 'Dell XPS 15',
         type: 'device',
         description: 'Dev laptop',
@@ -87,17 +87,17 @@ describe('lookupApi', () => {
 
       expect(result.data.data.entity_type).toBe('asset');
       expect(result.data.data.asset?.id).toBe(1);
-      expect(result.data.data.asset?.identifier).toBe('LAPTOP-001');
+      expect(result.data.data.asset?.external_key).toBe('LAPTOP-001');
     });
 
     it('should return lookup result with location', async () => {
       const mockLocation: Location = {
         id: 10,
         org_id: 1,
-        identifier: 'ZONE-A',
+        external_key: 'ZONE-A',
         name: 'Zone A',
         description: 'Warehouse Zone A',
-        parent_location_id: null,
+        parent_id: null,
         path: '10',
         depth: 0,
         valid_from: '2024-01-01',
@@ -172,7 +172,7 @@ describe('lookupApi', () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'LAPTOP-001',
+        external_key: 'LAPTOP-001',
         name: 'Dell XPS 15',
         type: 'device',
         description: 'Dev laptop',
@@ -229,7 +229,7 @@ describe('lookupApi', () => {
       const mockAsset1: Asset = {
         id: 1,
         org_id: 1,
-        identifier: 'ASSET-1',
+        external_key: 'ASSET-1',
         name: 'Asset 1',
         type: 'device',
         description: '',
@@ -247,7 +247,7 @@ describe('lookupApi', () => {
       const mockAsset2: Asset = {
         id: 2,
         org_id: 1,
-        identifier: 'ASSET-2',
+        external_key: 'ASSET-2',
         name: 'Asset 2',
         type: 'device',
         description: '',
@@ -277,9 +277,9 @@ describe('lookupApi', () => {
         values: ['EPC1', 'EPC2', 'EPC3'],
       });
 
-      expect(result.data.data['EPC1']?.asset?.identifier).toBe('ASSET-1');
+      expect(result.data.data['EPC1']?.asset?.external_key).toBe('ASSET-1');
       expect(result.data.data['EPC2']).toBeNull();
-      expect(result.data.data['EPC3']?.asset?.identifier).toBe('ASSET-2');
+      expect(result.data.data['EPC3']?.asset?.external_key).toBe('ASSET-2');
     });
 
     it('should propagate validation errors for batch size exceeded', async () => {

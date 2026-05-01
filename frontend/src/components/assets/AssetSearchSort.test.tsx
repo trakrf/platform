@@ -33,7 +33,7 @@ describe('AssetSearchSort', () => {
       getFilteredAssets: vi.fn(() => [{ id: 1 }, { id: 2 }]),
       cache: {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set(),
         allIds: [],

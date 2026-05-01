@@ -21,7 +21,7 @@ describe('InventoryTableRow - Asset Actions', () => {
   const mockAsset: Asset = {
     id: 1,
     org_id: 1,
-    identifier: 'TEST-001',
+    external_key: 'TEST-001',
     name: 'Test Asset',
     type: 'device',
     description: 'Test description',
@@ -41,7 +41,7 @@ describe('InventoryTableRow - Asset Actions', () => {
     useAssetStore.setState({
       cache: {
         byId: new Map(),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set(),
         allIds: [],
@@ -72,7 +72,7 @@ describe('InventoryTableRow - Asset Actions', () => {
     useAssetStore.setState({
       cache: {
         byId: new Map([[1, mockAsset]]),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set([1]),
         allIds: [1],
@@ -106,7 +106,7 @@ describe('InventoryTableRow - Asset Actions', () => {
     useAssetStore.setState({
       cache: {
         byId: new Map([[1, mockAsset]]),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set([1]),
         allIds: [1],
@@ -141,7 +141,7 @@ describe('InventoryTableRow - Asset Actions', () => {
     useAssetStore.setState({
       cache: {
         byId: new Map([[1, mockAsset]]),
-        byIdentifier: new Map(),
+        byExternalKey: new Map(),
         byType: new Map(),
         activeIds: new Set([1]),
         allIds: [1],

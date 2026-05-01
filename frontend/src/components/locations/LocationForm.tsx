@@ -12,10 +12,10 @@ import toast from 'react-hot-toast';
 import { TagInputRow } from '@/components/assets';
 
 interface LocationFormData {
-  identifier: string;
+  external_key: string;
   name: string;
   description: string;
-  parent_location_id: number | null;
+  parent_id: number | null;
   valid_from: string;
   valid_to: string;
   is_active: boolean;
@@ -32,7 +32,7 @@ interface LocationFormProps {
 }
 
 interface FieldErrors {
-  identifier?: string;
+  external_key?: string;
   name?: string;
   valid_to?: string;
 }
@@ -64,10 +64,10 @@ export function LocationForm({
   error = null,
 }: LocationFormProps) {
   const [formData, setFormData] = useState<LocationFormData>({
-    identifier: '',
+    external_key: '',
     name: '',
     description: '',
-    parent_location_id: null,
+    parent_id: null,
     valid_from: '',
     valid_to: '',
     is_active: true,
@@ -105,10 +105,10 @@ export function LocationForm({
   useEffect(() => {
     if (mode === 'edit' && location) {
       setFormData({
-        identifier: location.identifier,
+        external_key: location.external_key,
         name: location.name,
         description: location.description || '',
-        parent_location_id: location.parent_location_id,
+        parent_id: location.parent_id,
         valid_from: formatDateForInput(location.valid_from),
         valid_to: formatDateForInput(location.valid_to),
         is_active: location.is_active,
@@ -124,10 +124,10 @@ export function LocationForm({
     } else if (mode === 'create') {
       // Reset form data for create mode
       setFormData({
-        identifier: '',
+        external_key: '',
         name: '',
         description: '',
-        parent_location_id: parentLocationId ?? null,
+        parent_id: parentLocationId ?? null,
         valid_from: '',
         valid_to: '',
         is_active: true,
@@ -235,9 +235,9 @@ export function LocationForm({
   const validateForm = (): boolean => {
     const errors: FieldErrors = {};
 
-    const identifierError = validateIdentifier(formData.identifier);
+    const identifierError = validateIdentifier(formData.external_key);
     if (identifierError) {
-      errors.identifier = identifierError;
+      errors.external_key = identifierError;
     }
 
     const nameError = validateName(formData.name);
@@ -296,26 +296,26 @@ export function LocationForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label
-            htmlFor="identifier"
+            htmlFor="external_key"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
           >
             Identifier <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
-            id="identifier"
-            value={formData.identifier}
-            onChange={(e) => handleChange('identifier', e.target.value)}
+            id="external_key"
+            value={formData.external_key}
+            onChange={(e) => handleChange('external_key', e.target.value)}
             disabled={loading || mode === 'edit'}
             className={`block w-full px-3 py-2 border rounded-lg ${
-              fieldErrors.identifier
+              fieldErrors.external_key
                 ? 'border-red-500 focus:ring-red-500'
                 : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
             } bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50`}
             placeholder="e.g., warehouse_a"
           />
-          {fieldErrors.identifier && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.identifier}</p>
+          {fieldErrors.external_key && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.external_key}</p>
           )}
 
           {mode === 'create' && (
@@ -370,7 +370,7 @@ export function LocationForm({
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <span className="text-sm text-blue-700 dark:text-blue-300">
-                  Creating inside: <span className="font-medium">{parentLocation.identifier}</span>
+                  Creating inside: <span className="font-medium">{parentLocation.external_key}</span>
                 </span>
               </div>
             ) : (
@@ -382,8 +382,8 @@ export function LocationForm({
         ) : (
           <>
             <LocationParentSelector
-              value={formData.parent_location_id}
-              onChange={(value) => handleChange('parent_location_id', value)}
+              value={formData.parent_id}
+              onChange={(value) => handleChange('parent_id', value)}
               currentLocationId={location?.id}
               disabled={loading}
             />

@@ -99,7 +99,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		FROM latest_scans ls
 		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
-		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
+		WHERE ($2::text[] IS NULL OR l.external_key = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
@@ -146,13 +146,13 @@ func buildCurrentLocationsQueryDistinctOn() string {
 			a.identifier AS asset_identifier,
 			ls.location_id,
 			l.name AS location_name,
-			l.identifier AS location_identifier,
+			l.external_key AS location_identifier,
 			ls.last_seen,
 			a.deleted_at AS asset_deleted_at
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
-		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
+		WHERE ($2::text[] IS NULL OR l.external_key = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
@@ -181,13 +181,13 @@ func buildCurrentLocationsQueryTimescale() string {
 			a.identifier AS asset_identifier,
 			ls.location_id,
 			l.name AS location_name,
-			l.identifier AS location_identifier,
+			l.external_key AS location_identifier,
 			ls.last_seen,
 			a.deleted_at AS asset_deleted_at
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
-		WHERE ($2::text[] IS NULL OR l.identifier = ANY($2::text[]))
+		WHERE ($2::text[] IS NULL OR l.external_key = ANY($2::text[]))
 		  AND ($3::text IS NULL OR a.name ILIKE $3 OR a.identifier ILIKE $3
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
@@ -207,7 +207,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 				s.timestamp,
 				s.location_id,
 				l.name AS location_name,
-				l.identifier AS location_identifier,
+				l.external_key AS location_identifier,
 				LEAD(s.timestamp) OVER (ORDER BY s.timestamp) AS next_timestamp
 			FROM trakrf.asset_scans s
 			LEFT JOIN trakrf.locations l ON l.id = s.location_id AND l.org_id = $2 AND l.deleted_at IS NULL

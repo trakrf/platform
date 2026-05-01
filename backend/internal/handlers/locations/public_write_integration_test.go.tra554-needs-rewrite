@@ -99,7 +99,7 @@ func TestUpdateLocation_CrossOrg_Returns404(t *testing.T) {
 	_, tokenB := seedLocOrgAndKey(t, pool, store, "orgB-locations-write", []string{"locations:write"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgA, Identifier: "orgA-loc", Name: "A", Path: "orgA-loc",
+		OrgID: orgA, ExternalKey: "orgA-loc", Name: "A", Path: "orgA-loc",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestDeleteLocation_CrossOrg_Returns404(t *testing.T) {
 	_, tokenB := seedLocOrgAndKey(t, pool, store, "orgB-locations-write-delete", []string{"locations:write"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgA, Identifier: "orgA-loc-delete", Name: "Survivor", Path: "orgA-loc-delete",
+		OrgID: orgA, ExternalKey: "orgA-loc-delete", Name: "Survivor", Path: "orgA-loc-delete",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestDeleteLocation_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "to-delete", Name: "Bye", Path: "to-delete",
+		OrgID: orgID, ExternalKey: "to-delete", Name: "Bye", Path: "to-delete",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -190,7 +190,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "ident-host-loc", Name: "WH", Path: "ident-host-loc",
+		OrgID: orgID, ExternalKey: "ident-host-loc", Name: "WH", Path: "ident-host-loc",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -225,7 +225,7 @@ func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "ident-host", Name: "Host", Path: "ident-host",
+		OrgID: orgID, ExternalKey: "ident-host", Name: "Host", Path: "ident-host",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -262,13 +262,13 @@ func TestRemoveLocationTag_WrongLocationID_DoesNotDelete(t *testing.T) {
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 
 	owningLoc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "owning-loc", Name: "Owner", Path: "owning-loc",
+		OrgID: orgID, ExternalKey: "owning-loc", Name: "Owner", Path: "owning-loc",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "other-loc", Name: "Other", Path: "other-loc",
+		OrgID: orgID, ExternalKey: "other-loc", Name: "Other", Path: "other-loc",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -310,7 +310,7 @@ func TestLocationsUpdate_ByIdentifier_Works(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "update-target", Name: "Old Name", Path: "update-target",
+		OrgID: orgID, ExternalKey: "update-target", Name: "Old Name", Path: "update-target",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -358,7 +358,7 @@ func TestLocationsDelete_ByIdentifier_Works(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "delete-target", Name: "Bye", Path: "delete-target",
+		OrgID: orgID, ExternalKey: "delete-target", Name: "Bye", Path: "delete-target",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -399,7 +399,7 @@ func TestLocationsAddIdentifier_ByIdentifier_Works(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "addident-target", Name: "Host", Path: "addident-target",
+		OrgID: orgID, ExternalKey: "addident-target", Name: "Host", Path: "addident-target",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -450,7 +450,7 @@ func TestLocationsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	loc, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "removeident-target", Name: "Host", Path: "removeident-target",
+		OrgID: orgID, ExternalKey: "removeident-target", Name: "Host", Path: "removeident-target",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -497,20 +497,20 @@ func TestLocationsGetAncestors_ByIdentifier_Works(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 	root, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "anc-root", Name: "Root", Path: "anc-root",
+		OrgID: orgID, ExternalKey: "anc-root", Name: "Root", Path: "anc-root",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "anc-parent", Name: "Parent", Path: "anc-root.anc-parent",
+		OrgID: orgID, ExternalKey: "anc-parent", Name: "Parent", Path: "anc-root.anc-parent",
 		ParentLocationID: &root.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "anc-child", Name: "Child", Path: "anc-root.anc-parent.anc-child",
+		OrgID: orgID, ExternalKey: "anc-child", Name: "Child", Path: "anc-root.anc-parent.anc-child",
 		ParentLocationID: &parent.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
@@ -563,18 +563,18 @@ func TestLocationsGetAncestors_PaginationEnvelope(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 	root, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-root", Name: "Root", Path: "p503-root",
+		OrgID: orgID, ExternalKey: "p503-root", Name: "Root", Path: "p503-root",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	mid, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-mid", Name: "Mid", Path: "p503-root.p503-mid",
+		OrgID: orgID, ExternalKey: "p503-mid", Name: "Mid", Path: "p503-root.p503-mid",
 		ParentLocationID: &root.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-leaf", Name: "Leaf", Path: "p503-root.p503-mid.p503-leaf",
+		OrgID: orgID, ExternalKey: "p503-leaf", Name: "Leaf", Path: "p503-root.p503-mid.p503-leaf",
 		ParentLocationID: &mid.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
@@ -607,13 +607,13 @@ func TestLocationsGetChildren_ByIdentifier_Works(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "children-parent", Name: "Parent", Path: "children-parent",
+		OrgID: orgID, ExternalKey: "children-parent", Name: "Parent", Path: "children-parent",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "children-child", Name: "Child", Path: "children-parent.children-child",
+		OrgID: orgID, ExternalKey: "children-child", Name: "Child", Path: "children-parent.children-child",
 		ParentLocationID: &parent.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
@@ -660,20 +660,20 @@ func TestLocationsGetDescendants_ByIdentifier_Works(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 	root, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "desc-root", Name: "Root", Path: "desc-root",
+		OrgID: orgID, ExternalKey: "desc-root", Name: "Root", Path: "desc-root",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	child, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "desc-child", Name: "Child", Path: "desc-root.desc-child",
+		OrgID: orgID, ExternalKey: "desc-child", Name: "Child", Path: "desc-root.desc-child",
 		ParentLocationID: &root.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "desc-grandchild", Name: "GrandChild", Path: "desc-root.desc-child.desc-grandchild",
+		OrgID: orgID, ExternalKey: "desc-grandchild", Name: "GrandChild", Path: "desc-root.desc-child.desc-grandchild",
 		ParentLocationID: &child.ID,
 		ValidFrom:        time.Now(), IsActive: true,
 	})
@@ -756,7 +756,7 @@ func TestCreateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra447-parent", Name: "Parent",
+		OrgID: orgID, ExternalKey: "tra447-parent", Name: "Parent",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -838,12 +838,12 @@ func TestUpdateLocation_APIKey_ParentIdentifier_HappyPath(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra447-u-parent", Name: "Parent",
+		OrgID: orgID, ExternalKey: "tra447-u-parent", Name: "Parent",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra447-u-child", Name: "Child",
+		OrgID: orgID, ExternalKey: "tra447-u-child", Name: "Child",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -874,7 +874,7 @@ func TestUpdateLocation_APIKey_UnknownField_Rejected(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra447-u-unknown", Name: "x",
+		OrgID: orgID, ExternalKey: "tra447-u-unknown", Name: "x",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -898,7 +898,7 @@ func TestCreateLocation_APIKey_ParentDisagree_Rejected(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:write"})
 	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra447-disagree-parent", Name: "Parent",
+		OrgID: orgID, ExternalKey: "tra447-disagree-parent", Name: "Parent",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -926,30 +926,30 @@ func seedTra428HierarchyPair(t *testing.T, pool *pgxpool.Pool, store *storage.St
 
 	now := time.Now()
 	whsA, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgA, Identifier: "whs-01", Name: "OrgA Warehouse",
+		OrgID: orgA, ExternalKey: "whs-01", Name: "OrgA Warehouse",
 		ValidFrom: now, IsActive: true,
 	})
 	require.NoError(t, err)
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgA, Identifier: "dock-01", Name: "OrgA Dock",
+		OrgID: orgA, ExternalKey: "dock-01", Name: "OrgA Dock",
 		ParentLocationID: &whsA.ID,
 		ValidFrom:        now, IsActive: true,
 	})
 	require.NoError(t, err)
 
 	whsB, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgB, Identifier: "whs-01", Name: "OrgB Warehouse",
+		OrgID: orgB, ExternalKey: "whs-01", Name: "OrgB Warehouse",
 		ValidFrom: now, IsActive: true,
 	})
 	require.NoError(t, err)
 	dockB, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgB, Identifier: "dock-01", Name: "OrgB Dock",
+		OrgID: orgB, ExternalKey: "dock-01", Name: "OrgB Dock",
 		ParentLocationID: &whsB.ID,
 		ValidFrom:        now, IsActive: true,
 	})
 	require.NoError(t, err)
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgB, Identifier: "leak-b", Name: "OrgB Only",
+		OrgID: orgB, ExternalKey: "leak-b", Name: "OrgB Only",
 		ParentLocationID: &dockB.ID,
 		ValidFrom:        now, IsActive: true,
 	})
@@ -1292,7 +1292,7 @@ func TestUpdateLocation_ValidToNull_ClearsField(t *testing.T) {
 
 	validTo := time.Now().UTC().AddDate(1, 0, 0)
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra476-loc-null-vt", Name: "expires",
+		OrgID: orgID, ExternalKey: "tra476-loc-null-vt", Name: "expires",
 		Path: "tra476-loc-null-vt", ValidFrom: time.Now().UTC(), ValidTo: &validTo, IsActive: true,
 	})
 	require.NoError(t, err)
@@ -1326,7 +1326,7 @@ func TestUpdateLocation_ValidFromNull_Returns400(t *testing.T) {
 	r := buildLocationsPublicWriteRouter(store)
 
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra476-loc-null-vf", Name: "has-valid-from",
+		OrgID: orgID, ExternalKey: "tra476-loc-null-vf", Name: "has-valid-from",
 		Path: "tra476-loc-null-vf", ValidFrom: time.Now().UTC(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -1450,13 +1450,13 @@ func TestLocationsGetChildren_PaginationEnvelope(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-ch-parent", Name: "Parent", Path: "p503-ch-parent",
+		OrgID: orgID, ExternalKey: "p503-ch-parent", Name: "Parent", Path: "p503-ch-parent",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	for _, name := range []string{"alpha", "bravo", "charlie"} {
 		_, err := store.CreateLocation(context.Background(), locmodel.Location{
-			OrgID: orgID, Identifier: "p503-ch-" + name, Name: name,
+			OrgID: orgID, ExternalKey: "p503-ch-" + name, Name: name,
 			Path:             "p503-ch-parent.p503-ch-" + name,
 			ParentLocationID: &parent.ID,
 			ValidFrom:        time.Now(), IsActive: true,
@@ -1490,23 +1490,23 @@ func TestLocationsGetDescendants_PaginationEnvelope(t *testing.T) {
 
 	orgID, token := seedLocOrgAndKey(t, pool, store, "", []string{"locations:read"})
 	root, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-d-root", Name: "Root", Path: "p503-d-root",
+		OrgID: orgID, ExternalKey: "p503-d-root", Name: "Root", Path: "p503-d-root",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	a, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-d-a", Name: "A", Path: "p503-d-root.p503-d-a",
+		OrgID: orgID, ExternalKey: "p503-d-a", Name: "A", Path: "p503-d-root.p503-d-a",
 		ParentLocationID: &root.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-d-a-1", Name: "A.1",
+		OrgID: orgID, ExternalKey: "p503-d-a-1", Name: "A.1",
 		Path:             "p503-d-root.p503-d-a.p503-d-a-1",
 		ParentLocationID: &a.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "p503-d-b", Name: "B", Path: "p503-d-root.p503-d-b",
+		OrgID: orgID, ExternalKey: "p503-d-b", Name: "B", Path: "p503-d-root.p503-d-b",
 		ParentLocationID: &root.ID, ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)

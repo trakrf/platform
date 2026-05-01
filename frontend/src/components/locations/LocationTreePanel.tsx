@@ -38,7 +38,7 @@ function TreeNode({
   const isExpanded = expandedNodeIds.has(location.id);
   const isSelected = selectedId === location.id;
   const isFocused = focusedId === location.id;
-  const isRoot = location.parent_location_id === null;
+  const isRoot = location.parent_id === null;
   const Icon = isRoot ? Building2 : MapPin;
 
   // If filtering, skip nodes not in the visible set
@@ -102,7 +102,7 @@ function TreeNode({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
-              {location.identifier}
+              {location.external_key}
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
               {location.name}
@@ -170,7 +170,7 @@ export function LocationTreePanel({
 
     const checkLocation = (location: Location) => {
       const matches =
-        location.identifier.toLowerCase().includes(term) ||
+        location.external_key.toLowerCase().includes(term) ||
         location.name.toLowerCase().includes(term);
 
       if (matches) {
@@ -273,9 +273,9 @@ export function LocationTreePanel({
           e.preventDefault();
           if (hasChildren && isExpanded) {
             toggleNodeExpanded(currentId);
-          } else if (location.parent_location_id !== null) {
+          } else if (location.parent_id !== null) {
             // Move to parent
-            focusNode(location.parent_location_id);
+            focusNode(location.parent_id);
           }
           break;
         case 'Enter':

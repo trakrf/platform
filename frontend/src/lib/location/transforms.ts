@@ -50,7 +50,7 @@ export function formatPathBreadcrumb(path: string): string {
 export function serializeCache(cache: LocationCache): string {
   const serializable = {
     byId: Array.from(cache.byId.entries()),
-    byIdentifier: Array.from(cache.byIdentifier.entries()),
+    byExternalKey: Array.from(cache.byExternalKey.entries()),
     byTagEpc: Array.from(cache.byTagEpc.entries()),
     byParentId: Array.from(cache.byParentId.entries()).map(([key, value]) => [
       key,
@@ -59,7 +59,7 @@ export function serializeCache(cache: LocationCache): string {
     rootIds: Array.from(cache.rootIds),
     activeIds: Array.from(cache.activeIds),
     allIds: cache.allIds,
-    allIdentifiers: cache.allIdentifiers,
+    allExternalKeys: cache.allExternalKeys,
     lastFetched: cache.lastFetched,
     ttl: cache.ttl,
   };
@@ -82,7 +82,7 @@ export function deserializeCache(data: string): LocationCache | null {
 
     return {
       byId: new Map(parsed.byId),
-      byIdentifier: new Map(parsed.byIdentifier),
+      byExternalKey: new Map(parsed.byExternalKey),
       byTagEpc: new Map(parsed.byTagEpc || []),
       byParentId: new Map(
         parsed.byParentId.map(([key, value]: [any, any]) => [key, new Set(value)])
@@ -90,7 +90,7 @@ export function deserializeCache(data: string): LocationCache | null {
       rootIds: new Set(parsed.rootIds),
       activeIds: new Set(parsed.activeIds),
       allIds: parsed.allIds,
-      allIdentifiers: parsed.allIdentifiers,
+      allExternalKeys: parsed.allExternalKeys,
       lastFetched: parsed.lastFetched,
       ttl: parsed.ttl,
     };

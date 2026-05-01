@@ -34,10 +34,10 @@ vi.mock('./LocationDetailsPanel', () => ({
 const createMockLocation = (id: number, overrides = {}): Location => ({
   id,
   org_id: 1,
-  identifier: `loc_${id}`,
+  external_key: `loc_${id}`,
   name: `Location ${id}`,
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',

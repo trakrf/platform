@@ -36,7 +36,7 @@ export function filterAssets(
       } else {
         // Filter for specific location — look up identifier from store by surrogate ID
         const locById = useLocationStore.getState().cache.byId.get(filters.location_id as number);
-        const filterIdentifier = locById?.identifier;
+        const filterIdentifier = locById?.external_key;
         if (asset.current_location !== filterIdentifier) {
           return false;
         }
@@ -109,7 +109,7 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
  */
 export interface SearchResult {
   asset: Asset;
-  matchedField?: string; // 'identifier' | 'name' | 'identifiers.value' | 'description'
+  matchedField?: string; // 'external_key' | 'name' | 'identifiers.value' | 'description'
   matchedValue?: string; // The actual matched identifier value
 }
 
@@ -156,7 +156,7 @@ export function searchAssetsWithMatches(
     if (assetIdLower === termLower) {
       matches.push({
         asset,
-        matchedField: 'identifier',
+        matchedField: 'external_key',
         matchedValue: asset.identifier,
       });
       matchedAssetIds.add(asset.id);
@@ -183,7 +183,7 @@ export function searchAssetsWithMatches(
     if (assetIdLower.startsWith(termLower) || assetIdLower.endsWith(termLower)) {
       matches.push({
         asset,
-        matchedField: 'identifier',
+        matchedField: 'external_key',
         matchedValue: asset.identifier,
       });
       matchedAssetIds.add(asset.id);

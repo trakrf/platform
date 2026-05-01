@@ -45,7 +45,7 @@ export default function LocationsScreen() {
     if (deletingLocation) {
       try {
         await deleteLocation(deletingLocation.id);
-        toast.success(`Location "${deletingLocation.identifier}" deleted successfully`);
+        toast.success(`Location "${deletingLocation.external_key}" deleted successfully`);
         setDeletingLocation(null);
       } catch (error: any) {
         console.error('Delete error:', error);
@@ -98,9 +98,9 @@ export default function LocationsScreen() {
 
     try {
       await useLocationStore.getState().updateLocation(locationId, {
-        parent_location_id: newParentId,
+        parent_id: newParentId,
       });
-      toast.success(`Location "${location.identifier}" moved successfully`);
+      toast.success(`Location "${location.external_key}" moved successfully`);
     } catch (error: any) {
       console.error('Move error:', error);
       throw new Error(error.message || 'Failed to move location');
@@ -206,7 +206,7 @@ export default function LocationsScreen() {
         <ConfirmModal
           isOpen={!!deletingLocation}
           title="Delete Location"
-          message={`Are you sure you want to delete "${deletingLocation?.identifier}"? This action cannot be undone.`}
+          message={`Are you sure you want to delete "${deletingLocation?.external_key}"? This action cannot be undone.`}
           onConfirm={confirmDelete}
           onCancel={() => setDeletingLocation(null)}
         />

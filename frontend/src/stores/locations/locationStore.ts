@@ -64,20 +64,20 @@ export interface LocationStore {
 
 const initialCache: LocationCache = {
   byId: new Map(),
-  byIdentifier: new Map(),
+  byExternalKey: new Map(),
   byTagEpc: new Map(),
   byParentId: new Map(),
   rootIds: new Set(),
   activeIds: new Set(),
   allIds: [],
-  allIdentifiers: [],
+  allExternalKeys: [],
   lastFetched: 0,
   ttl: 0,
 };
 
 const initialFilters: LocationFilters = {
   search: '',
-  identifier: '',
+  external_key: '',
   is_active: 'all',
 };
 
@@ -89,7 +89,7 @@ const initialPagination: PaginationState = {
 };
 
 const initialSort: LocationSort = {
-  field: 'identifier',
+  field: 'external_key',
   direction: 'asc',
 };
 

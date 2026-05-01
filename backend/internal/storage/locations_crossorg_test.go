@@ -25,12 +25,12 @@ func TestUpdateLocation_CrossOrgReturnsNil(t *testing.T) {
 	orgB := createOrg(t, pool, "Org B Locations", "test-org-b-locations")
 
 	created, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgA,
-		Identifier: "wh-a",
-		Name:       "Owned by A",
-		Path:       "wh-a",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgA,
+		ExternalKey: "wh-a",
+		Name:        "Owned by A",
+		Path:        "wh-a",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -56,12 +56,12 @@ func TestDeleteLocation_CrossOrgReturnsFalse(t *testing.T) {
 	orgB := createOrg(t, pool, "Org B Locations Del", "test-org-b-locations-del")
 
 	created, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgA,
-		Identifier: "wh-a-del",
-		Name:       "Owned by A",
-		Path:       "wh-a-del",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgA,
+		ExternalKey: "wh-a-del",
+		Name:        "Owned by A",
+		Path:        "wh-a-del",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 

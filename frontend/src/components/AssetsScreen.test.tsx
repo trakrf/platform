@@ -18,7 +18,7 @@ describe('AssetsScreen', () => {
     {
       id: 1,
       org_id: 1,
-      identifier: 'LAP-001',
+      external_key: 'LAP-001',
       name: 'Laptop 1',
       type: 'device',
       description: '',

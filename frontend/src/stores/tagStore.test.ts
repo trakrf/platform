@@ -20,10 +20,10 @@ vi.mock('@/lib/auth/orgContext', () => ({
 const createMockLocation = (id: number, name: string, tagEpc?: string): Location => ({
   id,
   org_id: 1,
-  identifier: `loc_${id}`,
+  external_key: `loc_${id}`,
   name,
   description: '',
-  parent_location_id: null,
+  parent_id: null,
   path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',

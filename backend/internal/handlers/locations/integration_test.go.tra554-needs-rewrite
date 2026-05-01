@@ -58,11 +58,11 @@ func TestCreateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "dup-loc",
-		Name:       "Existing",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "dup-loc",
+		Name:        "Existing",
+		ValidFrom:   validFrom,
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -73,10 +73,10 @@ func TestCreateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 	active := true
 	body, err := json.Marshal(locmodel.CreateLocationWithTagsRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
-			Name:       "Duplicate",
-			Identifier: "dup-loc",
-			ValidFrom:  &vfFD,
-			IsActive:   &active,
+			Name:        "Duplicate",
+			ExternalKey: "dup-loc",
+			ValidFrom:   &vfFD,
+			IsActive:    &active,
 		},
 	})
 	require.NoError(t, err)
@@ -104,11 +104,11 @@ func TestCreateLocationWithTags_DuplicateReturns409(t *testing.T) {
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "dup-loc-ids",
-		Name:       "Existing",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "dup-loc-ids",
+		Name:        "Existing",
+		ValidFrom:   validFrom,
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -119,10 +119,10 @@ func TestCreateLocationWithTags_DuplicateReturns409(t *testing.T) {
 	active2 := true
 	body, err := json.Marshal(locmodel.CreateLocationWithTagsRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
-			Name:       "Duplicate",
-			Identifier: "dup-loc-ids",
-			ValidFrom:  &vfFD2,
-			IsActive:   &active2,
+			Name:        "Duplicate",
+			ExternalKey: "dup-loc-ids",
+			ValidFrom:   &vfFD2,
+			IsActive:    &active2,
 		},
 		Tags: []shared.TagRequest{
 			{TagType: "rfid", Value: "E2000000DEADBEEF"},
@@ -149,20 +149,20 @@ func TestUpdateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "loc-a",
-		Name:       "A",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "loc-a",
+		Name:        "A",
+		ValidFrom:   validFrom,
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "loc-b",
-		Name:       "B",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "loc-b",
+		Name:        "B",
+		ValidFrom:   validFrom,
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -170,7 +170,7 @@ func TestUpdateLocation_DuplicateIdentifierReturns409(t *testing.T) {
 	router := setupTestRouter(handler)
 
 	collide := "loc-a"
-	body, err := json.Marshal(locmodel.UpdateLocationRequest{Identifier: &collide})
+	body, err := json.Marshal(locmodel.UpdateLocationRequest{ExternalKey: &collide})
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/loc-b", bytes.NewReader(body))
@@ -198,11 +198,11 @@ func TestLocationsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "tra407-dup-loc",
-		Name:       "First",
-		ValidFrom:  validFrom,
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "tra407-dup-loc",
+		Name:        "First",
+		ValidFrom:   validFrom,
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -213,10 +213,10 @@ func TestLocationsCreate_DuplicateIdentifier_Returns409(t *testing.T) {
 	active3 := true
 	body, err := json.Marshal(locmodel.CreateLocationWithTagsRequest{
 		CreateLocationRequest: locmodel.CreateLocationRequest{
-			Name:       "Second",
-			Identifier: "tra407-dup-loc",
-			ValidFrom:  &vfFD3,
-			IsActive:   &active3,
+			Name:        "Second",
+			ExternalKey: "tra407-dup-loc",
+			ValidFrom:   &vfFD3,
+			IsActive:    &active3,
 		},
 	})
 	require.NoError(t, err)
@@ -246,13 +246,13 @@ func TestLocationsAddIdentifier_DuplicateValue_Returns409(t *testing.T) {
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra482-loc-host", Name: "Host",
+		OrgID: orgID, ExternalKey: "tra482-loc-host", Name: "Host",
 		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra482-loc-host2", Name: "Host2",
+		OrgID: orgID, ExternalKey: "tra482-loc-host2", Name: "Host2",
 		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
@@ -336,12 +336,12 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 
 	// Seed a parent location so we can exercise the Parent path.
 	parent, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID:      orgID,
-		Identifier: "tra429-parent-loc",
-		Name:       "TRA-429 Parent",
-		Path:       "tra429-parent-loc",
-		ValidFrom:  time.Now(),
-		IsActive:   true,
+		OrgID:       orgID,
+		ExternalKey: "tra429-parent-loc",
+		Name:        "TRA-429 Parent",
+		Path:        "tra429-parent-loc",
+		ValidFrom:   time.Now(),
+		IsActive:    true,
 	})
 	require.NoError(t, err)
 
@@ -376,10 +376,10 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 		active4 := true
 		reqBody := locmodel.CreateLocationWithTagsRequest{
 			CreateLocationRequest: locmodel.CreateLocationRequest{
-				Name:       "TRA-429 Leak Guard",
-				Identifier: "tra429-no-parent",
-				ValidFrom:  &vfFD4,
-				IsActive:   &active4,
+				Name:        "TRA-429 Leak Guard",
+				ExternalKey: "tra429-no-parent",
+				ValidFrom:   &vfFD4,
+				IsActive:    &active4,
 			},
 		}
 
@@ -402,11 +402,11 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 		active5 := true
 		reqBody := locmodel.CreateLocationWithTagsRequest{
 			CreateLocationRequest: locmodel.CreateLocationRequest{
-				Name:             "TRA-429 With Parent",
-				Identifier:       "tra429-with-parent",
-				ParentLocationID: &parent.ID,
-				ValidFrom:        &vfFD5,
-				IsActive:         &active5,
+				Name:        "TRA-429 With Parent",
+				ExternalKey: "tra429-with-parent",
+				ParentID:    &parent.ID,
+				ValidFrom:   &vfFD5,
+				IsActive:    &active5,
 			},
 		}
 
@@ -431,12 +431,12 @@ func TestLocationWriteResponses_OmitInternalFields(t *testing.T) {
 	t.Run("PUT_Update", func(t *testing.T) {
 		// Seed a location to update.
 		_, err := store.CreateLocation(context.Background(), locmodel.Location{
-			OrgID:      orgID,
-			Identifier: "tra429-update-target",
-			Name:       "Before",
-			Path:       "tra429-update-target",
-			ValidFrom:  time.Now(),
-			IsActive:   true,
+			OrgID:       orgID,
+			ExternalKey: "tra429-update-target",
+			Name:        "Before",
+			Path:        "tra429-update-target",
+			ValidFrom:   time.Now(),
+			IsActive:    true,
 		})
 		require.NoError(t, err)
 
@@ -468,7 +468,7 @@ func TestLocationsAddIdentifier_AfterSoftDelete_ReusesValue(t *testing.T) {
 
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "tra482-loc-reuse", Name: "Reuse",
+		OrgID: orgID, ExternalKey: "tra482-loc-reuse", Name: "Reuse",
 		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
@@ -540,7 +540,7 @@ func TestLocationsAddIdentifier_CollidesWithAssetIdentifier_Returns409(t *testin
 	// Now create a location in the same org and try to attach the same tag.
 	validFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err = store.CreateLocation(context.Background(), locmodel.Location{
-		OrgID: orgID, Identifier: "cross-loc", Name: "Cross Loc",
+		OrgID: orgID, ExternalKey: "cross-loc", Name: "Cross Loc",
 		ValidFrom: validFrom, IsActive: true,
 	})
 	require.NoError(t, err)
