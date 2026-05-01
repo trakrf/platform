@@ -10,18 +10,18 @@ import (
 // org_id and deleted_at, renames the surrogate id, and carries the parent
 // location's natural key instead of the INT FK.
 type PublicAssetView struct {
-	Identifier      string                 `json:"identifier"`
-	Name            string                 `json:"name"`
-	Description     string                 `json:"description,omitempty"`
-	CurrentLocation *string                `json:"current_location"`
-	Metadata        any                    `json:"metadata"`
-	IsActive        bool                   `json:"is_active"`
-	ValidFrom       time.Time              `json:"valid_from"`
-	ValidTo         *time.Time             `json:"valid_to,omitempty"`
-	CreatedAt       time.Time              `json:"created_at"`
-	UpdatedAt       time.Time              `json:"updated_at"`
-	SurrogateID     int                    `json:"surrogate_id"`
-	Tags            []shared.TagIdentifier `json:"tags"`
+	Identifier      string       `json:"identifier"`
+	Name            string       `json:"name"`
+	Description     string       `json:"description,omitempty"`
+	CurrentLocation *string      `json:"current_location"`
+	Metadata        any          `json:"metadata"`
+	IsActive        bool         `json:"is_active"`
+	ValidFrom       time.Time    `json:"valid_from"`
+	ValidTo         *time.Time   `json:"valid_to,omitempty"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
+	SurrogateID     int          `json:"surrogate_id"`
+	Tags            []shared.Tag `json:"tags"`
 }
 
 // ToPublicAssetView projects an AssetWithLocation to the public HTTP shape.

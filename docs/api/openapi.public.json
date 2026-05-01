@@ -128,7 +128,7 @@
           },
           "tags": {
             "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifierRequest"
+              "$ref": "#/components/schemas/shared.TagRequest"
             },
             "type": "array"
           },
@@ -179,7 +179,7 @@
           },
           "tags": {
             "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifier"
+              "$ref": "#/components/schemas/shared.Tag"
             },
             "type": "array"
           },
@@ -243,7 +243,7 @@
       "assets.AddTagResponse": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/shared.TagIdentifier"
+            "$ref": "#/components/schemas/shared.Tag"
           }
         },
         "type": "object"
@@ -396,7 +396,7 @@
           },
           "tags": {
             "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifierRequest"
+              "$ref": "#/components/schemas/shared.TagRequest"
             },
             "type": "array"
           },
@@ -449,7 +449,7 @@
           },
           "tags": {
             "items": {
-              "$ref": "#/components/schemas/shared.TagIdentifier"
+              "$ref": "#/components/schemas/shared.Tag"
             },
             "type": "array"
           },
@@ -513,7 +513,7 @@
       "locations.AddTagResponse": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/shared.TagIdentifier"
+            "$ref": "#/components/schemas/shared.Tag"
           }
         },
         "type": "object"
@@ -767,7 +767,7 @@
         },
         "type": "object"
       },
-      "shared.TagIdentifier": {
+      "shared.Tag": {
         "properties": {
           "id": {
             "type": "integer"
@@ -797,7 +797,7 @@
         ],
         "type": "object"
       },
-      "shared.TagIdentifierRequest": {
+      "shared.TagRequest": {
         "properties": {
           "tag_type": {
             "enum": [
@@ -1609,7 +1609,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/shared.TagIdentifierRequest"
+                "$ref": "#/components/schemas/shared.TagRequest"
               }
             }
           },
@@ -2903,7 +2903,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/shared.TagIdentifierRequest"
+                "$ref": "#/components/schemas/shared.TagRequest"
               }
             }
           },

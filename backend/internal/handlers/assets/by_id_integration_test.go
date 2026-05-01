@@ -360,7 +360,7 @@ func TestRemoveIdentifierByID_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToAsset(context.Background(), orgID, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgID, created.ID, shared.TagRequest{
 		TagType: "rfid", Value: "EPC-BYID-RM",
 	})
 	require.NoError(t, err)
@@ -396,7 +396,7 @@ func TestRemoveIdentifierByID_CrossOrg_Returns404(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagRequest{
 		TagType: "rfid", Value: "EPC-CROSS-RM",
 	})
 	require.NoError(t, err)

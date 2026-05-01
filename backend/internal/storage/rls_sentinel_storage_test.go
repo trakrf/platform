@@ -109,7 +109,7 @@ func TestRLS_SentinelMode_StorageMethods(t *testing.T) {
 	// ── 6. tags.go: AddTagToAsset + GetTagsByAssetID. ─────
 	t.Run("tags", func(t *testing.T) {
 		require.NotZero(t, createdAssetID, "need asset from previous subtest")
-		tag, err := store.AddTagToAsset(ctx, orgID, createdAssetID, shared.TagIdentifierRequest{
+		tag, err := store.AddTagToAsset(ctx, orgID, createdAssetID, shared.TagRequest{
 			TagType: "rfid",
 			Value:   "RLS-SENTINEL-STORAGE-RFID",
 		})

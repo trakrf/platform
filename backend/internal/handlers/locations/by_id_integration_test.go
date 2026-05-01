@@ -341,7 +341,7 @@ func TestRemoveLocationTagByID_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToLocation(context.Background(), orgID, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgID, created.ID, shared.TagRequest{
 		TagType: "rfid", Value: "EPC-LOC-RM",
 	})
 	require.NoError(t, err)
@@ -376,7 +376,7 @@ func TestRemoveLocationTagByID_CrossOrg_Returns404(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToLocation(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgA, created.ID, shared.TagRequest{
 		TagType: "rfid", Value: "EPC-LOC-CROSS-RM",
 	})
 	require.NoError(t, err)

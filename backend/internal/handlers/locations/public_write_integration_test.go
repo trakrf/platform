@@ -197,7 +197,7 @@ func TestAddIdentifier_APIKey_HappyPath(t *testing.T) {
 
 	r := buildLocationsPublicWriteRouter(store)
 
-	// TagIdentifierRequest.TagType accepts only rfid/ble/barcode; use rfid.
+	// TagRequest.TagType accepts only rfid/ble/barcode; use rfid.
 	body := `{"tag_type":"rfid","value":"EPC-LOC-ABC-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations/ident-host-loc/tags",
 		bytes.NewBufferString(body))
@@ -230,7 +230,7 @@ func TestRemoveLocationTag_APIKey_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagRequest{
 		TagType: "rfid",
 		Value:   "EPC-LOC-HAPPY-1",
 	})
@@ -273,7 +273,7 @@ func TestRemoveLocationTag_WrongLocationID_DoesNotDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToLocation(context.Background(), orgID, owningLoc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgID, owningLoc.ID, shared.TagRequest{
 		TagType: "rfid",
 		Value:   "EPC-LOC-WRONG-1",
 	})
@@ -455,7 +455,7 @@ func TestLocationsRemoveIdentifier_ByIdentifier_Works(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgID, loc.ID, shared.TagRequest{
 		TagType: "rfid", Value: "EPC-TRA407-REMOVE-1",
 	})
 	require.NoError(t, err)

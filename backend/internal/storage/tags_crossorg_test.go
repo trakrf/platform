@@ -39,7 +39,7 @@ func TestRemoveAssetTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgA, created.ID, shared.TagRequest{
 		TagType: "epc",
 		Value:   "EPC-CROSS-ORG-ASSET",
 	})
@@ -85,7 +85,7 @@ func TestRemoveAssetTag_WrongAssetID_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToAsset(context.Background(), orgA, assetOwner.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToAsset(context.Background(), orgA, assetOwner.ID, shared.TagRequest{
 		TagType: "epc",
 		Value:   "EPC-OWNER",
 	})
@@ -122,7 +122,7 @@ func TestRemoveLocationTag_CrossOrg_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToLocation(context.Background(), orgA, loc.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgA, loc.ID, shared.TagRequest{
 		TagType: "epc",
 		Value:   "EPC-CROSS-ORG-LOC",
 	})
@@ -167,7 +167,7 @@ func TestRemoveLocationTag_WrongLocationID_ReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tag, err := store.AddTagToLocation(context.Background(), orgA, locOwner.ID, shared.TagIdentifierRequest{
+	tag, err := store.AddTagToLocation(context.Background(), orgA, locOwner.ID, shared.TagRequest{
 		TagType: "epc",
 		Value:   "EPC-LOC-OWNER",
 	})

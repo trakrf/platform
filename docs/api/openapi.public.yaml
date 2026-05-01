@@ -92,7 +92,7 @@ components:
                     type: string
                 tags:
                     items:
-                        $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                        $ref: '#/components/schemas/shared.TagRequest'
                     type: array
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
@@ -128,7 +128,7 @@ components:
                     type: integer
                 tags:
                     items:
-                        $ref: '#/components/schemas/shared.TagIdentifier'
+                        $ref: '#/components/schemas/shared.Tag'
                     type: array
                 updated_at:
                     format: date-time
@@ -175,7 +175,7 @@ components:
         assets.AddTagResponse:
             properties:
                 data:
-                    $ref: '#/components/schemas/shared.TagIdentifier'
+                    $ref: '#/components/schemas/shared.Tag'
             type: object
         assets.CreateAssetResponse:
             properties:
@@ -285,7 +285,7 @@ components:
                     type: string
                 tags:
                     items:
-                        $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                        $ref: '#/components/schemas/shared.TagRequest'
                     type: array
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
@@ -322,7 +322,7 @@ components:
                     type: integer
                 tags:
                     items:
-                        $ref: '#/components/schemas/shared.TagIdentifier'
+                        $ref: '#/components/schemas/shared.Tag'
                     type: array
                 updated_at:
                     format: date-time
@@ -370,7 +370,7 @@ components:
         locations.AddTagResponse:
             properties:
                 data:
-                    $ref: '#/components/schemas/shared.TagIdentifier'
+                    $ref: '#/components/schemas/shared.Tag'
             type: object
         locations.CreateLocationResponse:
             properties:
@@ -542,7 +542,7 @@ components:
                     example: 100
                     type: integer
             type: object
-        shared.TagIdentifier:
+        shared.Tag:
             properties:
                 id:
                     type: integer
@@ -564,7 +564,7 @@ components:
                 - tag_type
                 - value
             type: object
-        shared.TagIdentifierRequest:
+        shared.TagRequest:
             properties:
                 tag_type:
                     enum:
@@ -1081,7 +1081,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                            $ref: '#/components/schemas/shared.TagRequest'
                 description: Tag to attach
                 required: true
                 x-originalParamName: request
@@ -1782,7 +1782,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/shared.TagIdentifierRequest'
+                            $ref: '#/components/schemas/shared.TagRequest'
                 description: Tag to attach
                 required: true
                 x-originalParamName: request

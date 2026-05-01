@@ -554,7 +554,7 @@ func (handler *Handler) GetAssetByIdentifier(w http.ResponseWriter, req *http.Re
 // AddTagResponse is the typed envelope returned by POST /api/v1/assets/{identifier}/tags
 // and POST /api/v1/assets/by-id/{id}/tags (TRA-547 §2.4).
 type AddTagResponse struct {
-	Data shared.TagIdentifier `json:"data"`
+	Data shared.Tag `json:"data"`
 }
 
 // @Summary      Add a tag to an asset
@@ -565,7 +565,7 @@ type AddTagResponse struct {
 // @Accept       json
 // @Produce      json
 // @Param        identifier  path  string                         true  "Asset identifier"
-// @Param        request     body  shared.TagIdentifierRequest    true  "Tag to attach"
+// @Param        request     body  shared.TagRequest    true  "Tag to attach"
 // @Success      201  {object}  assets.AddTagResponse         "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -608,7 +608,7 @@ func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, orgID, assetID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	var request shared.TagIdentifierRequest
+	var request shared.TagRequest
 	if err := httputil.DecodeJSON(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
