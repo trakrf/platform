@@ -148,7 +148,10 @@ func setupRouter(
 		r.Use(middleware.SentryContext)
 
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
-		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{identifier}", assetsHandler.GetAssetByIdentifier)
+		// /lookup must be registered BEFORE /{id} so chi resolves it as a literal,
+		// not as a {id} match with value "lookup".
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/lookup", assetsHandler.Lookup)
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{id}", assetsHandler.GetAsset)
 
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
 		// /lookup must be registered BEFORE /{id} so chi resolves it as a literal,
@@ -163,7 +166,7 @@ func setupRouter(
 		// require scans:read per TRA-392 — they moved under /locations/ and /assets/ for URL
 		// aesthetics but are scan data, not asset/location CRUD data.
 		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
-		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/assets/{identifier}/history", reportsHandler.GetAssetHistory)
+		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/assets/{id}/history", reportsHandler.GetAssetHistory)
 	})
 
 	// TRA-397 public write surface — accepts API-key OR session auth via EitherAuth.
@@ -180,10 +183,10 @@ func setupRouter(
 
 		// Assets
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
-		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{identifier}", assetsHandler.UpdateAsset)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}", assetsHandler.DeleteAsset)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{identifier}/tags", assetsHandler.AddTag)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{identifier}/tags/{tagId}", assetsHandler.RemoveTag)
+		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{id}", assetsHandler.Update)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}", assetsHandler.Delete)
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{id}/tags", assetsHandler.AddTag)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}/tags/{tag_id}", assetsHandler.RemoveTag)
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
@@ -196,25 +199,9 @@ func setupRouter(
 		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)
 	})
 
-	// TRA-396 internal-only surrogate paths — session auth only, for frontend convenience.
-	// TRA-425 added PUT/DELETE/POST variants so the frontend can continue writing by
-	// surrogate id after TRA-407 flipped the public write surface to {identifier}.
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.DefaultRateLimitHeaders(rl))
-		r.Use(middleware.Auth)
-		r.Use(middleware.SentryContext)
-
-		r.Get("/api/v1/assets/by-id/{id}", assetsHandler.GetAssetByID)
-		r.Get("/api/v1/assets/by-id/{id}/history", reportsHandler.GetAssetHistoryByID)
-		r.Put("/api/v1/assets/by-id/{id}", assetsHandler.UpdateAssetByID)
-		r.Delete("/api/v1/assets/by-id/{id}", assetsHandler.DeleteAssetByID)
-		r.Post("/api/v1/assets/by-id/{id}/tags", assetsHandler.AddTagByID)
-		r.Delete("/api/v1/assets/by-id/{id}/tags/{tagId}", assetsHandler.RemoveTagByID)
-
-		// Locations /by-id/ family removed in TRA-554. Public /api/v1/locations/{id}
-		// already accepts session JWT via EitherAuth, so frontend session-auth
-		// flows hit the canonical route directly.
-	})
+	// TRA-555 / TRA-554: Internal /by-id/ families removed. Public
+	// /api/v1/{assets,locations}/{id} routes already accept session JWT via
+	// EitherAuth, so frontend session-auth flows hit canonical routes directly.
 
 	if os.Getenv("APP_ENV") != "production" {
 		testHandler.RegisterRoutes(r)

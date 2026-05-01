@@ -99,7 +99,7 @@ export function parseBoolean(value: string | boolean | number): boolean {
 export function serializeCache(cache: AssetCache): string {
   const serializable = {
     byId: Array.from(cache.byId.entries()),
-    byIdentifier: Array.from(cache.byIdentifier.entries()),
+    byExternalKey: Array.from(cache.byExternalKey.entries()),
     activeIds: Array.from(cache.activeIds),
     allIds: cache.allIds,
     lastFetched: cache.lastFetched,
@@ -121,7 +121,7 @@ export function deserializeCache(data: string): AssetCache | null {
 
     if (
       !parsed.byId ||
-      !parsed.byIdentifier ||
+      !parsed.byExternalKey ||
       !parsed.activeIds ||
       !parsed.allIds
     ) {
@@ -139,7 +139,7 @@ export function deserializeCache(data: string): AssetCache | null {
 
     return {
       byId: new Map(byIdEntries as [number, import('@/types/assets').Asset][]),
-      byIdentifier: new Map(parsed.byIdentifier),
+      byExternalKey: new Map(parsed.byExternalKey),
       activeIds: new Set(
         (parsed.activeIds as number[]).filter((id) => validIds.has(id))
       ),

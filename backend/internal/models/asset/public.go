@@ -7,21 +7,22 @@ import (
 )
 
 // PublicAssetView is the HTTP shape emitted by read endpoints. It drops
-// org_id and deleted_at, renames the surrogate id, and carries the parent
-// location's natural key instead of the INT FK.
+// org_id and deleted_at and exposes the asset's current location as both
+// the canonical int FK and its natural-key external_key (TRA-555).
 type PublicAssetView struct {
-	Identifier      string       `json:"identifier"`
-	Name            string       `json:"name"`
-	Description     string       `json:"description,omitempty"`
-	CurrentLocation *string      `json:"current_location"`
-	Metadata        any          `json:"metadata"`
-	IsActive        bool         `json:"is_active"`
-	ValidFrom       time.Time    `json:"valid_from"`
-	ValidTo         *time.Time   `json:"valid_to,omitempty"`
-	CreatedAt       time.Time    `json:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at"`
-	SurrogateID     int          `json:"surrogate_id"`
-	Tags            []shared.Tag `json:"tags"`
+	ID                         int          `json:"id"`
+	ExternalKey                string       `json:"external_key"`
+	Name                       string       `json:"name"`
+	Description                string       `json:"description,omitempty"`
+	CurrentLocationID          *int         `json:"current_location_id"`
+	CurrentLocationExternalKey *string      `json:"current_location_external_key"`
+	Metadata                   any          `json:"metadata"`
+	IsActive                   bool         `json:"is_active"`
+	ValidFrom                  time.Time    `json:"valid_from"`
+	ValidTo                    *time.Time   `json:"valid_to,omitempty"`
+	CreatedAt                  time.Time    `json:"created_at"`
+	UpdatedAt                  time.Time    `json:"updated_at"`
+	Tags                       []shared.Tag `json:"tags"`
 }
 
 // ToPublicAssetView projects an AssetWithLocation to the public HTTP shape.
@@ -32,17 +33,18 @@ func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
 		metadata = map[string]any{}
 	}
 	return PublicAssetView{
-		Identifier:      a.Identifier,
-		Name:            a.Name,
-		Description:     a.Description,
-		CurrentLocation: a.CurrentLocationIdentifier,
-		Metadata:        metadata,
-		IsActive:        a.IsActive,
-		ValidFrom:       a.ValidFrom,
-		ValidTo:         a.ValidTo,
-		CreatedAt:       a.CreatedAt,
-		UpdatedAt:       a.UpdatedAt,
-		SurrogateID:     a.ID,
-		Tags:            a.Tags,
+		ID:                         a.ID,
+		ExternalKey:                a.ExternalKey,
+		Name:                       a.Name,
+		Description:                a.Description,
+		CurrentLocationID:          a.CurrentLocationID,
+		CurrentLocationExternalKey: a.CurrentLocationExternalKey,
+		Metadata:                   metadata,
+		IsActive:                   a.IsActive,
+		ValidFrom:                  a.ValidFrom,
+		ValidTo:                    a.ValidTo,
+		CreatedAt:                  a.CreatedAt,
+		UpdatedAt:                  a.UpdatedAt,
+		Tags:                       a.Tags,
 	}
 }

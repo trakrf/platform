@@ -107,7 +107,7 @@ func ParseCSVTags(tagsStr string) []string {
 
 // Required CSV columns for asset bulk import
 var requiredCSVHeaders = []string{
-	"identifier",
+	"external_key",
 	"name",
 	"valid_from",
 	"valid_to",
@@ -167,12 +167,12 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 		return strings.TrimSpace(row[idx]), nil
 	}
 
-	identifier, err := getCol("identifier")
+	externalKey, err := getCol("external_key")
 	if err != nil {
 		return nil, err
 	}
-	if identifier == "" {
-		return nil, fmt.Errorf("identifier cannot be empty")
+	if externalKey == "" {
+		return nil, fmt.Errorf("external_key cannot be empty")
 	}
 
 	name, err := getCol("name")
@@ -224,7 +224,7 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 
 	return &asset.Asset{
 		OrgID:       orgID,
-		Identifier:  identifier,
+		ExternalKey: externalKey,
 		Name:        name,
 		Description: description,
 		ValidFrom:   validFrom,

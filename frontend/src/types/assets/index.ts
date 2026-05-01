@@ -10,51 +10,53 @@ import type { Tag } from '@/types/shared';
 // ============ Core Entity Types ============
 
 /**
- * Core Asset entity - matches backend PublicAssetView struct
+ * Core Asset entity - matches backend PublicAssetView struct (TRA-555).
  * Reference: backend/internal/models/asset/public.go
  */
 export interface Asset {
-  id: number; // Internal surrogate ID (populated from surrogate_id at fetch boundary)
-  surrogate_id: number; // Go: int — public API field name
-  identifier: string; // Go: string - Customer identifier (e.g., "LAP-001")
-  name: string; // Go: string
-  description: string; // Go: string
-  current_location: string | null; // Natural key of current location (was current_location_id int)
-  valid_from: string; // Go: time.Time → ISO 8601 string
-  valid_to: string | null; // Go: *time.Time → ISO 8601 string or null
-  metadata: Record<string, any>; // Go: any → JSON object
-  is_active: boolean; // Go: bool
-  created_at: string; // Go: time.Time → ISO 8601 string
-  updated_at: string; // Go: time.Time → ISO 8601 string
-  tags: Tag[]; // Physical tags (RFID, BLE, NFC, barcode) linked to this asset
+  id: number; // Canonical surrogate id (obfuscated int)
+  external_key: string; // Customer-supplied or auto-generated ASSET-NNNN
+  name: string;
+  description: string;
+  current_location_id: number | null; // Canonical FK to current location (TRA-555)
+  current_location_external_key: string | null; // Natural-key alternate for current location (TRA-555)
+  valid_from: string; // ISO 8601 string
+  valid_to: string | null; // ISO 8601 or null
+  metadata: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  tags: Tag[];
 }
 
 // ============ Request/Response Types ============
 
 /**
- * Create request - matches backend CreateAssetRequest
- * Reference: backend/internal/models/asset/asset.go lines 27-37
+ * Create request - matches backend CreateAssetRequest.
+ * Either current_location_id (canonical) or current_location_external_key
+ * may be provided; mismatch is rejected.
  */
 export interface CreateAssetRequest {
-  identifier?: string; // optional - auto-generated as ASSET-XXXX if not provided
+  external_key?: string; // optional - auto-generated as ASSET-XXXX if omitted
   name: string; // required, max 255
   description?: string; // optional, max 1024
-  current_location_id?: number | null; // optional location FK (write path, unchanged)
-  valid_from: string; // ISO 8601 date
-  valid_to: string; // ISO 8601 date
+  current_location_id?: number | null;
+  current_location_external_key?: string | null;
+  valid_from: string;
+  valid_to: string;
   is_active: boolean;
   metadata?: Record<string, any>;
 }
 
 /**
- * Update request - matches backend UpdateAssetRequest (all fields optional)
- * Reference: backend/internal/models/asset/asset.go lines 39-49
+ * Update request - matches backend UpdateAssetRequest (all fields optional).
  */
 export interface UpdateAssetRequest {
-  identifier?: string;
+  external_key?: string;
   name?: string;
   description?: string;
-  current_location_id?: number | null; // write path, unchanged
+  current_location_id?: number | null;
+  current_location_external_key?: string | null;
   valid_from?: string;
   valid_to?: string;
   is_active?: boolean;
@@ -72,13 +74,12 @@ export interface TagInput {
 
 /**
  * List response with pagination - matches ListAssetsResponse
- * Reference: backend/internal/handlers/assets/assets.go lines 191-196
  */
 export interface ListAssetsResponse {
   data: Asset[];
-  limit: number; // Number of items in current response (was `count`)
-  offset: number; // Current offset for pagination
-  total_count: number; // Total items in database
+  limit: number;
+  offset: number;
+  total_count: number;
 }
 
 /**
@@ -99,7 +100,6 @@ export interface DeleteResponse {
 
 /**
  * Bulk upload response - matches UploadResponse
- * Reference: backend/internal/models/bulkimport/bulkimport.go lines 54-59
  */
 export interface BulkUploadResponse {
   status: 'accepted';
@@ -115,7 +115,6 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 /**
  * Job status response - matches JobStatusResponse
- * Reference: backend/internal/models/bulkimport/bulkimport.go lines 41-51
  */
 export interface JobStatusResponse {
   job_id: string;
@@ -123,16 +122,15 @@ export interface JobStatusResponse {
   total_rows: number;
   processed_rows: number;
   failed_rows: number;
-  successful_rows?: number; // Only present when completed
-  tags_created?: number; // Number of tags created
-  created_at: string; // ISO 8601
-  completed_at?: string; // ISO 8601, only when completed/failed
+  successful_rows?: number;
+  tags_created?: number;
+  created_at: string;
+  completed_at?: string;
   errors?: BulkErrorDetail[];
 }
 
 /**
  * Bulk error detail - matches ErrorDetail
- * Reference: backend/internal/models/bulkimport/bulkimport.go lines 8-12
  */
 export interface BulkErrorDetail {
   row: number;
@@ -155,16 +153,16 @@ export interface AssetFilters {
  * Pagination state (1-indexed for UI)
  */
 export interface PaginationState {
-  currentPage: number; // 1-indexed for UI
+  currentPage: number;
   pageSize: number;
   totalCount: number;
-  totalPages: number; // Calculated
+  totalPages: number;
 }
 
 /**
  * Sort field options
  */
-export type SortField = 'identifier' | 'name' | 'is_active' | 'valid_from' | 'created_at';
+export type SortField = 'external_key' | 'name' | 'is_active' | 'valid_from' | 'created_at';
 
 /**
  * Sort direction
@@ -186,7 +184,7 @@ export interface SortState {
  */
 export interface AssetCache {
   byId: Map<number, Asset>;
-  byIdentifier: Map<string, Asset>;
+  byExternalKey: Map<string, Asset>;
   activeIds: Set<number>;
   allIds: number[];
   lastFetched: number;
@@ -197,11 +195,10 @@ export interface AssetCache {
 
 /**
  * CSV validation constants - must match backend exactly
- * Reference: backend/internal/services/bulkimport/validator.go lines 16-18
  */
 export const CSV_VALIDATION = {
-  MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB - matches backend MaxFileSize
-  MAX_ROWS: 1000, // Matches backend MaxRows
+  MAX_FILE_SIZE: 5 * 1024 * 1024,
+  MAX_ROWS: 1000,
   ALLOWED_MIME_TYPES: [
     'text/csv',
     'application/vnd.ms-excel',

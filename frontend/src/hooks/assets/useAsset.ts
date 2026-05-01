@@ -5,7 +5,7 @@ import { assetsApi } from '@/lib/api/assets';
 import type { Asset } from '@/types/assets';
 
 function normalizeAsset(raw: Asset): Asset {
-  return { ...raw, id: raw.surrogate_id };
+  return { ...raw, id: raw.id };
 }
 
 export interface UseAssetOptions {

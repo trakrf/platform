@@ -98,7 +98,7 @@ export default function ReportsHistoryScreen() {
                   {asset.name}
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {asset.identifier}
+                  {asset.external_key}
                 </p>
               </div>
             </div>

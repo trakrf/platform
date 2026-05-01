@@ -341,9 +341,9 @@ func TestProcessUpload_ValidCSV(t *testing.T) {
 
 	service := NewService(store)
 
-	csv := `identifier,name,description,valid_from,valid_to,is_active
+	csv := `external_key,name,description,valid_from,valid_to,is_active
 ASSET-TEST-001,Test Asset 1,Description 1,2024-01-01,2024-12-31,true
-ASSET-TEST-002,Test Asset 2,person,Description 2,2024-01-01,2024-12-31,false`
+ASSET-TEST-002,Test Asset 2,Description 2,2024-01-01,2024-12-31,false`
 
 	file, header := createTestCSV(t, csv)
 	defer file.Close()
@@ -576,7 +576,7 @@ func TestProcessUpload_ValidCSVWithTags(t *testing.T) {
 
 	service := NewService(store)
 
-	csv := `identifier,name,description,valid_from,valid_to,is_active,tags
+	csv := `external_key,name,description,valid_from,valid_to,is_active,tags
 ASSET-TAG-001,Tagged Asset 1,Has tags,2024-01-01,2024-12-31,true,RFID_001
 ASSET-TAG-002,Tagged Asset 2,More tags,2024-01-01,2024-12-31,true,"RFID_002,RFID_003"`
 

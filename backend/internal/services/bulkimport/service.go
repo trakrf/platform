@@ -153,21 +153,21 @@ func (s *Service) processCSVAsync(
 	}
 	fmt.Printf("Validating %d data rows for job %d\n", totalDataRows, jobID)
 
-	// PHASE 2: Check for duplicate identifiers WITHIN the CSV batch
-	identifierToRows := make(map[string][]int)
+	// PHASE 2: Check for duplicate external_keys WITHIN the CSV batch
+	externalKeyToRows := make(map[string][]int)
 	for _, pr := range validRows {
-		identifier := pr.asset.Identifier
-		identifierToRows[identifier] = append(identifierToRows[identifier], pr.rowNumber)
+		ek := pr.asset.ExternalKey
+		externalKeyToRows[ek] = append(externalKeyToRows[ek], pr.rowNumber)
 	}
 
-	for identifier, rowNumbers := range identifierToRows {
+	for ek, rowNumbers := range externalKeyToRows {
 		if len(rowNumbers) > 1 {
 			for _, rowNum := range rowNumbers {
-				fmt.Printf("Duplicate identifier '%s' at row %d in CSV for job %d\n", identifier, rowNum, jobID)
+				fmt.Printf("Duplicate external_key '%s' at row %d in CSV for job %d\n", ek, rowNum, jobID)
 				allErrors = append(allErrors, bulkimport.ErrorDetail{
 					Row:   rowNum,
-					Field: "identifier",
-					Error: fmt.Sprintf("duplicate identifier '%s' appears in rows %v within the CSV", identifier, rowNumbers),
+					Field: "external_key",
+					Error: fmt.Sprintf("duplicate external_key '%s' appears in rows %v within the CSV", ek, rowNumbers),
 				})
 			}
 		}
@@ -228,7 +228,7 @@ func (s *Service) processCSVAsync(
 		request := asset.CreateAssetWithTagsRequest{
 			CreateAssetRequest: asset.CreateAssetRequest{
 				OrgID:       pr.asset.OrgID,
-				Identifier:  pr.asset.Identifier,
+				ExternalKey: pr.asset.ExternalKey,
 				Name:        pr.asset.Name,
 				Description: pr.asset.Description,
 				ValidFrom:   &validFrom,

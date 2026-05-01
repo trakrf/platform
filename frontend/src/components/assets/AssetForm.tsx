@@ -25,12 +25,12 @@ interface AssetFormProps {
 export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
   // Resolve current_location_id from natural key for write path (POST/PUT unchanged)
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const resolvedLocationId = asset?.current_location
-    ? (getLocationByIdentifier(asset.current_location)?.id ?? null)
+  const resolvedLocationId = asset?.current_location_external_key
+    ? (getLocationByIdentifier(asset.current_location_external_key)?.id ?? null)
     : null;
 
   const [formData, setFormData] = useState({
-    identifier: asset?.identifier || initialIdentifier || '',
+    external_key: asset?.external_key || initialIdentifier || '',
     name: asset?.name || '',
     description: asset?.description || '',
     current_location_id: resolvedLocationId as number | null,
@@ -85,11 +85,11 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   useEffect(() => {
     if (asset && mode === 'edit') {
       setFormData({
-        identifier: asset.identifier,
+        external_key: asset.external_key,
         name: asset.name,
         description: asset.description,
-        current_location_id: asset.current_location
-          ? (getLocationByIdentifier(asset.current_location)?.id ?? null)
+        current_location_id: asset.current_location_external_key
+          ? (getLocationByIdentifier(asset.current_location_external_key)?.id ?? null)
           : null,
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
@@ -209,8 +209,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
     // Asset ID is optional - backend auto-generates if empty
     // Only validate format if a value is provided
-    if (formData.identifier.trim() && !/^[a-zA-Z0-9-_]+$/.test(formData.identifier)) {
-      errors.identifier = 'Asset ID must contain only letters, numbers, hyphens, and underscores';
+    if (formData.external_key.trim() && !/^[a-zA-Z0-9-_]+$/.test(formData.external_key)) {
+      errors.external_key = 'Asset ID must contain only letters, numbers, hyphens, and underscores';
     }
 
     if (!formData.name.trim()) {
@@ -248,7 +248,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
     const data: CreateAssetRequest | UpdateAssetRequest = {
-      identifier: formData.identifier,
+      external_key: formData.external_key,
       name: formData.name,
       description: formData.description,
       current_location_id: formData.current_location_id,
@@ -279,30 +279,30 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label htmlFor="external_key" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Asset ID
           </label>
           <input
             type="text"
-            id="identifier"
-            value={formData.identifier}
-            onChange={(e) => handleChange('identifier', e.target.value)}
+            id="external_key"
+            value={formData.external_key}
+            onChange={(e) => handleChange('external_key', e.target.value)}
             disabled={loading}
             className={`block w-full px-3 py-2 border rounded-lg ${
-              fieldErrors.identifier
+              fieldErrors.external_key
                 ? 'border-red-500 focus:ring-red-500'
                 : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
             } bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed`}
             placeholder="Leave blank to auto-generate"
           />
           {/* Show hint when field is empty */}
-          {!formData.identifier.trim() && mode === 'create' && (
+          {!formData.external_key.trim() && mode === 'create' && (
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Will be auto-generated as ASSET-XXXX
             </p>
           )}
-          {fieldErrors.identifier && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.identifier}</p>
+          {fieldErrors.external_key && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.external_key}</p>
           )}
         </div>
 

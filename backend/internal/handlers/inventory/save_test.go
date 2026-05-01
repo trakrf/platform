@@ -45,7 +45,7 @@ func (m *mockInventoryStorage) GetLocationByExternalKey(ctx context.Context, org
 	return m.locationByIdentifier[identifier], nil
 }
 
-func (m *mockInventoryStorage) GetAssetIDsByIdentifiers(ctx context.Context, orgID int, identifiers []string) (map[string]int, error) {
+func (m *mockInventoryStorage) GetAssetIDsByExternalKeys(ctx context.Context, orgID int, identifiers []string) (map[string]int, error) {
 	if m.assetIDsByIdentifiersError != nil {
 		return nil, m.assetIDsByIdentifiersError
 	}

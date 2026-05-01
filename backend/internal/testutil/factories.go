@@ -13,7 +13,7 @@ import (
 
 type AssetFactory struct {
 	OrgID       int
-	Identifier  string
+	ExternalKey string
 	Name        string
 	Description string
 	ValidFrom   time.Time
@@ -26,7 +26,7 @@ func NewAssetFactory(orgID int) *AssetFactory {
 	validTo := now.Add(24 * time.Hour)
 	return &AssetFactory{
 		OrgID:       orgID,
-		Identifier:  fmt.Sprintf("TEST-%d", time.Now().UnixNano()%1000000),
+		ExternalKey: fmt.Sprintf("TEST-%d", time.Now().UnixNano()%1000000),
 		Name:        "Test Asset",
 		Description: "Test description",
 		ValidFrom:   now,
@@ -36,7 +36,7 @@ func NewAssetFactory(orgID int) *AssetFactory {
 }
 
 func (f *AssetFactory) WithIdentifier(id string) *AssetFactory {
-	f.Identifier = id
+	f.ExternalKey = id
 	return f
 }
 
@@ -58,7 +58,7 @@ func (f *AssetFactory) WithValidTo(validTo *time.Time) *AssetFactory {
 func (f *AssetFactory) Build() asset.Asset {
 	return asset.Asset{
 		OrgID:       f.OrgID,
-		Identifier:  f.Identifier,
+		ExternalKey: f.ExternalKey,
 		Name:        f.Name,
 		Description: f.Description,
 		ValidFrom:   f.ValidFrom,
@@ -74,7 +74,7 @@ func (f *AssetFactory) Build() asset.Asset {
 func (f *AssetFactory) BuildCreateRequest() asset.CreateAssetRequest {
 	validFrom := shared.FlexibleDate{Time: f.ValidFrom}
 	req := asset.CreateAssetRequest{
-		Identifier:  f.Identifier,
+		ExternalKey: f.ExternalKey,
 		Name:        f.Name,
 		Description: f.Description,
 		ValidFrom:   &validFrom,
@@ -92,7 +92,7 @@ func (f *AssetFactory) BuildBatch(count int) []asset.Asset {
 	for i := 0; i < count; i++ {
 		assets[i] = asset.Asset{
 			OrgID:       f.OrgID,
-			Identifier:  fmt.Sprintf("%s-%d", f.Identifier, i),
+			ExternalKey: fmt.Sprintf("%s-%d", f.ExternalKey, i),
 			Name:        fmt.Sprintf("%s %d", f.Name, i),
 			Description: f.Description,
 			ValidFrom:   f.ValidFrom,
@@ -111,7 +111,7 @@ type CSVFactory struct {
 func NewCSVFactory() *CSVFactory {
 	return &CSVFactory{
 		rows: [][]string{
-			{"identifier", "name", "description", "valid_from", "valid_to", "is_active"},
+			{"external_key", "name", "description", "valid_from", "valid_to", "is_active"},
 		},
 		withTags: false,
 	}
@@ -125,8 +125,8 @@ func (f *CSVFactory) WithTags() *CSVFactory {
 	return f
 }
 
-func (f *CSVFactory) AddRow(identifier, name, description, validFrom, validTo, isActive string) *CSVFactory {
-	row := []string{identifier, name, description, validFrom, validTo, isActive}
+func (f *CSVFactory) AddRow(externalKey, name, description, validFrom, validTo, isActive string) *CSVFactory {
+	row := []string{externalKey, name, description, validFrom, validTo, isActive}
 	if f.withTags {
 		row = append(row, "") // Empty tags by default
 	}
@@ -134,11 +134,11 @@ func (f *CSVFactory) AddRow(identifier, name, description, validFrom, validTo, i
 	return f
 }
 
-func (f *CSVFactory) AddRowWithTags(identifier, name, description, validFrom, validTo, isActive, tags string) *CSVFactory {
+func (f *CSVFactory) AddRowWithTags(externalKey, name, description, validFrom, validTo, isActive, tags string) *CSVFactory {
 	if !f.withTags {
 		f.WithTags()
 	}
-	f.rows = append(f.rows, []string{identifier, name, description, validFrom, validTo, isActive, tags})
+	f.rows = append(f.rows, []string{externalKey, name, description, validFrom, validTo, isActive, tags})
 	return f
 }
 
@@ -146,17 +146,17 @@ func (f *CSVFactory) Build() [][]string {
 	return f.rows
 }
 
-func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier string) *asset.Asset {
+func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, externalKey string) *asset.Asset {
 	t.Helper()
 	ctx := context.Background()
 
 	now := time.Now()
 	var id int
 	err := pool.QueryRow(ctx, `
-		INSERT INTO trakrf.assets (org_id, identifier, name, description, valid_from, valid_to, is_active)
+		INSERT INTO trakrf.assets (org_id, external_key, name, description, valid_from, valid_to, is_active)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, orgID, identifier, "Test Asset", "Test description", now, now.Add(24*time.Hour), true).Scan(&id)
+	`, orgID, externalKey, "Test Asset", "Test description", now, now.Add(24*time.Hour), true).Scan(&id)
 
 	if err != nil {
 		t.Fatalf("Failed to create test asset: %v", err)
@@ -166,7 +166,7 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, identifier str
 	return &asset.Asset{
 		ID:          id,
 		OrgID:       orgID,
-		Identifier:  identifier,
+		ExternalKey: externalKey,
 		Name:        "Test Asset",
 		Description: "Test description",
 		ValidFrom:   now,

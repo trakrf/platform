@@ -95,7 +95,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
           addAsset(normalized);
         }
 
-        toast.success(`Asset "${normalized.identifier}" created successfully`);
+        toast.success(`Asset "${normalized.external_key}" created successfully`);
       } else if (mode === 'edit' && asset) {
         const allTags = (data as UpdateAssetRequest & { tags?: TagInput[] }).tags || [];
         const newTags = allTags.filter(t => !t.id);
@@ -132,7 +132,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
           updateCachedAsset(asset.id, normalized);
         }
 
-        toast.success(`Asset "${normalized.identifier}" updated successfully`);
+        toast.success(`Asset "${normalized.external_key}" updated successfully`);
       }
 
       onClose(true);
@@ -177,7 +177,7 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
       <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {mode === 'create' ? 'Create New Asset' : `Edit Asset: ${asset?.identifier}`}
+            {mode === 'create' ? 'Create New Asset' : `Edit Asset: ${asset?.external_key}`}
           </h2>
           <button
             onClick={() => onClose()}

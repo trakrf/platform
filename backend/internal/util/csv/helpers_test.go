@@ -212,31 +212,31 @@ func TestValidateCSVHeaders_ValidHeaders(t *testing.T) {
 	}{
 		{
 			name:    "exact order",
-			headers: []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active"},
+			headers: []string{"external_key", "name", "description", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "different order",
-			headers: []string{"name", "identifier", "valid_from", "valid_to", "is_active"},
+			headers: []string{"name", "external_key", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "required only (no description)",
-			headers: []string{"identifier", "name", "valid_from", "valid_to", "is_active"},
+			headers: []string{"external_key", "name", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "uppercase headers",
-			headers: []string{"IDENTIFIER", "NAME", "VALID_FROM", "VALID_TO", "IS_ACTIVE"},
+			headers: []string{"EXTERNAL_KEY", "NAME", "VALID_FROM", "VALID_TO", "IS_ACTIVE"},
 		},
 		{
 			name:    "mixed case headers",
-			headers: []string{"Identifier", "Name", "Valid_From", "Valid_To", "Is_Active"},
+			headers: []string{"External_Key", "Name", "Valid_From", "Valid_To", "Is_Active"},
 		},
 		{
 			name:    "headers with spaces",
-			headers: []string{"  identifier  ", "name", "valid_from", "valid_to", "is_active"},
+			headers: []string{"  external_key  ", "name", "valid_from", "valid_to", "is_active"},
 		},
 		{
 			name:    "extra columns (should be ignored)",
-			headers: []string{"identifier", "name", "valid_from", "valid_to", "is_active", "extra_column", "another_column"},
+			headers: []string{"external_key", "name", "valid_from", "valid_to", "is_active", "extra_column", "another_column"},
 		},
 	}
 
@@ -262,18 +262,18 @@ func TestValidateCSVHeaders_InvalidHeaders(t *testing.T) {
 			errorContains: "CSV headers cannot be empty",
 		},
 		{
-			name:          "missing identifier",
+			name:          "missing external_key",
 			headers:       []string{"name", "valid_from", "valid_to", "is_active"},
-			errorContains: "missing required columns: identifier",
+			errorContains: "missing required columns: external_key",
 		},
 		{
 			name:          "missing name",
-			headers:       []string{"identifier", "valid_from", "valid_to", "is_active"},
+			headers:       []string{"external_key", "valid_from", "valid_to", "is_active"},
 			errorContains: "missing required columns: name",
 		},
 		{
 			name:          "missing multiple columns",
-			headers:       []string{"identifier", "name"},
+			headers:       []string{"external_key", "name"},
 			errorContains: "missing required columns",
 		},
 		{
@@ -299,7 +299,7 @@ func TestValidateCSVHeaders_InvalidHeaders(t *testing.T) {
 }
 
 func TestMapCSVRowToAsset_ValidRow(t *testing.T) {
-	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active"}
+	headers := []string{"external_key", "name", "description", "valid_from", "valid_to", "is_active"}
 	row := []string{"ASSET-001", "Test Asset", "Test description", "2024-01-01", "2024-12-31", "true"}
 	orgID := 1
 
@@ -308,8 +308,8 @@ func TestMapCSVRowToAsset_ValidRow(t *testing.T) {
 		t.Fatalf("MapCSVRowToAsset failed: %v", err)
 	}
 
-	if asset.Identifier != "ASSET-001" {
-		t.Errorf("Expected identifier ASSET-001, got %s", asset.Identifier)
+	if asset.ExternalKey != "ASSET-001" {
+		t.Errorf("Expected external_key ASSET-001, got %s", asset.ExternalKey)
 	}
 	if asset.Name != "Test Asset" {
 		t.Errorf("Expected name 'Test Asset', got %s", asset.Name)
@@ -332,13 +332,13 @@ func TestMapCSVRowToAsset_MissingRequired(t *testing.T) {
 		row     []string
 	}{
 		{
-			name:    "missing identifier",
+			name:    "missing external_key",
 			headers: []string{"name", "valid_from", "valid_to", "is_active"},
 			row:     []string{"Test", "2024-01-01", "2024-12-31", "true"},
 		},
 		{
 			name:    "missing name",
-			headers: []string{"identifier", "valid_from", "valid_to", "is_active"},
+			headers: []string{"external_key", "valid_from", "valid_to", "is_active"},
 			row:     []string{"ASSET-001", "2024-01-01", "2024-12-31", "true"},
 		},
 	}
@@ -354,7 +354,7 @@ func TestMapCSVRowToAsset_MissingRequired(t *testing.T) {
 }
 
 func TestMapCSVRowToAsset_InvalidDates(t *testing.T) {
-	headers := []string{"identifier", "name", "valid_from", "valid_to", "is_active"}
+	headers := []string{"external_key", "name", "valid_from", "valid_to", "is_active"}
 	row := []string{"ASSET-001", "Test", "2024-12-31", "2024-01-01", "true"}
 
 	_, err := MapCSVRowToAsset(row, headers, 1)
@@ -399,7 +399,7 @@ func TestParseCSVTags(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_WithTags(t *testing.T) {
-	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
+	headers := []string{"external_key", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
 	row := []string{"ASSET-001", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1,TAG2"}
 
 	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
@@ -407,8 +407,8 @@ func TestMapCSVRowToAssetWithTags_WithTags(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if result.Asset.Identifier != "ASSET-001" {
-		t.Errorf("Expected identifier ASSET-001, got %s", result.Asset.Identifier)
+	if result.Asset.ExternalKey != "ASSET-001" {
+		t.Errorf("Expected external_key ASSET-001, got %s", result.Asset.ExternalKey)
 	}
 
 	if len(result.TagValues) != 2 {
@@ -420,7 +420,7 @@ func TestMapCSVRowToAssetWithTags_WithTags(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_NoTagsColumn(t *testing.T) {
-	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active"}
+	headers := []string{"external_key", "name", "description", "valid_from", "valid_to", "is_active"}
 	row := []string{"ASSET-001", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true"}
 
 	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
@@ -428,8 +428,8 @@ func TestMapCSVRowToAssetWithTags_NoTagsColumn(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if result.Asset.Identifier != "ASSET-001" {
-		t.Errorf("Expected identifier ASSET-001, got %s", result.Asset.Identifier)
+	if result.Asset.ExternalKey != "ASSET-001" {
+		t.Errorf("Expected external_key ASSET-001, got %s", result.Asset.ExternalKey)
 	}
 
 	if len(result.TagValues) != 0 {
@@ -438,7 +438,7 @@ func TestMapCSVRowToAssetWithTags_NoTagsColumn(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_EmptyTags(t *testing.T) {
-	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
+	headers := []string{"external_key", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
 	row := []string{"ASSET-001", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true", ""}
 
 	result, err := MapCSVRowToAssetWithTags(row, headers, 1)
@@ -452,11 +452,11 @@ func TestMapCSVRowToAssetWithTags_EmptyTags(t *testing.T) {
 }
 
 func TestMapCSVRowToAssetWithTags_InvalidAssetData(t *testing.T) {
-	headers := []string{"identifier", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
+	headers := []string{"external_key", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
 	row := []string{"", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1"}
 
 	_, err := MapCSVRowToAssetWithTags(row, headers, 1)
 	if err == nil {
-		t.Error("Expected error for empty identifier")
+		t.Error("Expected error for empty external_key")
 	}
 }

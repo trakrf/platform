@@ -14,28 +14,28 @@ import (
 )
 
 func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.Asset, error) {
-	// Auto-generate identifier if empty
-	if strings.TrimSpace(request.Identifier) == "" {
+	// Auto-generate external_key if empty
+	if strings.TrimSpace(request.ExternalKey) == "" {
 		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate identifier: %w", err)
+			return nil, fmt.Errorf("failed to generate external_key: %w", err)
 		}
-		request.Identifier = GenerateAssetIdentifier(seq)
+		request.ExternalKey = GenerateAssetExternalKey(seq)
 	}
 
 	query := `
 	insert into trakrf.assets
-	(name, identifier, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
+	(name, external_key, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
 	values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	returning id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
+	returning id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
 	          metadata, is_active, created_at, updated_at, deleted_at
 	`
 	var asset asset.Asset
 	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, request.Name, request.Identifier,
+		return tx.QueryRow(ctx, query, request.Name, request.ExternalKey,
 			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo, request.Metadata,
 			request.IsActive, request.OrgID,
-		).Scan(&asset.ID, &asset.OrgID, &asset.Identifier, &asset.Name,
+		).Scan(&asset.ID, &asset.OrgID, &asset.ExternalKey, &asset.Name,
 			&asset.Description, &asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
 			&asset.IsActive, &asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
@@ -43,7 +43,7 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, fmt.Errorf("asset with identifier %s already exists", request.Identifier)
+			return nil, fmt.Errorf("asset with external_key %s already exists", request.ExternalKey)
 		}
 		if strings.Contains(err.Error(), "current_location_id_fkey") {
 			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
@@ -54,16 +54,16 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	return &asset, nil
 }
 
-// GetNextAssetSequence derives the next sequence number for auto-generated asset identifiers.
-// It queries the max sequence from existing ASSET-XXXX identifiers for the org.
-// Returns 1 if no ASSET-XXXX identifiers exist.
+// GetNextAssetSequence derives the next sequence number for auto-generated asset external_keys.
+// It queries the max sequence from existing ASSET-XXXX external_keys for the org.
+// Returns 1 if no ASSET-XXXX external_keys exist.
 func (s *Storage) GetNextAssetSequence(ctx context.Context, orgID int) (int, error) {
 	var maxSeq sql.NullInt64
 	query := `
-		SELECT MAX(CAST(SUBSTRING(identifier FROM 'ASSET-([0-9]+)') AS INT))
+		SELECT MAX(CAST(SUBSTRING(external_key FROM 'ASSET-([0-9]+)') AS INT))
 		FROM trakrf.assets
 		WHERE org_id = $1
-		  AND identifier ~ '^ASSET-[0-9]+$'
+		  AND external_key ~ '^ASSET-[0-9]+$'
 		  AND deleted_at IS NULL
 	`
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
@@ -78,9 +78,9 @@ func (s *Storage) GetNextAssetSequence(ctx context.Context, orgID int) (int, err
 	return int(maxSeq.Int64) + 1, nil
 }
 
-// GenerateAssetIdentifier creates an identifier in format ASSET-XXXX.
+// GenerateAssetExternalKey creates an external_key in format ASSET-XXXX.
 // Zero-pads to 4 digits minimum, grows naturally beyond 9999.
-func GenerateAssetIdentifier(seq int) string {
+func GenerateAssetExternalKey(seq int) string {
 	return fmt.Sprintf("ASSET-%04d", seq)
 }
 
@@ -122,11 +122,11 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 			return nil, nil
 		}
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			identifier := "unknown"
-			if request.Identifier != nil {
-				identifier = *request.Identifier
+			externalKey := "unknown"
+			if request.ExternalKey != nil {
+				externalKey = *request.ExternalKey
 			}
-			return nil, fmt.Errorf("asset with identifier %s already exists", identifier)
+			return nil, fmt.Errorf("asset with external_key %s already exists", externalKey)
 		}
 		if strings.Contains(err.Error(), "current_location_id_fkey") {
 			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
@@ -139,7 +139,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 
 func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.Asset, error) {
 	query := `
-	select id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
+	select id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	from trakrf.assets
 	where id = $1 and org_id = $2 and deleted_at is null
@@ -147,7 +147,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.
 	var asset asset.Asset
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(&asset.ID, &asset.OrgID,
-			&asset.Identifier, &asset.Name, &asset.Description,
+			&asset.ExternalKey, &asset.Name, &asset.Description,
 			&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
 			&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
@@ -171,7 +171,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 	}
 
 	query := `
-	SELECT id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
+	SELECT id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.assets
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
@@ -187,7 +187,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 
 		for rows.Next() {
 			var a asset.Asset
-			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name,
+			if err := rows.Scan(&a.ID, &a.OrgID, &a.ExternalKey, &a.Name,
 				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
@@ -206,7 +206,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 
 func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offset int) ([]asset.Asset, error) {
 	query := `
-		select id, org_id, identifier, name, description, current_location_id, valid_from, valid_to,
+		select id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
 		       metadata, is_active, created_at, updated_at, deleted_at
 		from trakrf.assets
 		where org_id = $1 and deleted_at is null
@@ -223,7 +223,7 @@ func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offse
 
 		for rows.Next() {
 			var a asset.Asset
-			if err := rows.Scan(&a.ID, &a.OrgID, &a.Identifier, &a.Name,
+			if err := rows.Scan(&a.ID, &a.OrgID, &a.ExternalKey, &a.Name,
 				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
@@ -295,43 +295,39 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 		}
 	}
 
-	// Auto-generate identifiers for assets with empty identifiers.
+	// Auto-generate external_keys for assets with empty external_keys.
 	seq, err := s.GetNextAssetSequence(ctx, orgID)
 	if err != nil {
 		return 0, []error{fmt.Errorf("failed to get sequence for auto-generation: %w", err)}
 	}
 
 	for i := range assets {
-		if strings.TrimSpace(assets[i].Identifier) == "" {
-			assets[i].Identifier = GenerateAssetIdentifier(seq)
+		if strings.TrimSpace(assets[i].ExternalKey) == "" {
+			assets[i].ExternalKey = GenerateAssetExternalKey(seq)
 			seq++
 		}
 	}
 
 	// TRA-475: BatchCreateAssets is documented and tested as all-or-nothing
-	// insert — any duplicate identifier rolls the whole transaction back.
-	// The legacy ON CONFLICT clause referenced a non-existent unique index,
-	// so it never actually upserted; conflicts surfaced as "no matching
-	// unique constraint" errors that the substring sniff below caught.
-	// Now that the partial index exists, plain INSERT is the right shape:
-	// the partial UNIQUE(org_id, identifier) WHERE deleted_at IS NULL fires
+	// insert — any duplicate external_key rolls the whole transaction back.
+	// The partial UNIQUE(org_id, external_key) WHERE deleted_at IS NULL fires
 	// on duplicate, the substring sniff converts it to a row-numbered
 	// error, and WithOrgTx rolls the transaction back. Upsert-on-bulk-import
 	// is intentionally out of scope (see TRA-475 spec).
 	query := `
 		INSERT INTO trakrf.assets
-		(name, identifier, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
+		(name, external_key, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		for i, a := range assets {
 			if _, err := tx.Exec(ctx, query,
-				a.Name, a.Identifier, a.Description, a.CurrentLocationID,
+				a.Name, a.ExternalKey, a.Description, a.CurrentLocationID,
 				a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
 			); err != nil {
 				if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-					return fmt.Errorf("row %d: asset with identifier %s already exists", i, a.Identifier)
+					return fmt.Errorf("row %d: asset with external_key %s already exists", i, a.ExternalKey)
 				}
 				return fmt.Errorf("row %d: %w", i, err)
 			}
@@ -345,41 +341,41 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 	return len(assets), nil
 }
 
-// CheckDuplicateIdentifiers checks if any of the provided identifiers already exist in the database
-// Returns a map of identifier -> bool where true means the identifier exists
-func (s *Storage) CheckDuplicateIdentifiers(ctx context.Context, orgID int, identifiers []string) (map[string]bool, error) {
-	if len(identifiers) == 0 {
+// CheckDuplicateExternalKeys checks if any of the provided external_keys already exist in the database.
+// Returns a map of external_key -> bool where true means the external_key exists.
+func (s *Storage) CheckDuplicateExternalKeys(ctx context.Context, orgID int, externalKeys []string) (map[string]bool, error) {
+	if len(externalKeys) == 0 {
 		return make(map[string]bool), nil
 	}
 
 	query := `
-		SELECT identifier
+		SELECT external_key
 		FROM trakrf.assets
-		WHERE org_id = $1 AND identifier = ANY($2) AND deleted_at IS NULL
+		WHERE org_id = $1 AND external_key = ANY($2) AND deleted_at IS NULL
 	`
 
-	existingIdentifiers := make(map[string]bool)
+	existing := make(map[string]bool)
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, orgID, identifiers)
+		rows, err := tx.Query(ctx, query, orgID, externalKeys)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 
 		for rows.Next() {
-			var identifier string
-			if err := rows.Scan(&identifier); err != nil {
-				return fmt.Errorf("failed to scan identifier: %w", err)
+			var ek string
+			if err := rows.Scan(&ek); err != nil {
+				return fmt.Errorf("failed to scan external_key: %w", err)
 			}
-			existingIdentifiers[identifier] = true
+			existing[ek] = true
 		}
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to check duplicate identifiers: %w", err)
+		return nil, fmt.Errorf("failed to check duplicate external_keys: %w", err)
 	}
 
-	return existingIdentifiers, nil
+	return existing, nil
 }
 
 func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
@@ -388,8 +384,8 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	// Note: OrgID is intentionally NOT writable via UpdateAssetRequest.
 	// The owning org is fixed at creation; ownership transfers must use
 	// dedicated tooling, never a public PUT body.
-	if req.Identifier != nil {
-		fields["identifier"] = *req.Identifier
+	if req.ExternalKey != nil {
+		fields["external_key"] = *req.ExternalKey
 	}
 	if req.Name != nil {
 		fields["name"] = *req.Name
@@ -419,13 +415,13 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 }
 
 func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateAssetWithTagsRequest) (*asset.AssetWithLocation, error) {
-	// Auto-generate identifier if empty
-	if strings.TrimSpace(request.Identifier) == "" {
+	// Auto-generate external_key if empty
+	if strings.TrimSpace(request.ExternalKey) == "" {
 		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate identifier: %w", err)
+			return nil, fmt.Errorf("failed to generate external_key: %w", err)
 		}
-		request.Identifier = GenerateAssetIdentifier(seq)
+		request.ExternalKey = GenerateAssetExternalKey(seq)
 	}
 
 	tagsJSON, err := tagsToJSON(request.Tags)
@@ -459,7 +455,7 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 	err = s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			request.OrgID,
-			request.Identifier,
+			request.ExternalKey,
 			request.Name,
 			request.Description,
 			request.CurrentLocationID,
@@ -472,7 +468,7 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 	})
 
 	if err != nil {
-		return nil, parseAssetWithTagsError(err, request.Identifier)
+		return nil, parseAssetWithTagsError(err, request.ExternalKey)
 	}
 
 	return s.getAssetWithLocationByID(ctx, request.OrgID, assetID)
@@ -499,10 +495,9 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, orgID, id int) (*asset.A
 }
 
 // getAssetWithLocationByID returns an AssetWithLocation by surrogate id,
-// performing the LEFT JOIN on parent location and fetching identifiers.
-// Used by CreateAssetWithTags and UpdateAsset to emit the public
-// write-response shape. Returns (nil, nil) if the asset doesn't exist
-// or is soft-deleted.
+// performing the LEFT JOIN on current location and fetching tags. Used by
+// CreateAssetWithTags and UpdateAsset to emit the public write-response
+// shape. Returns (nil, nil) if the asset doesn't exist or is soft-deleted.
 func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
 	// TRA-477: prefer an explicit current_location_id, fall back to the
 	// location of the latest scan (matches list semantics so single-asset
@@ -516,7 +511,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 			LIMIT 1
 		)
 		SELECT
-			a.id, a.org_id, a.identifier, a.name, a.description,
+			a.id, a.org_id, a.external_key, a.name, a.description,
 			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.external_key
@@ -529,15 +524,15 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 		LIMIT 1
 	`
 	var (
-		a      asset.Asset
-		locIdt *string
+		a         asset.Asset
+		locExtKey *string
 	)
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(
-			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Description,
+			&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
 			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-			&locIdt,
+			&locExtKey,
 		)
 	})
 	if err != nil {
@@ -557,7 +552,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 			Asset: a,
 			Tags:  tags,
 		},
-		CurrentLocationIdentifier: locIdt,
+		CurrentLocationExternalKey: locExtKey,
 	}, nil
 }
 
@@ -596,14 +591,14 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 	return views, nil
 }
 
-// GetAssetByIdentifier returns the live (non-deleted) asset with the given
-// natural identifier for the given org, plus the parent location's identifier.
+// GetAssetByExternalKey returns the live (non-deleted) asset with the given
+// natural key for the given org, plus the current location's external_key.
 // Returns (nil, nil) if no match.
-func (s *Storage) GetAssetByIdentifier(
-	ctx context.Context, orgID int, identifier string,
+func (s *Storage) GetAssetByExternalKey(
+	ctx context.Context, orgID int, externalKey string,
 ) (*asset.AssetWithLocation, error) {
 	// TRA-477: same COALESCE(explicit FK, latest-scan) pattern as
-	// getAssetWithLocationByID so identifier-keyed reads surface the
+	// getAssetWithLocationByID so external-key reads surface the
 	// scan-inferred location.
 	query := `
 		WITH latest_scan AS (
@@ -611,14 +606,14 @@ func (s *Storage) GetAssetByIdentifier(
 			FROM trakrf.asset_scans s
 			WHERE s.org_id = $1 AND s.asset_id = (
 				SELECT id FROM trakrf.assets
-				WHERE org_id = $1 AND identifier = $2 AND deleted_at IS NULL
+				WHERE org_id = $1 AND external_key = $2 AND deleted_at IS NULL
 				LIMIT 1
 			)
 			ORDER BY s.timestamp DESC
 			LIMIT 1
 		)
 		SELECT
-			a.id, a.org_id, a.identifier, a.name, a.description,
+			a.id, a.org_id, a.external_key, a.name, a.description,
 			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.external_key
@@ -627,26 +622,26 @@ func (s *Storage) GetAssetByIdentifier(
 		LEFT JOIN trakrf.locations l
 			ON l.id = COALESCE(a.current_location_id, ls.location_id)
 			AND l.org_id = a.org_id AND l.deleted_at IS NULL
-		WHERE a.org_id = $1 AND a.identifier = $2 AND a.deleted_at IS NULL
+		WHERE a.org_id = $1 AND a.external_key = $2 AND a.deleted_at IS NULL
 		LIMIT 1
 	`
 	var (
-		a      asset.Asset
-		locIdt *string
+		a         asset.Asset
+		locExtKey *string
 	)
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, identifier).Scan(
-			&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Description,
+		return tx.QueryRow(ctx, query, orgID, externalKey).Scan(
+			&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
 			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-			&locIdt,
+			&locExtKey,
 		)
 	})
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get asset by identifier: %w", err)
+		return nil, fmt.Errorf("get asset by external_key: %w", err)
 	}
 
 	tags, err := s.GetTagsByAssetID(ctx, orgID, a.ID)
@@ -659,32 +654,32 @@ func (s *Storage) GetAssetByIdentifier(
 			Asset: a,
 			Tags:  tags,
 		},
-		CurrentLocationIdentifier: locIdt,
+		CurrentLocationExternalKey: locExtKey,
 	}, nil
 }
 
-// GetAssetIDsByIdentifiers resolves a batch of natural identifiers to internal
-// surrogate IDs for one org. Returns a map keyed by identifier; identifiers not
-// found in the org are absent from the map. Empty/nil input returns an empty
-// map without querying.
+// GetAssetIDsByExternalKeys resolves a batch of natural external_keys to
+// internal surrogate IDs for one org. Returns a map keyed by external_key;
+// entries not found in the org are absent from the map. Empty/nil input
+// returns an empty map without querying.
 //
-// Used by inventory/save (TRA-448) to convert public-API identifier lists to
-// the numeric IDs the storage layer expects.
-func (s *Storage) GetAssetIDsByIdentifiers(
-	ctx context.Context, orgID int, identifiers []string,
+// Used by inventory/save (TRA-448) to convert public-API external_key lists
+// to the numeric IDs the storage layer expects.
+func (s *Storage) GetAssetIDsByExternalKeys(
+	ctx context.Context, orgID int, externalKeys []string,
 ) (map[string]int, error) {
-	if len(identifiers) == 0 {
+	if len(externalKeys) == 0 {
 		return map[string]int{}, nil
 	}
 
 	query := `
-		SELECT identifier, id
+		SELECT external_key, id
 		FROM trakrf.assets
-		WHERE org_id = $1 AND identifier = ANY($2) AND deleted_at IS NULL
+		WHERE org_id = $1 AND external_key = ANY($2) AND deleted_at IS NULL
 	`
-	out := make(map[string]int, len(identifiers))
+	out := make(map[string]int, len(externalKeys))
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, orgID, identifiers)
+		rows, err := tx.Query(ctx, query, orgID, externalKeys)
 		if err != nil {
 			return err
 		}
@@ -692,21 +687,21 @@ func (s *Storage) GetAssetIDsByIdentifiers(
 
 		for rows.Next() {
 			var (
-				ident string
-				id    int
+				ek string
+				id int
 			)
-			if err := rows.Scan(&ident, &id); err != nil {
-				return fmt.Errorf("scan asset identifier row: %w", err)
+			if err := rows.Scan(&ek, &id); err != nil {
+				return fmt.Errorf("scan asset external_key row: %w", err)
 			}
-			out[ident] = id
+			out[ek] = id
 		}
 		if err := rows.Err(); err != nil {
-			return fmt.Errorf("iterate asset identifier rows: %w", err)
+			return fmt.Errorf("iterate asset external_key rows: %w", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get asset ids by identifiers: %w", err)
+		return nil, fmt.Errorf("get asset ids by external_keys: %w", err)
 	}
 	return out, nil
 }
@@ -733,7 +728,7 @@ func (s *Storage) ListAssetsFiltered(
 			ORDER BY s.asset_id, s.timestamp DESC
 		)
 		SELECT
-			a.id, a.org_id, a.identifier, a.name, a.description,
+			a.id, a.org_id, a.external_key, a.name, a.description,
 			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
@@ -760,20 +755,20 @@ func (s *Storage) ListAssetsFiltered(
 
 		for rows.Next() {
 			var (
-				a      asset.Asset
-				locIdt *string
+				a         asset.Asset
+				locExtKey *string
 			)
 			if err := rows.Scan(
-				&a.ID, &a.OrgID, &a.Identifier, &a.Name, &a.Description,
+				&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
 				&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 				&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-				&locIdt,
+				&locExtKey,
 			); err != nil {
 				return fmt.Errorf("scan asset: %w", err)
 			}
 			out = append(out, asset.AssetWithLocation{
-				AssetView:                 asset.AssetView{Asset: a, Tags: nil},
-				CurrentLocationIdentifier: locIdt,
+				AssetView:                  asset.AssetView{Asset: a, Tags: nil},
+				CurrentLocationExternalKey: locExtKey,
 			})
 		}
 		return rows.Err()
@@ -782,18 +777,18 @@ func (s *Storage) ListAssetsFiltered(
 		return nil, fmt.Errorf("list assets filtered: %w", err)
 	}
 
-	// Bulk-fetch identifiers for the returned assets.
+	// Bulk-fetch tags for the returned assets.
 	if len(out) > 0 {
 		ids := make([]int, len(out))
 		for i, a := range out {
 			ids[i] = a.ID
 		}
-		idMap, err := s.getTagsForAssets(ctx, orgID, ids)
+		tagMap, err := s.getTagsForAssets(ctx, orgID, ids)
 		if err != nil {
 			return nil, err
 		}
 		for i := range out {
-			out[i].Tags = idMap[out[i].ID]
+			out[i].Tags = tagMap[out[i].ID]
 			if out[i].Tags == nil {
 				out[i].Tags = []shared.Tag{}
 			}
@@ -840,10 +835,24 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 	clauses := []string{"a.org_id = $1", "a.deleted_at IS NULL"}
 	args := []any{orgID}
 
-	if len(f.LocationIdentifiers) > 0 {
-		args = append(args, f.LocationIdentifiers)
+	// location_id and location_external_key combine with OR semantics — a row
+	// matches if its current location appears in either set.
+	hasIDs := len(f.LocationIDs) > 0
+	hasExtKeys := len(f.LocationExternalKeys) > 0
+	if hasIDs && hasExtKeys {
+		args = append(args, f.LocationIDs)
+		idIdx := len(args)
+		args = append(args, f.LocationExternalKeys)
+		ekIdx := len(args)
+		clauses = append(clauses, fmt.Sprintf("(l.id = ANY($%d::int[]) OR l.external_key = ANY($%d::text[]))", idIdx, ekIdx))
+	} else if hasIDs {
+		args = append(args, f.LocationIDs)
+		clauses = append(clauses, fmt.Sprintf("l.id = ANY($%d::int[])", len(args)))
+	} else if hasExtKeys {
+		args = append(args, f.LocationExternalKeys)
 		clauses = append(clauses, fmt.Sprintf("l.external_key = ANY($%d::text[])", len(args)))
 	}
+
 	if f.IsActive != nil {
 		args = append(args, *f.IsActive)
 		clauses = append(clauses, fmt.Sprintf("a.is_active = $%d", len(args)))
@@ -852,7 +861,7 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 		args = append(args, "%"+*f.Q+"%")
 		idx := len(args)
 		clauses = append(clauses, fmt.Sprintf(
-			"(a.name ILIKE $%d OR a.identifier ILIKE $%d OR a.description ILIKE $%d "+
+			"(a.name ILIKE $%d OR a.external_key ILIKE $%d OR a.description ILIKE $%d "+
 				"OR EXISTS (SELECT 1 FROM trakrf.tags i "+
 				"WHERE i.asset_id = a.id AND i.is_active = true "+
 				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
@@ -863,7 +872,7 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 
 func buildAssetsOrderBy(sorts []asset.ListSort) string {
 	if len(sorts) == 0 {
-		return "a.identifier ASC"
+		return "a.external_key ASC"
 	}
 	out := make([]string, 0, len(sorts))
 	for _, s := range sorts {
@@ -886,12 +895,12 @@ func clampAssetListLimit(n int) int {
 	return n
 }
 
-func parseAssetWithTagsError(err error, identifier string) error {
+func parseAssetWithTagsError(err error, externalKey string) error {
 	errStr := err.Error()
 
-	if strings.Contains(errStr, "assets_org_id_identifier") ||
+	if strings.Contains(errStr, "assets_org_id_external_key") ||
 		(strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "assets")) {
-		return fmt.Errorf("asset with identifier %s already exists", identifier)
+		return fmt.Errorf("asset with external_key %s already exists", externalKey)
 	}
 
 	if strings.Contains(errStr, "tags_org_id_type_value") ||
@@ -907,7 +916,7 @@ func parseAssetWithTagsError(err error, identifier string) error {
 }
 
 // GetAssetWithLocationByIDForTest exposes getAssetWithLocationByID to integration
-// tests in the same package. Production code must use GetAssetByIdentifier or
+// tests in the same package. Production code must use GetAssetByExternalKey or
 // the CreateAssetWithTags / UpdateAsset return values.
 func (s *Storage) GetAssetWithLocationByIDForTest(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
 	return s.getAssetWithLocationByID(ctx, orgID, id)

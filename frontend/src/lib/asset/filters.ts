@@ -30,14 +30,14 @@ export function filterAssets(
     if (filters.location_id !== undefined && filters.location_id !== 'all') {
       if (filters.location_id === null) {
         // Filter for unassigned assets (no location)
-        if (asset.current_location !== null && asset.current_location !== undefined) {
+        if (asset.current_location_external_key !== null && asset.current_location_external_key !== undefined) {
           return false;
         }
       } else {
         // Filter for specific location — look up identifier from store by surrogate ID
         const locById = useLocationStore.getState().cache.byId.get(filters.location_id as number);
         const filterIdentifier = locById?.external_key;
-        if (asset.current_location !== filterIdentifier) {
+        if (asset.current_location_external_key !== filterIdentifier) {
           return false;
         }
       }
@@ -66,9 +66,9 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
     let bValue: string | number | null;
 
     switch (sort.field) {
-      case 'identifier':
-        aValue = a.identifier;
-        bValue = b.identifier;
+      case 'external_key':
+        aValue = a.external_key;
+        bValue = b.external_key;
         break;
       case 'name':
         aValue = a.name;
@@ -83,8 +83,8 @@ export function sortAssets(assets: Asset[], sort: SortState): Asset[] {
         bValue = b.created_at;
         break;
       default:
-        aValue = a.identifier;
-        bValue = b.identifier;
+        aValue = a.external_key;
+        bValue = b.external_key;
     }
 
     if (aValue === null && bValue === null) return 0;
@@ -150,14 +150,14 @@ export function searchAssetsWithMatches(
   const matchedAssetIds = new Set<number>();
 
   for (const asset of assets) {
-    const assetIdLower = asset.identifier.toLowerCase();
+    const assetIdLower = asset.external_key.toLowerCase();
 
     // 1. Asset ID: exact match (highest priority)
     if (assetIdLower === termLower) {
       matches.push({
         asset,
         matchedField: 'external_key',
-        matchedValue: asset.identifier,
+        matchedValue: asset.external_key,
       });
       matchedAssetIds.add(asset.id);
       continue;
@@ -184,7 +184,7 @@ export function searchAssetsWithMatches(
       matches.push({
         asset,
         matchedField: 'external_key',
-        matchedValue: asset.identifier,
+        matchedValue: asset.external_key,
       });
       matchedAssetIds.add(asset.id);
     }

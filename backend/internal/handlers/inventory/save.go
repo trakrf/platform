@@ -27,7 +27,7 @@ var validate = func() *validator.Validate {
 type InventoryStorage interface {
 	SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error)
 	GetLocationByExternalKey(ctx context.Context, orgID int, identifier string) (*location.LocationWithParent, error)
-	GetAssetIDsByIdentifiers(ctx context.Context, orgID int, identifiers []string) (map[string]int, error)
+	GetAssetIDsByExternalKeys(ctx context.Context, orgID int, externalKeys []string) (map[string]int, error)
 }
 
 // Handler handles inventory-related API requests
@@ -114,7 +114,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	locationID := loc.ID
 
 	// Resolve asset_identifiers → numeric IDs (one query).
-	resolved, err := h.storage.GetAssetIDsByIdentifiers(r.Context(), orgID, request.AssetIdentifiers)
+	resolved, err := h.storage.GetAssetIDsByExternalKeys(r.Context(), orgID, request.AssetIdentifiers)
 	if err != nil {
 		httputil.RespondStorageError(w, r, err, requestID)
 		return

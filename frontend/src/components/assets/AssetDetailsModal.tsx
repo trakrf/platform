@@ -15,7 +15,7 @@ interface AssetDetailsModalProps {
 export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetailsModalProps) {
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
-  const location = asset?.current_location ? getLocationByIdentifier(asset.current_location) : null;
+  const location = asset?.current_location_external_key ? getLocationByIdentifier(asset.current_location_external_key) : null;
 
   const [localTags, setLocalTags] = useState<Tag[]>([]);
 
@@ -86,7 +86,7 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
           <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <InfoField label="Asset ID" value={asset.identifier} />
+                <InfoField label="Asset ID" value={asset.external_key} />
                 <InfoField label="Name" value={asset.name} />
                 <InfoField
                   label="Status"

@@ -22,7 +22,7 @@ import { createAssetPersistence } from './assetPersistence';
  * Match info for search results - tracks which field matched
  */
 export interface SearchMatchInfo {
-  field: string; // 'identifier' | 'name' | 'identifiers.value' | 'description'
+  field: string; // 'external_key' | 'name' | 'identifiers.value' | 'description'
   value: string; // The actual matched value
 }
 
@@ -77,7 +77,7 @@ export interface AssetStore {
  */
 const initialCache: AssetCache = {
   byId: new Map(),
-  byIdentifier: new Map(),
+  byExternalKey: new Map(),
   activeIds: new Set(),
   allIds: [],
   lastFetched: 0,
@@ -115,7 +115,7 @@ const initialSort: SortState = {
  * Asset management store
  *
  * Provides:
- * - Multi-index cache with O(1) lookups (byId, byIdentifier, byType)
+ * - Multi-index cache with O(1) lookups (byId, byExternalKey, byType)
  * - UI state management (filters, pagination, sort, selection)
  * - LocalStorage persistence with 1-hour TTL
  * - Bulk upload job tracking
@@ -146,7 +146,7 @@ export const useAssetStore = create<AssetStore>()(
      * Get asset by identifier (O(1) lookup)
      */
     getAssetByIdentifier: (identifier) => {
-      return get().cache.byIdentifier.get(identifier);
+      return get().cache.byExternalKey.get(identifier);
     },
 
     /**

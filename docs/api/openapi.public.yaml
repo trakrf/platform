@@ -69,15 +69,18 @@ components:
             type: object
         asset.CreateAssetWithTagsRequest:
             properties:
-                current_location:
+                current_location_external_key:
                     example: WHS-01
                     maxLength: 255
                     minLength: 1
                     type: string
+                current_location_id:
+                    example: 42
+                    type: integer
                 description:
                     maxLength: 1024
                     type: string
-                identifier:
+                external_key:
                     maxLength: 255
                     type: string
                 is_active:
@@ -110,13 +113,18 @@ components:
                 created_at:
                     format: date-time
                     type: string
-                current_location:
+                current_location_external_key:
                     nullable: true
                     type: string
+                current_location_id:
+                    nullable: true
+                    type: integer
                 description:
                     type: string
-                identifier:
+                external_key:
                     type: string
+                id:
+                    type: integer
                 is_active:
                     type: boolean
                 metadata:
@@ -124,8 +132,6 @@ components:
                     type: object
                 name:
                     type: string
-                surrogate_id:
-                    type: integer
                 tags:
                     items:
                         $ref: '#/components/schemas/shared.Tag'
@@ -142,15 +148,18 @@ components:
             type: object
         asset.UpdateAssetRequest:
             properties:
-                current_location:
+                current_location_external_key:
                     example: WHS-01
                     maxLength: 255
                     minLength: 1
                     type: string
+                current_location_id:
+                    example: 42
+                    type: integer
                 description:
                     maxLength: 1024
                     type: string
-                identifier:
+                external_key:
                     maxLength: 255
                     minLength: 1
                     type: string
@@ -633,9 +642,14 @@ paths:
                   schema:
                     default: 0
                     type: integer
-                - description: filter by location natural key (may repeat)
+                - description: filter by current location id (canonical, may repeat)
                   in: query
-                  name: location
+                  name: location_id
+                  schema:
+                    type: integer
+                - description: filter by current location external_key (may repeat)
+                  in: query
+                  name: location_external_key
                   schema:
                     type: string
                 - description: filter by active flag
@@ -643,7 +657,7 @@ paths:
                   name: is_active
                   schema:
                     type: boolean
-                - description: substring search (case-insensitive) on name, identifier, description, and active tag values
+                - description: substring search (case-insensitive) on name, external_key, description, and active tag values
                   in: query
                   name: q
                   schema:
@@ -718,10 +732,10 @@ paths:
             description: |-
                 Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).
 
-                The `identifier` field is optional. Provide a value from your system of record
+                The `external_key` field is optional. Provide a value from your system of record
                 (ERP, WMS, asset management) for natural-key joins, or omit it to receive a
-                server-assigned identifier in the format `ASSET-NNNN` (per-organization sequence).
-                A caller-supplied identifier that collides with an existing asset returns 409.
+                server-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).
+                A caller-supplied external_key that collides with an existing asset returns 409.
 
                 Returns the created asset with its assigned tags. The Location response header contains the canonical URL.
             operationId: assets.create
@@ -782,17 +796,79 @@ paths:
             summary: Create an asset
             tags:
                 - assets
-    /api/v1/assets/{identifier}:
+    /api/v1/assets/{asset_id}/tags/{tag_id}:
         delete:
-            description: Delete an asset by its natural identifier. The asset is removed from all subsequent queries and its identifier becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
-            operationId: assets.delete
+            description: Detach a tag from an asset by its tag record id.
+            operationId: assets.tags.remove
             parameters:
-                - description: Asset identifier
+                - description: Asset id (canonical)
                   in: path
-                  name: identifier
+                  name: asset_id
                   required: true
                   schema:
-                    type: string
+                    type: integer
+                - description: Tag id
+                  in: path
+                  name: tag_id
+                  required: true
+                  schema:
+                    type: integer
+            responses:
+                "204":
+                    description: deleted
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: not_found
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey:
+                    - assets:write
+            summary: Remove a tag from an asset
+            tags:
+                - assets
+    /api/v1/assets/{id}:
+        delete:
+            description: Delete an asset by its canonical id. The asset is removed from all subsequent queries and its external_key becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
+            operationId: assets.delete
+            parameters:
+                - description: Asset id (canonical)
+                  in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: integer
             responses:
                 "204":
                     description: deleted
@@ -833,15 +909,15 @@ paths:
             tags:
                 - assets
         get:
-            description: Retrieve an asset by its natural identifier. Returns 404 if the asset does not exist.
+            description: Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.
             operationId: assets.get
             parameters:
-                - description: Asset identifier (natural key)
+                - description: Asset id (canonical)
                   in: path
-                  name: identifier
+                  name: id
                   required: true
                   schema:
-                    type: string
+                    type: integer
             responses:
                 "200":
                     content:
@@ -900,19 +976,19 @@ paths:
             security:
                 - APIKey:
                     - assets:read
-            summary: Get asset by natural identifier
+            summary: Get asset by canonical id
             tags:
                 - assets
         put:
             description: Update mutable fields on an existing asset. Only fields included in the request body are changed.
             operationId: assets.update
             parameters:
-                - description: Asset identifier
+                - description: Asset id (canonical)
                   in: path
-                  name: identifier
+                  name: id
                   required: true
                   schema:
-                    type: string
+                    type: integer
             requestBody:
                 content:
                     application/json:
@@ -976,17 +1052,17 @@ paths:
             summary: Update an asset
             tags:
                 - assets
-    /api/v1/assets/{identifier}/history:
+    /api/v1/assets/{id}/history:
         get:
-            description: Location history for an asset identified by its natural key.
+            description: Location history for an asset identified by its canonical id.
             operationId: assets.history
             parameters:
-                - description: Asset identifier (natural key)
+                - description: Asset id (canonical)
                   in: path
-                  name: identifier
+                  name: id
                   required: true
                   schema:
-                    type: string
+                    type: integer
                 - description: max 200
                   in: query
                   name: limit
@@ -1076,19 +1152,19 @@ paths:
             summary: Asset movement history
             tags:
                 - reports
-    /api/v1/assets/{identifier}/tags:
+    /api/v1/assets/{id}/tags:
         post:
             description: |-
                 Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
                 The tag must be unique within the organization.
             operationId: assets.tags.add
             parameters:
-                - description: Asset identifier
+                - description: Asset id (canonical)
                   in: path
-                  name: identifier
+                  name: id
                   required: true
                   schema:
-                    type: string
+                    type: integer
             requestBody:
                 content:
                     application/json:
@@ -1146,26 +1222,40 @@ paths:
             summary: Add a tag to an asset
             tags:
                 - assets
-    /api/v1/assets/{identifier}/tags/{tagId}:
-        delete:
-            description: Detach a tag from an asset by its tag record ID.
-            operationId: assets.tags.remove
+    /api/v1/assets/lookup:
+        get:
+            description: |-
+                Find a single live asset by its external_key. Equality match only.
+                Returns the matching object (200) or 404. Multiple natural-key parameters or none returns 400.
+                Soft-deleted rows are not addressable through this endpoint.
+            operationId: assets.lookup
             parameters:
-                - description: Asset identifier
-                  in: path
-                  name: identifier
+                - description: Asset external_key (natural key)
+                  in: query
+                  name: external_key
                   required: true
                   schema:
                     type: string
-                - description: Tag ID
-                  in: path
-                  name: tagId
-                  required: true
-                  schema:
-                    type: integer
             responses:
-                "204":
-                    description: deleted
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/assets.GetAssetResponse'
+                    description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            description: Steady-state requests/min for this API key
+                            schema:
+                                type: integer
+                        X-RateLimit-Remaining:
+                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
+                            schema:
+                                type: integer
+                        X-RateLimit-Reset:
+                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
+                            schema:
+                                type: integer
                 "400":
                     content:
                         application/json:
@@ -1196,16 +1286,15 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
-                "500":
-                    content:
-                        application/json:
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
                             schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
+                                type: integer
             security:
                 - APIKey:
-                    - assets:write
-            summary: Remove a tag from an asset
+                    - assets:read
+            summary: Look up an asset by external_key
             tags:
                 - assets
     /api/v1/locations:

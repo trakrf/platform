@@ -12,8 +12,8 @@ vi.mock('@/stores/locations/locationStore', () => ({
     getState: () => ({
       cache: {
         byExternalKey: new Map([
-          ['WH-A', { id: 1, name: 'Warehouse A', identifier: 'WH-A' }],
-          ['OFF-B', { id: 2, name: 'Office B', identifier: 'OFF-B' }],
+          ['WH-A', { id: 1, name: 'Warehouse A', external_key: 'WH-A' }],
+          ['OFF-B', { id: 2, name: 'Office B', external_key: 'OFF-B' }],
         ]),
       },
     }),
@@ -30,11 +30,11 @@ const mockAssets: Asset[] = [
   {
     id: 1,
     id: 1,
-    identifier: 'ASSET-001',
+    external_key: 'ASSET-001',
     name: 'Laptop Dell XPS',
     type: 'device',
     description: 'Development laptop',
-    current_location: 'WH-A',
+    current_location_external_key: 'WH-A',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     metadata: {},
@@ -49,11 +49,11 @@ const mockAssets: Asset[] = [
   {
     id: 2,
     id: 2,
-    identifier: 'ASSET-002',
+    external_key: 'ASSET-002',
     name: 'Office Chair',
     type: 'asset',
     description: 'Ergonomic chair',
-    current_location: 'OFF-B',
+    current_location_external_key: 'OFF-B',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     metadata: {},
@@ -65,11 +65,11 @@ const mockAssets: Asset[] = [
   {
     id: 3,
     id: 3,
-    identifier: 'ASSET-003',
+    external_key: 'ASSET-003',
     name: 'Asset without location',
     type: 'inventory',
     description: '',
-    current_location: null,
+    current_location_external_key: null,
     valid_from: '2024-02-01T00:00:00Z',
     valid_to: null,
     metadata: {},
