@@ -152,6 +152,32 @@ var requiredFields = map[string][]string{
 
 	// orgs
 	"orgs.OrgMeView": {"id", "name"},
+
+	// assets envelopes
+	"assets.AddTagResponse":      {"data"},
+	"assets.CreateAssetResponse": {"data"},
+	"assets.GetAssetResponse":    {"data"},
+	"assets.ListAssetsResponse":  {"data", "limit", "offset", "total_count"},
+	"assets.UpdateAssetResponse": {"data"},
+
+	// locations envelopes
+	"locations.AddTagResponse":          {"data"},
+	"locations.CreateLocationResponse":  {"data"},
+	"locations.GetLocationResponse":     {"data"},
+	"locations.ListAncestorsResponse":   {"data", "limit", "offset", "total_count"},
+	"locations.ListChildrenResponse":    {"data", "limit", "offset", "total_count"},
+	"locations.ListDescendantsResponse": {"data", "limit", "offset", "total_count"},
+	"locations.ListLocationsResponse":   {"data", "limit", "offset", "total_count"},
+	"locations.UpdateLocationResponse":  {"data"},
+
+	// orgs envelopes
+	"orgs.CreateAPIKeyResponse": {"data"},
+	"orgs.GetOrgMeResponse":     {"data"},
+	"orgs.ListAPIKeysResponse":  {"data", "limit", "offset", "total_count"},
+
+	// reports envelopes
+	"reports.AssetHistoryResponse":         {"data", "limit", "offset", "total_count"},
+	"reports.ListCurrentLocationsResponse": {"data", "limit", "offset", "total_count"},
 }
 
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse

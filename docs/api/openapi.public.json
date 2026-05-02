@@ -289,6 +289,9 @@
             "$ref": "#/components/schemas/shared.Tag"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "assets.CreateAssetResponse": {
@@ -297,6 +300,9 @@
             "$ref": "#/components/schemas/asset.PublicAssetView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "assets.GetAssetResponse": {
@@ -305,6 +311,9 @@
             "$ref": "#/components/schemas/asset.PublicAssetView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "assets.ListAssetsResponse": {
@@ -328,6 +337,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "assets.UpdateAssetResponse": {
@@ -336,6 +351,9 @@
             "$ref": "#/components/schemas/asset.PublicAssetView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "errors.ErrorResponse": {
@@ -595,6 +613,9 @@
             "$ref": "#/components/schemas/shared.Tag"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "locations.CreateLocationResponse": {
@@ -603,6 +624,9 @@
             "$ref": "#/components/schemas/location.PublicLocationView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "locations.GetLocationResponse": {
@@ -611,6 +635,9 @@
             "$ref": "#/components/schemas/location.PublicLocationView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "locations.ListAncestorsResponse": {
@@ -634,6 +661,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.ListChildrenResponse": {
@@ -657,6 +690,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.ListDescendantsResponse": {
@@ -680,6 +719,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.ListLocationsResponse": {
@@ -703,6 +748,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.UpdateLocationResponse": {
@@ -711,6 +762,9 @@
             "$ref": "#/components/schemas/location.PublicLocationView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "orgs.CreateAPIKeyResponse": {
@@ -719,6 +773,9 @@
             "$ref": "#/components/schemas/apikey.APIKeyCreateResponse"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "orgs.GetOrgMeResponse": {
@@ -727,6 +784,9 @@
             "$ref": "#/components/schemas/orgs.OrgMeView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "orgs.ListAPIKeysResponse": {
@@ -750,6 +810,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "orgs.OrgMeView": {
@@ -853,6 +919,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "reports.ListCurrentLocationsResponse": {
@@ -876,6 +948,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "shared.Tag": {
