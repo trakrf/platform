@@ -742,11 +742,6 @@ components:
             description: 'TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account.'
             scheme: bearer
             type: http
-        BearerAuth:
-            bearerFormat: JWT
-            description: Session JWT for internal endpoints (platform frontend uses this).
-            scheme: bearer
-            type: http
 info:
     contact:
         email: support@trakrf.id
@@ -2297,7 +2292,6 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - BearerAuth: []
                 - APIKey:
                     - keys:admin
             summary: List active API keys for an organization
@@ -2359,7 +2353,6 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - BearerAuth: []
                 - APIKey:
                     - keys:admin
             summary: Create a new API key for an organization
@@ -2415,7 +2408,6 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - BearerAuth: []
                 - APIKey:
                     - keys:admin
             summary: Revoke an API key
@@ -2473,7 +2465,6 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - BearerAuth: []
                 - APIKey:
                     - keys:admin
             summary: Revoke an API key by jti
