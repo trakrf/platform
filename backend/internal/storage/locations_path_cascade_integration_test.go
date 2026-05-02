@@ -143,10 +143,10 @@ func TestRecomputeLocationPaths_FixesLegacyRows(t *testing.T) {
 	var childID int
 	err = pool.QueryRow(ctx, `
 		INSERT INTO trakrf.locations
-		(name, external_key, parent_location_id, path, valid_from, is_active, org_id)
-		VALUES ($1, $2, $3, $4::ltree, $5, $6, $7)
+		(name, external_key, parent_location_id, path, description, valid_from, is_active, org_id)
+		VALUES ($1, $2, $3, $4::ltree, $5, $6, $7, $8)
 		RETURNING id
-	`, "WHS-07-03", "WHS-07-03", parent.ID, "WHS-01.WHS-07-03", time.Now(), true, orgID).Scan(&childID)
+	`, "WHS-07-03", "WHS-07-03", parent.ID, "WHS-01.WHS-07-03", "", time.Now(), true, orgID).Scan(&childID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, "ALTER TABLE trakrf.locations ENABLE TRIGGER maintain_location_path")
