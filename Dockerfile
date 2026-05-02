@@ -50,6 +50,15 @@ RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
 # Copy backend source
 COPY backend/ .
 
+# Stub frontend/dist/index.html before swag init so --parseDependency walks
+# main.go's //go:embed frontend/dist successfully. Without this, swag falls
+# back to fully-qualified Go package names (e.g. internal_handlers_X) and the
+# generated swagger.json schema names diverge from the committed public spec
+# — and from the requiredFields/nullableFields maps in apispec postprocess.
+# The real frontend/dist is copied from frontend-builder a few steps later;
+# this stub only exists to keep swag's parser happy. TRA-505.
+RUN mkdir -p frontend/dist && touch frontend/dist/index.html
+
 # Generate Swagger 2.0 spec (docs directory is gitignored; swag emits docs/swagger.json)
 RUN swag init -g main.go --parseDependency --parseInternal
 
