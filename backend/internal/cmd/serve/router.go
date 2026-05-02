@@ -163,10 +163,10 @@ func setupRouter(
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}/descendants", locationsHandler.GetDescendants)
 
 		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
-		// require scans:read per TRA-392 — they moved under /locations/ and /assets/ for URL
-		// aesthetics but are scan data, not asset/location CRUD data.
-		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
-		r.With(middleware.RequireScope("scans:read")).Get("/api/v1/assets/{id}/history", reportsHandler.GetAssetHistory)
+		// require history:read per TRA-578 — these endpoints expose scan-derived
+		// history data; the scope name aligns with the /history endpoint vocabulary.
+		r.With(middleware.RequireScope("history:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
+		r.With(middleware.RequireScope("history:read")).Get("/api/v1/assets/{id}/history", reportsHandler.GetAssetHistory)
 	})
 
 	// TRA-397 public write surface — accepts API-key OR session auth via EitherAuth.
