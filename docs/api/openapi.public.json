@@ -1096,7 +1096,20 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "type": "string"
+              "items": {
+                "enum": [
+                  "external_key",
+                  "-external_key",
+                  "name",
+                  "-name",
+                  "created_at",
+                  "-created_at",
+                  "updated_at",
+                  "-updated_at"
+                ],
+                "type": "string"
+              },
+              "type": "array"
             }
           }
         ],
@@ -1888,6 +1901,21 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "comma-separated; prefix '-' for DESC",
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "items": {
+                "enum": [
+                  "timestamp",
+                  "-timestamp"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            }
           }
         ],
         "responses": {
@@ -2166,7 +2194,20 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "type": "string"
+              "items": {
+                "enum": [
+                  "path",
+                  "-path",
+                  "external_key",
+                  "-external_key",
+                  "name",
+                  "-name",
+                  "created_at",
+                  "-created_at"
+                ],
+                "type": "string"
+              },
+              "type": "array"
             }
           }
         ],
@@ -2395,7 +2436,18 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "type": "string"
+              "items": {
+                "enum": [
+                  "last_seen",
+                  "-last_seen",
+                  "asset",
+                  "-asset",
+                  "location",
+                  "-location"
+                ],
+                "type": "string"
+              },
+              "type": "array"
             }
           }
         ],

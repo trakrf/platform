@@ -49,6 +49,7 @@ type AssetHistoryResponse struct {
 // @Param offset query int false "min 0"    default(0)
 // @Param from query string false "RFC 3339 start timestamp"
 // @Param to query string false "RFC 3339 end timestamp"
+// @Param sort query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(timestamp, -timestamp)
 // @Success 200 {object} reports.AssetHistoryResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"

@@ -346,7 +346,7 @@ type ListDescendantsResponse struct {
 // @Param parent_external_key query string false "filter by parent's external_key (may repeat)"
 // @Param is_active           query bool   false "filter by active flag"
 // @Param q                   query string false "substring search on name, external_key, description, and active tag values"
-// @Param sort                query string false "comma-separated, prefix '-' for DESC"
+// @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(path, -path, external_key, -external_key, name, -name, created_at, -created_at)
 // @Success 200 {object} locations.ListLocationsResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"

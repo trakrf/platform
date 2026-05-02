@@ -363,7 +363,7 @@ type UpdateAssetResponse struct {
 // @Param location_external_key query string false "filter by current location external_key (may repeat)"
 // @Param is_active             query bool   false "filter by active flag"
 // @Param q                     query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
-// @Param sort                  query string false "comma-separated; prefix '-' for DESC"
+// @Param sort                  query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(external_key, -external_key, name, -name, created_at, -created_at, updated_at, -updated_at)
 // @Success 200 {object} assets.ListAssetsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
