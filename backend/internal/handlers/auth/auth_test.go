@@ -160,6 +160,6 @@ func TestLogin_WrongPassword_Respond401(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Authentication required", resp.Error.Title)
+	assert.Equal(t, "Unauthorized", resp.Error.Title)
 	assert.Equal(t, "Invalid email or password", resp.Error.Detail)
 }

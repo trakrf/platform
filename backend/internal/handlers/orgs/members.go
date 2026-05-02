@@ -32,14 +32,16 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	members, err := h.service.ListMembers(r.Context(), orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.MemberListFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.MemberListFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -67,34 +69,39 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	userID, err := strconv.Atoi(chi.URLParam(r, "userId"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.MemberUpdateInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.MemberUpdateInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	var request organization.UpdateMemberRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.MemberUpdateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.MemberUpdateValidationFail, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	role := models.OrgRole(request.Role)
 	if !role.IsValid() {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.MemberInvalidRole, "", middleware.GetRequestID(r.Context()))
+			apierrors.MemberInvalidRole, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -106,11 +113,13 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 		}
 		if err.Error() == "cannot demote the last admin" {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.MemberLastAdmin, "", middleware.GetRequestID(r.Context()))
+				apierrors.MemberLastAdmin, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.MemberUpdateFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.MemberUpdateFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -143,14 +152,16 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	userID, err := strconv.Atoi(chi.URLParam(r, "userId"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.MemberUpdateInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.MemberUpdateInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -158,7 +169,8 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err.Error() == "cannot remove yourself" {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.MemberSelfRemoval, "", middleware.GetRequestID(r.Context()))
+				apierrors.MemberSelfRemoval, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		if err.Error() == "member not found" {
@@ -167,11 +179,13 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		}
 		if err.Error() == "cannot remove the last admin" {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.MemberLastAdmin, "", middleware.GetRequestID(r.Context()))
+				apierrors.MemberLastAdmin, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.MemberRemoveFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.MemberRemoveFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 

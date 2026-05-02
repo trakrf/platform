@@ -238,7 +238,7 @@ func TestAuth_MissingHeader_Respond401(t *testing.T) {
 	}
 	var resp apierrors.ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error.Title != "Authentication required" {
+	if resp.Error.Title != "Unauthorized" {
 		t.Errorf("title = %q, want normalized", resp.Error.Title)
 	}
 	if resp.Error.Detail != "Authorization header is required" {
@@ -322,8 +322,8 @@ func TestAPIKey_MissingHeader_Respond401(t *testing.T) {
 	}
 	var resp apierrors.ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error.Title != "Authentication required" {
-		t.Errorf("title = %q, want %q", resp.Error.Title, "Authentication required")
+	if resp.Error.Title != "Unauthorized" {
+		t.Errorf("title = %q, want %q", resp.Error.Title, "Unauthorized")
 	}
 	if resp.Error.Detail != "Authorization header is required" {
 		t.Errorf("detail = %q, want canonical missing-header string", resp.Error.Detail)

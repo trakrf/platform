@@ -14,7 +14,7 @@ import (
 // access log; no useful per-call variability remains.
 func Respond405(w http.ResponseWriter, r *http.Request, requestID string) {
 	WriteJSONError(w, r, http.StatusMethodNotAllowed, apierrors.ErrMethodNotAllowed,
-		"Method not allowed", "", requestID)
+		"", requestID)
 }
 
 // Respond415 writes a normalized unsupported-media-type response. Used by the
@@ -27,7 +27,7 @@ func Respond405(w http.ResponseWriter, r *http.Request, requestID string) {
 // endpoint, but that detail is not surfaced in the public-facing error.
 func Respond415(w http.ResponseWriter, r *http.Request, requestID string) {
 	WriteJSONError(w, r, http.StatusUnsupportedMediaType, apierrors.ErrUnsupportedMedia,
-		"Unsupported media type", "Content-Type must be application/json", requestID)
+		"Content-Type must be application/json", requestID)
 }
 
 // RespondMissingOrgContext writes the canonical 422 envelope used when
@@ -45,7 +45,6 @@ func Respond415(w http.ResponseWriter, r *http.Request, requestID string) {
 // per-call to keep the contract clean for client-side branching.
 func RespondMissingOrgContext(w http.ResponseWriter, r *http.Request, requestID string) {
 	WriteJSONError(w, r, http.StatusUnprocessableEntity, apierrors.ErrMissingOrgContext,
-		"Organization context required",
 		"This request requires an active organization context. Select an organization or re-authenticate.",
 		requestID)
 }

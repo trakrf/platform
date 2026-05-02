@@ -65,7 +65,8 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-				"Failed to resolve parent key", "", reqID)
+				"Failed to resolve parent key", reqID)
+
 			return
 		}
 		parentID := parent.ID
@@ -78,14 +79,16 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", "", reqID)
+			"Invalid org id", reqID)
+
 		return
 	}
 
 	var req apikey.CreateAPIKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid JSON body", "", reqID)
+			"Invalid JSON body", reqID)
+
 		return
 	}
 	if err := validate.Struct(req); err != nil {
@@ -95,7 +98,8 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	for _, s := range req.Scopes {
 		if !apikey.ValidScopes[s] {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-				"Invalid scope", "Unknown scope: "+s, reqID)
+				"Unknown scope: "+s, reqID)
+
 			return
 		}
 	}
@@ -104,14 +108,16 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	count, err := h.storage.CountActiveAPIKeys(r.Context(), orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to check key count", "", reqID)
+			"Failed to check key count", reqID)
+
 		return
 	}
 	if count >= apikey.ActiveKeyCap {
 		httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-			"Key limit reached",
+
 			"Organization has reached the 10 active API key limit. Revoke an unused key first.",
 			reqID)
+
 		return
 	}
 
@@ -119,14 +125,16 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		creator, req.ExpiresAt)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to create api key", "", reqID)
+			"Failed to create api key", reqID)
+
 		return
 	}
 
 	signed, err := jwt.GenerateAPIKey(key.JTI, orgID, req.Scopes, req.ExpiresAt)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to sign api key", "", reqID)
+			"Failed to sign api key", reqID)
+
 		return
 	}
 
@@ -163,7 +171,8 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", "", reqID)
+			"Invalid org id", reqID)
+
 		return
 	}
 
@@ -176,14 +185,16 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	keys, err := h.storage.ListActiveAPIKeysPaginated(r.Context(), orgID, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to list api keys", "", reqID)
+			"Failed to list api keys", reqID)
+
 		return
 	}
 
 	total, err := h.storage.CountActiveAPIKeys(r.Context(), orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to count api keys", "", reqID)
+			"Failed to count api keys", reqID)
+
 		return
 	}
 
@@ -234,13 +245,15 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", "", reqID)
+			"Invalid org id", reqID)
+
 		return
 	}
 	keyID, err := strconv.Atoi(chi.URLParam(r, "key_id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid key id", "", reqID)
+			"Invalid key id", reqID)
+
 		return
 	}
 
@@ -250,7 +263,8 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to revoke api key", "", reqID)
+			"Failed to revoke api key", reqID)
+
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -278,13 +292,15 @@ func (h *Handler) RevokeAPIKeyByJTI(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", "", reqID)
+			"Invalid org id", reqID)
+
 		return
 	}
 	jti, err := uuid.Parse(chi.URLParam(r, "jti"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid jti", "", reqID)
+			"Invalid jti", reqID)
+
 		return
 	}
 
@@ -294,7 +310,8 @@ func (h *Handler) RevokeAPIKeyByJTI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to revoke api key", "", reqID)
+			"Failed to revoke api key", reqID)
+
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

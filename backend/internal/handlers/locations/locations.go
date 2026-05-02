@@ -117,12 +117,14 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-				apierrors.LocationCreateFailed, fErr.Message, requestID)
+				fErr.Message, requestID)
+
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.LocationCreateFailed, fErr.Message, requestID,
+			fErr.Message, requestID,
 			[]modelerrors.FieldError{*fErr})
+
 		return
 	}
 	request.ParentID = resolved
@@ -140,7 +142,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.LocationCreateFailed, err.Error(), requestID)
+				err.Error(), requestID)
+
 			return
 		}
 		httputil.RespondStorageError(w, r, err, requestID)
@@ -198,12 +201,13 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	if _, ok := explicitNulls["valid_from"]; ok {
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.LocationUpdateFailed, "validation failed", reqID,
+			"validation failed", reqID,
 			[]modelerrors.FieldError{{
 				Field:   "valid_from",
 				Code:    "invalid_value",
 				Message: "valid_from cannot be null; omit the field to leave unchanged, or provide a date",
 			}})
+
 		return
 	}
 	if _, ok := explicitNulls["valid_to"]; ok {
@@ -219,12 +223,14 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-				apierrors.LocationUpdateFailed, fErr.Message, reqID)
+				fErr.Message, reqID)
+
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.LocationUpdateFailed, fErr.Message, reqID,
+			fErr.Message, reqID,
 			[]modelerrors.FieldError{*fErr})
+
 		return
 	}
 	request.ParentID = resolved
@@ -233,7 +239,8 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.LocationUpdateFailed, err.Error(), reqID)
+				err.Error(), reqID)
+
 			return
 		}
 		httputil.RespondStorageError(w, req, err, reqID)
@@ -343,7 +350,8 @@ type ListDescendantsResponse struct {
 // @ID locations.list
 // @Param limit               query int    false "max 200"  default(50)
 // @Param offset              query int    false "min 0"   default(0)
-// @Param parent_external_key query string false "filter by parent's external_key (may repeat)"
+// @Param parent_id            query int    false "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key"
+// @Param parent_external_key query string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id"
 // @Param is_active           query bool   false "filter by active flag"
 // @Param q                   query string false "substring search on name, external_key, description, and active tag values"
 // @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(path, -path, external_key, -external_key, name, -name, created_at, -created_at)
@@ -364,7 +372,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"parent_external_key", "is_active", "q"},
+		Filters:     []string{"parent_id", "parent_external_key", "is_active", "q"},
 		BoolFilters: []string{"is_active"},
 		Sorts:       []string{"path", "external_key", "name", "created_at"},
 	})
@@ -373,10 +381,42 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	// D-10: parent_id and parent_external_key are mutually exclusive — pick
+	// one form per request.
+	_, hasParentID := params.Filters["parent_id"]
+	_, hasParentExtKey := params.Filters["parent_external_key"]
+	if hasParentID && hasParentExtKey {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"parent_id and parent_external_key are mutually exclusive", reqID,
+			[]modelerrors.FieldError{{
+				Field:   "parent_external_key",
+				Code:    "invalid_value",
+				Message: "parent_id and parent_external_key are mutually exclusive",
+			}})
+		return
+	}
+
 	f := location.ListFilter{
 		ParentExternalKeys: params.Filters["parent_external_key"],
 		Limit:              params.Limit,
 		Offset:             params.Offset,
+	}
+	if vs, ok := params.Filters["parent_id"]; ok && len(vs) > 0 {
+		f.ParentIDs = make([]int, 0, len(vs))
+		for _, s := range vs {
+			n, err := strconv.Atoi(s)
+			if err != nil || n < 1 {
+				httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+					"invalid parent_id", reqID,
+					[]modelerrors.FieldError{{
+						Field:   "parent_id",
+						Code:    "invalid_value",
+						Message: fmt.Sprintf("parent_id %q must be a positive integer", s),
+					}})
+				return
+			}
+			f.ParentIDs = append(f.ParentIDs, n)
+		}
 	}
 	if vs, ok := params.Filters["is_active"]; ok && len(vs) > 0 {
 		b := vs[0] == "true"
@@ -392,14 +432,16 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	items, err := handler.storage.ListLocationsFiltered(req.Context(), orgID, f)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationListFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	total, err := handler.storage.CountLocationsFiltered(req.Context(), orgID, f)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationListFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
@@ -442,14 +484,16 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	view, err := handler.storage.GetLocationViewByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 	if view == nil {
@@ -493,6 +537,14 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 	}
 
 	q := req.URL.Query()
+	// D-4: duplicate external_key params silently first-wins is an LLM-hostile
+	// bug; reject them explicitly. Repeated values (same or different) → 400.
+	if len(q["external_key"]) > 1 {
+		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			"exactly one of: external_key", reqID)
+		return
+	}
+
 	naturalKeyParams := []string{"external_key"}
 	provided := 0
 	for _, k := range naturalKeyParams {
@@ -503,12 +555,14 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 
 	if provided == 0 {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Missing natural-key parameter", "exactly one of: external_key", reqID)
+			"exactly one of: external_key", reqID)
+
 		return
 	}
 	if provided > 1 {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Multiple natural-key parameters", "exactly one of: external_key", reqID)
+			"exactly one of: external_key", reqID)
+
 		return
 	}
 
@@ -516,7 +570,8 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 	loc, err := handler.storage.GetLocationByExternalKey(req.Context(), orgID, externalKey)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 	if loc == nil {
@@ -567,14 +622,16 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	results, err := handler.storage.ListAncestorsPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	total, err := handler.storage.CountAncestors(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
@@ -624,14 +681,16 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 	results, err := handler.storage.ListDescendantsPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	total, err := handler.storage.CountDescendants(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
@@ -681,14 +740,16 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	results, err := handler.storage.ListChildrenPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	total, err := handler.storage.CountChildren(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
@@ -761,7 +822,8 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.LocationCreateFailed, err.Error(), requestID)
+				err.Error(), requestID)
+
 			return
 		}
 		httputil.RespondStorageError(w, r, err, requestID)
@@ -798,14 +860,16 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
 	loc, err := handler.storage.GetLocationByID(r.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 	if loc == nil || loc.OrgID != orgID {
@@ -823,7 +887,8 @@ func (handler *Handler) doRemoveLocationTag(w http.ResponseWriter, r *http.Reque
 	tagID, err := strconv.Atoi(tagIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"invalid tag ID", err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
@@ -843,14 +908,16 @@ func (handler *Handler) parseAndVerifyLocationID(w http.ResponseWriter, req *htt
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.LocationGetInvalidID, idParam), err.Error(), reqID)
+			err.Error(), reqID)
+
 		return 0, false
 	}
 
 	loc, err := handler.storage.GetLocationByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LocationGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return 0, false
 	}
 	if loc == nil || loc.OrgID != orgID {

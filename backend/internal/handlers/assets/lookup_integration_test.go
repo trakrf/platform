@@ -187,3 +187,50 @@ func TestLookup_CrossOrg_Returns404(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+// TRA-579 D-4: duplicate external_key parameters must be rejected with 400
+// rather than silently first-wins. The "looks correct, isn't" behavior is
+// the worst kind of failure for an LLM-driven integration.
+func TestLookup_DuplicateExternalKey_Returns400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	seedAsset(t, pool, orgID, "WIDGET-7", "Widget 7")
+
+	handler := NewHandler(store)
+	router := setupLookupRouter(handler)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"two distinct values", "/api/v1/assets/lookup?external_key=WIDGET-7&external_key=NOPE"},
+		{"two identical values", "/api/v1/assets/lookup?external_key=WIDGET-7&external_key=WIDGET-7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			req = withLookupOrgContext(req, orgID)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			assert.Equal(t, "bad_request", resp.Error.Type)
+			assert.Equal(t, "Bad request", resp.Error.Title)
+			assert.Contains(t, resp.Error.Detail, "exactly one of: external_key")
+		})
+	}
+}

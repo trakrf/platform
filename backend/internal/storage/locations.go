@@ -891,6 +891,10 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 	clauses := []string{"l.org_id = $1", "l.deleted_at IS NULL"}
 	args := []any{orgID}
 
+	if len(f.ParentIDs) > 0 {
+		args = append(args, f.ParentIDs)
+		clauses = append(clauses, fmt.Sprintf("p.id = ANY($%d::int[])", len(args)))
+	}
 	if len(f.ParentExternalKeys) > 0 {
 		args = append(args, f.ParentExternalKeys)
 		clauses = append(clauses, fmt.Sprintf("p.external_key = ANY($%d::text[])", len(args)))

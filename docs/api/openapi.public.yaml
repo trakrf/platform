@@ -1356,7 +1356,12 @@ paths:
                   schema:
                     default: 0
                     type: integer
-                - description: filter by parent's external_key (may repeat)
+                - description: filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key
+                  in: query
+                  name: parent_id
+                  schema:
+                    type: integer
+                - description: filter by parent's external_key (may repeat); mutually exclusive with parent_id
                   in: query
                   name: parent_external_key
                   schema:

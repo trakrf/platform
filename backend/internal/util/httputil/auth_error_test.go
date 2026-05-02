@@ -23,8 +23,8 @@ func TestRespond401_SetsWWWAuthenticateAndNormalizedTitle(t *testing.T) {
 
 	var resp apierrors.ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error.Title != "Authentication required" {
-		t.Errorf("title = %q, want Authentication required", resp.Error.Title)
+	if resp.Error.Title != "Unauthorized" {
+		t.Errorf("title = %q, want Unauthorized", resp.Error.Title)
 	}
 	if resp.Error.Type != string(apierrors.ErrUnauthorized) {
 		t.Errorf("type = %q, want %q", resp.Error.Type, apierrors.ErrUnauthorized)

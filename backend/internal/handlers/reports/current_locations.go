@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/report"
@@ -85,12 +84,13 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 			n, err := strconv.Atoi(s)
 			if err != nil || n < 1 {
 				httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-					apierrors.ReportCurrentLocationsFailed, "invalid location_id", reqID,
+					"invalid location_id", reqID,
 					[]modelerrors.FieldError{{
 						Field:   "location_id",
 						Code:    "invalid_value",
 						Message: fmt.Sprintf("location_id %q must be a positive integer", s),
 					}})
+
 				return
 			}
 			filter.LocationIDs = append(filter.LocationIDs, n)
@@ -106,13 +106,15 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	items, err := h.storage.ListCurrentLocations(r.Context(), orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportCurrentLocationsFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 	total, err := h.storage.CountCurrentLocations(r.Context(), orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportCurrentLocationsCount, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 

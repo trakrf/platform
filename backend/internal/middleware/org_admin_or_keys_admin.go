@@ -29,13 +29,15 @@ func RequireOrgAdminOrKeysAdmin(store OrgRoleStore) func(http.Handler) http.Hand
 				orgID, err := strconv.Atoi(orgIDStr)
 				if err != nil {
 					httputil.WriteJSONError(w, r, http.StatusBadRequest,
-						errors.ErrBadRequest, "Bad Request", "Invalid organization ID", reqID)
+						errors.ErrBadRequest, "Invalid organization ID", reqID)
+
 					return
 				}
 				if p.OrgID != orgID {
 					httputil.WriteJSONError(w, r, http.StatusForbidden,
-						errors.ErrForbidden, "Forbidden",
+						errors.ErrForbidden,
 						"API key is not authorized for this organization", reqID)
+
 					return
 				}
 				for _, s := range p.Scopes {
@@ -45,8 +47,9 @@ func RequireOrgAdminOrKeysAdmin(store OrgRoleStore) func(http.Handler) http.Hand
 					}
 				}
 				httputil.WriteJSONError(w, r, http.StatusForbidden,
-					errors.ErrForbidden, "Forbidden",
+					errors.ErrForbidden,
 					"Missing required scope: keys:admin", reqID)
+
 				return
 			}
 

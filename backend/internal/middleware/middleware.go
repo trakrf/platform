@@ -54,7 +54,8 @@ func Recovery(next http.Handler) http.Handler {
 					Msg("Panic recovered")
 
 				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
-					errors.ErrInternal, "Internal server error", "", requestID)
+					errors.ErrInternal, "Internal server error", requestID)
+
 			}
 		}()
 		next.ServeHTTP(w, r)

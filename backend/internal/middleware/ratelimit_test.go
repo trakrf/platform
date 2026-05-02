@@ -113,7 +113,7 @@ func TestRateLimit_DeniedRequestReturns429WithEnvelope(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, string(errors.ErrRateLimited), body.Error.Type)
-	require.Equal(t, "Rate limit exceeded", body.Error.Title)
+	require.Equal(t, "Rate limited", body.Error.Title)
 	require.Equal(t, 429, body.Error.Status)
 	require.Equal(t, "Retry after 1 seconds", body.Error.Detail)
 	require.Equal(t, "/api/v1/assets", body.Error.Instance)

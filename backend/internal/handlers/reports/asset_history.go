@@ -22,12 +22,13 @@ const (
 func respondInvalidTimestamp(w http.ResponseWriter, r *http.Request, field, reqID string) {
 	msg := fmt.Sprintf("Invalid '%s' timestamp; expected RFC 3339, e.g. 2026-04-21T00:00:00Z", field)
 	httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-		"Invalid request", msg, reqID,
+		msg, reqID,
 		[]modelerrors.FieldError{{
 			Field:   field,
 			Code:    "invalid_value",
 			Message: msg,
 		}})
+
 }
 
 // AssetHistoryResponse is the typed envelope returned by
@@ -76,14 +77,16 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.ReportInvalidAssetID, idParam), err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	assetRow, err := h.storage.GetAssetByID(r.Context(), orgID, &id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportAssetHistoryFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 	if assetRow == nil || assetRow.OrgID != orgID {
@@ -121,13 +124,15 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	items, err := h.storage.ListAssetHistory(r.Context(), assetRow.ID, orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportAssetHistoryFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 	total, err := h.storage.CountAssetHistory(r.Context(), assetRow.ID, orgID, filter)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.ReportAssetHistoryCount, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 

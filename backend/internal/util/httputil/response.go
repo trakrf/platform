@@ -37,21 +37,20 @@ type ErrorResponse struct {
 
 // WriteJSONError writes a standardized error response in RFC 7807 format.
 //
-// Contract for callers:
-//   - title is a stable, machine-readable summary of what went wrong, suitable
-//     for client-side branching (e.g. apierrors.AssetNotFound). Should not vary
-//     between calls for the same condition.
+// Contract:
+//   - title is derived from errType via errors.TitleForType — fixed per type,
+//     never per call. Per-call context belongs in detail.
 //   - detail is the specific, human-readable cause of this particular failure
-//     (e.g. err.Error() text or a templated message with the offending value).
-//     May be empty when the title alone fully describes the condition.
+//     (e.g. "asset id 999 is invalid", err.Error() text). May be empty when
+//     the type alone fully describes the condition.
 //
 // Module paths in detail are scrubbed before the response is written so that
 // internal package structure cannot leak through wrapped errors.
-func WriteJSONError(w http.ResponseWriter, r *http.Request, status int, errType errors.ErrorType, title, detail, requestID string) {
+func WriteJSONError(w http.ResponseWriter, r *http.Request, status int, errType errors.ErrorType, detail, requestID string) {
 	detail = sanitizeDetail(detail)
 	resp := ErrorResponse{}
 	resp.Error.Type = string(errType)
-	resp.Error.Title = title
+	resp.Error.Title = errors.TitleForType(errType)
 	resp.Error.Status = status
 	resp.Error.Detail = detail
 	resp.Error.Instance = r.URL.Path
@@ -86,11 +85,11 @@ func WriteJSON(w http.ResponseWriter, status int, data any) error {
 
 // WriteJSONErrorWithFields is WriteJSONError plus a populated fields[]
 // array. Used by RespondValidationError.
-func WriteJSONErrorWithFields(w http.ResponseWriter, r *http.Request, status int, errType errors.ErrorType, title, detail, requestID string, fields []errors.FieldError) {
+func WriteJSONErrorWithFields(w http.ResponseWriter, r *http.Request, status int, errType errors.ErrorType, detail, requestID string, fields []errors.FieldError) {
 	detail = sanitizeDetail(detail)
 	resp := ErrorResponse{}
 	resp.Error.Type = string(errType)
-	resp.Error.Title = title
+	resp.Error.Title = errors.TitleForType(errType)
 	resp.Error.Status = status
 	resp.Error.Detail = detail
 	resp.Error.Instance = r.URL.Path

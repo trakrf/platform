@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Migrating handheld React app as frontend component
+- TRA-579 BB15 D-4/D-6/D-10 platform-side fixes:
+  - `error.title` is now a fixed string per `error.type` (e.g. `validation_error` → "Validation failed", `bad_request` → "Bad request"). Per-call specifics live in `error.detail` and `error.fields[]`. Generated clients should branch on `error.type` and `error.fields[].code`.
+  - `GET /api/v1/assets/lookup` and `GET /api/v1/locations/lookup` now reject duplicate `external_key` query parameters with `400 bad_request` (previously: silent first-wins).
+  - `GET /api/v1/locations` now accepts `parent_id` (canonical) as a filter, mutually exclusive with `parent_external_key`.
+  - Wrong-resource title bug on tags POST conflict ("Failed to create asset" emitted on `/assets/{id}/tags`) is fixed; the conflict still returns 409 with the underlying duplicate-tag detail.
 - TRA-578 Public API surface cleanup:
   - `POST/GET/DELETE /api/v1/orgs/{id}/api-keys*` removed from the public OpenAPI spec. Key minting remains browser-mediated by design (see Authentication docs). The endpoints are still implemented and used by the SPA's avatar menu.
   - Renamed scope `scans:read` → `history:read` to align with the `/assets/{id}/history` and `/locations/current` endpoint vocabulary. Existing keys are migrated by `000039_rename_scans_read_scope`. JWTs minted before the migration with a literal `scans:read` claim will return 403 — pre-launch hard cut, no production keys exist.

@@ -33,7 +33,8 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	jobID, err := strconv.Atoi(jobIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.BulkImportJobInvalidID, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
@@ -51,7 +52,8 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	job, err := handler.storage.GetBulkImportJobByID(r.Context(), jobID, orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.BulkImportJobFailedToRetrieve, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
@@ -110,14 +112,16 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(6 * 1024 * 1024)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.BulkImportUploadFailedToParse, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.BulkImportUploadMissingFile, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 	defer file.Close()
@@ -135,7 +139,7 @@ func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 			errorType = modelerrors.ErrInternal
 		}
 
-		httputil.WriteJSONError(w, r, statusCode, errorType, apierrors.BulkImportUploadFailed, err.Error(), requestID)
+		httputil.WriteJSONError(w, r, statusCode, errorType, err.Error(), requestID)
 		return
 	}
 
