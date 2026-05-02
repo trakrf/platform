@@ -48,6 +48,13 @@ describe('ScopeSelector', () => {
     expect(within(locations).getByRole('option', { name: /read \+ write/i })).toBeInTheDocument();
   });
 
+  it('emits scans:read for "Read" on Scans', () => {
+    const onChange = vi.fn();
+    render(<ScopeSelector value={[]} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText(/scans/i), { target: { value: 'read' } });
+    expect(onChange).toHaveBeenCalledWith(['scans:read']);
+  });
+
   it('renders Key management row with None/Admin options', () => {
     render(<ScopeSelector value={[]} onChange={() => {}} />);
     const select = screen.getByLabelText(/key management/i);
