@@ -8,12 +8,12 @@ interface Props {
   onChange: (next: Scope[]) => void;
 }
 
-type ResourceKey = 'assets' | 'locations' | 'scans';
+type ResourceKey = 'assets' | 'locations' | 'history';
 
 const RESOURCES: { key: ResourceKey; label: string; hasWrite: boolean }[] = [
   { key: 'assets',    label: 'Assets',    hasWrite: true },
   { key: 'locations', label: 'Locations', hasWrite: true },
-  { key: 'scans',     label: 'Scans',     hasWrite: false },
+  { key: 'history',   label: 'History',   hasWrite: false },
 ];
 
 function levelFor(resource: ResourceKey, scopes: Scope[]): ResourceLevel {
