@@ -4,7 +4,6 @@ export type Scope =
   | 'locations:read'
   | 'locations:write'
   | 'scans:read'
-  | 'scans:write'
   | 'keys:admin';
 
 export interface APIKey {
@@ -41,7 +40,6 @@ export const ALL_SCOPES: Scope[] = [
   'locations:read',
   'locations:write',
   'scans:read',
-  'scans:write',
   'keys:admin',
 ];
 
