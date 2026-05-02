@@ -28,6 +28,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	injectTopLevelSecurity(doc)
+	stripBearerAuthScheme(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -87,6 +88,17 @@ func rewriteBearerSchemes(doc *openapi3.T) {
 			Description:  desc,
 		}
 	}
+}
+
+// stripBearerAuthScheme removes the BearerAuth security scheme from the
+// public spec's components. BearerAuth is the SPA session JWT and is not
+// part of the v1 public API surface (TRA-568). The internal postprocess
+// keeps it. Safe to call when the scheme is absent — no-ops in that case.
+func stripBearerAuthScheme(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.SecuritySchemes == nil {
+		return
+	}
+	delete(doc.Components.SecuritySchemes, "BearerAuth")
 }
 
 // injectTopLevelSecurity sets the document-level security requirement to
