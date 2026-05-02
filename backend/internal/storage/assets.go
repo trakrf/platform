@@ -499,9 +499,11 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, orgID, id int) (*asset.A
 // CreateAssetWithTags and UpdateAsset to emit the public write-response
 // shape. Returns (nil, nil) if the asset doesn't exist or is soft-deleted.
 func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
-	// TRA-477: prefer an explicit current_location_id, fall back to the
-	// location of the latest scan (matches list semantics so single-asset
-	// reads don't silently drop the inferred location).
+	// TRA-576: align with ListAssetsFiltered. Latest scan wins; explicit
+	// current_location_id is the fallback (TRA-495). Selecting the
+	// coalesced expression for both the int and the JOIN guarantees the
+	// FK pair is always derived from the same row — current_location_id
+	// and current_location_external_key are populated or null together.
 	query := `
 		WITH latest_scan AS (
 			SELECT s.location_id
@@ -512,13 +514,14 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 		)
 		SELECT
 			a.id, a.org_id, a.external_key, a.name, a.description,
-			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
+			COALESCE(ls.location_id, a.current_location_id),
+			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.external_key
 		FROM trakrf.assets a
 		LEFT JOIN latest_scan ls ON true
 		LEFT JOIN trakrf.locations l
-			ON l.id = COALESCE(a.current_location_id, ls.location_id)
+			ON l.id = COALESCE(ls.location_id, a.current_location_id)
 			AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE a.id = $1 AND a.org_id = $2 AND a.deleted_at IS NULL
 		LIMIT 1
@@ -597,9 +600,10 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 func (s *Storage) GetAssetByExternalKey(
 	ctx context.Context, orgID int, externalKey string,
 ) (*asset.AssetWithLocation, error) {
-	// TRA-477: same COALESCE(explicit FK, latest-scan) pattern as
-	// getAssetWithLocationByID so external-key reads surface the
-	// scan-inferred location.
+	// TRA-576: same scan-first / FK-fallback expression as
+	// ListAssetsFiltered and getAssetWithLocationByID, so all read paths
+	// return identical (current_location_id, current_location_external_key)
+	// pairs.
 	query := `
 		WITH latest_scan AS (
 			SELECT s.location_id
@@ -614,13 +618,14 @@ func (s *Storage) GetAssetByExternalKey(
 		)
 		SELECT
 			a.id, a.org_id, a.external_key, a.name, a.description,
-			a.current_location_id, a.valid_from, a.valid_to, a.metadata,
+			COALESCE(ls.location_id, a.current_location_id),
+			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
 			l.external_key
 		FROM trakrf.assets a
 		LEFT JOIN latest_scan ls ON true
 		LEFT JOIN trakrf.locations l
-			ON l.id = COALESCE(a.current_location_id, ls.location_id)
+			ON l.id = COALESCE(ls.location_id, a.current_location_id)
 			AND l.org_id = a.org_id AND l.deleted_at IS NULL
 		WHERE a.org_id = $1 AND a.external_key = $2 AND a.deleted_at IS NULL
 		LIMIT 1
