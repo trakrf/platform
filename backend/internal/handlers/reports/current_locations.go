@@ -43,7 +43,7 @@ type ListCurrentLocationsResponse struct {
 // @Param location_external_key query string false "filter by location external_key (may repeat)"
 // @Param q                     query string false "substring search (case-insensitive) on asset name, external_key, and active tag values"
 // @Param include_deleted       query bool   false "include rows for soft-deleted assets" default(false)
-// @Param sort                  query string false "comma-separated sort fields; prefix '-' for DESC"
+// @Param sort                  query []string false "comma-separated sort fields; prefix '-' for DESC" collectionFormat(csv) Enums(last_seen, -last_seen, asset, -asset, location, -location)
 // @Success 200 {object} reports.ListCurrentLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"

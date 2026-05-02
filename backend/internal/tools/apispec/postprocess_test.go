@@ -437,6 +437,76 @@ func TestPostprocessInternal_KeepsBearerAuth(t *testing.T) {
 	assert.Equal(t, "JWT", scheme.Value.BearerFormat)
 }
 
+// TestNormalizeArrayQueryParams verifies that in:query parameters with
+// type:array receive style:form and explode:false, that non-array (string)
+// params are untouched, and that a param whose Style is already non-default is
+// not overwritten.
+func TestNormalizeArrayQueryParams(t *testing.T) {
+	f := false
+	boolFalse := &f
+
+	makeDoc := func(params openapi3.Parameters) *openapi3.T {
+		doc := &openapi3.T{
+			OpenAPI: "3.0.0",
+			Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+			Paths:   openapi3.NewPaths(),
+		}
+		doc.Paths.Set("/things", &openapi3.PathItem{
+			Get: &openapi3.Operation{
+				Parameters: params,
+			},
+		})
+		return doc
+	}
+
+	t.Run("sets style+explode on array query param", func(t *testing.T) {
+		doc := makeDoc(openapi3.Parameters{
+			{Value: &openapi3.Parameter{
+				Name:   "sort",
+				In:     "query",
+				Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeArray}}},
+			}},
+			{Value: &openapi3.Parameter{
+				Name:   "filter",
+				In:     "query",
+				Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+			}},
+		})
+
+		normalizeArrayQueryParams(doc)
+
+		params := doc.Paths.Value("/things").Get.Parameters
+		arrayParam := params[0].Value
+		stringParam := params[1].Value
+
+		assert.Equal(t, "form", arrayParam.Style, "array param must get style:form")
+		require.NotNil(t, arrayParam.Explode, "array param must get explode set")
+		assert.Equal(t, false, *arrayParam.Explode, "array param must get explode:false")
+
+		assert.Equal(t, "", stringParam.Style, "string param style must remain empty")
+		assert.Nil(t, stringParam.Explode, "string param explode must remain nil")
+	})
+
+	t.Run("does not overwrite existing non-default Style", func(t *testing.T) {
+		doc := makeDoc(openapi3.Parameters{
+			{Value: &openapi3.Parameter{
+				Name:    "tags",
+				In:      "query",
+				Style:   "spaceDelimited",
+				Explode: boolFalse,
+				Schema:  &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeArray}}},
+			}},
+		})
+
+		normalizeArrayQueryParams(doc)
+
+		p := doc.Paths.Value("/things").Get.Parameters[0].Value
+		assert.Equal(t, "spaceDelimited", p.Style, "pre-existing Style must not be overwritten")
+		require.NotNil(t, p.Explode)
+		assert.Equal(t, false, *p.Explode, "pre-existing Explode must not be overwritten")
+	})
+}
+
 // withEmptyRequiredFields clears the package-level requiredFields map for the
 // duration of a test and restores it on cleanup. Tests that exercise
 // postprocessPublic / postprocessInternal against synthetic minimal docs use

@@ -27,6 +27,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	}
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
+	normalizeArrayQueryParams(doc)
 	injectTopLevelSecurity(doc)
 	stripBearerAuthScheme(doc)
 	doc.Info.Title = "TrakRF API"
@@ -54,6 +55,7 @@ func postprocessInternal(doc *openapi3.T) error {
 	}
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
+	normalizeArrayQueryParams(doc)
 	doc.Info.Title = "TrakRF Internal API — not for customer use"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -381,4 +383,53 @@ var timestampFieldNames = regexp.MustCompile(`^(valid_from|valid_to|timestamp|la
 
 func isTimestampField(name string) bool {
 	return timestampFieldNames.MatchString(name)
+}
+
+// normalizeArrayQueryParams walks every operation parameter in doc.Paths and,
+// for each in:query parameter whose schema is type:array, sets Style to "form"
+// and Explode to false. This corrects the OpenAPI 3 default (style:form,
+// explode:true — i.e. ?sort=a&sort=b) to match the actual CSV wire format the
+// server expects (?sort=a,-b). kin-openapi's openapi2conv.ToV3 drops Swagger
+// 2.0's collectionFormat, leaving the default that tells codegen to send
+// multi-value instead of comma-separated.
+//
+// The pass is idempotent and does not clobber Style/Explode that are already
+// set to a non-default (non-zero) value.
+func normalizeArrayQueryParams(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	f := false
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			for _, pRef := range op.Parameters {
+				if pRef == nil || pRef.Value == nil {
+					continue
+				}
+				p := pRef.Value
+				if p.In != "query" {
+					continue
+				}
+				if p.Schema == nil || p.Schema.Value == nil {
+					continue
+				}
+				if !p.Schema.Value.Type.Is(openapi3.TypeArray) {
+					continue
+				}
+				// Only set if not already overridden to a non-default value.
+				if p.Style == "" {
+					p.Style = "form"
+				}
+				if p.Explode == nil {
+					p.Explode = &f
+				}
+			}
+		}
+	}
 }
