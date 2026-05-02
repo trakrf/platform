@@ -415,6 +415,71 @@ func TestCreateAPIKey_ValidationFailed_JSONFieldNames(t *testing.T) {
 	assert.Contains(t, fieldNames, "scopes")
 }
 
+// TestCreateAPIKey_RejectsScansWrite pins the TRA-571 contract: the public
+// CreateAPIKey handler must reject scans:write because the scope is no
+// longer in apikey.ValidScopes. Internal handlers still reference the
+// literal "scans:write" string against JWT claims (router.go RequireScope
+// and inventory/save.go @Security annotation), but no new key may be
+// minted with it via the public surface.
+func TestCreateAPIKey_RejectsScansWrite(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-tra571")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	_, sessionToken := seedAdminUser(t, pool, orgID)
+
+	r := newAdminRouter(t, store)
+
+	body := []byte(`{"name":"tra-571-guard","scopes":["scans:write"]}`)
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID),
+		bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	assert.Equal(t, "Invalid scope", resp.Error.Title)
+	assert.Contains(t, resp.Error.Detail, "scans:write",
+		"detail must name the offending scope so the integrator knows what to remove")
+}
+
+// TestCreateAPIKey_AcceptsScansRead is the positive companion: scans:read
+// is still a valid public scope and must continue to mint cleanly.
+func TestCreateAPIKey_AcceptsScansRead(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-tra571-read")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	_, sessionToken := seedAdminUser(t, pool, orgID)
+
+	r := newAdminRouter(t, store)
+
+	body := []byte(`{"name":"tra-571-positive","scopes":["scans:read"]}`)
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID),
+		bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+}
+
 func TestCreateAPIKey_ByAPIKeyPrincipal(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-keys-admin")
 	store, cleanup := testutil.SetupTestDB(t)
