@@ -30,6 +30,14 @@
             "type": "array"
           }
         },
+        "required": [
+          "key",
+          "id",
+          "jti",
+          "name",
+          "scopes",
+          "created_at"
+        ],
         "type": "object"
       },
       "apikey.APIKeyListItem": {
@@ -39,6 +47,7 @@
             "type": "string"
           },
           "created_by": {
+            "nullable": true,
             "type": "integer"
           },
           "created_by_key_id": {
@@ -70,6 +79,15 @@
             "type": "array"
           }
         },
+        "required": [
+          "id",
+          "jti",
+          "name",
+          "scopes",
+          "created_by",
+          "created_by_key_id",
+          "created_at"
+        ],
         "type": "object"
       },
       "apikey.CreateAPIKeyRequest": {
@@ -204,6 +222,19 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "external_key",
+          "name",
+          "current_location_id",
+          "current_location_external_key",
+          "metadata",
+          "is_active",
+          "valid_from",
+          "created_at",
+          "updated_at",
+          "tags"
+        ],
         "type": "object"
       },
       "asset.UpdateAssetRequest": {
@@ -258,6 +289,9 @@
             "$ref": "#/components/schemas/shared.Tag"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "assets.CreateAssetResponse": {
@@ -266,6 +300,9 @@
             "$ref": "#/components/schemas/asset.PublicAssetView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "assets.GetAssetResponse": {
@@ -274,6 +311,9 @@
             "$ref": "#/components/schemas/asset.PublicAssetView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "assets.ListAssetsResponse": {
@@ -297,6 +337,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "assets.UpdateAssetResponse": {
@@ -305,6 +351,9 @@
             "$ref": "#/components/schemas/asset.PublicAssetView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "errors.ErrorResponse": {
@@ -357,6 +406,9 @@
             "type": "object"
           }
         },
+        "required": [
+          "error"
+        ],
         "type": "object"
       },
       "errors.FieldError": {
@@ -375,6 +427,11 @@
             "type": "object"
           }
         },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
         "type": "object"
       },
       "location.CreateLocationWithTagsRequest": {
@@ -488,6 +545,19 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "external_key",
+          "name",
+          "parent_id",
+          "parent_external_key",
+          "path",
+          "depth",
+          "is_active",
+          "valid_from",
+          "created_at",
+          "tags"
+        ],
         "type": "object"
       },
       "location.UpdateLocationRequest": {
@@ -543,6 +613,9 @@
             "$ref": "#/components/schemas/shared.Tag"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "locations.CreateLocationResponse": {
@@ -551,6 +624,9 @@
             "$ref": "#/components/schemas/location.PublicLocationView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "locations.GetLocationResponse": {
@@ -559,6 +635,9 @@
             "$ref": "#/components/schemas/location.PublicLocationView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "locations.ListAncestorsResponse": {
@@ -582,6 +661,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.ListChildrenResponse": {
@@ -605,6 +690,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.ListDescendantsResponse": {
@@ -628,6 +719,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.ListLocationsResponse": {
@@ -651,6 +748,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "locations.UpdateLocationResponse": {
@@ -659,6 +762,9 @@
             "$ref": "#/components/schemas/location.PublicLocationView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "orgs.CreateAPIKeyResponse": {
@@ -667,6 +773,9 @@
             "$ref": "#/components/schemas/apikey.APIKeyCreateResponse"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "orgs.GetOrgMeResponse": {
@@ -675,6 +784,9 @@
             "$ref": "#/components/schemas/orgs.OrgMeView"
           }
         },
+        "required": [
+          "data"
+        ],
         "type": "object"
       },
       "orgs.ListAPIKeysResponse": {
@@ -698,6 +810,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "orgs.OrgMeView": {
@@ -711,6 +829,10 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "name"
+        ],
         "type": "object"
       },
       "report.PublicAssetHistoryItem": {
@@ -732,6 +854,12 @@
             "type": "string"
           }
         },
+        "required": [
+          "timestamp",
+          "location_id",
+          "location_external_key",
+          "duration_seconds"
+        ],
         "type": "object"
       },
       "report.PublicCurrentLocationItem": {
@@ -761,6 +889,13 @@
             "type": "integer"
           }
         },
+        "required": [
+          "asset_id",
+          "asset_external_key",
+          "location_id",
+          "location_external_key",
+          "last_seen"
+        ],
         "type": "object"
       },
       "reports.AssetHistoryResponse": {
@@ -784,6 +919,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "reports.ListCurrentLocationsResponse": {
@@ -807,6 +948,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
         "type": "object"
       },
       "shared.Tag": {
@@ -835,13 +982,15 @@
         },
         "required": [
           "tag_type",
-          "value"
+          "value",
+          "is_active"
         ],
         "type": "object"
       },
       "shared.TagRequest": {
         "properties": {
           "tag_type": {
+            "default": "rfid",
             "enum": [
               "rfid",
               "ble",

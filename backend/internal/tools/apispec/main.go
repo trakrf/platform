@@ -45,8 +45,12 @@ func run(inPath, publicOut, internalOut string) error {
 		return err
 	}
 
-	postprocessPublic(public)
-	postprocessInternal(internal)
+	if err := postprocessPublic(public); err != nil {
+		return fmt.Errorf("postprocess public: %w", err)
+	}
+	if err := postprocessInternal(internal); err != nil {
+		return fmt.Errorf("postprocess internal: %w", err)
+	}
 
 	if err := emit(public, publicOut); err != nil {
 		return fmt.Errorf("emit public: %w", err)

@@ -20,6 +20,13 @@ components:
                     items:
                         type: string
                     type: array
+            required:
+                - key
+                - id
+                - jti
+                - name
+                - scopes
+                - created_at
             type: object
         apikey.APIKeyListItem:
             properties:
@@ -27,6 +34,7 @@ components:
                     format: date-time
                     type: string
                 created_by:
+                    nullable: true
                     type: integer
                 created_by_key_id:
                     nullable: true
@@ -48,6 +56,14 @@ components:
                     items:
                         type: string
                     type: array
+            required:
+                - id
+                - jti
+                - name
+                - scopes
+                - created_by
+                - created_by_key_id
+                - created_at
             type: object
         apikey.CreateAPIKeyRequest:
             properties:
@@ -145,6 +161,18 @@ components:
                 valid_to:
                     format: date-time
                     type: string
+            required:
+                - id
+                - external_key
+                - name
+                - current_location_id
+                - current_location_external_key
+                - metadata
+                - is_active
+                - valid_from
+                - created_at
+                - updated_at
+                - tags
             type: object
         asset.UpdateAssetRequest:
             properties:
@@ -185,16 +213,22 @@ components:
             properties:
                 data:
                     $ref: '#/components/schemas/shared.Tag'
+            required:
+                - data
             type: object
         assets.CreateAssetResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/asset.PublicAssetView'
+            required:
+                - data
             type: object
         assets.GetAssetResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/asset.PublicAssetView'
+            required:
+                - data
             type: object
         assets.ListAssetsResponse:
             properties:
@@ -211,11 +245,18 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         assets.UpdateAssetResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/asset.PublicAssetView'
+            required:
+                - data
             type: object
         errors.ErrorResponse:
             description: RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.
@@ -255,6 +296,8 @@ components:
                             type: string
                             x-extensible-enum: true
                     type: object
+            required:
+                - error
             type: object
         errors.FieldError:
             properties:
@@ -267,6 +310,10 @@ components:
                 params:
                     additionalProperties: {}
                     type: object
+            required:
+                - field
+                - code
+                - message
             type: object
         location.CreateLocationWithTagsRequest:
             properties:
@@ -350,6 +397,18 @@ components:
                 valid_to:
                     format: date-time
                     type: string
+            required:
+                - id
+                - external_key
+                - name
+                - parent_id
+                - parent_external_key
+                - path
+                - depth
+                - is_active
+                - valid_from
+                - created_at
+                - tags
             type: object
         location.UpdateLocationRequest:
             properties:
@@ -392,16 +451,22 @@ components:
             properties:
                 data:
                     $ref: '#/components/schemas/shared.Tag'
+            required:
+                - data
             type: object
         locations.CreateLocationResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/location.PublicLocationView'
+            required:
+                - data
             type: object
         locations.GetLocationResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/location.PublicLocationView'
+            required:
+                - data
             type: object
         locations.ListAncestorsResponse:
             properties:
@@ -418,6 +483,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         locations.ListChildrenResponse:
             properties:
@@ -434,6 +504,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         locations.ListDescendantsResponse:
             properties:
@@ -450,6 +525,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         locations.ListLocationsResponse:
             properties:
@@ -466,21 +546,32 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         locations.UpdateLocationResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/location.PublicLocationView'
+            required:
+                - data
             type: object
         orgs.CreateAPIKeyResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/apikey.APIKeyCreateResponse'
+            required:
+                - data
             type: object
         orgs.GetOrgMeResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/orgs.OrgMeView'
+            required:
+                - data
             type: object
         orgs.ListAPIKeysResponse:
             properties:
@@ -497,6 +588,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         orgs.OrgMeView:
             properties:
@@ -506,6 +602,9 @@ components:
                 name:
                     example: Acme Logistics
                     type: string
+            required:
+                - id
+                - name
             type: object
         report.PublicAssetHistoryItem:
             properties:
@@ -521,6 +620,11 @@ components:
                 timestamp:
                     format: date-time
                     type: string
+            required:
+                - timestamp
+                - location_id
+                - location_external_key
+                - duration_seconds
             type: object
         report.PublicCurrentLocationItem:
             properties:
@@ -542,6 +646,12 @@ components:
                 location_id:
                     nullable: true
                     type: integer
+            required:
+                - asset_id
+                - asset_external_key
+                - location_id
+                - location_external_key
+                - last_seen
             type: object
         reports.AssetHistoryResponse:
             properties:
@@ -558,6 +668,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         reports.ListCurrentLocationsResponse:
             properties:
@@ -574,6 +689,11 @@ components:
                 total_count:
                     example: 100
                     type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         shared.Tag:
             properties:
@@ -596,10 +716,12 @@ components:
             required:
                 - tag_type
                 - value
+                - is_active
             type: object
         shared.TagRequest:
             properties:
                 tag_type:
+                    default: rfid
                     enum:
                         - rfid
                         - ble

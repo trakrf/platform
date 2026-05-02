@@ -13,6 +13,7 @@ import (
 )
 
 func TestEmit_WritesJSONAndYAML(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	postprocessPublic(doc)
 

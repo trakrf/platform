@@ -10,7 +10,7 @@ type Tag struct {
 }
 
 type TagRequest struct {
-	TagType string `json:"tag_type" validate:"omitempty,oneof=rfid ble barcode" example:"rfid" extensions:"x-extensible-enum=true"`
+	TagType string `json:"tag_type" validate:"omitempty,oneof=rfid ble barcode" example:"rfid" default:"rfid" extensions:"x-extensible-enum=true"`
 	Value   string `json:"value" validate:"required,min=1,max=255"`
 }
 

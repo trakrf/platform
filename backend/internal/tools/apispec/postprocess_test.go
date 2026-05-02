@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -9,6 +10,7 @@ import (
 )
 
 func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	// minimal fixture carries only APIKey; synthesize BearerAuth the way
 	// swaggo emits it so we can verify the rewrite.
@@ -38,6 +40,7 @@ func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
 // We accept the cosmetic SDK-naming churn (e.g. setApiKeyAuth → setBearerAuth)
 // in exchange for over-the-wire correctness.
 func TestPostprocess_RewritesAPIKeyToHTTPBearer(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	postprocessPublic(doc)
 
@@ -55,6 +58,7 @@ func TestPostprocess_RewritesAPIKeyToHTTPBearer(t *testing.T) {
 // integration testing, and each entry's description warns that an API key
 // scoped to one environment will fail against the other.
 func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	postprocessPublic(doc)
 
@@ -76,6 +80,7 @@ func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
 }
 
 func TestPostprocess_SetsInternalInfoAndServers(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	postprocessInternal(doc)
 
@@ -86,6 +91,7 @@ func TestPostprocess_SetsInternalInfoAndServers(t *testing.T) {
 }
 
 func TestPostprocess_NormalizesMetadataEmptySchema(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
 		"Asset": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
@@ -104,6 +110,7 @@ func TestPostprocess_NormalizesMetadataEmptySchema(t *testing.T) {
 }
 
 func TestPostprocess_LeavesNonEmptyMetadataAlone(t *testing.T) {
+	withEmptyRequiredFields(t)
 	structured := &openapi3.SchemaRef{Value: &openapi3.Schema{
 		Type: &openapi3.Types{openapi3.TypeObject},
 		Properties: openapi3.Schemas{
@@ -124,6 +131,7 @@ func TestPostprocess_LeavesNonEmptyMetadataAlone(t *testing.T) {
 }
 
 func TestPostprocess_ConvertsExtensibleEnumStringToBool(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
 		"Identifier": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
@@ -149,6 +157,7 @@ func TestPostprocess_ConvertsExtensibleEnumStringToBool(t *testing.T) {
 // their semantics. swaggo doesn't propagate godoc through an outer struct
 // that wraps an anonymous nested struct, so this is applied here.
 func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
 		"errors.ErrorResponse": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
@@ -182,6 +191,7 @@ func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
 // doesn't carry that into the OpenAPI 3.0 schema. This is the post-process
 // step that adds nullable:true on the curated allowlist of fields.
 func TestPostprocess_MarksNullableFields(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
 		"asset.PublicAssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
@@ -254,6 +264,7 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 }
 
 func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
 		"Asset": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
@@ -299,6 +310,69 @@ func TestInjectTopLevelSecurity_PreservesExisting(t *testing.T) {
 	assert.Equal(t, []string{"read"}, doc.Security[0]["BearerAuth"])
 }
 
+func TestMarkRequiredFields_AddsRequiredBlock(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+		Paths:   openapi3.NewPaths(),
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"thing.View": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{
+						"id":   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
+						"name": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+						"note": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+					},
+				}},
+			},
+		},
+	}
+	required := map[string][]string{"thing.View": {"id", "name"}}
+
+	if err := markRequiredFields(doc, required); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := doc.Components.Schemas["thing.View"].Value.Required
+	want := []string{"id", "name"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("required = %v, want %v", got, want)
+	}
+	if err := doc.Validate(context.Background()); err != nil {
+		t.Fatalf("doc no longer validates: %v", err)
+	}
+}
+
+func TestMarkRequiredFields_ErrorsOnMissingSchema(t *testing.T) {
+	doc := &openapi3.T{Components: &openapi3.Components{Schemas: openapi3.Schemas{}}}
+	required := map[string][]string{"thing.Missing": {"id"}}
+
+	err := markRequiredFields(doc, required)
+	if err == nil {
+		t.Fatalf("expected error for missing schema, got nil")
+	}
+}
+
+func TestMarkRequiredFields_ErrorsOnMissingField(t *testing.T) {
+	doc := &openapi3.T{
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"thing.View": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type:       &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{"id": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}}},
+				}},
+			},
+		},
+	}
+	required := map[string][]string{"thing.View": {"id", "ghost"}}
+
+	err := markRequiredFields(doc, required)
+	if err == nil {
+		t.Fatalf("expected error for missing field, got nil")
+	}
+}
+
 func docWithSchemas(schemas openapi3.Schemas) *openapi3.T {
 	return &openapi3.T{
 		OpenAPI: "3.0.0",
@@ -319,4 +393,17 @@ func stringProp(format string) *openapi3.SchemaRef {
 	return &openapi3.SchemaRef{Value: &openapi3.Schema{
 		Type: &openapi3.Types{openapi3.TypeString}, Format: format,
 	}}
+}
+
+// withEmptyRequiredFields clears the package-level requiredFields map for the
+// duration of a test and restores it on cleanup. Tests that exercise
+// postprocessPublic / postprocessInternal against synthetic minimal docs use
+// this so the stale-entry guard in markRequiredFields doesn't bail out before
+// the assertions run. Tests that need to verify required-block injection
+// directly call markRequiredFields with their own map.
+func withEmptyRequiredFields(t *testing.T) {
+	t.Helper()
+	saved := requiredFields
+	requiredFields = map[string][]string{}
+	t.Cleanup(func() { requiredFields = saved })
 }
