@@ -600,6 +600,7 @@ components:
         shared.TagRequest:
             properties:
                 tag_type:
+                    default: rfid
                     enum:
                         - rfid
                         - ble
