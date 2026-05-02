@@ -53,6 +53,7 @@ func TestPartition_FailsOnBothTags(t *testing.T) {
 // public and internal shells; postprocessInternal would then overwrite the
 // title postprocessPublic just set.
 func TestPartition_PublicAndInternalHaveIndependentInfo(t *testing.T) {
+	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-with-internal-v2.json")
 	public, internal, err := partition(doc)
 	require.NoError(t, err)

@@ -30,6 +30,14 @@
             "type": "array"
           }
         },
+        "required": [
+          "key",
+          "id",
+          "jti",
+          "name",
+          "scopes",
+          "created_at"
+        ],
         "type": "object"
       },
       "apikey.APIKeyListItem": {
@@ -70,6 +78,15 @@
             "type": "array"
           }
         },
+        "required": [
+          "id",
+          "jti",
+          "name",
+          "scopes",
+          "created_by",
+          "created_by_key_id",
+          "created_at"
+        ],
         "type": "object"
       },
       "apikey.CreateAPIKeyRequest": {
@@ -204,6 +221,19 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "external_key",
+          "name",
+          "current_location_id",
+          "current_location_external_key",
+          "metadata",
+          "is_active",
+          "valid_from",
+          "created_at",
+          "updated_at",
+          "tags"
+        ],
         "type": "object"
       },
       "asset.UpdateAssetRequest": {
@@ -357,6 +387,9 @@
             "type": "object"
           }
         },
+        "required": [
+          "error"
+        ],
         "type": "object"
       },
       "errors.FieldError": {
@@ -375,6 +408,11 @@
             "type": "object"
           }
         },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
         "type": "object"
       },
       "location.CreateLocationWithTagsRequest": {
@@ -488,6 +526,19 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "external_key",
+          "name",
+          "parent_id",
+          "parent_external_key",
+          "path",
+          "depth",
+          "is_active",
+          "valid_from",
+          "created_at",
+          "tags"
+        ],
         "type": "object"
       },
       "location.UpdateLocationRequest": {
@@ -711,6 +762,10 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "name"
+        ],
         "type": "object"
       },
       "report.PublicAssetHistoryItem": {
@@ -732,6 +787,12 @@
             "type": "string"
           }
         },
+        "required": [
+          "timestamp",
+          "location_id",
+          "location_external_key",
+          "duration_seconds"
+        ],
         "type": "object"
       },
       "report.PublicCurrentLocationItem": {
@@ -761,6 +822,13 @@
             "type": "integer"
           }
         },
+        "required": [
+          "asset_id",
+          "asset_external_key",
+          "location_id",
+          "location_external_key",
+          "last_seen"
+        ],
         "type": "object"
       },
       "reports.AssetHistoryResponse": {
@@ -835,7 +903,8 @@
         },
         "required": [
           "tag_type",
-          "value"
+          "value",
+          "is_active"
         ],
         "type": "object"
       },

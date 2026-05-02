@@ -20,6 +20,13 @@ components:
                     items:
                         type: string
                     type: array
+            required:
+                - key
+                - id
+                - jti
+                - name
+                - scopes
+                - created_at
             type: object
         apikey.APIKeyListItem:
             properties:
@@ -48,6 +55,14 @@ components:
                     items:
                         type: string
                     type: array
+            required:
+                - id
+                - jti
+                - name
+                - scopes
+                - created_by
+                - created_by_key_id
+                - created_at
             type: object
         apikey.CreateAPIKeyRequest:
             properties:
@@ -145,6 +160,18 @@ components:
                 valid_to:
                     format: date-time
                     type: string
+            required:
+                - id
+                - external_key
+                - name
+                - current_location_id
+                - current_location_external_key
+                - metadata
+                - is_active
+                - valid_from
+                - created_at
+                - updated_at
+                - tags
             type: object
         asset.UpdateAssetRequest:
             properties:
@@ -255,6 +282,8 @@ components:
                             type: string
                             x-extensible-enum: true
                     type: object
+            required:
+                - error
             type: object
         errors.FieldError:
             properties:
@@ -267,6 +296,10 @@ components:
                 params:
                     additionalProperties: {}
                     type: object
+            required:
+                - field
+                - code
+                - message
             type: object
         location.CreateLocationWithTagsRequest:
             properties:
@@ -350,6 +383,18 @@ components:
                 valid_to:
                     format: date-time
                     type: string
+            required:
+                - id
+                - external_key
+                - name
+                - parent_id
+                - parent_external_key
+                - path
+                - depth
+                - is_active
+                - valid_from
+                - created_at
+                - tags
             type: object
         location.UpdateLocationRequest:
             properties:
@@ -506,6 +551,9 @@ components:
                 name:
                     example: Acme Logistics
                     type: string
+            required:
+                - id
+                - name
             type: object
         report.PublicAssetHistoryItem:
             properties:
@@ -521,6 +569,11 @@ components:
                 timestamp:
                     format: date-time
                     type: string
+            required:
+                - timestamp
+                - location_id
+                - location_external_key
+                - duration_seconds
             type: object
         report.PublicCurrentLocationItem:
             properties:
@@ -542,6 +595,12 @@ components:
                 location_id:
                     nullable: true
                     type: integer
+            required:
+                - asset_id
+                - asset_external_key
+                - location_id
+                - location_external_key
+                - last_seen
             type: object
         reports.AssetHistoryResponse:
             properties:
@@ -596,6 +655,7 @@ components:
             required:
                 - tag_type
                 - value
+                - is_active
             type: object
         shared.TagRequest:
             properties:

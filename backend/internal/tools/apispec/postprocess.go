@@ -129,7 +129,29 @@ var nullableFields = map[string][]string{
 // markRequiredFields errors if a configured schema or field is missing from
 // the spec — keeps this map honest as struct fields rename or move.
 var requiredFields = map[string][]string{
-	// Populated in subsequent tasks.
+	// errors
+	"errors.ErrorResponse": {"error"},
+	"errors.FieldError":    {"field", "code", "message"},
+
+	// shared
+	"shared.Tag": {"tag_type", "value", "is_active"},
+
+	// asset
+	"asset.PublicAssetView": {"id", "external_key", "name", "current_location_id", "current_location_external_key", "metadata", "is_active", "valid_from", "created_at", "updated_at", "tags"},
+
+	// location
+	"location.PublicLocationView": {"id", "external_key", "name", "parent_id", "parent_external_key", "path", "depth", "is_active", "valid_from", "created_at", "tags"},
+
+	// report
+	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen"},
+	"report.PublicAssetHistoryItem":    {"timestamp", "location_id", "location_external_key", "duration_seconds"},
+
+	// apikey
+	"apikey.APIKeyListItem":       {"id", "jti", "name", "scopes", "created_by", "created_by_key_id", "created_at"},
+	"apikey.APIKeyCreateResponse": {"key", "id", "jti", "name", "scopes", "created_at"},
+
+	// orgs
+	"orgs.OrgMeView": {"id", "name"},
 }
 
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse
