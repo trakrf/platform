@@ -1093,6 +1093,7 @@
           },
           {
             "description": "comma-separated; prefix '-' for DESC",
+            "explode": false,
             "in": "query",
             "name": "sort",
             "schema": {
@@ -1110,7 +1111,8 @@
                 "type": "string"
               },
               "type": "array"
-            }
+            },
+            "style": "form"
           }
         ],
         "responses": {
@@ -1904,6 +1906,7 @@
           },
           {
             "description": "comma-separated; prefix '-' for DESC",
+            "explode": false,
             "in": "query",
             "name": "sort",
             "schema": {
@@ -1915,7 +1918,8 @@
                 "type": "string"
               },
               "type": "array"
-            }
+            },
+            "style": "form"
           }
         ],
         "responses": {
@@ -2191,6 +2195,7 @@
           },
           {
             "description": "comma-separated, prefix '-' for DESC",
+            "explode": false,
             "in": "query",
             "name": "sort",
             "schema": {
@@ -2208,7 +2213,8 @@
                 "type": "string"
               },
               "type": "array"
-            }
+            },
+            "style": "form"
           }
         ],
         "responses": {
@@ -2433,6 +2439,7 @@
           },
           {
             "description": "comma-separated sort fields; prefix '-' for DESC",
+            "explode": false,
             "in": "query",
             "name": "sort",
             "schema": {
@@ -2448,7 +2455,8 @@
                 "type": "string"
               },
               "type": "array"
-            }
+            },
+            "style": "form"
           }
         ],
         "responses": {

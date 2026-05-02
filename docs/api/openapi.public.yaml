@@ -792,6 +792,7 @@ paths:
                   schema:
                     type: string
                 - description: comma-separated; prefix '-' for DESC
+                  explode: false
                   in: query
                   name: sort
                   schema:
@@ -807,6 +808,7 @@ paths:
                             - -updated_at
                         type: string
                     type: array
+                  style: form
             responses:
                 "200":
                     content:
@@ -1226,6 +1228,7 @@ paths:
                   schema:
                     type: string
                 - description: comma-separated; prefix '-' for DESC
+                  explode: false
                   in: query
                   name: sort
                   schema:
@@ -1235,6 +1238,7 @@ paths:
                             - -timestamp
                         type: string
                     type: array
+                  style: form
             responses:
                 "200":
                     content:
@@ -1479,6 +1483,7 @@ paths:
                   schema:
                     type: string
                 - description: comma-separated, prefix '-' for DESC
+                  explode: false
                   in: query
                   name: sort
                   schema:
@@ -1494,6 +1499,7 @@ paths:
                             - -created_at
                         type: string
                     type: array
+                  style: form
             responses:
                 "200":
                     content:
@@ -2155,6 +2161,7 @@ paths:
                     default: false
                     type: boolean
                 - description: comma-separated sort fields; prefix '-' for DESC
+                  explode: false
                   in: query
                   name: sort
                   schema:
@@ -2168,6 +2175,7 @@ paths:
                             - -location
                         type: string
                     type: array
+                  style: form
             responses:
                 "200":
                     content:
