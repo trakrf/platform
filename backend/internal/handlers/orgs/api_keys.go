@@ -34,7 +34,7 @@ type ListAPIKeysResponse struct {
 
 // @Summary Create a new API key for an organization
 // @Description Mints an API-key JWT scoped to the target org. Accepts either session-admin or an API key with the keys:admin scope.
-// @Tags api-keys,public
+// @Tags api-keys,internal
 // @ID api_keys.create
 // @Accept json
 // @Produce json
@@ -143,7 +143,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List active API keys for an organization
-// @Tags api-keys,public
+// @Tags api-keys,internal
 // @ID api_keys.list
 // @Accept json
 // @Produce json
@@ -211,7 +211,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Revoke an API key
-// @Tags api-keys,public
+// @Tags api-keys,internal
 // @ID api_keys.revoke
 // @Accept json
 // @Produce json
@@ -258,7 +258,7 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // @Summary Revoke an API key by jti
 // @Description Revoke an API key by its UUID jti (stable identifier embedded in the JWT).
-// @Tags api-keys,public
+// @Tags api-keys,internal
 // @ID api_keys.revoke_by_jti
 // @Accept json
 // @Produce json

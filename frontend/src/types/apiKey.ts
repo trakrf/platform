@@ -3,7 +3,7 @@ export type Scope =
   | 'assets:write'
   | 'locations:read'
   | 'locations:write'
-  | 'scans:read'
+  | 'history:read'
   | 'keys:admin';
 
 export interface APIKey {
@@ -39,7 +39,7 @@ export const ALL_SCOPES: Scope[] = [
   'assets:write',
   'locations:read',
   'locations:write',
-  'scans:read',
+  'history:read',
   'keys:admin',
 ];
 

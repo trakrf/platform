@@ -53,6 +53,9 @@ func postprocessInternal(doc *openapi3.T) error {
 	if err := markRequiredFields(doc, requiredFields); err != nil {
 		return err
 	}
+	if err := markRequiredFields(doc, internalOnlyRequiredFields); err != nil {
+		return err
+	}
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	normalizeArrayQueryParams(doc)
@@ -160,10 +163,6 @@ var requiredFields = map[string][]string{
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen"},
 	"report.PublicAssetHistoryItem":    {"timestamp", "location_id", "location_external_key", "duration_seconds"},
 
-	// apikey
-	"apikey.APIKeyListItem":       {"id", "jti", "name", "scopes", "created_by", "created_by_key_id", "created_at"},
-	"apikey.APIKeyCreateResponse": {"key", "id", "jti", "name", "scopes", "created_at"},
-
 	// orgs
 	"orgs.OrgMeView": {"id", "name"},
 
@@ -185,13 +184,22 @@ var requiredFields = map[string][]string{
 	"locations.UpdateLocationResponse":  {"data"},
 
 	// orgs envelopes
-	"orgs.CreateAPIKeyResponse": {"data"},
-	"orgs.GetOrgMeResponse":     {"data"},
-	"orgs.ListAPIKeysResponse":  {"data", "limit", "offset", "total_count"},
+	"orgs.GetOrgMeResponse": {"data"},
 
 	// reports envelopes
 	"reports.AssetHistoryResponse":         {"data", "limit", "offset", "total_count"},
 	"reports.ListCurrentLocationsResponse": {"data", "limit", "offset", "total_count"},
+}
+
+// internalOnlyRequiredFields is the same as requiredFields but for schemas
+// that only appear in the internal spec (the public spec prunes them via
+// prunePublicSchemas). TRA-578 flipped /orgs/{id}/api-keys to internal-only,
+// taking these schemas with it.
+var internalOnlyRequiredFields = map[string][]string{
+	"apikey.APIKeyListItem":       {"id", "jti", "name", "scopes", "created_by", "created_by_key_id", "created_at"},
+	"apikey.APIKeyCreateResponse": {"key", "id", "jti", "name", "scopes", "created_at"},
+	"orgs.CreateAPIKeyResponse":   {"data"},
+	"orgs.ListAPIKeysResponse":    {"data", "limit", "offset", "total_count"},
 }
 
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse

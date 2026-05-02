@@ -517,5 +517,10 @@ func withEmptyRequiredFields(t *testing.T) {
 	t.Helper()
 	saved := requiredFields
 	requiredFields = map[string][]string{}
-	t.Cleanup(func() { requiredFields = saved })
+	savedInternal := internalOnlyRequiredFields
+	internalOnlyRequiredFields = map[string][]string{}
+	t.Cleanup(func() {
+		requiredFields = saved
+		internalOnlyRequiredFields = savedInternal
+	})
 }

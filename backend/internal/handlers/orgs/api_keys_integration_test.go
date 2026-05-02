@@ -456,10 +456,11 @@ func TestCreateAPIKey_RejectsScansWrite(t *testing.T) {
 		"detail must name the offending scope so the integrator knows what to remove")
 }
 
-// TestCreateAPIKey_AcceptsScansRead is the positive companion: scans:read
-// is still a valid public scope and must continue to mint cleanly.
-func TestCreateAPIKey_AcceptsScansRead(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-tra571-read")
+// TestCreateAPIKey_AcceptsHistoryRead is the positive companion: history:read
+// (renamed from scans:read in TRA-578) remains a valid scope and must continue
+// to mint cleanly.
+func TestCreateAPIKey_AcceptsHistoryRead(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-tra578-read")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -468,7 +469,7 @@ func TestCreateAPIKey_AcceptsScansRead(t *testing.T) {
 
 	r := newAdminRouter(t, store)
 
-	body := []byte(`{"name":"tra-571-positive","scopes":["scans:read"]}`)
+	body := []byte(`{"name":"tra-578-positive","scopes":["history:read"]}`)
 	req := httptest.NewRequest(http.MethodPost,
 		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID),
 		bytes.NewReader(body))
