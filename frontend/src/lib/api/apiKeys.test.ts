@@ -23,7 +23,7 @@ describe('apiKeysApi', () => {
 
   it('create POSTs request body to /orgs/{orgId}/api-keys and returns unwrapped data', async () => {
     const payload = {
-      key: 'eyJ...',
+      token: 'eyJ...',
       id: 1,
       name: 'x',
       scopes: ['assets:read' as const],

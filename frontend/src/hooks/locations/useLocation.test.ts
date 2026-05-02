@@ -24,7 +24,7 @@ const apiLocation = {
   name: 'United States',
   description: 'Main country location',
   parent_external_key: null,
-  path: 'usa',
+  tree_path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
   valid_to: null,

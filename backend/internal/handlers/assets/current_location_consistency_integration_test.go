@@ -105,7 +105,7 @@ func fetchListPair(t *testing.T, router *chi.Mux, orgID, assetID int) fkPair {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	for _, v := range resp.Data {
 		if v.ID == assetID {
-			return fkPair{id: v.CurrentLocationID, externalKey: v.CurrentLocationExternalKey}
+			return fkPair{id: v.LocationID, externalKey: v.LocationExternalKey}
 		}
 	}
 	t.Fatalf("asset id %d not found in list response", assetID)
@@ -124,7 +124,7 @@ func fetchDetailPair(t *testing.T, router *chi.Mux, orgID, assetID int) fkPair {
 		Data assetmodel.PublicAssetView `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	return fkPair{id: resp.Data.CurrentLocationID, externalKey: resp.Data.CurrentLocationExternalKey}
+	return fkPair{id: resp.Data.LocationID, externalKey: resp.Data.LocationExternalKey}
 }
 
 func fetchLookupPair(t *testing.T, router *chi.Mux, orgID int, externalKey string) fkPair {
@@ -139,7 +139,7 @@ func fetchLookupPair(t *testing.T, router *chi.Mux, orgID int, externalKey strin
 		Data assetmodel.PublicAssetView `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	return fkPair{id: resp.Data.CurrentLocationID, externalKey: resp.Data.CurrentLocationExternalKey}
+	return fkPair{id: resp.Data.LocationID, externalKey: resp.Data.LocationExternalKey}
 }
 
 // BB15 reproduction: asset has no explicit FK but has a scan pointing at a

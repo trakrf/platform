@@ -30,14 +30,14 @@ export function filterAssets(
     if (filters.location_id !== undefined && filters.location_id !== 'all') {
       if (filters.location_id === null) {
         // Filter for unassigned assets (no location)
-        if (asset.current_location_external_key !== null && asset.current_location_external_key !== undefined) {
+        if (asset.location_external_key !== null && asset.location_external_key !== undefined) {
           return false;
         }
       } else {
         // Filter for specific location — look up identifier from store by surrogate ID
         const locById = useLocationStore.getState().cache.byId.get(filters.location_id as number);
         const filterIdentifier = locById?.external_key;
-        if (asset.current_location_external_key !== filterIdentifier) {
+        if (asset.location_external_key !== filterIdentifier) {
           return false;
         }
       }

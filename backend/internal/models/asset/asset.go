@@ -8,43 +8,43 @@ import (
 )
 
 type Asset struct {
-	ID                int        `json:"id"`
-	OrgID             int        `json:"org_id"`
-	Org               *org.Org   `json:"org"`
-	ExternalKey       string     `json:"external_key"`
-	Name              string     `json:"name"`
-	Description       string     `json:"description"`
-	CurrentLocationID *int       `json:"current_location_id"`
-	ValidFrom         time.Time  `json:"valid_from"`
-	ValidTo           *time.Time `json:"valid_to"`
-	Metadata          any        `json:"metadata"`
-	IsActive          bool       `json:"is_active"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	DeletedAt         *time.Time `json:"deleted_at"`
+	ID          int        `json:"id"`
+	OrgID       int        `json:"org_id"`
+	Org         *org.Org   `json:"org"`
+	ExternalKey string     `json:"external_key"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	LocationID  *int       `json:"location_id"`
+	ValidFrom   time.Time  `json:"valid_from"`
+	ValidTo     *time.Time `json:"valid_to"`
+	Metadata    any        `json:"metadata"`
+	IsActive    bool       `json:"is_active"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at"`
 }
 
 type CreateAssetRequest struct {
-	OrgID                      int                  `json:"-" swaggerignore:"true"`
-	ExternalKey                string               `json:"external_key,omitempty" validate:"omitempty,max=255"`
-	Name                       string               `json:"name" validate:"required,min=1,max=255"`
-	Description                string               `json:"description,omitempty" validate:"omitempty,max=1024"`
-	CurrentLocationID          *int                 `json:"current_location_id,omitempty" example:"42"`
-	CurrentLocationExternalKey *string              `json:"current_location_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
-	ValidFrom                  *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
-	ValidTo                    *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
-	Metadata                   any                  `json:"metadata,omitempty"`
-	IsActive                   *bool                `json:"is_active,omitempty" example:"true"`
+	OrgID               int                  `json:"-" swaggerignore:"true"`
+	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,max=255"`
+	Name                string               `json:"name" validate:"required,min=1,max=255"`
+	Description         string               `json:"description,omitempty" validate:"omitempty,max=1024"`
+	LocationID          *int                 `json:"location_id,omitempty" example:"42"`
+	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
+	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
+	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
+	Metadata            any                  `json:"metadata,omitempty"`
+	IsActive            *bool                `json:"is_active,omitempty" example:"true"`
 }
 
 type UpdateAssetRequest struct {
-	ExternalKey                *string              `json:"external_key" validate:"omitempty,min=1,max=255"`
-	Name                       *string              `json:"name" validate:"omitempty,min=1,max=255"`
-	Description                *string              `json:"description" validate:"omitempty,max=1024"`
-	CurrentLocationID          *int                 `json:"current_location_id" example:"42"`
-	CurrentLocationExternalKey *string              `json:"current_location_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
-	ValidFrom                  *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
-	ValidTo                    *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
+	ExternalKey         *string              `json:"external_key" validate:"omitempty,min=1,max=255"`
+	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`
+	Description         *string              `json:"description" validate:"omitempty,max=1024"`
+	LocationID          *int                 `json:"location_id" example:"42"`
+	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
+	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
+	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
 	// Set by the PUT handler when the body had `"valid_to": null`, to request
 	// an SQL NULL write. Not decoded from JSON directly.
 	ClearValidTo bool  `json:"-" swaggerignore:"true"`
@@ -72,12 +72,13 @@ type AssetViewListResponse struct {
 	Pagination shared.Pagination `json:"pagination"`
 }
 
-// AssetWithLocation is AssetView plus the resolved current-location natural
-// key. Populated by GetAssetByExternalKey / list-with-join storage methods;
+// AssetWithLocation is AssetView plus the resolved location natural key.
+// Populated by GetAssetByExternalKey / list-with-join storage methods;
 // returned to HTTP handlers which then project it to PublicAssetView.
+// Wire field renamed in TRA-580 C-3.
 type AssetWithLocation struct {
 	AssetView
-	CurrentLocationExternalKey *string `json:"current_location_external_key,omitempty"`
+	LocationExternalKey *string `json:"location_external_key,omitempty"`
 }
 
 // ListFilter carries the optional filters the assets list endpoint supports.

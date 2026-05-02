@@ -25,7 +25,7 @@ export interface CreateAPIKeyRequest {
 }
 
 export interface APIKeyCreateResponse {
-  key: string; // full JWT — shown once
+  token: string; // full JWT — shown once (TRA-580 C-2: renamed from `key` to avoid LLM-leak risk)
   id: number;
   jti: string;
   name: string;

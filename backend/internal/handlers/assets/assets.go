@@ -37,11 +37,12 @@ func NewHandler(storage *storage.Storage) *Handler {
 	}
 }
 
-// resolveCurrentLocation reconciles the current_location_id (canonical) and
-// current_location_external_key (natural-key alternate) inputs on
-// Create/Update. Both nil → nil (no location). external_key alone → resolved
-// via lookup. Both set → must agree; mismatch returns a validation FieldError.
-func (handler *Handler) resolveCurrentLocation(
+// resolveLocation reconciles the location_id (canonical) and
+// location_external_key (natural-key alternate) inputs on Create/Update.
+// Both nil → nil (no location). external_key alone → resolved via lookup.
+// Both set → must agree; mismatch returns a validation FieldError.
+// Wire field names dropped the `current_` prefix in TRA-580 C-3.
+func (handler *Handler) resolveLocation(
 	r *http.Request, orgID int, locID *int, locExternalKey *string,
 ) (*int, *modelerrors.FieldError) {
 	hasID := locID != nil
@@ -57,23 +58,23 @@ func (handler *Handler) resolveCurrentLocation(
 	loc, err := handler.storage.GetLocationByExternalKey(r.Context(), orgID, *locExternalKey)
 	if err != nil {
 		return nil, &modelerrors.FieldError{
-			Field:   "current_location_external_key",
+			Field:   "location_external_key",
 			Code:    "internal_error",
 			Message: err.Error(),
 		}
 	}
 	if loc == nil {
 		return nil, &modelerrors.FieldError{
-			Field:   "current_location_external_key",
+			Field:   "location_external_key",
 			Code:    "invalid_value",
-			Message: fmt.Sprintf("current_location_external_key %q not found", *locExternalKey),
+			Message: fmt.Sprintf("location_external_key %q not found", *locExternalKey),
 		}
 	}
 	if hasID && *locID != loc.ID {
 		return nil, &modelerrors.FieldError{
-			Field:   "current_location_external_key",
+			Field:   "location_external_key",
 			Code:    "invalid_value",
-			Message: "current_location_id and current_location_external_key disagree",
+			Message: "location_id and location_external_key disagree",
 		}
 	}
 	return &loc.ID, nil
@@ -150,7 +151,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolved, fErr := handler.resolveCurrentLocation(r, orgID, request.CurrentLocationID, request.CurrentLocationExternalKey)
+	resolved, fErr := handler.resolveLocation(r, orgID, request.LocationID, request.LocationExternalKey)
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -164,7 +165,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	request.CurrentLocationID = resolved
+	request.LocationID = resolved
 
 	request.OrgID = orgID
 
@@ -251,7 +252,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	resolved, fErr := handler.resolveCurrentLocation(req, orgID, request.CurrentLocationID, request.CurrentLocationExternalKey)
+	resolved, fErr := handler.resolveLocation(req, orgID, request.LocationID, request.LocationExternalKey)
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -265,7 +266,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 		return
 	}
-	request.CurrentLocationID = resolved
+	request.LocationID = resolved
 
 	result, err := handler.storage.UpdateAsset(req.Context(), orgID, id, request)
 	if err != nil {

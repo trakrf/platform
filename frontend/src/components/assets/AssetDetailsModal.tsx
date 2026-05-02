@@ -15,7 +15,7 @@ interface AssetDetailsModalProps {
 export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetailsModalProps) {
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
-  const location = asset?.current_location_external_key ? getLocationByIdentifier(asset.current_location_external_key) : null;
+  const location = asset?.location_external_key ? getLocationByIdentifier(asset.location_external_key) : null;
 
   const [localTags, setLocalTags] = useState<Tag[]>([]);
 

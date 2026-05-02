@@ -33,10 +33,10 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	var asset asset.Asset
 	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, request.Name, request.ExternalKey,
-			request.Description, request.CurrentLocationID, request.ValidFrom, request.ValidTo, request.Metadata,
+			request.Description, request.LocationID, request.ValidFrom, request.ValidTo, request.Metadata,
 			request.IsActive, request.OrgID,
 		).Scan(&asset.ID, &asset.OrgID, &asset.ExternalKey, &asset.Name,
-			&asset.Description, &asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
+			&asset.Description, &asset.LocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
 			&asset.IsActive, &asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
 	})
@@ -46,7 +46,7 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 			return nil, fmt.Errorf("asset with external_key %s already exists", request.ExternalKey)
 		}
 		if strings.Contains(err.Error(), "current_location_id_fkey") {
-			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
+			return nil, fmt.Errorf("invalid location_id: location does not exist")
 		}
 		return nil, fmt.Errorf("failed to create asset: %w", err)
 	}
@@ -129,7 +129,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 			return nil, fmt.Errorf("asset with external_key %s already exists", externalKey)
 		}
 		if strings.Contains(err.Error(), "current_location_id_fkey") {
-			return nil, fmt.Errorf("invalid current_location_id: location does not exist")
+			return nil, fmt.Errorf("invalid location_id: location does not exist")
 		}
 		return nil, fmt.Errorf("failed to update asset: %w", err)
 	}
@@ -148,7 +148,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(&asset.ID, &asset.OrgID,
 			&asset.ExternalKey, &asset.Name, &asset.Description,
-			&asset.CurrentLocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
+			&asset.LocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
 			&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
 	})
@@ -188,7 +188,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 		for rows.Next() {
 			var a asset.Asset
 			if err := rows.Scan(&a.ID, &a.OrgID, &a.ExternalKey, &a.Name,
-				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+				&a.Description, &a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan asset: %w", err)
@@ -224,7 +224,7 @@ func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offse
 		for rows.Next() {
 			var a asset.Asset
 			if err := rows.Scan(&a.ID, &a.OrgID, &a.ExternalKey, &a.Name,
-				&a.Description, &a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+				&a.Description, &a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan asset: %w", err)
@@ -323,7 +323,7 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		for i, a := range assets {
 			if _, err := tx.Exec(ctx, query,
-				a.Name, a.ExternalKey, a.Description, a.CurrentLocationID,
+				a.Name, a.ExternalKey, a.Description, a.LocationID,
 				a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
 			); err != nil {
 				if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -393,8 +393,8 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	if req.Description != nil {
 		fields["description"] = *req.Description
 	}
-	if req.CurrentLocationID != nil {
-		fields["current_location_id"] = *req.CurrentLocationID
+	if req.LocationID != nil {
+		fields["current_location_id"] = *req.LocationID
 	}
 	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {
 		fields["valid_from"] = req.ValidFrom.ToTime()
@@ -458,7 +458,7 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 			request.ExternalKey,
 			request.Name,
 			request.Description,
-			request.CurrentLocationID,
+			request.LocationID,
 			validFrom,
 			validTo,
 			isActive,
@@ -533,7 +533,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(
 			&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
-			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+			&a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			&locExtKey,
 		)
@@ -555,7 +555,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 			Asset: a,
 			Tags:  tags,
 		},
-		CurrentLocationExternalKey: locExtKey,
+		LocationExternalKey: locExtKey,
 	}, nil
 }
 
@@ -637,7 +637,7 @@ func (s *Storage) GetAssetByExternalKey(
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, externalKey).Scan(
 			&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
-			&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+			&a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			&locExtKey,
 		)
@@ -659,7 +659,7 @@ func (s *Storage) GetAssetByExternalKey(
 			Asset: a,
 			Tags:  tags,
 		},
-		CurrentLocationExternalKey: locExtKey,
+		LocationExternalKey: locExtKey,
 	}, nil
 }
 
@@ -765,15 +765,15 @@ func (s *Storage) ListAssetsFiltered(
 			)
 			if err := rows.Scan(
 				&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
-				&a.CurrentLocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+				&a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
 				&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 				&locExtKey,
 			); err != nil {
 				return fmt.Errorf("scan asset: %w", err)
 			}
 			out = append(out, asset.AssetWithLocation{
-				AssetView:                  asset.AssetView{Asset: a, Tags: nil},
-				CurrentLocationExternalKey: locExtKey,
+				AssetView:           asset.AssetView{Asset: a, Tags: nil},
+				LocationExternalKey: locExtKey,
 			})
 		}
 		return rows.Err()
@@ -914,7 +914,7 @@ func parseAssetWithTagsError(err error, externalKey string) error {
 	}
 
 	if strings.Contains(errStr, "current_location_id_fkey") {
-		return fmt.Errorf("invalid current_location_id: location does not exist")
+		return fmt.Errorf("invalid location_id: location does not exist")
 	}
 
 	return fmt.Errorf("failed to create asset with tags: %w", err)

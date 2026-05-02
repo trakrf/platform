@@ -23,17 +23,17 @@ interface AssetFormProps {
 }
 
 export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
-  // Resolve current_location_id from natural key for write path (POST/PUT unchanged)
+  // Resolve location_id from natural key for write path (POST/PUT unchanged)
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const resolvedLocationId = asset?.current_location_external_key
-    ? (getLocationByIdentifier(asset.current_location_external_key)?.id ?? null)
+  const resolvedLocationId = asset?.location_external_key
+    ? (getLocationByIdentifier(asset.location_external_key)?.id ?? null)
     : null;
 
   const [formData, setFormData] = useState({
     external_key: asset?.external_key || initialIdentifier || '',
     name: asset?.name || '',
     description: asset?.description || '',
-    current_location_id: resolvedLocationId as number | null,
+    location_id: resolvedLocationId as number | null,
     valid_from: asset?.valid_from?.split('T')[0] || new Date().toISOString().split('T')[0],
     valid_to: asset?.valid_to?.split('T')[0] || '',
     is_active: asset?.is_active ?? true,
@@ -88,8 +88,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         external_key: asset.external_key,
         name: asset.name,
         description: asset.description,
-        current_location_id: asset.current_location_external_key
-          ? (getLocationByIdentifier(asset.current_location_external_key)?.id ?? null)
+        location_id: asset.location_external_key
+          ? (getLocationByIdentifier(asset.location_external_key)?.id ?? null)
           : null,
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
@@ -251,7 +251,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       external_key: formData.external_key,
       name: formData.name,
       description: formData.description,
-      current_location_id: formData.current_location_id,
+      location_id: formData.location_id,
       valid_from: toRFC3339(formData.valid_from),
       valid_to: toRFC3339(formData.valid_to || '2099-12-31'),
       is_active: formData.is_active,
@@ -349,8 +349,8 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
           </label>
           <select
             id="location"
-            value={formData.current_location_id ?? ''}
-            onChange={(e) => handleChange('current_location_id', e.target.value ? Number(e.target.value) : null)}
+            value={formData.location_id ?? ''}
+            onChange={(e) => handleChange('location_id', e.target.value ? Number(e.target.value) : null)}
             disabled={loading}
             className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           >

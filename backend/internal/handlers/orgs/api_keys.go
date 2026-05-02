@@ -139,7 +139,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := apikey.APIKeyCreateResponse{
-		Key:       signed,
+		Token:     signed,
 		ID:        key.ID,
 		JTI:       key.JTI,
 		Name:      key.Name,

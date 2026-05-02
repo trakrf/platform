@@ -3,16 +3,6 @@
     "schemas": {
       "asset.CreateAssetWithTagsRequest": {
         "properties": {
-          "current_location_external_key": {
-            "example": "WHS-01",
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          },
-          "current_location_id": {
-            "example": 42,
-            "type": "integer"
-          },
           "description": {
             "maxLength": 1024,
             "type": "string"
@@ -24,6 +14,16 @@
           "is_active": {
             "example": true,
             "type": "boolean"
+          },
+          "location_external_key": {
+            "example": "WHS-01",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "location_id": {
+            "example": 42,
+            "type": "integer"
           },
           "metadata": {
             "additionalProperties": true,
@@ -62,14 +62,6 @@
             "format": "date-time",
             "type": "string"
           },
-          "current_location_external_key": {
-            "nullable": true,
-            "type": "string"
-          },
-          "current_location_id": {
-            "nullable": true,
-            "type": "integer"
-          },
           "description": {
             "type": "string"
           },
@@ -81,6 +73,14 @@
           },
           "is_active": {
             "type": "boolean"
+          },
+          "location_external_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "location_id": {
+            "nullable": true,
+            "type": "integer"
           },
           "metadata": {
             "additionalProperties": true,
@@ -112,8 +112,8 @@
           "id",
           "external_key",
           "name",
-          "current_location_id",
-          "current_location_external_key",
+          "location_id",
+          "location_external_key",
           "metadata",
           "is_active",
           "valid_from",
@@ -125,16 +125,6 @@
       },
       "asset.UpdateAssetRequest": {
         "properties": {
-          "current_location_external_key": {
-            "example": "WHS-01",
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          },
-          "current_location_id": {
-            "example": 42,
-            "type": "integer"
-          },
           "description": {
             "maxLength": 1024,
             "type": "string"
@@ -146,6 +136,16 @@
           },
           "is_active": {
             "type": "boolean"
+          },
+          "location_external_key": {
+            "example": "WHS-01",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "location_id": {
+            "example": 42,
+            "type": "integer"
           },
           "metadata": {
             "additionalProperties": true,
@@ -409,14 +409,14 @@
             "nullable": true,
             "type": "integer"
           },
-          "path": {
-            "type": "string"
-          },
           "tags": {
             "items": {
               "$ref": "#/components/schemas/shared.Tag"
             },
             "type": "array"
+          },
+          "tree_path": {
+            "type": "string"
           },
           "updated_at": {
             "format": "date-time",
@@ -437,7 +437,7 @@
           "name",
           "parent_id",
           "parent_external_key",
-          "path",
+          "tree_path",
           "depth",
           "is_active",
           "valid_from",
@@ -2055,8 +2055,8 @@
             "schema": {
               "items": {
                 "enum": [
-                  "path",
-                  "-path",
+                  "tree_path",
+                  "-tree_path",
                   "external_key",
                   "-external_key",
                   "name",

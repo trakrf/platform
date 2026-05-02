@@ -6,7 +6,7 @@ import type { Location } from '@/types/locations';
 
 afterEach(cleanup);
 
-function makeLocation(overrides: Partial<Location> & { id: number; name: string; path: string; depth: number }): Location {
+function makeLocation(overrides: Partial<Location> & { id: number; name: string; tree_path: string; depth: number }): Location {
   return {
     org_id: 1,
     external_key: `loc-${overrides.id}`,
@@ -23,9 +23,9 @@ function makeLocation(overrides: Partial<Location> & { id: number; name: string;
 }
 
 const locations: Location[] = [
-  makeLocation({ id: 1, name: 'Warehouse A', path: 'warehouse-a', depth: 0 }),
-  makeLocation({ id: 2, name: 'Shelf B', path: 'warehouse-a/shelf-b', depth: 1 }),
-  makeLocation({ id: 3, name: 'Office C', path: 'office-c', depth: 0 }),
+  makeLocation({ id: 1, name: 'Warehouse A', tree_path: 'warehouse-a', depth: 0 }),
+  makeLocation({ id: 2, name: 'Shelf B', tree_path: 'warehouse-a/shelf-b', depth: 1 }),
+  makeLocation({ id: 3, name: 'Office C', tree_path: 'office-c', depth: 0 }),
 ];
 
 const defaultProps = {
@@ -129,9 +129,9 @@ describe('LocationBar', () => {
   it('sorts locations by path in dropdown', async () => {
     // Provide locations in non-sorted order to verify sorting
     const unsortedLocations: Location[] = [
-      makeLocation({ id: 3, name: 'Office C', path: 'office-c', depth: 0 }),
-      makeLocation({ id: 1, name: 'Warehouse A', path: 'warehouse-a', depth: 0 }),
-      makeLocation({ id: 2, name: 'Shelf B', path: 'warehouse-a/shelf-b', depth: 1 }),
+      makeLocation({ id: 3, name: 'Office C', tree_path: 'office-c', depth: 0 }),
+      makeLocation({ id: 1, name: 'Warehouse A', tree_path: 'warehouse-a', depth: 0 }),
+      makeLocation({ id: 2, name: 'Shelf B', tree_path: 'warehouse-a/shelf-b', depth: 1 }),
     ];
 
     render(
@@ -148,7 +148,7 @@ describe('LocationBar', () => {
     // Wait for menu items to appear
     const menuItems = await screen.findAllByRole('menuitem');
 
-    // Sorted by path: office-c, warehouse-a, warehouse-a/shelf-b
+    // Sorted by tree_path: office-c, warehouse-a, warehouse-a/shelf-b
     expect(menuItems[0]).toHaveTextContent('Office C');
     expect(menuItems[1]).toHaveTextContent('Warehouse A');
     expect(menuItems[2]).toHaveTextContent('Shelf B');

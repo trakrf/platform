@@ -196,9 +196,9 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		"asset.PublicAssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
-				"current_location_id":           &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
-				"current_location_external_key": stringProp(""),
-				"name":                          stringProp(""), // not on the allowlist
+				"location_id":           &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"location_external_key": stringProp(""),
+				"name":                  stringProp(""), // not on the allowlist
 			},
 		}},
 		"apikey.APIKeyListItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
@@ -234,8 +234,8 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		schema string
 		field  string
 	}{
-		{"asset.PublicAssetView", "current_location_id"},
-		{"asset.PublicAssetView", "current_location_external_key"},
+		{"asset.PublicAssetView", "location_id"},
+		{"asset.PublicAssetView", "location_external_key"},
 		{"apikey.APIKeyListItem", "created_by_key_id"},
 		{"apikey.APIKeyListItem", "last_used_at"},
 		{"report.PublicAssetHistoryItem", "duration_seconds"},

@@ -23,8 +23,8 @@ export function LocationBar({
   locations,
   isAuthenticated,
 }: LocationBarProps) {
-  // Sort locations by path for proper hierarchy ordering
-  const sortedLocations = [...locations].sort((a, b) => a.path.localeCompare(b.path));
+  // Sort locations by tree_path for proper hierarchy ordering
+  const sortedLocations = [...locations].sort((a, b) => a.tree_path.localeCompare(b.tree_path));
 
   const resolvedLocation = selectedLocationId
     ? locations.find((l) => l.id === selectedLocationId)

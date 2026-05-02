@@ -173,7 +173,7 @@ export default function APIKeysScreen() {
 
       {newKey && (
         <ShowOnceModal
-          apiKey={newKey.key}
+          apiKey={newKey.token}
           onClose={() => setNewKey(null)}
         />
       )}

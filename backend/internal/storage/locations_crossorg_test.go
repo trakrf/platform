@@ -28,7 +28,7 @@ func TestUpdateLocation_CrossOrgReturnsNil(t *testing.T) {
 		OrgID:       orgA,
 		ExternalKey: "wh-a",
 		Name:        "Owned by A",
-		Path:        "wh-a",
+		TreePath:    "wh-a",
 		ValidFrom:   time.Now(),
 		IsActive:    true,
 	})
@@ -59,7 +59,7 @@ func TestDeleteLocation_CrossOrgReturnsFalse(t *testing.T) {
 		OrgID:       orgA,
 		ExternalKey: "wh-a-del",
 		Name:        "Owned by A",
-		Path:        "wh-a-del",
+		TreePath:    "wh-a-del",
 		ValidFrom:   time.Now(),
 		IsActive:    true,
 	})

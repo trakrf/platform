@@ -24,7 +24,7 @@ const createMockLocation = (id: number, name: string, tagEpc?: string): Location
   name,
   description: '',
   parent_id: null,
-  path: `loc_${id}`,
+  tree_path: `loc_${id}`,
   depth: 1,
   valid_from: '2024-01-01',
   valid_to: null,
