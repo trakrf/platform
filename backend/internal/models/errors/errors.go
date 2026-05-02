@@ -63,6 +63,41 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
+// TitleForType returns the canonical, fixed title for an error type.
+// `error.title` is stable per `error.type` per the v1 contract; per-call
+// specifics (the offending value, the missing field) belong in
+// `error.detail` or `error.fields[]`, never in `title`.
+//
+// Unknown types fall back to "Error" so a typo in errType still produces
+// a valid envelope rather than a panic.
+func TitleForType(t ErrorType) string {
+	switch t {
+	case ErrValidation:
+		return "Validation failed"
+	case ErrNotFound:
+		return "Not found"
+	case ErrConflict:
+		return "Conflict"
+	case ErrInternal:
+		return "Internal server error"
+	case ErrBadRequest:
+		return "Bad request"
+	case ErrUnauthorized:
+		return "Unauthorized"
+	case ErrForbidden:
+		return "Forbidden"
+	case ErrRateLimited:
+		return "Rate limited"
+	case ErrMethodNotAllowed:
+		return "Method not allowed"
+	case ErrUnsupportedMedia:
+		return "Unsupported media type"
+	case ErrMissingOrgContext:
+		return "Missing org context"
+	}
+	return "Error"
+}
+
 // Domain-specific errors
 var (
 	// Org errors

@@ -48,7 +48,8 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	profile, err := h.service.GetUserProfile(r.Context(), claims.UserID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to get user profile", "", middleware.GetRequestID(r.Context()))
+			"Failed to get user profile", middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -80,24 +81,28 @@ func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {
 	var request organization.SetCurrentOrgRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid JSON", err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			"Validation failed", err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := h.service.SetCurrentOrg(r.Context(), claims.UserID, request.OrgID); err != nil {
 		if errors.Is(err, storage.ErrOrgUserNotFound) {
 			httputil.WriteJSONError(w, r, http.StatusForbidden, modelerrors.ErrForbidden,
-				apierrors.OrgNotMember, "", middleware.GetRequestID(r.Context()))
+				apierrors.OrgNotMember, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.OrgNotMember, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -105,7 +110,8 @@ func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {
 	token, err := jwt.Generate(claims.UserID, claims.Email, &request.OrgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to generate token", "", middleware.GetRequestID(r.Context()))
+			"Failed to generate token", middleware.GetRequestID(r.Context()))
+
 		return
 	}
 

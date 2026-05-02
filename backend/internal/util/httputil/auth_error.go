@@ -18,7 +18,7 @@ const AuthRealm = "trakrf-api"
 func Respond401(w http.ResponseWriter, r *http.Request, detail, requestID string) {
 	w.Header().Set("WWW-Authenticate", `Bearer realm="`+AuthRealm+`"`)
 	WriteJSONError(w, r, http.StatusUnauthorized, apierrors.ErrUnauthorized,
-		"Authentication required", detail, requestID)
+		detail, requestID)
 }
 
 // Respond404 writes a normalized not-found response. All 404 call sites in
@@ -29,5 +29,5 @@ func Respond401(w http.ResponseWriter, r *http.Request, detail, requestID string
 // detail is caller-supplied, e.g. apierrors.AssetNotFound.
 func Respond404(w http.ResponseWriter, r *http.Request, detail, requestID string) {
 	WriteJSONError(w, r, http.StatusNotFound, apierrors.ErrNotFound,
-		"Not found", detail, requestID)
+		detail, requestID)
 }

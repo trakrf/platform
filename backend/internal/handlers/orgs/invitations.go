@@ -32,14 +32,16 @@ func (h *Handler) ListInvitations(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	invitations, err := h.service.ListPendingInvitations(r.Context(), orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.InvitationListFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.InvitationListFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -72,20 +74,23 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	var req organization.CreateInvitationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvitationCreateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(req); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.InvitationCreateValidation, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -101,13 +106,16 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 		switch err.Error() {
 		case "already_member":
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				fmt.Sprintf(apierrors.InvitationAlreadyMember, req.Email), "", middleware.GetRequestID(r.Context()))
+				fmt.Sprintf(apierrors.InvitationAlreadyMember, req.Email), middleware.GetRequestID(r.Context()))
+
 		case "already_pending":
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				fmt.Sprintf(apierrors.InvitationAlreadyPending, req.Email), "", middleware.GetRequestID(r.Context()))
+				fmt.Sprintf(apierrors.InvitationAlreadyPending, req.Email), middleware.GetRequestID(r.Context()))
+
 		default:
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-				apierrors.InvitationCreateFailed, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationCreateFailed, middleware.GetRequestID(r.Context()))
+
 		}
 		return
 	}
@@ -135,7 +143,8 @@ func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 	inviteID, err := strconv.Atoi(chi.URLParam(r, "inviteId"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvitationInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.InvitationInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -145,7 +154,8 @@ func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.InvitationCancelFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.InvitationCancelFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -172,14 +182,16 @@ func (h *Handler) ResendInvitation(w http.ResponseWriter, r *http.Request) {
 	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	inviteID, err := strconv.Atoi(chi.URLParam(r, "inviteId"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvitationInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.InvitationInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -197,7 +209,8 @@ func (h *Handler) ResendInvitation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.InvitationResendFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.InvitationResendFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 

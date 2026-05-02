@@ -52,7 +52,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgs, err := h.storage.ListUserOrgs(r.Context(), claims.UserID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.OrgListFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgListFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -84,13 +85,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request organization.CreateOrganizationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgCreateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.OrgCreateValidationFail, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -98,11 +101,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err.Error() == "organization identifier already taken" {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				"Organization identifier already taken", "", middleware.GetRequestID(r.Context()))
+				"Organization identifier already taken", middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.OrgCreateFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgCreateFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -129,14 +134,16 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	org, err := h.storage.GetOrganizationByID(r.Context(), id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.OrgGetFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgGetFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -168,27 +175,31 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgUpdateInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgUpdateInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	var request organization.UpdateOrganizationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgUpdateInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.OrgUpdateValidationFail, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	org, err := h.storage.UpdateOrganization(r.Context(), id, request)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.OrgUpdateFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgUpdateFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -221,14 +232,16 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgDeleteInvalidID, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgDeleteInvalidID, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	var request organization.DeleteOrganizationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgDeleteInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -236,7 +249,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err.Error() == "organization name does not match" {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-				apierrors.OrgDeleteNameMismatch, "", middleware.GetRequestID(r.Context()))
+				apierrors.OrgDeleteNameMismatch, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		if err.Error() == "organization not found" {
@@ -244,7 +258,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.OrgDeleteFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.OrgDeleteFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 

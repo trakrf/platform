@@ -365,8 +365,9 @@ func TestCreateAPIKey_EmptyBody_CleanMessage(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "bad_request", resp.Error.Type)
-	assert.Equal(t, "Invalid JSON body", resp.Error.Title)
-	assert.Empty(t, resp.Error.Detail, "detail must not carry runtime error text")
+	assert.Equal(t, "Bad request", resp.Error.Title, "title is fixed per error.type (TRA-579 D-6)")
+	assert.Equal(t, "Invalid JSON body", resp.Error.Detail,
+		"detail carries the per-call message; runtime decoder text must not leak (asserts above)")
 }
 
 func TestCreateAPIKey_ValidationFailed_JSONFieldNames(t *testing.T) {
@@ -451,7 +452,7 @@ func TestCreateAPIKey_RejectsScansWrite(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "validation_error", resp.Error.Type)
-	assert.Equal(t, "Invalid scope", resp.Error.Title)
+	assert.Equal(t, "Validation failed", resp.Error.Title)
 	assert.Contains(t, resp.Error.Detail, "scans:write",
 		"detail must name the offending scope so the integrator knows what to remove")
 }

@@ -46,7 +46,8 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 	org, err := h.storage.GetOrganizationByID(r.Context(), principal.OrgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to get organization", "", reqID)
+			"Failed to get organization", reqID)
+
 		return
 	}
 	if org == nil {

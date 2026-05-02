@@ -50,20 +50,23 @@ func (h *Handler) LookupByTag(w http.ResponseWriter, r *http.Request) {
 
 	if tagType == "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.LookupFailed, "type parameter is required", requestID)
+			"type parameter is required", requestID)
+
 		return
 	}
 
 	if value == "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.LookupFailed, "value parameter is required", requestID)
+			"value parameter is required", requestID)
+
 		return
 	}
 
 	result, err := h.storage.LookupByTagValue(r.Context(), orgID, tagType, value)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LookupFailed, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
@@ -105,13 +108,15 @@ func (h *Handler) LookupByTags(w http.ResponseWriter, r *http.Request) {
 	var req BatchLookupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.LookupFailed, "invalid request body", requestID)
+			"invalid request body", requestID)
+
 		return
 	}
 
 	if req.Type == "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.LookupFailed, "type field is required", requestID)
+			"type field is required", requestID)
+
 		return
 	}
 
@@ -125,14 +130,16 @@ func (h *Handler) LookupByTags(w http.ResponseWriter, r *http.Request) {
 	const maxBatchSize = 500
 	if len(req.Values) > maxBatchSize {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.LookupFailed, "batch size exceeds maximum of 500", requestID)
+			"batch size exceeds maximum of 500", requestID)
+
 		return
 	}
 
 	results, err := h.storage.LookupByTagValues(r.Context(), orgID, req.Type, req.Values)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.LookupFailed, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 

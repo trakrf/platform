@@ -21,7 +21,7 @@ func TestWriteJSONError_StripsTrakrfModulePathFromDetail(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
 
 	detail := "failed to query github.com/trakrf/platform/backend/internal/storage.ListAssets: connection refused"
-	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, "Internal error", detail, "req-1")
+	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, detail, "req-1")
 
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -36,7 +36,7 @@ func TestWriteJSONError_StripsThirdPartyModulePathFromDetail(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
 
 	detail := "scan failed: github.com/jackc/pgx/v5.errBadConn"
-	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, "Internal error", detail, "req-1")
+	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, detail, "req-1")
 
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -51,7 +51,7 @@ func TestWriteJSONError_StripsNonGithubModulePathFromDetail(t *testing.T) {
 	// Sanitizer matches host/path shape, not a literal hostname, so vanity
 	// imports and other forges are scrubbed too.
 	detail := "scan failed: golang.org/x/sync/singleflight.Group: deadlock"
-	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, "Internal error", detail, "req-1")
+	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, detail, "req-1")
 
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -65,7 +65,7 @@ func TestWriteJSONError_LeavesPlainDetailUntouched(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
 
 	detail := "asset FORK-007 not found"
-	httputil.WriteJSONError(w, r, 404, apierrors.ErrNotFound, "Not found", detail, "req-1")
+	httputil.WriteJSONError(w, r, 404, apierrors.ErrNotFound, detail, "req-1")
 
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -78,7 +78,7 @@ func TestWriteJSONErrorWithFields_StripsModulePathFromDetail(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/v1/assets", nil)
 
 	detail := "validation failed: github.com/trakrf/platform/backend/internal/models/asset.Validate: bad input"
-	httputil.WriteJSONErrorWithFields(w, r, 422, apierrors.ErrValidation, "Validation error", detail, "req-1", nil)
+	httputil.WriteJSONErrorWithFields(w, r, 422, apierrors.ErrValidation, detail, "req-1", nil)
 
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))

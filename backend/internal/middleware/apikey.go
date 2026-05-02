@@ -121,8 +121,9 @@ func RequireScope(required string) func(http.Handler) http.Handler {
 				}
 			}
 			httputil.WriteJSONError(w, r, http.StatusForbidden,
-				errors.ErrForbidden, "Forbidden",
+				errors.ErrForbidden,
 				"Missing required scope: "+required, reqID)
+
 		})
 	}
 }

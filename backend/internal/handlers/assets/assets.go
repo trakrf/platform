@@ -135,12 +135,13 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if request.ExternalKey != "" && strings.TrimSpace(request.ExternalKey) == "" {
 		msg := "external_key must contain non-whitespace characters"
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.AssetCreateFailed, msg, requestID,
+			msg, requestID,
 			[]modelerrors.FieldError{{
 				Field:   "external_key",
 				Code:    "invalid_value",
 				Message: msg,
 			}})
+
 		return
 	}
 
@@ -153,12 +154,14 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-				apierrors.AssetCreateFailed, fErr.Message, requestID)
+				fErr.Message, requestID)
+
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.AssetCreateFailed, fErr.Message, requestID,
+			fErr.Message, requestID,
 			[]modelerrors.FieldError{*fErr})
+
 		return
 	}
 	request.CurrentLocationID = resolved
@@ -169,7 +172,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.AssetCreateFailed, err.Error(), requestID)
+				err.Error(), requestID)
+
 			return
 		}
 		httputil.RespondStorageError(w, r, err, requestID)
@@ -229,12 +233,13 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	// valid_to null requests a clear (SQL NULL), per TRA-468 wire convention.
 	if _, ok := explicitNulls["valid_from"]; ok {
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.AssetUpdateFailed, "validation failed", reqID,
+			"validation failed", reqID,
 			[]modelerrors.FieldError{{
 				Field:   "valid_from",
 				Code:    "invalid_value",
 				Message: "valid_from cannot be null; omit the field to leave unchanged, or provide a date",
 			}})
+
 		return
 	}
 	if _, ok := explicitNulls["valid_to"]; ok {
@@ -250,12 +255,14 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-				apierrors.AssetUpdateFailed, fErr.Message, reqID)
+				fErr.Message, reqID)
+
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.AssetUpdateFailed, fErr.Message, reqID,
+			fErr.Message, reqID,
 			[]modelerrors.FieldError{*fErr})
+
 		return
 	}
 	request.CurrentLocationID = resolved
@@ -264,7 +271,8 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.AssetUpdateFailed, err.Error(), reqID)
+				err.Error(), reqID)
+
 			return
 		}
 		httputil.RespondStorageError(w, req, err, reqID)
@@ -406,12 +414,13 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 			n, err := strconv.Atoi(s)
 			if err != nil || n < 1 {
 				httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-					apierrors.AssetListFailed, "invalid location_id", reqID,
+					"invalid location_id", reqID,
 					[]modelerrors.FieldError{{
 						Field:   "location_id",
 						Code:    "invalid_value",
 						Message: fmt.Sprintf("location_id %q must be a positive integer", s),
 					}})
+
 				return
 			}
 			f.LocationIDs = append(f.LocationIDs, n)
@@ -431,14 +440,16 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	items, err := handler.storage.ListAssetsFiltered(req.Context(), orgID, f)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.AssetListFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	total, err := handler.storage.CountAssetsFiltered(req.Context(), orgID, f)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.AssetCountFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
@@ -485,14 +496,16 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 
 	view, err := handler.storage.GetAssetWithLocationByIDForTest(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.AssetGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 	if view == nil {
@@ -534,6 +547,14 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 	}
 
 	q := req.URL.Query()
+	// D-4: duplicate external_key params silently first-wins is an LLM-hostile
+	// bug; reject them explicitly. Repeated values (same or different) → 400.
+	if len(q["external_key"]) > 1 {
+		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
+			"exactly one of: external_key", reqID)
+		return
+	}
+
 	naturalKeyParams := []string{"external_key"}
 	provided := 0
 	for _, k := range naturalKeyParams {
@@ -544,12 +565,14 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 
 	if provided == 0 {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Missing natural-key parameter", "exactly one of: external_key", reqID)
+			"exactly one of: external_key", reqID)
+
 		return
 	}
 	if provided > 1 {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Multiple natural-key parameters", "exactly one of: external_key", reqID)
+			"exactly one of: external_key", reqID)
+
 		return
 	}
 
@@ -557,7 +580,8 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 	a, err := handler.storage.GetAssetByExternalKey(req.Context(), orgID, externalKey)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.AssetGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return
 	}
 	if a == nil {
@@ -632,7 +656,8 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.AssetCreateFailed, err.Error(), requestID)
+				err.Error(), requestID)
+
 			return
 		}
 		httputil.RespondStorageError(w, r, err, requestID)
@@ -672,14 +697,16 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
 	a, err := handler.storage.GetAssetByID(r.Context(), orgID, &id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.AssetGetFailed, err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 	if a == nil || a.OrgID != orgID {
@@ -701,7 +728,8 @@ func (handler *Handler) doRemoveAssetTag(w http.ResponseWriter, r *http.Request,
 	tagID, err := strconv.Atoi(tagIDParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"invalid tag id", err.Error(), requestID)
+			err.Error(), requestID)
+
 		return
 	}
 
@@ -722,14 +750,16 @@ func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.R
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			fmt.Sprintf(apierrors.AssetGetInvalidID, idParam), err.Error(), reqID)
+			err.Error(), reqID)
+
 		return 0, false
 	}
 
 	a, err := handler.storage.GetAssetByID(req.Context(), orgID, &id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.AssetGetFailed, err.Error(), reqID)
+			err.Error(), reqID)
+
 		return 0, false
 	}
 	if a == nil || a.OrgID != orgID {

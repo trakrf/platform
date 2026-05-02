@@ -46,14 +46,16 @@ func RequireOrgMember(store OrgRoleStore) func(http.Handler) http.Handler {
 			}
 			if orgIDStr == "" {
 				httputil.WriteJSONError(w, r, http.StatusBadRequest,
-					errors.ErrBadRequest, "Bad Request", "Organization ID required", requestID)
+					errors.ErrBadRequest, "Organization ID required", requestID)
+
 				return
 			}
 
 			orgID, err := strconv.Atoi(orgIDStr)
 			if err != nil {
 				httputil.WriteJSONError(w, r, http.StatusBadRequest,
-					errors.ErrBadRequest, "Bad Request", "Invalid organization ID", requestID)
+					errors.ErrBadRequest, "Invalid organization ID", requestID)
+
 				return
 			}
 
@@ -66,7 +68,8 @@ func RequireOrgMember(store OrgRoleStore) func(http.Handler) http.Handler {
 					Str("request_id", requestID).
 					Msg("Failed to check superadmin status")
 				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
-					errors.ErrInternal, "Internal Error", "Failed to check permissions", requestID)
+					errors.ErrInternal, "Failed to check permissions", requestID)
+
 				return
 			}
 
@@ -91,7 +94,8 @@ func RequireOrgMember(store OrgRoleStore) func(http.Handler) http.Handler {
 				if err.Error() == ErrOrgUserNotFound.Error() {
 					logAccessDenied(claims.UserID, orgID, "member", r)
 					httputil.WriteJSONError(w, r, http.StatusForbidden,
-						errors.ErrForbidden, "Forbidden", "You are not a member of this organization", requestID)
+						errors.ErrForbidden, "You are not a member of this organization", requestID)
+
 					return
 				}
 				logger.Get().Error().
@@ -101,7 +105,8 @@ func RequireOrgMember(store OrgRoleStore) func(http.Handler) http.Handler {
 					Str("request_id", requestID).
 					Msg("Failed to get user org role")
 				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
-					errors.ErrInternal, "Internal Error", "Failed to check permissions", requestID)
+					errors.ErrInternal, "Failed to check permissions", requestID)
+
 				return
 			}
 
@@ -125,7 +130,8 @@ func RequireOrgRole(store OrgRoleStore, minRole models.OrgRole) func(http.Handle
 			role, ok := GetOrgRole(ctx)
 			if !ok {
 				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
-					errors.ErrInternal, "Internal Error", "Role not found in context", requestID)
+					errors.ErrInternal, "Role not found in context", requestID)
+
 				return
 			}
 
@@ -138,8 +144,9 @@ func RequireOrgRole(store OrgRoleStore, minRole models.OrgRole) func(http.Handle
 				logAccessDenied(claims.UserID, orgID, minRole.String(), r)
 
 				httputil.WriteJSONError(w, r, http.StatusForbidden,
-					errors.ErrForbidden, "Forbidden",
+					errors.ErrForbidden,
 					"Insufficient permissions. Required role: "+minRole.String(), requestID)
+
 				return
 			}
 

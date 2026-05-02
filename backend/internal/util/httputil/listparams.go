@@ -174,13 +174,13 @@ func RespondListParamError(w http.ResponseWriter, r *http.Request, err error, re
 	var lpe *ListParamError
 	if errors.As(err, &lpe) {
 		WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-			"Invalid request", lpe.Error(), requestID, lpe.Fields)
+			lpe.Error(), requestID, lpe.Fields)
 		return
 	}
-	msg := ""
+	msg := "invalid list parameters"
 	if err != nil {
 		msg = err.Error()
 	}
 	WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
-		"Invalid list parameters", msg, requestID)
+		msg, requestID)
 }

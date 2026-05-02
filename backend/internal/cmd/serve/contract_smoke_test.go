@@ -94,13 +94,13 @@ func TestContract_MissingAuthHeader_WWWAuthenticate(t *testing.T) {
 
 	var resp apierrors.ErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Equal(t, "Authentication required", resp.Error.Title)
+	require.Equal(t, "Unauthorized", resp.Error.Title)
 	require.Equal(t, string(apierrors.ErrUnauthorized), resp.Error.Type)
 	require.Equal(t, "Authorization header is required", resp.Error.Detail)
 }
 
 // TestContract_BB12_401Reproductions covers the four 401 variants named in
-// BB12 §1.2 (TRA-538). Each must emit title="Authentication required" with
+// BB12 §1.2 (TRA-538). Each must emit title="Unauthorized" with
 // the variable explanation in detail. Title must NOT contain "Bearer" or
 // the offending value — the contract violation the audit found.
 func TestContract_BB12_401Reproductions(t *testing.T) {
@@ -182,7 +182,7 @@ func TestContract_BB12_401Reproductions(t *testing.T) {
 			var resp apierrors.ErrorResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 
-			require.Equal(t, "Authentication required", resp.Error.Title,
+			require.Equal(t, "Unauthorized", resp.Error.Title,
 				"title must be the fixed string per TRA-538 contract")
 			require.Equal(t, "unauthorized", resp.Error.Type)
 			require.Contains(t, resp.Error.Detail, tc.wantDetailHas,
@@ -287,7 +287,7 @@ func TestContract_MissingOrgContext_EnvelopeAndType(t *testing.T) {
 	var resp apierrors.ErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, "missing_org_context", resp.Error.Type)
-	require.Equal(t, "Organization context required", resp.Error.Title)
+	require.Equal(t, "Missing org context", resp.Error.Title)
 	require.Equal(t, 422, resp.Error.Status)
 	require.Contains(t, resp.Error.Detail, "active organization context")
 	require.NotEmpty(t, resp.Error.RequestID, "request_id must propagate into envelope")

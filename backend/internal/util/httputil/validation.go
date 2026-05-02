@@ -154,7 +154,7 @@ func RespondValidationError(w http.ResponseWriter, r *http.Request, err error, r
 	var ves validator.ValidationErrors
 	if !errors.As(err, &ves) {
 		WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
-			"Bad Request", "Request validation failed", requestID)
+			"Request validation failed", requestID)
 		return
 	}
 	fields := make([]apierrors.FieldError, 0, len(ves))
@@ -167,5 +167,5 @@ func RespondValidationError(w http.ResponseWriter, r *http.Request, err error, r
 		})
 	}
 	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-		"Validation failed", "Request did not pass validation", requestID, fields)
+		"Request did not pass validation", requestID, fields)
 }

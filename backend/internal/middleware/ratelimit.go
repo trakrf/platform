@@ -77,9 +77,10 @@ func RateLimit(lim *ratelimit.Limiter) func(http.Handler) http.Handler {
 
 				httputil.WriteJSONError(w, r, http.StatusTooManyRequests,
 					errors.ErrRateLimited,
-					"Rate limit exceeded",
+
 					fmt.Sprintf("Retry after %d seconds", retrySec),
 					reqID)
+
 				return
 			}
 

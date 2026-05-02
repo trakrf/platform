@@ -25,10 +25,10 @@ func RespondStorageError(w http.ResponseWriter, r *http.Request, err error, requ
 		switch pgErr.Code {
 		case "23505":
 			WriteJSONError(w, r, http.StatusConflict, apierrors.ErrConflict,
-				"Conflict", "Resource already exists", requestID)
+				"Resource already exists", requestID)
 			return
 		}
 	}
 	WriteJSONError(w, r, http.StatusInternalServerError, apierrors.ErrInternal,
-		"Internal Server Error", "An unexpected error occurred", requestID)
+		"An unexpected error occurred", requestID)
 }

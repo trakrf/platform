@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/trakrf/platform/backend/internal/apierrors"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
@@ -103,12 +102,13 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	if loc == nil {
 		msg := fmt.Sprintf("location_identifier %q not found", *request.LocationIdentifier)
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.InventorySaveFailed, msg, requestID,
+			msg, requestID,
 			[]modelerrors.FieldError{{
 				Field:   "location_identifier",
 				Code:    "invalid_value",
 				Message: msg,
 			}})
+
 		return
 	}
 	locationID := loc.ID
@@ -139,7 +139,8 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			apierrors.InventorySaveFailed, msg, requestID, fields)
+			msg, requestID, fields)
+
 		return
 	}
 
@@ -160,7 +161,8 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 				Msg("Inventory save denied: org context mismatch")
 
 			httputil.WriteJSONError(w, r, http.StatusForbidden, modelerrors.ErrForbidden,
-				apierrors.InventorySaveForbidden, errStr, requestID)
+				errStr, requestID)
+
 			return
 		}
 		httputil.RespondStorageError(w, r, err, requestID)

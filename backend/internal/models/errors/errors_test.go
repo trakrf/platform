@@ -25,6 +25,37 @@ func TestErrorVariables(t *testing.T) {
 	}
 }
 
+// TRA-579 D-6: error.title is fixed per error.type. The mapping is
+// authoritative; tests below pin every declared ErrorType so a contributor
+// who adds a new type without updating TitleForType will see this test fail.
+func TestTitleForType_PinnedPerType(t *testing.T) {
+	cases := map[ErrorType]string{
+		ErrValidation:        "Validation failed",
+		ErrNotFound:          "Not found",
+		ErrConflict:          "Conflict",
+		ErrInternal:          "Internal server error",
+		ErrBadRequest:        "Bad request",
+		ErrUnauthorized:      "Unauthorized",
+		ErrForbidden:         "Forbidden",
+		ErrRateLimited:       "Rate limited",
+		ErrMethodNotAllowed:  "Method not allowed",
+		ErrUnsupportedMedia:  "Unsupported media type",
+		ErrMissingOrgContext: "Missing org context",
+	}
+	for typ, want := range cases {
+		got := TitleForType(typ)
+		if got != want {
+			t.Errorf("TitleForType(%q) = %q, want %q", typ, got, want)
+		}
+	}
+}
+
+func TestTitleForType_UnknownFallsBack(t *testing.T) {
+	if got := TitleForType(ErrorType("not_a_real_type")); got != "Error" {
+		t.Errorf("unknown type fallback = %q, want %q", got, "Error")
+	}
+}
+
 func TestErrorResponse(t *testing.T) {
 	var resp ErrorResponse
 	resp.Error.Type = "test_error"

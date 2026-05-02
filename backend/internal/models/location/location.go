@@ -89,7 +89,12 @@ type LocationWithParent struct {
 }
 
 // ListFilter carries the optional filters the locations list endpoint supports.
+//
+// ParentIDs and ParentExternalKeys are mutually exclusive at the handler
+// boundary; the storage layer ANDs both into the WHERE clause if a caller
+// somehow passed both, but the handler rejects that combination.
 type ListFilter struct {
+	ParentIDs          []int
 	ParentExternalKeys []string
 	IsActive           *bool
 	Q                  *string

@@ -89,7 +89,7 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 			fieldName := matches[1]
 			msg := fmt.Sprintf("unknown field %q in request body", fieldName)
 			WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-				"Invalid request", msg, requestID,
+				msg, requestID,
 				[]apierrors.FieldError{{
 					Field:   fieldName,
 					Code:    "invalid_value",
@@ -99,5 +99,5 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 		}
 	}
 	WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
-		"Bad Request", "Request body is not valid JSON", requestID)
+		"Request body is not valid JSON", requestID)
 }

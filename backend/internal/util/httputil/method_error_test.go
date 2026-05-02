@@ -88,8 +88,8 @@ func TestRespondMissingOrgContext_EnvelopeShape(t *testing.T) {
 	if resp.Error.Type != string(apierrors.ErrMissingOrgContext) {
 		t.Errorf("type = %q, want %q", resp.Error.Type, apierrors.ErrMissingOrgContext)
 	}
-	if resp.Error.Title != "Organization context required" {
-		t.Errorf("title = %q, want Organization context required", resp.Error.Title)
+	if resp.Error.Title != "Missing org context" {
+		t.Errorf("title = %q, want Missing org context", resp.Error.Title)
 	}
 	if resp.Error.Status != 422 {
 		t.Errorf("status field = %d, want 422", resp.Error.Status)

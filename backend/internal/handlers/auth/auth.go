@@ -76,41 +76,49 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "email already exists") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
-				apierrors.AuthSignupEmailExists, "", middleware.GetRequestID(r.Context()))
+				apierrors.AuthSignupEmailExists, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		if strings.Contains(errMsg, "organization identifier already taken") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
-				apierrors.AuthSignupOrgIdentifierTaken, "", middleware.GetRequestID(r.Context()))
+				apierrors.AuthSignupOrgIdentifierTaken, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		// Handle invitation-related errors
 		if strings.HasPrefix(errMsg, "email_mismatch:") {
 			invitedEmail := strings.TrimPrefix(errMsg, "email_mismatch:")
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				fmt.Sprintf(apierrors.SignupInvitationEmailMismatch, invitedEmail), "", middleware.GetRequestID(r.Context()))
+				fmt.Sprintf(apierrors.SignupInvitationEmailMismatch, invitedEmail), middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		switch errMsg {
 		case "invalid_token":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationInvalidToken, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationInvalidToken, middleware.GetRequestID(r.Context()))
+
 			return
 		case "expired":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationExpired, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationExpired, middleware.GetRequestID(r.Context()))
+
 			return
 		case "cancelled":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationCancelled, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationCancelled, middleware.GetRequestID(r.Context()))
+
 			return
 		case "already_accepted":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationAcceptAlreadyUsed, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationAcceptAlreadyUsed, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
-			apierrors.AuthSignupFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.AuthSignupFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -147,7 +155,8 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
-			apierrors.AuthLoginFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.AuthLoginFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -167,13 +176,15 @@ func (handler *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var request auth.ForgotPasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			apierrors.AuthForgotPasswordInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
-			apierrors.AuthForgotPasswordValidation, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -200,13 +211,15 @@ func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var request auth.ResetPasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			apierrors.AuthResetPasswordInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
-			apierrors.AuthResetPasswordValidation, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -214,11 +227,13 @@ func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid or expired") {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.AuthResetPasswordInvalidToken, "", middleware.GetRequestID(r.Context()))
+				apierrors.AuthResetPasswordInvalidToken, middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
-			apierrors.AuthResetPasswordFailed, "", middleware.GetRequestID(r.Context()))
+			apierrors.AuthResetPasswordFailed, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -251,13 +266,15 @@ func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	var request organization.AcceptInvitationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			apierrors.InvitationAcceptInvalidJSON, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrValidation,
-			apierrors.InvitationAcceptValidation, err.Error(), middleware.GetRequestID(r.Context()))
+			err.Error(), middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -268,28 +285,35 @@ func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(errMsg, "email_mismatch:") {
 			invitedEmail := strings.TrimPrefix(errMsg, "email_mismatch:")
 			httputil.WriteJSONError(w, r, http.StatusForbidden, errors.ErrForbidden,
-				fmt.Sprintf(apierrors.InvitationAcceptEmailMismatch, invitedEmail), "", middleware.GetRequestID(r.Context()))
+				fmt.Sprintf(apierrors.InvitationAcceptEmailMismatch, invitedEmail), middleware.GetRequestID(r.Context()))
+
 			return
 		}
 		switch errMsg {
 		case "invalid_token":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationInvalidToken, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationInvalidToken, middleware.GetRequestID(r.Context()))
+
 		case "expired":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationExpired, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationExpired, middleware.GetRequestID(r.Context()))
+
 		case "cancelled":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationCancelled, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationCancelled, middleware.GetRequestID(r.Context()))
+
 		case "already_accepted":
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-				apierrors.InvitationAcceptAlreadyUsed, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationAcceptAlreadyUsed, middleware.GetRequestID(r.Context()))
+
 		case "already_member":
 			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
-				apierrors.InvitationAcceptAlreadyMember, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationAcceptAlreadyMember, middleware.GetRequestID(r.Context()))
+
 		default:
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
-				apierrors.InvitationAcceptFailed, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationAcceptFailed, middleware.GetRequestID(r.Context()))
+
 		}
 		return
 	}
@@ -311,7 +335,8 @@ func (handler *Handler) GetInvitationInfo(w http.ResponseWriter, r *http.Request
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
-			apierrors.InvitationInfoMissingToken, "", middleware.GetRequestID(r.Context()))
+			apierrors.InvitationInfoMissingToken, middleware.GetRequestID(r.Context()))
+
 		return
 	}
 
@@ -324,7 +349,8 @@ func (handler *Handler) GetInvitationInfo(w http.ResponseWriter, r *http.Request
 			httputil.Respond404(w, r, apierrors.InvitationInvalidToken, middleware.GetRequestID(r.Context()))
 		default:
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
-				apierrors.InvitationInfoFailed, "", middleware.GetRequestID(r.Context()))
+				apierrors.InvitationInfoFailed, middleware.GetRequestID(r.Context()))
+
 		}
 		return
 	}
