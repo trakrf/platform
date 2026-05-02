@@ -53,7 +53,7 @@ type ListCurrentLocationsResponse struct {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
-// @Security APIKey[scans:read]
+// @Security APIKey[history:read]
 // @Router /api/v1/locations/current [get]
 func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
