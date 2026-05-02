@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -18,9 +19,12 @@ import (
 // HTML page and silently succeed. Servers are ordered Preview-first so
 // generated clients default to preview during integration testing
 // (TRA-517 AC12).
-func postprocessPublic(doc *openapi3.T) {
+func postprocessPublic(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
 	markNullableFields(doc)
+	if err := markRequiredFields(doc, requiredFields); err != nil {
+		return err
+	}
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	injectTopLevelSecurity(doc)
@@ -36,13 +40,17 @@ func postprocessPublic(doc *openapi3.T) {
 			Description: "Production. Production-scoped API keys authenticate here only — they will fail with 401 against Preview, and Preview keys will fail here.",
 		},
 	}
+	return nil
 }
 
 // postprocessInternal is the same but labels the doc as internal and
 // uses a local development server URL.
-func postprocessInternal(doc *openapi3.T) {
+func postprocessInternal(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
 	markNullableFields(doc)
+	if err := markRequiredFields(doc, requiredFields); err != nil {
+		return err
+	}
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	doc.Info.Title = "TrakRF Internal API — not for customer use"
@@ -50,6 +58,7 @@ func postprocessInternal(doc *openapi3.T) {
 	doc.Servers = openapi3.Servers{
 		{URL: "http://localhost:8080", Description: "Local development"},
 	}
+	return nil
 }
 
 // rewriteBearerSchemes promotes the security schemes from swaggo's
@@ -108,6 +117,21 @@ var nullableFields = map[string][]string{
 	"location.PublicLocationView":      {"parent_id", "parent_external_key"},
 }
 
+// requiredFields names the response fields that are guaranteed present in
+// every emission of the corresponding schema. The postprocess injects these
+// as the schema's `required:` block so generated clients see them as
+// non-optional. Source of truth: the Go struct's `json:` tag — a field is
+// required iff its tag does NOT contain `,omitempty`. Pointer-typed fields
+// without `,omitempty` are required-and-nullable; they belong here AND in
+// `nullableFields`. Fields with `,omitempty` (e.g. description, valid_to)
+// are excluded.
+//
+// markRequiredFields errors if a configured schema or field is missing from
+// the spec — keeps this map honest as struct fields rename or move.
+var requiredFields = map[string][]string{
+	// Populated in subsequent tasks.
+}
+
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse
 // (and per-property descriptions on the title and detail fields) documenting
 // the title vs detail contract from TRA-517 AC4. swaggo doesn't propagate
@@ -158,6 +182,32 @@ func markNullableFields(doc *openapi3.T) {
 			prop.Value.Nullable = true
 		}
 	}
+}
+
+// markRequiredFields walks doc.Components.Schemas and sets the `required:`
+// list on the configured schemas. Errors if a configured schema or field
+// does not exist in the spec, so renames break the build instead of going
+// silently stale.
+func markRequiredFields(doc *openapi3.T, required map[string][]string) error {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		if len(required) == 0 {
+			return nil
+		}
+		return fmt.Errorf("apispec: components.schemas is empty but requiredFields has %d entries", len(required))
+	}
+	for schemaName, fields := range required {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			return fmt.Errorf("apispec: requiredFields references unknown schema %q", schemaName)
+		}
+		for _, fieldName := range fields {
+			if _, ok := ref.Value.Properties[fieldName]; !ok {
+				return fmt.Errorf("apispec: requiredFields references unknown field %q on schema %q", fieldName, schemaName)
+			}
+		}
+		ref.Value.Required = append([]string(nil), fields...)
+	}
+	return nil
 }
 
 // normalizeSchemaQuirks walks every schema in doc.Components.Schemas (and

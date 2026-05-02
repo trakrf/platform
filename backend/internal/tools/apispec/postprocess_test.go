@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -297,6 +298,69 @@ func TestInjectTopLevelSecurity_PreservesExisting(t *testing.T) {
 	injectTopLevelSecurity(doc)
 	require.Len(t, doc.Security, 1)
 	assert.Equal(t, []string{"read"}, doc.Security[0]["BearerAuth"])
+}
+
+func TestMarkRequiredFields_AddsRequiredBlock(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+		Paths:   openapi3.NewPaths(),
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"thing.View": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{
+						"id":   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
+						"name": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+						"note": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+					},
+				}},
+			},
+		},
+	}
+	required := map[string][]string{"thing.View": {"id", "name"}}
+
+	if err := markRequiredFields(doc, required); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := doc.Components.Schemas["thing.View"].Value.Required
+	want := []string{"id", "name"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("required = %v, want %v", got, want)
+	}
+	if err := doc.Validate(context.Background()); err != nil {
+		t.Fatalf("doc no longer validates: %v", err)
+	}
+}
+
+func TestMarkRequiredFields_ErrorsOnMissingSchema(t *testing.T) {
+	doc := &openapi3.T{Components: &openapi3.Components{Schemas: openapi3.Schemas{}}}
+	required := map[string][]string{"thing.Missing": {"id"}}
+
+	err := markRequiredFields(doc, required)
+	if err == nil {
+		t.Fatalf("expected error for missing schema, got nil")
+	}
+}
+
+func TestMarkRequiredFields_ErrorsOnMissingField(t *testing.T) {
+	doc := &openapi3.T{
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"thing.View": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type:       &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{"id": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}}},
+				}},
+			},
+		},
+	}
+	required := map[string][]string{"thing.View": {"id", "ghost"}}
+
+	err := markRequiredFields(doc, required)
+	if err == nil {
+		t.Fatalf("expected error for missing field, got nil")
+	}
 }
 
 func docWithSchemas(schemas openapi3.Schemas) *openapi3.T {
