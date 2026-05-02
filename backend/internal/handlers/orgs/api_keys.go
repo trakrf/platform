@@ -46,7 +46,6 @@ type ListAPIKeysResponse struct {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 409 {object} modelerrors.ErrorResponse "Active-key cap reached"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
 // @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys [post]
 // CreateAPIKey handles POST /api/v1/orgs/{id}/api-keys.
@@ -156,7 +155,6 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
 // @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys [get]
 // ListAPIKeys handles GET /api/v1/orgs/{id}/api-keys.
@@ -225,7 +223,6 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
 // @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys/{key_id} [delete]
 // RevokeAPIKey handles DELETE /api/v1/orgs/{id}/api-keys/{key_id}.
@@ -273,7 +270,6 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
 // @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys/by-jti/{jti} [delete]
 // RevokeAPIKeyByJTI handles DELETE /api/v1/orgs/{id}/api-keys/by-jti/{jti}.
