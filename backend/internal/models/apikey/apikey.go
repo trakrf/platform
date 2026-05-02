@@ -2,14 +2,19 @@ package apikey
 
 import "time"
 
-// ValidScopes is the canonical set of scope strings accepted by the public API.
+// ValidScopes is the canonical set of scope strings accepted on key minting via
+// the public POST /api/v1/orgs/{id}/api-keys endpoint. scans:write is
+// intentionally absent — it is an internal-only scope (the only handler that
+// references it, /api/v1/inventory/save, is @Tags inventory,internal per
+// TRA-547). Already-minted keys with scans:write continue to authenticate
+// against the internal endpoint because middleware.RequireScope checks the
+// JWT's scope claim against the literal string, not against ValidScopes.
 var ValidScopes = map[string]bool{
 	"assets:read":     true,
 	"assets:write":    true,
 	"locations:read":  true,
 	"locations:write": true,
 	"scans:read":      true,
-	"scans:write":     true,
 	"keys:admin":      true,
 }
 

@@ -32,16 +32,27 @@ describe('ScopeSelector', () => {
     expect(screen.getByLabelText(/assets/i)).toHaveValue('readwrite');
   });
 
-  it('emits scans:read + scans:write for "Read + Write" on Scans', () => {
+  it('does not offer "Read + Write" on Scans (TRA-571 — scans:write is internal-only)', () => {
+    render(<ScopeSelector value={[]} onChange={() => {}} />);
+    const select = screen.getByLabelText(/scans/i);
+    expect(within(select).getByRole('option', { name: /^none$/i })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: /^read$/i })).toBeInTheDocument();
+    expect(within(select).queryByRole('option', { name: /read \+ write/i })).not.toBeInTheDocument();
+  });
+
+  it('still offers "Read + Write" on Assets and Locations', () => {
+    render(<ScopeSelector value={[]} onChange={() => {}} />);
+    const assets = screen.getByLabelText(/assets/i);
+    const locations = screen.getByLabelText(/locations/i);
+    expect(within(assets).getByRole('option', { name: /read \+ write/i })).toBeInTheDocument();
+    expect(within(locations).getByRole('option', { name: /read \+ write/i })).toBeInTheDocument();
+  });
+
+  it('emits scans:read for "Read" on Scans', () => {
     const onChange = vi.fn();
     render(<ScopeSelector value={[]} onChange={onChange} />);
-    const select = screen.getByLabelText(/scans/i);
-    // Guard: the Read+Write option must actually be rendered for Scans — a prior
-    // regression (hasWrite=false) hid this option but fireEvent.change would still
-    // dispatch the onChange, masking the bug.
-    expect(within(select).getByRole('option', { name: /read \+ write/i })).toBeInTheDocument();
-    fireEvent.change(select, { target: { value: 'readwrite' } });
-    expect(onChange).toHaveBeenCalledWith(['scans:read', 'scans:write']);
+    fireEvent.change(screen.getByLabelText(/scans/i), { target: { value: 'read' } });
+    expect(onChange).toHaveBeenCalledWith(['scans:read']);
   });
 
   it('renders Key management row with None/Admin options', () => {

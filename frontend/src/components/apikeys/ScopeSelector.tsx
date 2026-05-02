@@ -13,7 +13,7 @@ type ResourceKey = 'assets' | 'locations' | 'scans';
 const RESOURCES: { key: ResourceKey; label: string; hasWrite: boolean }[] = [
   { key: 'assets',    label: 'Assets',    hasWrite: true },
   { key: 'locations', label: 'Locations', hasWrite: true },
-  { key: 'scans',     label: 'Scans',     hasWrite: true },
+  { key: 'scans',     label: 'Scans',     hasWrite: false },
 ];
 
 function levelFor(resource: ResourceKey, scopes: Scope[]): ResourceLevel {
