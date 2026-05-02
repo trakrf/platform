@@ -18,8 +18,8 @@ export interface Asset {
   external_key: string; // Customer-supplied or auto-generated ASSET-NNNN
   name: string;
   description: string;
-  current_location_id: number | null; // Canonical FK to current location (TRA-555)
-  current_location_external_key: string | null; // Natural-key alternate for current location (TRA-555)
+  location_id: number | null; // Canonical FK to current location (TRA-555 / TRA-580 C-3)
+  location_external_key: string | null; // Natural-key alternate for current location (TRA-555 / TRA-580 C-3)
   valid_from: string; // ISO 8601 string
   valid_to: string | null; // ISO 8601 or null
   metadata: Record<string, any>;
@@ -33,15 +33,15 @@ export interface Asset {
 
 /**
  * Create request - matches backend CreateAssetRequest.
- * Either current_location_id (canonical) or current_location_external_key
- * may be provided; mismatch is rejected.
+ * Either location_id (canonical) or location_external_key may be provided;
+ * mismatch is rejected.
  */
 export interface CreateAssetRequest {
   external_key?: string; // optional - auto-generated as ASSET-XXXX if omitted
   name: string; // required, max 255
   description?: string; // optional, max 1024
-  current_location_id?: number | null;
-  current_location_external_key?: string | null;
+  location_id?: number | null;
+  location_external_key?: string | null;
   valid_from: string;
   valid_to: string;
   is_active: boolean;
@@ -55,8 +55,8 @@ export interface UpdateAssetRequest {
   external_key?: string;
   name?: string;
   description?: string;
-  current_location_id?: number | null;
-  current_location_external_key?: string | null;
+  location_id?: number | null;
+  location_external_key?: string | null;
   valid_from?: string;
   valid_to?: string;
   is_active?: boolean;

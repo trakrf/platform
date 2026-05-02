@@ -127,7 +127,7 @@ func injectTopLevelSecurity(doc *openapi3.T) {
 // nullable:true for Go *Type pointers, so we add it here. The list is
 // curated from BB10/BB11 audit findings (TRA-517 AC2, AC9, AC11).
 var nullableFields = map[string][]string{
-	"asset.PublicAssetView":            {"current_location_id", "current_location_external_key"},
+	"asset.PublicAssetView":            {"location_id", "location_external_key"},
 	"apikey.APIKeyListItem":            {"created_by", "created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem":    {"duration_seconds", "location_id", "location_external_key"},
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key"},
@@ -154,10 +154,10 @@ var requiredFields = map[string][]string{
 	"shared.Tag": {"tag_type", "value", "is_active"},
 
 	// asset
-	"asset.PublicAssetView": {"id", "external_key", "name", "current_location_id", "current_location_external_key", "metadata", "is_active", "valid_from", "created_at", "updated_at", "tags"},
+	"asset.PublicAssetView": {"id", "external_key", "name", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "created_at", "updated_at", "tags"},
 
 	// location
-	"location.PublicLocationView": {"id", "external_key", "name", "parent_id", "parent_external_key", "path", "depth", "is_active", "valid_from", "created_at", "tags"},
+	"location.PublicLocationView": {"id", "external_key", "name", "parent_id", "parent_external_key", "tree_path", "depth", "is_active", "valid_from", "created_at", "tags"},
 
 	// report
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen"},
@@ -197,7 +197,7 @@ var requiredFields = map[string][]string{
 // taking these schemas with it.
 var internalOnlyRequiredFields = map[string][]string{
 	"apikey.APIKeyListItem":       {"id", "jti", "name", "scopes", "created_by", "created_by_key_id", "created_at"},
-	"apikey.APIKeyCreateResponse": {"key", "id", "jti", "name", "scopes", "created_at"},
+	"apikey.APIKeyCreateResponse": {"token", "id", "jti", "name", "scopes", "created_at"},
 	"orgs.CreateAPIKeyResponse":   {"data"},
 	"orgs.ListAPIKeysResponse":    {"data", "limit", "offset", "total_count"},
 }

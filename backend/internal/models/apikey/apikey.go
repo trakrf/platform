@@ -41,9 +41,11 @@ type CreateAPIKeyRequest struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-// APIKeyCreateResponse is returned ONCE from POST; Key is the full JWT.
+// APIKeyCreateResponse is returned ONCE from POST; Token is the full JWT.
+// Field is named `token` on the wire (not `key`) so that LLMs and integrators
+// don't confuse it with the human-readable `name` of an API key (TRA-580 C-2).
 type APIKeyCreateResponse struct {
-	Key       string     `json:"key"`
+	Token     string     `json:"token"`
 	ID        int        `json:"id"`
 	JTI       string     `json:"jti"`
 	Name      string     `json:"name"`

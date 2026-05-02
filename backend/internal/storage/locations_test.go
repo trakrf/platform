@@ -64,7 +64,7 @@ func TestCreateLocation(t *testing.T) {
 	assert.Equal(t, 2, result.ID)
 	assert.Equal(t, request.Name, result.Name)
 	assert.Equal(t, request.ExternalKey, result.ExternalKey)
-	assert.Equal(t, "usa.warehouse_1", result.Path)
+	assert.Equal(t, "usa.warehouse_1", result.TreePath)
 	assert.Equal(t, 2, result.Depth)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -111,7 +111,7 @@ func TestCreateLocation_RootLocation(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.ID)
-	assert.Equal(t, "usa", result.Path)
+	assert.Equal(t, "usa", result.TreePath)
 	assert.Equal(t, 1, result.Depth)
 	assert.Nil(t, result.ParentID)
 
@@ -307,7 +307,7 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, locationID, result.ID)
 	assert.Equal(t, &newParentID, result.ParentID)
-	assert.Equal(t, "usa.california.zone_a", result.Path)
+	assert.Equal(t, "usa.california.zone_a", result.TreePath)
 	assert.Equal(t, 3, result.Depth)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -389,7 +389,7 @@ func TestGetLocationByID(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, locationID, result.ID)
 	assert.Equal(t, "USA", result.Name)
-	assert.Equal(t, "usa", result.Path)
+	assert.Equal(t, "usa", result.TreePath)
 	assert.Equal(t, 1, result.Depth)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -453,9 +453,9 @@ func TestListAllLocations(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, results)
 	assert.Len(t, results, 3)
-	assert.Equal(t, "usa", results[0].Path)
-	assert.Equal(t, "usa.california", results[1].Path)
-	assert.Equal(t, "usa.california.warehouse_1", results[2].Path)
+	assert.Equal(t, "usa", results[0].TreePath)
+	assert.Equal(t, "usa.california", results[1].TreePath)
+	assert.Equal(t, "usa.california.warehouse_1", results[2].TreePath)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -608,9 +608,9 @@ func TestGetAncestors(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, results)
 	assert.Len(t, results, 2)
-	assert.Equal(t, "usa", results[0].Path)
+	assert.Equal(t, "usa", results[0].TreePath)
 	assert.Nil(t, results[0].ParentExternalKey, "root ancestor must have no parent identifier")
-	assert.Equal(t, "usa.california", results[1].Path)
+	assert.Equal(t, "usa.california", results[1].TreePath)
 	require.NotNil(t, results[1].ParentExternalKey)
 	assert.Equal(t, "usa", *results[1].ParentExternalKey)
 	assert.NotNil(t, results[1].Tags, "Tags must be non-nil empty slice, not nil")
@@ -690,7 +690,7 @@ func TestListAncestorsPaginated(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
-	assert.Equal(t, "usa.california", results[0].Path)
+	assert.Equal(t, "usa.california", results[0].TreePath)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -765,13 +765,13 @@ func TestGetDescendants(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, results)
 	assert.Len(t, results, 3)
-	assert.Equal(t, "usa.california", results[0].Path)
+	assert.Equal(t, "usa.california", results[0].TreePath)
 	require.NotNil(t, results[0].ParentExternalKey)
 	assert.Equal(t, "usa", *results[0].ParentExternalKey)
-	assert.Equal(t, "usa.california.warehouse_1", results[1].Path)
+	assert.Equal(t, "usa.california.warehouse_1", results[1].TreePath)
 	require.NotNil(t, results[1].ParentExternalKey)
 	assert.Equal(t, "california", *results[1].ParentExternalKey)
-	assert.Equal(t, "usa.california.warehouse_1.zone_a", results[2].Path)
+	assert.Equal(t, "usa.california.warehouse_1.zone_a", results[2].TreePath)
 	require.NotNil(t, results[2].ParentExternalKey)
 	assert.Equal(t, "warehouse_1", *results[2].ParentExternalKey)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -1071,21 +1071,21 @@ func TestGetLocationWithRelations(t *testing.T) {
 	// Verify target location
 	assert.Equal(t, targetID, result.ID)
 	assert.Equal(t, "Warehouse 1", result.Name)
-	assert.Equal(t, "usa.california.warehouse_1", result.Path)
+	assert.Equal(t, "usa.california.warehouse_1", result.TreePath)
 
 	// Verify ancestors (should have 2: USA and California)
 	require.Len(t, result.Ancestors, 2)
 	assert.Equal(t, "USA", result.Ancestors[0].Name)
-	assert.Equal(t, "usa", result.Ancestors[0].Path)
+	assert.Equal(t, "usa", result.Ancestors[0].TreePath)
 	assert.Equal(t, "California", result.Ancestors[1].Name)
-	assert.Equal(t, "usa.california", result.Ancestors[1].Path)
+	assert.Equal(t, "usa.california", result.Ancestors[1].TreePath)
 
 	// Verify children (should have 2: Zone A and Zone B)
 	require.Len(t, result.Children, 2)
 	assert.Equal(t, "Zone A", result.Children[0].Name)
-	assert.Equal(t, "usa.california.warehouse_1.zone_a", result.Children[0].Path)
+	assert.Equal(t, "usa.california.warehouse_1.zone_a", result.Children[0].TreePath)
 	assert.Equal(t, "Zone B", result.Children[1].Name)
-	assert.Equal(t, "usa.california.warehouse_1.zone_b", result.Children[1].Path)
+	assert.Equal(t, "usa.california.warehouse_1.zone_b", result.Children[1].TreePath)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

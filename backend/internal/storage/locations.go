@@ -25,7 +25,7 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 		return tx.QueryRow(ctx, query, request.Name, request.ExternalKey, request.ParentID,
 			request.Description, request.ValidFrom, request.ValidTo, request.IsActive, request.OrgID,
 		).Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
-			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.TreePath, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 		)
 	})
@@ -106,7 +106,7 @@ func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location
 	var loc location.Location
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(&loc.ID, &loc.OrgID, &loc.Name,
-			&loc.ExternalKey, &loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
+			&loc.ExternalKey, &loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
 			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 		)
 	})
@@ -146,7 +146,7 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 		for rows.Next() {
 			var loc location.Location
 			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name,
-				&loc.ExternalKey, &loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ExternalKey, &loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan location: %w", err)
@@ -211,7 +211,7 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 			var relationType string
 
 			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
 				&loc.UpdatedAt, &loc.DeletedAt, &relationType,
 			); err != nil {
@@ -264,7 +264,7 @@ func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, of
 		for rows.Next() {
 			var loc location.Location
 			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
 				&loc.UpdatedAt, &loc.DeletedAt,
 			); err != nil {
@@ -519,7 +519,7 @@ func (s *Storage) scanHierarchyRows(
 			)
 			if err := rows.Scan(
 				&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
 				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 				&parExtKey,
@@ -653,7 +653,7 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(
 			&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
-			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.TreePath, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 			&parExtKey,
 		)
@@ -759,7 +759,7 @@ func (s *Storage) GetLocationByExternalKey(
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, identifier).Scan(
 			&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
-			&loc.Path, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.TreePath, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 			&parExtKey,
 		)
@@ -825,7 +825,7 @@ func (s *Storage) ListLocationsFiltered(
 			)
 			if err := rows.Scan(
 				&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.Path, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
 				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 				&parExtKey,
@@ -926,7 +926,12 @@ func buildLocationsOrderBy(sorts []location.ListSort) string {
 		if s.Desc {
 			dir = "DESC"
 		}
-		out = append(out, "l."+s.Field+" "+dir)
+		col := s.Field
+		if col == "tree_path" {
+			// Wire field is tree_path (TRA-580 C-1); SQL column stays `path`.
+			col = "path"
+		}
+		out = append(out, "l."+col+" "+dir)
 	}
 	return strings.Join(out, ", ")
 }

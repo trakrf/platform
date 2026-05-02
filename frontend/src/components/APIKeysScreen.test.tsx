@@ -72,7 +72,7 @@ describe('APIKeysScreen', () => {
   it('create flow: POSTs and shows the key in show-once modal', async () => {
     (apiKeysApi.list as ReturnType<typeof vi.fn>).mockResolvedValue({ data: [] });
     (apiKeysApi.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-      key: 'eyJNEWtoken',
+      token: 'eyJNEWtoken',
       id: 99,
       name: 'x',
       scopes: ['assets:read'],

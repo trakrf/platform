@@ -47,7 +47,7 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
     asset.external_key,
     asset.name || '',
     asset.tags?.map((t) => t.value).join(', ') || '',
-    getLocationName(asset.current_location_external_key),
+    getLocationName(asset.location_external_key),
     asset.is_active ? 'Active' : 'Inactive',
     asset.description || '',
   ]);
@@ -109,7 +109,7 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
     'Asset ID': asset.external_key,
     Name: asset.name || '',
     'Tag ID(s)': asset.tags?.map((t) => t.value).join(', ') || '',
-    Location: getLocationName(asset.current_location_external_key),
+    Location: getLocationName(asset.location_external_key),
     Status: asset.is_active ? 'Active' : 'Inactive',
     Description: asset.description || '',
     Created: asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
@@ -181,7 +181,7 @@ export function generateAssetCSV(assets: Asset[]): ExportResult {
       `"${(asset.description || '').replace(/"/g, '""')}"`,
       asset.is_active ? 'Active' : 'Inactive',
       asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
-      `"${getLocationName(asset.current_location_external_key).replace(/"/g, '""')}"`,
+      `"${getLocationName(asset.location_external_key).replace(/"/g, '""')}"`,
     ];
 
     // Tag columns - one per column, pad with empty if fewer tags

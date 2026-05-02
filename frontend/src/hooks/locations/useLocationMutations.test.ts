@@ -18,7 +18,7 @@ const apiLocation = {
   name: 'United States',
   description: '',
   parent_external_key: null,
-  path: 'usa',
+  tree_path: 'usa',
   depth: 1,
   valid_from: '2024-01-01',
   valid_to: null,
@@ -118,7 +118,7 @@ describe('useLocationMutations', () => {
     } as Location;
     useLocationStore.getState().addLocation(parentLocation);
 
-    const moved = { ...apiLocation, parent_external_key: 'parent-loc', path: 'parent-loc.usa' };
+    const moved = { ...apiLocation, parent_external_key: 'parent-loc', tree_path: 'parent-loc.usa' };
     vi.mocked(locationsApi.move).mockResolvedValue({
       data: { data: moved },
     } as any);

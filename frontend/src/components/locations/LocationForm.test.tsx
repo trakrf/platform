@@ -150,7 +150,7 @@ describe('LocationForm - Context-Aware Parent', () => {
     name: `Location ${id}`,
     description: '',
     parent_id: null,
-    path: `loc_${id}`,
+    tree_path: `loc_${id}`,
     depth: 1,
     valid_from: '2024-01-01',
     valid_to: null,

@@ -13,7 +13,7 @@ type Location struct {
 	OrgID       int        `json:"org_id"`
 	Org         *org.Org   `json:"org,omitempty"`
 	ExternalKey string     `json:"external_key" validate:"required,min=1,max=255"`
-	Path        string     `json:"path"`
+	TreePath    string     `json:"tree_path"`
 	Depth       int        `json:"depth"`
 	ParentID    *int       `json:"parent_id"`
 	Parent      *Location  `json:"parent,omitempty"`

@@ -354,7 +354,7 @@ type ListDescendantsResponse struct {
 // @Param parent_external_key query string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id"
 // @Param is_active           query bool   false "filter by active flag"
 // @Param q                   query string false "substring search on name, external_key, description, and active tag values"
-// @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(path, -path, external_key, -external_key, name, -name, created_at, -created_at)
+// @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(tree_path, -tree_path, external_key, -external_key, name, -name, created_at, -created_at)
 // @Success 200 {object} locations.ListLocationsResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -374,7 +374,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
 		Filters:     []string{"parent_id", "parent_external_key", "is_active", "q"},
 		BoolFilters: []string{"is_active"},
-		Sorts:       []string{"path", "external_key", "name", "created_at"},
+		Sorts:       []string{"tree_path", "external_key", "name", "created_at"},
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, req, err, reqID)

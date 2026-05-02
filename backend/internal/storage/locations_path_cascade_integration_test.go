@@ -47,22 +47,22 @@ func TestUpdateLocation_Reparent_CascadesDescendants(t *testing.T) {
 	c := mkLoc(t, ctx, store, orgID, "c", &b.ID)
 	d := mkLoc(t, ctx, store, orgID, "d", nil)
 
-	require.Equal(t, "a", a.Path)
-	require.Equal(t, "a.b", b.Path)
-	require.Equal(t, "a.b.c", c.Path)
-	require.Equal(t, "d", d.Path)
+	require.Equal(t, "a", a.TreePath)
+	require.Equal(t, "a.b", b.TreePath)
+	require.Equal(t, "a.b.c", c.TreePath)
+	require.Equal(t, "d", d.TreePath)
 
 	updated, err := store.UpdateLocation(ctx, orgID, b.ID, location.UpdateLocationRequest{
 		ParentID: &d.ID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated)
-	assert.Equal(t, "d.b", updated.Path, "B's own path must reflect new parent")
+	assert.Equal(t, "d.b", updated.TreePath, "B's own path must reflect new parent")
 
 	cAfter, err := store.GetLocationByID(ctx, orgID, c.ID)
 	require.NoError(t, err)
 	require.NotNil(t, cAfter)
-	assert.Equal(t, "d.b.c", cAfter.Path, "C must follow B under its new parent")
+	assert.Equal(t, "d.b.c", cAfter.TreePath, "C must follow B under its new parent")
 
 	descendants, err := store.GetDescendants(ctx, orgID, d.ID)
 	require.NoError(t, err)
@@ -93,12 +93,12 @@ func TestUpdateLocation_ChangeExternalKey_CascadesDescendants(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated)
-	assert.Equal(t, "a.b2", updated.Path)
+	assert.Equal(t, "a.b2", updated.TreePath)
 
 	cAfter, err := store.GetLocationByID(ctx, orgID, c.ID)
 	require.NoError(t, err)
 	require.NotNil(t, cAfter)
-	assert.Equal(t, "a.b2.c", cAfter.Path)
+	assert.Equal(t, "a.b2.c", cAfter.TreePath)
 }
 
 // TestRecomputeLocationPaths_Idempotent confirms the recompute function is a
@@ -132,7 +132,7 @@ func TestRecomputeLocationPaths_FixesLegacyRows(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	parent := mkLoc(t, ctx, store, orgID, "WHS-01", nil)
-	require.Equal(t, "whs_01", parent.Path)
+	require.Equal(t, "whs_01", parent.TreePath)
 
 	// Insert a child while bypassing the BEFORE trigger so we can plant a
 	// deliberately non-canonical legacy path. Mirrors the preview-DB state
@@ -171,7 +171,7 @@ func TestRecomputeLocationPaths_FixesLegacyRows(t *testing.T) {
 	child, err := store.GetLocationByID(ctx, orgID, childID)
 	require.NoError(t, err)
 	require.NotNil(t, child)
-	assert.Equal(t, "whs_01.whs_07_03", child.Path)
+	assert.Equal(t, "whs_01.whs_07_03", child.TreePath)
 
 	// Descendants query now finds the child.
 	descAfter, err := store.GetDescendants(ctx, orgID, parent.ID)

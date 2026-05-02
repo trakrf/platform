@@ -106,12 +106,12 @@ func TestCreateAPIKey_Admin(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &flat))
 	assert.NotContains(t, flat, "key", "response must be wrapped in data envelope")
 	resp := envelope.Data
-	assert.NotEmpty(t, resp.Key)
+	assert.NotEmpty(t, resp.Token)
 	assert.Equal(t, "TeamCentral sync", resp.Name)
 	assert.Equal(t, []string{"assets:read", "locations:read"}, resp.Scopes)
 
 	// Key must validate as an api-key JWT
-	claims, err := jwt.ValidateAPIKey(resp.Key)
+	claims, err := jwt.ValidateAPIKey(resp.Token)
 	require.NoError(t, err)
 	assert.Equal(t, orgID, claims.OrgID)
 }
@@ -665,7 +665,7 @@ func TestCreateAPIKey_ResponseIncludesJTI(t *testing.T) {
 
 	// The UUID jti is encoded in the JWT's `sub` claim (see GenerateAPIKey
 	// in backend/internal/util/jwt/apikey.go) — assert they match.
-	claims, err := jwt.ValidateAPIKey(resp.Key)
+	claims, err := jwt.ValidateAPIKey(resp.Token)
 	require.NoError(t, err)
 	assert.Equal(t, claims.Subject, resp.JTI, "jti in response must match JWT sub claim")
 }

@@ -27,8 +27,8 @@ export function AssetCard({
   className = '',
 }: AssetCardProps) {
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const locationData = asset.current_location_external_key ? getLocationByIdentifier(asset.current_location_external_key) : null;
-  const locationName = locationData?.name ?? asset.current_location_external_key ?? undefined;
+  const locationData = asset.location_external_key ? getLocationByIdentifier(asset.location_external_key) : null;
+  const locationName = locationData?.name ?? asset.location_external_key ?? undefined;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localTags, setLocalTags] = useState<Tag[]>(asset.tags || []);
