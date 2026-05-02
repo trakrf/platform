@@ -47,6 +47,7 @@
             "type": "string"
           },
           "created_by": {
+            "nullable": true,
             "type": "integer"
           },
           "created_by_key_id": {
