@@ -20,7 +20,7 @@ func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
 			Description: "Session JWT for internal endpoints.",
 		},
 	}
-	postprocessPublic(doc)
+	postprocessInternal(doc)
 
 	scheme := doc.Components.SecuritySchemes["BearerAuth"]
 	require.NotNil(t, scheme, "BearerAuth scheme must be present")
@@ -393,6 +393,48 @@ func stringProp(format string) *openapi3.SchemaRef {
 	return &openapi3.SchemaRef{Value: &openapi3.Schema{
 		Type: &openapi3.Types{openapi3.TypeString}, Format: format,
 	}}
+}
+
+func TestPostprocessPublic_StripsBearerAuth(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	doc.Components.SecuritySchemes["BearerAuth"] = &openapi3.SecuritySchemeRef{
+		Value: &openapi3.SecurityScheme{
+			Type:        "apiKey",
+			In:          "header",
+			Name:        "Authorization",
+			Description: "Session JWT for internal endpoints (platform frontend uses this).",
+		},
+	}
+
+	require.NoError(t, postprocessPublic(doc))
+
+	_, hasBearer := doc.Components.SecuritySchemes["BearerAuth"]
+	assert.False(t, hasBearer, "BearerAuth must be stripped from public components")
+	_, hasAPIKey := doc.Components.SecuritySchemes["APIKey"]
+	assert.True(t, hasAPIKey, "APIKey must remain in public components")
+}
+
+func TestPostprocessInternal_KeepsBearerAuth(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	doc.Components.SecuritySchemes["BearerAuth"] = &openapi3.SecuritySchemeRef{
+		Value: &openapi3.SecurityScheme{
+			Type:        "apiKey",
+			In:          "header",
+			Name:        "Authorization",
+			Description: "Session JWT for internal endpoints (platform frontend uses this).",
+		},
+	}
+
+	require.NoError(t, postprocessInternal(doc))
+
+	scheme, ok := doc.Components.SecuritySchemes["BearerAuth"]
+	require.True(t, ok, "BearerAuth must remain in internal components")
+	require.NotNil(t, scheme.Value)
+	assert.Equal(t, "http", scheme.Value.Type)
+	assert.Equal(t, "bearer", scheme.Value.Scheme)
+	assert.Equal(t, "JWT", scheme.Value.BearerFormat)
 }
 
 // withEmptyRequiredFields clears the package-level requiredFields map for the
