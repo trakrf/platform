@@ -45,6 +45,10 @@ type CreateLocationRequest struct {
 	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
 }
 
+// UpdateLocationRequest is the PUT body. Strict-decoded — unknown fields
+// (including the read-only fields on PublicLocationView like id, created_at,
+// updated_at, tree_path, depth, tags) produce a 400. See the same comment
+// on asset.UpdateAssetRequest for the TRA-587 / TRA-592 context.
 type UpdateLocationRequest struct {
 	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
 	ExternalKey       *string              `json:"external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`

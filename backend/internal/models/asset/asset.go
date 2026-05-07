@@ -37,6 +37,15 @@ type CreateAssetRequest struct {
 	IsActive            *bool                `json:"is_active,omitempty" example:"true"`
 }
 
+// UpdateAssetRequest is the PUT body. The handler decodes it via
+// DecodeJSONStrict, so unknown fields (including the read-only fields on
+// PublicAssetView like id, created_at, updated_at, tags) produce a 400.
+// TRA-587 / BB16 S8 considered relaxing this to silently ignore read-only
+// fields (Stripe/GitHub style) for sync-job ergonomics; we kept strict
+// reject because the round-trip case is now type-system-enforced via
+// `readOnly: true` on the read schema, and A → B is a non-breaking
+// transition if TRA-592 personas show sync workflows are the dominant
+// integration shape.
 type UpdateAssetRequest struct {
 	ExternalKey         *string              `json:"external_key" validate:"omitempty,min=1,max=255"`
 	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`

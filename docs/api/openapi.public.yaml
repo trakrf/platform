@@ -57,12 +57,14 @@ components:
             properties:
                 created_at:
                     format: date-time
+                    readOnly: true
                     type: string
                 description:
                     type: string
                 external_key:
                     type: string
                 id:
+                    readOnly: true
                     type: integer
                 is_active:
                     type: boolean
@@ -80,9 +82,11 @@ components:
                 tags:
                     items:
                         $ref: '#/components/schemas/shared.Tag'
+                    readOnly: true
                     type: array
                 updated_at:
                     format: date-time
+                    readOnly: true
                     type: string
                 valid_from:
                     format: date-time
@@ -292,14 +296,17 @@ components:
             properties:
                 created_at:
                     format: date-time
+                    readOnly: true
                     type: string
                 depth:
+                    readOnly: true
                     type: integer
                 description:
                     type: string
                 external_key:
                     type: string
                 id:
+                    readOnly: true
                     type: integer
                 is_active:
                     type: boolean
@@ -314,11 +321,14 @@ components:
                 tags:
                     items:
                         $ref: '#/components/schemas/shared.Tag'
+                    readOnly: true
                     type: array
                 tree_path:
+                    readOnly: true
                     type: string
                 updated_at:
                     format: date-time
+                    readOnly: true
                     type: string
                 valid_from:
                     format: date-time
