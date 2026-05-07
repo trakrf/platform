@@ -22,6 +22,7 @@ import (
 // (TRA-517 AC12).
 func postprocessPublic(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
+	consolidateSchemaNamespaces(doc)
 	markNullableFields(doc)
 	if err := markRequiredFields(doc, requiredFields); err != nil {
 		return err
@@ -55,6 +56,7 @@ func postprocessPublic(doc *openapi3.T) error {
 // uses a local development server URL.
 func postprocessInternal(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
+	consolidateSchemaNamespaces(doc)
 	markNullableFields(doc)
 	if err := markRequiredFields(doc, requiredFields); err != nil {
 		return err
@@ -75,6 +77,204 @@ func postprocessInternal(doc *openapi3.T) error {
 		{URL: "http://localhost:8080", Description: "Local development"},
 	}
 	return nil
+}
+
+// schemaNamespaceRenames consolidates the asset/location/report families
+// onto a single (singular) namespace per TRA-602. swaggo derives the
+// schema namespace prefix from the Go package name, which produces a
+// confusing split where input/view types live in the singular `asset`
+// model package and response wrappers live in the plural `assets`
+// handler package. Codegen tools that mangle `.` to `_` (Java, Go,
+// TypeScript with named exports) emit `Asset…` vs `Assets…` types per
+// resource family — easy to grab the wrong one. Renaming pre-launch is
+// a free SDK regen; post-launch it would be a breaking change.
+//
+// errors.*, shared.*, orgs.*, apikey.* are intentionally untouched —
+// they have no plural collision in the spec.
+var schemaNamespaceRenames = map[string]string{
+	"assets.":    "asset.",
+	"locations.": "location.",
+	"reports.":   "report.",
+}
+
+// consolidateSchemaNamespaces renames Components.Schemas keys whose
+// prefix is in schemaNamespaceRenames and rewrites every $ref in the
+// document accordingly. The pass runs before markRequiredFields and
+// markReadOnlyFields so those passes see the consolidated names.
+//
+// The rename is collision-checked: if a target name already exists
+// (e.g. an `asset.AddTagResponse` already in the schemas map), the
+// rename for that key is skipped to avoid silent overwrite — but no
+// such collisions exist in the current Go package layout.
+func consolidateSchemaNamespaces(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+
+	renames := buildSchemaRenameSet(doc.Components.Schemas)
+	if len(renames) == 0 {
+		return
+	}
+
+	schemas := doc.Components.Schemas
+	for oldName, newName := range renames {
+		schemas[newName] = schemas[oldName]
+		delete(schemas, oldName)
+	}
+
+	rewriteSchemaRefs(doc, renames)
+}
+
+// buildSchemaRenameSet returns the (oldName → newName) renames that
+// apply to the current schema map, skipping any whose target already
+// exists (collision guard).
+func buildSchemaRenameSet(schemas openapi3.Schemas) map[string]string {
+	renames := map[string]string{}
+	for oldName := range schemas {
+		newName, ok := applyNamespaceRename(oldName)
+		if !ok {
+			continue
+		}
+		if _, collision := schemas[newName]; collision {
+			continue
+		}
+		renames[oldName] = newName
+	}
+	return renames
+}
+
+// applyNamespaceRename returns the consolidated form of name and true
+// if the name's prefix is in the rename set. Returns the original name
+// and false otherwise.
+func applyNamespaceRename(name string) (string, bool) {
+	for oldPrefix, newPrefix := range schemaNamespaceRenames {
+		if rest, ok := strings.CutPrefix(name, oldPrefix); ok {
+			return newPrefix + rest, true
+		}
+	}
+	return name, false
+}
+
+// rewriteSchemaRefs walks every SchemaRef in the document and rewrites
+// its Ref string from the old to the new component name. Covers paths
+// (operation parameters, request bodies, responses, response headers),
+// nested schemas (Properties, Items, AdditionalProperties, AllOf,
+// OneOf, AnyOf, Not), and Components.Responses.
+func rewriteSchemaRefs(doc *openapi3.T, renames map[string]string) {
+	rewrite := func(ref *openapi3.SchemaRef) {
+		if ref == nil || ref.Ref == "" {
+			return
+		}
+		name, ok := strings.CutPrefix(ref.Ref, schemaRefPrefix)
+		if !ok {
+			return
+		}
+		if newName, found := renames[name]; found {
+			ref.Ref = schemaRefPrefix + newName
+		}
+	}
+
+	visited := map[*openapi3.Schema]bool{}
+	var walk func(ref *openapi3.SchemaRef)
+	walk = func(ref *openapi3.SchemaRef) {
+		if ref == nil {
+			return
+		}
+		rewrite(ref)
+		s := ref.Value
+		if s == nil || visited[s] {
+			return
+		}
+		visited[s] = true
+		for _, r := range s.Properties {
+			walk(r)
+		}
+		walk(s.Items)
+		if s.AdditionalProperties.Schema != nil {
+			walk(s.AdditionalProperties.Schema)
+		}
+		for _, r := range s.AllOf {
+			walk(r)
+		}
+		for _, r := range s.OneOf {
+			walk(r)
+		}
+		for _, r := range s.AnyOf {
+			walk(r)
+		}
+		walk(s.Not)
+	}
+
+	if doc.Components != nil {
+		for _, ref := range doc.Components.Schemas {
+			walk(ref)
+		}
+		for _, respRef := range doc.Components.Responses {
+			if respRef == nil || respRef.Value == nil {
+				continue
+			}
+			for _, h := range respRef.Value.Headers {
+				if h != nil && h.Value != nil {
+					walk(h.Value.Schema)
+				}
+			}
+			for _, mt := range respRef.Value.Content {
+				if mt != nil {
+					walk(mt.Schema)
+				}
+			}
+		}
+	}
+
+	if doc.Paths == nil {
+		return
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			for _, p := range op.Parameters {
+				if p == nil || p.Value == nil {
+					continue
+				}
+				walk(p.Value.Schema)
+				for _, mt := range p.Value.Content {
+					if mt != nil {
+						walk(mt.Schema)
+					}
+				}
+			}
+			if op.RequestBody != nil && op.RequestBody.Value != nil {
+				for _, mt := range op.RequestBody.Value.Content {
+					if mt != nil {
+						walk(mt.Schema)
+					}
+				}
+			}
+			if op.Responses == nil {
+				continue
+			}
+			for _, resp := range op.Responses.Map() {
+				if resp == nil || resp.Value == nil {
+					continue
+				}
+				for _, h := range resp.Value.Headers {
+					if h != nil && h.Value != nil {
+						walk(h.Value.Schema)
+					}
+				}
+				for _, mt := range resp.Value.Content {
+					if mt != nil {
+						walk(mt.Schema)
+					}
+				}
+			}
+		}
+	}
 }
 
 // rewriteBearerSchemes promotes the security schemes from swaggo's
@@ -226,29 +426,29 @@ var requiredFields = map[string][]string{
 	// orgs
 	"orgs.OrgMeView": {"id", "name"},
 
-	// assets envelopes
-	"assets.AddTagResponse":      {"data"},
-	"assets.CreateAssetResponse": {"data"},
-	"assets.GetAssetResponse":    {"data"},
-	"assets.ListAssetsResponse":  {"data", "limit", "offset", "total_count"},
-	"assets.UpdateAssetResponse": {"data"},
+	// asset envelopes (post namespace consolidation — TRA-602)
+	"asset.AddTagResponse":      {"data"},
+	"asset.CreateAssetResponse": {"data"},
+	"asset.GetAssetResponse":    {"data"},
+	"asset.ListAssetsResponse":  {"data", "limit", "offset", "total_count"},
+	"asset.UpdateAssetResponse": {"data"},
 
-	// locations envelopes
-	"locations.AddTagResponse":          {"data"},
-	"locations.CreateLocationResponse":  {"data"},
-	"locations.GetLocationResponse":     {"data"},
-	"locations.ListAncestorsResponse":   {"data", "limit", "offset", "total_count"},
-	"locations.ListChildrenResponse":    {"data", "limit", "offset", "total_count"},
-	"locations.ListDescendantsResponse": {"data", "limit", "offset", "total_count"},
-	"locations.ListLocationsResponse":   {"data", "limit", "offset", "total_count"},
-	"locations.UpdateLocationResponse":  {"data"},
+	// location envelopes (post namespace consolidation — TRA-602)
+	"location.AddTagResponse":          {"data"},
+	"location.CreateLocationResponse":  {"data"},
+	"location.GetLocationResponse":     {"data"},
+	"location.ListAncestorsResponse":   {"data", "limit", "offset", "total_count"},
+	"location.ListChildrenResponse":    {"data", "limit", "offset", "total_count"},
+	"location.ListDescendantsResponse": {"data", "limit", "offset", "total_count"},
+	"location.ListLocationsResponse":   {"data", "limit", "offset", "total_count"},
+	"location.UpdateLocationResponse":  {"data"},
 
 	// orgs envelopes
 	"orgs.GetOrgMeResponse": {"data"},
 
-	// reports envelopes
-	"reports.AssetHistoryResponse":         {"data", "limit", "offset", "total_count"},
-	"reports.ListCurrentLocationsResponse": {"data", "limit", "offset", "total_count"},
+	// report envelopes (post namespace consolidation — TRA-602)
+	"report.AssetHistoryResponse":         {"data", "limit", "offset", "total_count"},
+	"report.ListCurrentLocationsResponse": {"data", "limit", "offset", "total_count"},
 }
 
 // internalOnlyRequiredFields is the same as requiredFields but for schemas

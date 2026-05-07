@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Migrating handheld React app as frontend component
+- TRA-602 BB17 S2 schema namespace consolidation (breaking for SDK consumers; no published SDK yet):
+  - Asset, location, and report schema components are now under a single (singular) namespace: `asset.*`, `location.*`, `report.*`. Response wrappers that previously lived under `assets.*` / `locations.*` / `reports.*` (e.g. `assets.CreateAssetResponse`, `locations.ListLocationsResponse`, `reports.AssetHistoryResponse`) are renamed to the singular form (`asset.CreateAssetResponse`, `location.ListLocationsResponse`, `report.AssetHistoryResponse`). `errors.*`, `shared.*`, `orgs.*`, and `apikey.*` are unchanged.
+  - SDK regen required for downstream consumers; pre-launch with no published SDKs, the break has no current cost.
+- TRA-603 BB17 S1 request body content-type alignment:
+  - `POST /api/v1/locations/{location_id}/tags` now declares `application/json` for its request body (previously `*/*`), matching the sibling `POST /api/v1/assets/{asset_id}/tags` endpoint. No wire-level behavior change — the server already required `application/json` — but strict generators (Java/Go) no longer drop the typed body.
 - TRA-586 BB16 S7 path-param naming sweep (breaking for SDK consumers; no published SDK yet):
   - Public API path parameters are now consistently qualified across all asset and location operations: `{id}` is renamed to `{asset_id}` on `/api/v1/assets/{asset_id}{,/history,/tags}` and to `{location_id}` on `/api/v1/locations/{location_id}{,/ancestors,/children,/descendants,/tags}`. The actual URL paths are unchanged — only the OpenAPI parameter names.
   - Generated `typescript-fetch` SDK now uses consistent parameter names per resource: `assetsTagsAdd({ assetId, ... })` and `assetsTagsRemove({ assetId, tagId })` — same `assetId` field across both calls. Same on `locationsTagsAdd` / `locationsTagsRemove` (`locationId`).
