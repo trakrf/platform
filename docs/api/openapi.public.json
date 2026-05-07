@@ -683,10 +683,10 @@
         ],
         "type": "object"
       },
-      "orgs.GetOrgMeResponse": {
+      "org.GetOrgMeResponse": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/orgs.OrgMeView"
+            "$ref": "#/components/schemas/org.OrgMeView"
           }
         },
         "required": [
@@ -694,7 +694,7 @@
         ],
         "type": "object"
       },
-      "orgs.OrgMeView": {
+      "org.OrgMeView": {
         "properties": {
           "id": {
             "example": 42,
@@ -3419,7 +3419,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/orgs.GetOrgMeResponse"
+                  "$ref": "#/components/schemas/org.GetOrgMeResponse"
                 }
               }
             },

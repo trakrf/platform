@@ -79,22 +79,42 @@ func postprocessInternal(doc *openapi3.T) error {
 	return nil
 }
 
-// schemaNamespaceRenames consolidates the asset/location/report families
-// onto a single (singular) namespace per TRA-602. swaggo derives the
-// schema namespace prefix from the Go package name, which produces a
-// confusing split where input/view types live in the singular `asset`
-// model package and response wrappers live in the plural `assets`
-// handler package. Codegen tools that mangle `.` to `_` (Java, Go,
-// TypeScript with named exports) emit `Asset…` vs `Assets…` types per
-// resource family — easy to grab the wrong one. Renaming pre-launch is
-// a free SDK regen; post-launch it would be a breaking change.
+// schemaNamespaceRenames consolidates resource families that swaggo
+// emits across multiple namespace prefixes onto a single singular
+// namespace per TRA-602. swaggo derives the schema namespace from the
+// Go package name; resources whose response wrappers live in a plural
+// handler package (e.g. `handlers/assets`) and whose inputs/views live
+// in a singular model package (e.g. `models/asset`) end up split.
+// Codegen tools that mangle `.` to `_` (Java, Go, TypeScript with
+// named exports) emit `Asset…` vs `Assets…` types per resource family
+// — easy to grab the wrong one. Renaming pre-launch is a free SDK
+// regen; post-launch it would be a breaking change.
 //
-// errors.*, shared.*, orgs.*, apikey.* are intentionally untouched —
-// they have no plural collision in the spec.
+// The audit covers every resource family with a model/handler split:
+//
+//   - asset / assets, location / locations, report / reports — original
+//     TRA-602 scope.
+//   - user / users — internal-only split (users.ListResponse vs
+//     user.{Create,Update}UserRequest).
+//   - organization / orgs — model package is `organization` (full
+//     word), handler package is `orgs` (abbreviation). Both fold onto
+//     `org.*` (matches the URL prefix /api/v1/orgs/...).
+//   - github_com_trakrf_platform_backend_internal_models_user — swag
+//     emission artifact: a single User schema falls back to the full
+//     Go import path. Folded onto `user.*` so users.ListResponse can
+//     reference user.User cleanly after the rename.
+//
+// errors.*, shared.*, apikey.*, auth.*, bulkimport.*, health.*,
+// inventory.*, lookup.*, storage.* are intentionally untouched — no
+// model/handler split exists for those families.
 var schemaNamespaceRenames = map[string]string{
-	"assets.":    "asset.",
-	"locations.": "location.",
-	"reports.":   "report.",
+	"assets.":       "asset.",
+	"locations.":    "location.",
+	"reports.":      "report.",
+	"users.":        "user.",
+	"organization.": "org.",
+	"orgs.":         "org.",
+	"github_com_trakrf_platform_backend_internal_models_user.": "user.",
 }
 
 // consolidateSchemaNamespaces renames Components.Schemas keys whose
@@ -126,21 +146,50 @@ func consolidateSchemaNamespaces(doc *openapi3.T) {
 }
 
 // buildSchemaRenameSet returns the (oldName → newName) renames that
-// apply to the current schema map, skipping any whose target already
-// exists (collision guard).
+// apply to the current schema map. Two collision guards apply:
+//
+//  1. If the target name already exists as a distinct schema in the
+//     input map (e.g. an `asset.AddTagResponse` already in schemas
+//     before any rename), skip the rename for that key.
+//  2. If two source names rename to the same target (e.g. multiple
+//     prefixes mapping to the same destination namespace), skip every
+//     source competing for that target. This guard fires when the
+//     prefix table introduces a many-to-one mapping like both
+//     `orgs.→org.` and `organization.→org.`; the case is benign in the
+//     current Go layout (the two source families have disjoint type
+//     names) but the guard keeps a future rename pair from silently
+//     overwriting one of the sources.
 func buildSchemaRenameSet(schemas openapi3.Schemas) map[string]string {
-	renames := map[string]string{}
+	candidates := map[string]string{}
+	conflicts := map[string]bool{}
+	targetSources := map[string]string{}
+
 	for oldName := range schemas {
 		newName, ok := applyNamespaceRename(oldName)
 		if !ok {
 			continue
 		}
-		if _, collision := schemas[newName]; collision {
+		if _, exists := schemas[newName]; exists {
 			continue
 		}
-		renames[oldName] = newName
+		if prior, taken := targetSources[newName]; taken {
+			conflicts[newName] = true
+			delete(candidates, prior)
+			continue
+		}
+		targetSources[newName] = oldName
+		candidates[oldName] = newName
 	}
-	return renames
+
+	if len(conflicts) == 0 {
+		return candidates
+	}
+	for old, new := range candidates {
+		if conflicts[new] {
+			delete(candidates, old)
+		}
+	}
+	return candidates
 }
 
 // applyNamespaceRename returns the consolidated form of name and true
@@ -423,8 +472,8 @@ var requiredFields = map[string][]string{
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen"},
 	"report.PublicAssetHistoryItem":    {"timestamp", "location_id", "location_external_key", "duration_seconds"},
 
-	// orgs
-	"orgs.OrgMeView": {"id", "name"},
+	// org (post namespace consolidation — TRA-602)
+	"org.OrgMeView": {"id", "name"},
 
 	// asset envelopes (post namespace consolidation — TRA-602)
 	"asset.AddTagResponse":      {"data"},
@@ -443,8 +492,8 @@ var requiredFields = map[string][]string{
 	"location.ListLocationsResponse":   {"data", "limit", "offset", "total_count"},
 	"location.UpdateLocationResponse":  {"data"},
 
-	// orgs envelopes
-	"orgs.GetOrgMeResponse": {"data"},
+	// org envelope (post namespace consolidation — TRA-602)
+	"org.GetOrgMeResponse": {"data"},
 
 	// report envelopes (post namespace consolidation — TRA-602)
 	"report.AssetHistoryResponse":         {"data", "limit", "offset", "total_count"},
@@ -458,8 +507,8 @@ var requiredFields = map[string][]string{
 var internalOnlyRequiredFields = map[string][]string{
 	"apikey.APIKeyListItem":       {"id", "jti", "name", "scopes", "created_by", "created_by_key_id", "created_at"},
 	"apikey.APIKeyCreateResponse": {"token", "id", "jti", "name", "scopes", "created_at"},
-	"orgs.CreateAPIKeyResponse":   {"data"},
-	"orgs.ListAPIKeysResponse":    {"data", "limit", "offset", "total_count"},
+	"org.CreateAPIKeyResponse":    {"data"},
+	"org.ListAPIKeysResponse":     {"data", "limit", "offset", "total_count"},
 }
 
 // readOnlyFields names schema/field pairs whose values are server-managed and
