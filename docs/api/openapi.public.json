@@ -243,7 +243,7 @@
         "type": "object"
       },
       "errors.ErrorResponse": {
-        "description": "RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
+        "description": "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
         "properties": {
           "error": {
             "properties": {
@@ -884,7 +884,7 @@
   "paths": {
     "/api/v1/assets": {
       "get": {
-        "description": "Paginated assets list with natural-key filters, sort, and substring search",
+        "description": "**Required scope:** `assets:read`\n\nPaginated assets list with natural-key filters, sort, and substring search",
         "operationId": "assets.list",
         "parameters": [
           {
@@ -1053,9 +1053,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "List assets",
@@ -1064,7 +1062,7 @@
         ]
       },
       "post": {
-        "description": "Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
+        "description": "**Required scope:** `assets:write`\n\nCreate a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
         "operationId": "assets.create",
         "requestBody": {
           "content": {
@@ -1087,7 +1085,15 @@
                 }
               }
             },
-            "description": "Created"
+            "description": "Created",
+            "headers": {
+              "Location": {
+                "description": "Canonical URL of the created resource",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -1129,6 +1135,16 @@
             },
             "description": "conflict"
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1152,9 +1168,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Create an asset",
@@ -1165,7 +1179,7 @@
     },
     "/api/v1/assets/lookup": {
       "get": {
-        "description": "Find a single live asset by its external_key. Equality match only.\nReturns the matching object (200) or 404. Multiple natural-key parameters or none returns 400.\nSoft-deleted rows are not addressable through this endpoint.",
+        "description": "**Required scope:** `assets:read`\n\nFind a single live asset by its external_key. Equality match only.\nReturns the matching object (200) or 404. Multiple natural-key parameters or none returns 400.\nSoft-deleted rows are not addressable through this endpoint.",
         "operationId": "assets.lookup",
         "parameters": [
           {
@@ -1270,9 +1284,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Look up an asset by external_key",
@@ -1283,7 +1295,7 @@
     },
     "/api/v1/assets/{asset_id}/tags/{tag_id}": {
       "delete": {
-        "description": "Detach a tag from an asset by its tag record id.",
+        "description": "**Required scope:** `assets:write`\n\nDetach a tag from an asset by its tag record id.\nIdempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.",
         "operationId": "assets.tags.remove",
         "parameters": [
           {
@@ -1339,16 +1351,6 @@
             },
             "description": "forbidden"
           },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "not_found"
-          },
           "429": {
             "content": {
               "application/json": {
@@ -1372,9 +1374,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Remove a tag from an asset",
@@ -1385,7 +1385,7 @@
     },
     "/api/v1/assets/{id}": {
       "delete": {
-        "description": "Delete an asset by its canonical id. The asset is removed from all subsequent queries and its external_key becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.",
+        "description": "**Required scope:** `assets:write`\n\nDelete an asset by its canonical id. The asset is removed from all subsequent queries and its external_key becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.",
         "operationId": "assets.delete",
         "parameters": [
           {
@@ -1455,9 +1455,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Delete an asset",
@@ -1466,7 +1464,7 @@
         ]
       },
       "get": {
-        "description": "Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.",
+        "description": "**Required scope:** `assets:read`\n\nRetrieve an asset by its canonical id. Returns 404 if the asset does not exist.",
         "operationId": "assets.get",
         "parameters": [
           {
@@ -1571,9 +1569,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Get asset by canonical id",
@@ -1582,7 +1578,7 @@
         ]
       },
       "put": {
-        "description": "Update mutable fields on an existing asset. Only fields included in the request body are changed.",
+        "description": "**Required scope:** `assets:write`\n\nUpdate mutable fields on an existing asset. Only fields included in the request body are changed.",
         "operationId": "assets.update",
         "parameters": [
           {
@@ -1668,6 +1664,16 @@
             },
             "description": "conflict"
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1691,9 +1697,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Update an asset",
@@ -1704,7 +1708,7 @@
     },
     "/api/v1/assets/{id}/history": {
       "get": {
-        "description": "Location history for an asset identified by its canonical id.",
+        "description": "**Required scope:** `history:read`\n\nLocation history for an asset identified by its canonical id.",
         "operationId": "assets.history",
         "parameters": [
           {
@@ -1870,9 +1874,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "history:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Asset movement history",
@@ -1883,7 +1885,7 @@
     },
     "/api/v1/assets/{id}/tags": {
       "post": {
-        "description": "Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.\nThe tag must be unique within the organization.",
+        "description": "**Required scope:** `assets:write`\n\nAttach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.\nThe tag must be unique within the organization.",
         "operationId": "assets.tags.add",
         "parameters": [
           {
@@ -1959,6 +1961,16 @@
             },
             "description": "not_found"
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1982,9 +1994,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "assets:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Add a tag to an asset",
@@ -1995,6 +2005,7 @@
     },
     "/api/v1/locations": {
       "get": {
+        "description": "**Required scope:** `locations:read`",
         "operationId": "locations.list",
         "parameters": [
           {
@@ -2040,7 +2051,7 @@
             }
           },
           {
-            "description": "substring search on name, external_key, description, and active tag values",
+            "description": "substring search (case-insensitive) on name, external_key, description, and active tag values",
             "in": "query",
             "name": "q",
             "schema": {
@@ -2125,9 +2136,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "List locations",
@@ -2136,7 +2145,7 @@
         ]
       },
       "post": {
-        "description": "Create a new location in the hierarchy, optionally with one or more tags.\nSet parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.",
+        "description": "**Required scope:** `locations:write`\n\nCreate a new location in the hierarchy, optionally with one or more tags.\nSet parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.",
         "operationId": "locations.create",
         "requestBody": {
           "content": {
@@ -2159,7 +2168,15 @@
                 }
               }
             },
-            "description": "Created"
+            "description": "Created",
+            "headers": {
+              "Location": {
+                "description": "Canonical URL of the created resource",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -2201,6 +2218,16 @@
             },
             "description": "conflict"
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2224,9 +2251,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Create a location",
@@ -2237,7 +2262,7 @@
     },
     "/api/v1/locations/current": {
       "get": {
-        "description": "Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.",
+        "description": "**Required scope:** `history:read`\n\nSnapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.",
         "operationId": "locations.current",
         "parameters": [
           {
@@ -2395,9 +2420,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "history:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "List current asset locations",
@@ -2408,7 +2431,7 @@
     },
     "/api/v1/locations/lookup": {
       "get": {
-        "description": "Find a single live location by its external_key. Returns 404 if no match.\nExactly one natural-key parameter is required; multiple or none returns 400.",
+        "description": "**Required scope:** `locations:read`\n\nFind a single live location by its external_key. Returns 404 if no match.\nExactly one natural-key parameter is required; multiple or none returns 400.",
         "operationId": "locations.lookup",
         "parameters": [
           {
@@ -2485,9 +2508,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Lookup location by external_key",
@@ -2498,7 +2519,7 @@
     },
     "/api/v1/locations/{id}": {
       "delete": {
-        "description": "Delete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.",
+        "description": "**Required scope:** `locations:write`\n\nDelete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.",
         "operationId": "locations.delete",
         "parameters": [
           {
@@ -2578,9 +2599,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Delete location",
@@ -2589,7 +2608,7 @@
         ]
       },
       "get": {
-        "description": "Retrieve a location by its canonical ID. Returns 404 if not found.",
+        "description": "**Required scope:** `locations:read`\n\nRetrieve a location by its canonical ID. Returns 404 if not found.",
         "operationId": "locations.get",
         "parameters": [
           {
@@ -2666,9 +2685,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Get location by ID",
@@ -2677,7 +2694,7 @@
         ]
       },
       "put": {
-        "description": "Update mutable fields on an existing location. Only fields included in the request body are changed.",
+        "description": "**Required scope:** `locations:write`\n\nUpdate mutable fields on an existing location. Only fields included in the request body are changed.",
         "operationId": "locations.update",
         "parameters": [
           {
@@ -2763,6 +2780,16 @@
             },
             "description": "conflict"
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2786,9 +2813,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Update a location",
@@ -2799,6 +2824,7 @@
     },
     "/api/v1/locations/{id}/ancestors": {
       "get": {
+        "description": "**Required scope:** `locations:read`",
         "operationId": "locations.ancestors",
         "parameters": [
           {
@@ -2903,9 +2929,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "List location ancestors",
@@ -2916,6 +2940,7 @@
     },
     "/api/v1/locations/{id}/children": {
       "get": {
+        "description": "**Required scope:** `locations:read`",
         "operationId": "locations.children",
         "parameters": [
           {
@@ -3020,9 +3045,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "List location children",
@@ -3033,6 +3056,7 @@
     },
     "/api/v1/locations/{id}/descendants": {
       "get": {
+        "description": "**Required scope:** `locations:read`",
         "operationId": "locations.descendants",
         "parameters": [
           {
@@ -3137,9 +3161,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:read"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "List location descendants",
@@ -3150,6 +3172,7 @@
     },
     "/api/v1/locations/{id}/tags": {
       "post": {
+        "description": "**Required scope:** `locations:write`",
         "operationId": "locations.tags.add",
         "parameters": [
           {
@@ -3225,6 +3248,16 @@
             },
             "description": "not_found"
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3248,9 +3281,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Add a tag to a location",
@@ -3261,6 +3292,7 @@
     },
     "/api/v1/locations/{location_id}/tags/{tag_id}": {
       "delete": {
+        "description": "**Required scope:** `locations:write`\n\nDetach a tag from a location by its tag record id.\nIdempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.",
         "operationId": "locations.tags.remove",
         "parameters": [
           {
@@ -3316,16 +3348,6 @@
             },
             "description": "forbidden"
           },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "not_found"
-          },
           "429": {
             "content": {
               "application/json": {
@@ -3349,9 +3371,7 @@
         },
         "security": [
           {
-            "APIKey": [
-              "locations:write"
-            ]
+            "APIKey": []
           }
         ],
         "summary": "Remove a tag from a location",
@@ -3384,6 +3404,24 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           },
           "500": {
             "content": {
