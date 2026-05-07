@@ -85,6 +85,7 @@ func (handler *Handler) resolveParent(
 // @Produce      json
 // @Param        request  body  location.CreateLocationWithTagsRequest  true  "Location to create with optional tags"
 // @Success      201  {object}  locations.CreateLocationResponse
+// @Header       201  {string}  Location  "Canonical URL of the created resource"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"

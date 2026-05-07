@@ -95,6 +95,7 @@ func (handler *Handler) resolveLocation(
 // @Produce      json
 // @Param        request  body  asset.CreateAssetWithTagsRequest  true  "Asset to create with optional tags"
 // @Success      201  {object}  assets.CreateAssetResponse
+// @Header       201  {string}  Location  "Canonical URL of the created resource"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
