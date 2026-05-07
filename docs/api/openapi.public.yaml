@@ -176,7 +176,7 @@ components:
                 - data
             type: object
         errors.ErrorResponse:
-            description: RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.
+            description: TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.
             properties:
                 error:
                     properties:
@@ -645,7 +645,10 @@ openapi: 3.0.3
 paths:
     /api/v1/assets:
         get:
-            description: Paginated assets list with natural-key filters, sort, and substring search
+            description: |-
+                **Required scope:** `assets:read`
+
+                Paginated assets list with natural-key filters, sort, and substring search
             operationId: assets.list
             parameters:
                 - description: max 200
@@ -754,13 +757,14 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - APIKey:
-                    - assets:read
+                - APIKey: []
             summary: List assets
             tags:
                 - assets
         post:
             description: |-
+                **Required scope:** `assets:write`
+
                 Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).
 
                 The `external_key` field is optional. Provide a value from your system of record
@@ -785,6 +789,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/assets.CreateAssetResponse'
                     description: Created
+                    headers:
+                        Location:
+                            description: Canonical URL of the created resource
+                            schema:
+                                type: string
                 "400":
                     content:
                         application/json:
@@ -809,6 +818,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unsupported_media_type
                 "429":
                     content:
                         application/json:
@@ -822,14 +837,17 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - assets:write
+                - APIKey: []
             summary: Create an asset
             tags:
                 - assets
     /api/v1/assets/{asset_id}/tags/{tag_id}:
         delete:
-            description: Detach a tag from an asset by its tag record id.
+            description: |-
+                **Required scope:** `assets:write`
+
+                Detach a tag from an asset by its tag record id.
+                Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
             operationId: assets.tags.remove
             parameters:
                 - description: Asset id (canonical)
@@ -865,12 +883,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
                 "429":
                     content:
                         application/json:
@@ -884,14 +896,16 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - assets:write
+                - APIKey: []
             summary: Remove a tag from an asset
             tags:
                 - assets
     /api/v1/assets/{id}:
         delete:
-            description: Delete an asset by its canonical id. The asset is removed from all subsequent queries and its external_key becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
+            description: |-
+                **Required scope:** `assets:write`
+
+                Delete an asset by its canonical id. The asset is removed from all subsequent queries and its external_key becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.
             operationId: assets.delete
             parameters:
                 - description: Asset id (canonical)
@@ -934,13 +948,15 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - assets:write
+                - APIKey: []
             summary: Delete an asset
             tags:
                 - assets
         get:
-            description: Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.
+            description: |-
+                **Required scope:** `assets:read`
+
+                Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.
             operationId: assets.get
             parameters:
                 - description: Asset id (canonical)
@@ -1005,13 +1021,15 @@ paths:
                             schema:
                                 type: integer
             security:
-                - APIKey:
-                    - assets:read
+                - APIKey: []
             summary: Get asset by canonical id
             tags:
                 - assets
         put:
-            description: Update mutable fields on an existing asset. Only fields included in the request body are changed.
+            description: |-
+                **Required scope:** `assets:write`
+
+                Update mutable fields on an existing asset. Only fields included in the request body are changed.
             operationId: assets.update
             parameters:
                 - description: Asset id (canonical)
@@ -1065,6 +1083,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unsupported_media_type
                 "429":
                     content:
                         application/json:
@@ -1078,14 +1102,16 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - assets:write
+                - APIKey: []
             summary: Update an asset
             tags:
                 - assets
     /api/v1/assets/{id}/history:
         get:
-            description: Location history for an asset identified by its canonical id.
+            description: |-
+                **Required scope:** `history:read`
+
+                Location history for an asset identified by its canonical id.
             operationId: assets.history
             parameters:
                 - description: Asset id (canonical)
@@ -1190,14 +1216,15 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - APIKey:
-                    - history:read
+                - APIKey: []
             summary: Asset movement history
             tags:
                 - reports
     /api/v1/assets/{id}/tags:
         post:
             description: |-
+                **Required scope:** `assets:write`
+
                 Attach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.
                 The tag must be unique within the organization.
             operationId: assets.tags.add
@@ -1247,6 +1274,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unsupported_media_type
                 "429":
                     content:
                         application/json:
@@ -1260,14 +1293,15 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - assets:write
+                - APIKey: []
             summary: Add a tag to an asset
             tags:
                 - assets
     /api/v1/assets/lookup:
         get:
             description: |-
+                **Required scope:** `assets:read`
+
                 Find a single live asset by its external_key. Equality match only.
                 Returns the matching object (200) or 404. Multiple natural-key parameters or none returns 400.
                 Soft-deleted rows are not addressable through this endpoint.
@@ -1335,13 +1369,13 @@ paths:
                             schema:
                                 type: integer
             security:
-                - APIKey:
-                    - assets:read
+                - APIKey: []
             summary: Look up an asset by external_key
             tags:
                 - assets
     /api/v1/locations:
         get:
+            description: '**Required scope:** `locations:read`'
             operationId: locations.list
             parameters:
                 - description: max 200
@@ -1371,7 +1405,7 @@ paths:
                   name: is_active
                   schema:
                     type: boolean
-                - description: substring search on name, external_key, description, and active tag values
+                - description: substring search (case-insensitive) on name, external_key, description, and active tag values
                   in: query
                   name: q
                   schema:
@@ -1426,13 +1460,14 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
             security:
-                - APIKey:
-                    - locations:read
+                - APIKey: []
             summary: List locations
             tags:
                 - locations
         post:
             description: |-
+                **Required scope:** `locations:write`
+
                 Create a new location in the hierarchy, optionally with one or more tags.
                 Set parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.
             operationId: locations.create
@@ -1451,6 +1486,11 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/locations.CreateLocationResponse'
                     description: Created
+                    headers:
+                        Location:
+                            description: Canonical URL of the created resource
+                            schema:
+                                type: string
                 "400":
                     content:
                         application/json:
@@ -1475,6 +1515,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unsupported_media_type
                 "429":
                     content:
                         application/json:
@@ -1488,14 +1534,16 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:write
+                - APIKey: []
             summary: Create a location
             tags:
                 - locations
     /api/v1/locations/{id}:
         delete:
-            description: Delete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.
+            description: |-
+                **Required scope:** `locations:write`
+
+                Delete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.
             operationId: locations.delete
             parameters:
                 - description: Location ID
@@ -1544,13 +1592,15 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:write
+                - APIKey: []
             summary: Delete location
             tags:
                 - locations
         get:
-            description: Retrieve a location by its canonical ID. Returns 404 if not found.
+            description: |-
+                **Required scope:** `locations:read`
+
+                Retrieve a location by its canonical ID. Returns 404 if not found.
             operationId: locations.get
             parameters:
                 - description: Location ID
@@ -1597,13 +1647,15 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Too Many Requests
             security:
-                - APIKey:
-                    - locations:read
+                - APIKey: []
             summary: Get location by ID
             tags:
                 - locations
         put:
-            description: Update mutable fields on an existing location. Only fields included in the request body are changed.
+            description: |-
+                **Required scope:** `locations:write`
+
+                Update mutable fields on an existing location. Only fields included in the request body are changed.
             operationId: locations.update
             parameters:
                 - description: Location ID
@@ -1657,6 +1709,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unsupported_media_type
                 "429":
                     content:
                         application/json:
@@ -1670,13 +1728,13 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:write
+                - APIKey: []
             summary: Update a location
             tags:
                 - locations
     /api/v1/locations/{id}/ancestors:
         get:
+            description: '**Required scope:** `locations:read`'
             operationId: locations.ancestors
             parameters:
                 - description: Location ID
@@ -1741,13 +1799,13 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:read
+                - APIKey: []
             summary: List location ancestors
             tags:
                 - locations
     /api/v1/locations/{id}/children:
         get:
+            description: '**Required scope:** `locations:read`'
             operationId: locations.children
             parameters:
                 - description: Location ID
@@ -1812,13 +1870,13 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:read
+                - APIKey: []
             summary: List location children
             tags:
                 - locations
     /api/v1/locations/{id}/descendants:
         get:
+            description: '**Required scope:** `locations:read`'
             operationId: locations.descendants
             parameters:
                 - description: Location ID
@@ -1883,13 +1941,13 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:read
+                - APIKey: []
             summary: List location descendants
             tags:
                 - locations
     /api/v1/locations/{id}/tags:
         post:
+            description: '**Required scope:** `locations:write`'
             operationId: locations.tags.add
             parameters:
                 - description: Location ID
@@ -1937,6 +1995,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unsupported_media_type
                 "429":
                     content:
                         application/json:
@@ -1950,13 +2014,17 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:write
+                - APIKey: []
             summary: Add a tag to a location
             tags:
                 - locations
     /api/v1/locations/{location_id}/tags/{tag_id}:
         delete:
+            description: |-
+                **Required scope:** `locations:write`
+
+                Detach a tag from a location by its tag record id.
+                Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
             operationId: locations.tags.remove
             parameters:
                 - description: Location ID
@@ -1992,12 +2060,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
                 "429":
                     content:
                         application/json:
@@ -2011,14 +2073,16 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey:
-                    - locations:write
+                - APIKey: []
             summary: Remove a tag from a location
             tags:
                 - locations
     /api/v1/locations/current:
         get:
-            description: Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
+            description: |-
+                **Required scope:** `history:read`
+
+                Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
             operationId: locations.current
             parameters:
                 - description: max 200
@@ -2120,14 +2184,15 @@ paths:
                             schema:
                                 type: integer
             security:
-                - APIKey:
-                    - history:read
+                - APIKey: []
             summary: List current asset locations
             tags:
                 - reports
     /api/v1/locations/lookup:
         get:
             description: |-
+                **Required scope:** `locations:read`
+
                 Find a single live location by its external_key. Returns 404 if no match.
                 Exactly one natural-key parameter is required; multiple or none returns 400.
             operationId: locations.lookup
@@ -2176,8 +2241,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
             security:
-                - APIKey:
-                    - locations:read
+                - APIKey: []
             summary: Lookup location by external_key
             tags:
                 - locations
@@ -2198,6 +2262,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            description: Seconds to wait before retrying
+                            schema:
+                                type: integer
                 "500":
                     content:
                         application/json:

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -505,6 +506,102 @@ func TestNormalizeArrayQueryParams(t *testing.T) {
 		require.NotNil(t, p.Explode)
 		assert.Equal(t, false, *p.Explode, "pre-existing Explode must not be overwritten")
 	})
+}
+
+// TestPostprocess_StripsBearerScopeArrays_InjectsDescription locks in
+// TRA-585 S2. OpenAPI 3.0 §4.8.30 forbids non-empty scope arrays on
+// non-oauth2 / non-openIdConnect schemes. Swaggo's
+// `@Security APIKey[assets:read]` syntax produces an invalid spec under
+// http-bearer. The pass strips the arrays and prepends a
+// "**Required scope:** `<scope>`" line to the operation description.
+func TestPostprocess_StripsBearerScopeArrays_InjectsDescription(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	op := doc.Paths.Find("/assets").Get
+	require.NotNil(t, op)
+	op.Description = "Paginated list of assets."
+	op.Security = openapi3.NewSecurityRequirements().With(
+		openapi3.SecurityRequirement{"APIKey": []string{"assets:read"}},
+	)
+
+	require.NoError(t, postprocessPublic(doc))
+
+	require.Len(t, *op.Security, 1)
+	assert.Equal(t, []string{}, (*op.Security)[0]["APIKey"],
+		"scope array must be empty after the pass — non-empty arrays are invalid for http-bearer")
+
+	assert.True(t, strings.HasPrefix(op.Description, "**Required scope:** `assets:read`"),
+		"description must start with the scope marker, got %q", op.Description)
+	assert.Contains(t, op.Description, "Paginated list of assets.",
+		"original description content must be preserved")
+}
+
+// TestPostprocess_StripsBearerScopeArrays_Idempotent verifies the pass is
+// safe to run twice.
+func TestPostprocess_StripsBearerScopeArrays_Idempotent(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	op := doc.Paths.Find("/assets").Get
+	op.Description = "Paginated list of assets."
+	op.Security = openapi3.NewSecurityRequirements().With(
+		openapi3.SecurityRequirement{"APIKey": []string{"assets:read"}},
+	)
+
+	require.NoError(t, postprocessPublic(doc))
+	first := op.Description
+	require.NoError(t, postprocessPublic(doc))
+	assert.Equal(t, first, op.Description,
+		"second invocation must not double-prepend the scope marker")
+}
+
+// TestPostprocess_StripsBearerScopeArrays_NoOpWithoutScopes verifies an op
+// with an already-empty scope array is left untouched.
+func TestPostprocess_StripsBearerScopeArrays_NoOpWithoutScopes(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	op := doc.Paths.Find("/assets").Get
+	op.Description = "Paginated list of assets."
+	op.Security = openapi3.NewSecurityRequirements().With(
+		openapi3.SecurityRequirement{"APIKey": []string{}},
+	)
+
+	require.NoError(t, postprocessPublic(doc))
+	assert.Equal(t, "Paginated list of assets.", op.Description,
+		"no scopes => no marker injected")
+}
+
+// TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs locks in TRA-585 S1.
+// The errors page declares the envelope is "modeled on RFC 7807 but not
+// 7807-compliant" — the spec description must match instead of claiming
+// full RFC 7807 compliance.
+func TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	doc.Components.Schemas["errors.ErrorResponse"] = &openapi3.SchemaRef{
+		Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: map[string]*openapi3.SchemaRef{
+				"error": {Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeObject},
+					Properties: map[string]*openapi3.SchemaRef{
+						"title":  {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+						"detail": {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+					},
+				}},
+			},
+		},
+	}
+	require.NoError(t, postprocessPublic(doc))
+
+	desc := doc.Components.Schemas["errors.ErrorResponse"].Value.Description
+	assert.Contains(t, desc, "modeled on RFC 7807 but not 7807-compliant",
+		"description must match the docs/api/errors page wording (TRA-585 S1)")
+	assert.Contains(t, desc, "application/json",
+		"description must call out that content-type is application/json, not application/problem+json")
+	assert.Contains(t, desc, "nested under `error.*`",
+		"description must call out the non-7807 nesting")
+	assert.NotContains(t, desc, "RFC 7807 Problem Details envelope.",
+		"old wording must be gone — it implies full compliance")
 }
 
 // withEmptyRequiredFields clears the package-level requiredFields map for the

@@ -93,6 +93,7 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 // @Success 202 {object} bulkimport.UploadResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid file or headers"
 // @Failure 413 {object} modelerrors.ErrorResponse "File too large"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Security BearerAuth
 // @Router /api/v1/assets/bulk [post]
 func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {

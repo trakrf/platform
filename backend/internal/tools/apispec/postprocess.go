@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -29,6 +30,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	normalizeSchemaQuirks(doc)
 	normalizeArrayQueryParams(doc)
 	injectTopLevelSecurity(doc)
+	stripBearerScopeArrays(doc)
 	stripBearerAuthScheme(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
@@ -59,6 +61,7 @@ func postprocessInternal(doc *openapi3.T) error {
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	normalizeArrayQueryParams(doc)
+	stripBearerScopeArrays(doc)
 	doc.Info.Title = "TrakRF Internal API — not for customer use"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -215,7 +218,9 @@ func annotateErrorEnvelope(doc *openapi3.T) {
 	if ref == nil || ref.Value == nil {
 		return
 	}
-	ref.Value.Description = "RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. " +
+	ref.Value.Description = "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. " +
+		"Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). " +
+		"Generated clients should branch on `error.type` and `error.title`, not `error.detail`. " +
 		"`error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. " +
 		"`error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition."
 
@@ -440,4 +445,99 @@ func normalizeArrayQueryParams(doc *openapi3.T) {
 			}
 		}
 	}
+}
+
+// stripBearerScopeArrays strips non-empty scope arrays from operation-level
+// SecurityRequirements where the underlying scheme is http or apiKey.
+// OpenAPI 3.0 §4.8.30 only permits scope arrays for oauth2 and openIdConnect
+// schemes; swaggo's `@Security APIKey[assets:read]` syntax produces invalid
+// arrays under http-bearer. To preserve the scope information for human
+// readers, the captured scopes are injected into the operation's
+// description as a "**Required scope:** `<scope>`" markdown line. The pass
+// is idempotent — repeated runs do not double-prepend.
+func stripBearerScopeArrays(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	if doc.Components == nil || doc.Components.SecuritySchemes == nil {
+		return
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil || op.Security == nil {
+				continue
+			}
+			scopes := stripScopesFromRequirements(op.Security, doc.Components.SecuritySchemes)
+			if len(scopes) == 0 {
+				continue
+			}
+			op.Description = injectScopeMarker(op.Description, scopes)
+		}
+	}
+}
+
+// stripScopesFromRequirements walks every SecurityRequirement in the slice,
+// finds entries whose scheme is http or apiKey, captures and zeroes their
+// scope arrays. Returns the captured scope names in declaration order with
+// duplicates removed.
+func stripScopesFromRequirements(reqs *openapi3.SecurityRequirements, schemes openapi3.SecuritySchemes) []string {
+	if reqs == nil {
+		return nil
+	}
+	var captured []string
+	seen := map[string]bool{}
+	for _, req := range *reqs {
+		for name, arr := range req {
+			if !isBearerLikeScheme(schemes, name) {
+				continue
+			}
+			if len(arr) == 0 {
+				continue
+			}
+			for _, s := range arr {
+				if !seen[s] {
+					seen[s] = true
+					captured = append(captured, s)
+				}
+			}
+			req[name] = []string{}
+		}
+	}
+	return captured
+}
+
+// isBearerLikeScheme returns true if the named scheme is one of the OpenAPI
+// 3.0 types where non-empty scope arrays are invalid (http, apiKey, mutualTLS).
+// Schemes the function can't resolve are conservatively treated as
+// bearer-like — they should not carry scope arrays in our spec.
+func isBearerLikeScheme(schemes openapi3.SecuritySchemes, name string) bool {
+	ref := schemes[name]
+	if ref == nil || ref.Value == nil {
+		return true
+	}
+	switch ref.Value.Type {
+	case "oauth2", "openIdConnect":
+		return false
+	default:
+		return true
+	}
+}
+
+const scopeMarkerPrefix = "**Required scope:**"
+
+// injectScopeMarker prepends a "**Required scope:** `<scope>`" line to the
+// description. Idempotent: returns the original string if the marker is
+// already present at the beginning.
+func injectScopeMarker(description string, scopes []string) string {
+	if strings.HasPrefix(description, scopeMarkerPrefix) {
+		return description
+	}
+	marker := scopeMarkerPrefix + " `" + strings.Join(scopes, ", ") + "`"
+	if description == "" {
+		return marker
+	}
+	return marker + "\n\n" + description
 }

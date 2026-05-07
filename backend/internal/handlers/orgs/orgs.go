@@ -71,6 +71,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 409 {object} modelerrors.ErrorResponse "Identifier already taken"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
 // @Router /api/v1/orgs [post]
@@ -167,6 +168,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
 // @Router /api/v1/orgs/{id} [put]

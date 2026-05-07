@@ -57,6 +57,7 @@ func NewHandler(service *authservice.Service) *Handler {
 // @Success 201 {object} map[string]any "data: auth.SignupResponse"
 // @Failure 400 {object} errors.ErrorResponse "Validation error"
 // @Failure 409 {object} errors.ErrorResponse "Email already exists"
+// @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} errors.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/signup [post]
 func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +135,7 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} map[string]any "data: auth.LoginResponse"
 // @Failure 400 {object} errors.ErrorResponse "Validation error"
 // @Failure 401 {object} errors.ErrorResponse "Invalid credentials"
+// @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} errors.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/login [post]
 func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +173,7 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // @Param request body auth.ForgotPasswordRequest true "Email address"
 // @Success 200 {object} auth.MessageResponse "Success message (always returns 200)"
 // @Failure 400 {object} errors.ErrorResponse "Validation error"
+// @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
 // @Router /api/v1/auth/forgot-password [post]
 func (handler *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var request auth.ForgotPasswordRequest
@@ -205,6 +208,7 @@ func (handler *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 // @Param request body auth.ResetPasswordRequest true "Token and new password"
 // @Success 200 {object} auth.MessageResponse "Success message"
 // @Failure 400 {object} errors.ErrorResponse "Invalid or expired token"
+// @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} errors.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/reset-password [post]
 func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
@@ -252,6 +256,7 @@ func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} errors.ErrorResponse "Invalid or expired token"
 // @Failure 401 {object} errors.ErrorResponse "Not authenticated"
 // @Failure 409 {object} errors.ErrorResponse "Already a member"
+// @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} errors.ErrorResponse "Internal server error"
 // @Security BearerAuth
 // @Router /api/v1/auth/accept-invite [post]

@@ -85,10 +85,12 @@ func (handler *Handler) resolveParent(
 // @Produce      json
 // @Param        request  body  location.CreateLocationWithTagsRequest  true  "Location to create with optional tags"
 // @Success      201  {object}  locations.CreateLocationResponse
+// @Header       201  {string}  Location  "Canonical URL of the created resource"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
@@ -168,6 +170,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
 // @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
@@ -353,7 +356,7 @@ type ListDescendantsResponse struct {
 // @Param parent_id            query int    false "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key"
 // @Param parent_external_key query string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id"
 // @Param is_active           query bool   false "filter by active flag"
-// @Param q                   query string false "substring search on name, external_key, description, and active tag values"
+// @Param q                   query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
 // @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(tree_path, -tree_path, external_key, -external_key, name, -name, created_at, -created_at)
 // @Success 200 {object} locations.ListLocationsResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
@@ -783,6 +786,7 @@ type AddTagResponse struct {
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
 // @Failure 404 {object} modelerrors.ErrorResponse "not_found"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:write]
@@ -834,6 +838,8 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 }
 
 // @Summary Remove a tag from a location
+// @Description Detach a tag from a location by its tag record id.
+// @Description Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
 // @Tags locations,public
 // @ID locations.tags.remove
 // @Param location_id path int true "Location ID"
@@ -842,7 +848,6 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
-// @Failure 404 {object} modelerrors.ErrorResponse "not_found"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:write]

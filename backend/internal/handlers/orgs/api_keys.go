@@ -45,6 +45,7 @@ type ListAPIKeysResponse struct {
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 409 {object} modelerrors.ErrorResponse "Active-key cap reached"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security APIKey[keys:admin]
 // @Router /api/v1/orgs/{id}/api-keys [post]
