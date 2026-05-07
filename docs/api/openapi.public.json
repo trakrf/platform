@@ -21,6 +21,28 @@
       }
     },
     "schemas": {
+      "asset.AddTagResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/shared.Tag"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "asset.CreateAssetResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/asset.PublicAssetView"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
       "asset.CreateAssetWithTagsRequest": {
         "properties": {
           "description": {
@@ -73,6 +95,46 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "asset.GetAssetResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/asset.PublicAssetView"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "asset.ListAssetsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/asset.PublicAssetView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
         ],
         "type": "object"
       },
@@ -193,69 +255,7 @@
         },
         "type": "object"
       },
-      "assets.AddTagResponse": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/shared.Tag"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "assets.CreateAssetResponse": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/asset.PublicAssetView"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "assets.GetAssetResponse": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/asset.PublicAssetView"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "assets.ListAssetsResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/asset.PublicAssetView"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "assets.UpdateAssetResponse": {
+      "asset.UpdateAssetResponse": {
         "properties": {
           "data": {
             "$ref": "#/components/schemas/asset.PublicAssetView"
@@ -344,6 +344,28 @@
         ],
         "type": "object"
       },
+      "location.AddTagResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/shared.Tag"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "location.CreateLocationResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/location.PublicLocationView"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
       "location.CreateLocationWithTagsRequest": {
         "properties": {
           "description": {
@@ -398,6 +420,133 @@
         "required": [
           "external_key",
           "name"
+        ],
+        "type": "object"
+      },
+      "location.GetLocationResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/location.PublicLocationView"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "location.ListAncestorsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/location.PublicLocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
+        "type": "object"
+      },
+      "location.ListChildrenResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/location.PublicLocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
+        "type": "object"
+      },
+      "location.ListDescendantsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/location.PublicLocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
+        "type": "object"
+      },
+      "location.ListLocationsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/location.PublicLocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
         ],
         "type": "object"
       },
@@ -523,18 +672,7 @@
         },
         "type": "object"
       },
-      "locations.AddTagResponse": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/shared.Tag"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "locations.CreateLocationResponse": {
+      "location.UpdateLocationResponse": {
         "properties": {
           "data": {
             "$ref": "#/components/schemas/location.PublicLocationView"
@@ -545,10 +683,10 @@
         ],
         "type": "object"
       },
-      "locations.GetLocationResponse": {
+      "org.GetOrgMeResponse": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/location.PublicLocationView"
+            "$ref": "#/components/schemas/org.OrgMeView"
           }
         },
         "required": [
@@ -556,145 +694,7 @@
         ],
         "type": "object"
       },
-      "locations.ListAncestorsResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "locations.ListChildrenResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "locations.ListDescendantsResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "locations.ListLocationsResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "locations.UpdateLocationResponse": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/location.PublicLocationView"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "orgs.GetOrgMeResponse": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/orgs.OrgMeView"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "orgs.OrgMeView": {
+      "org.OrgMeView": {
         "properties": {
           "id": {
             "example": 42,
@@ -708,6 +708,64 @@
         "required": [
           "id",
           "name"
+        ],
+        "type": "object"
+      },
+      "report.AssetHistoryResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/report.PublicAssetHistoryItem"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
+        "type": "object"
+      },
+      "report.ListCurrentLocationsResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/report.PublicCurrentLocationItem"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
         ],
         "type": "object"
       },
@@ -771,64 +829,6 @@
           "location_id",
           "location_external_key",
           "last_seen"
-        ],
-        "type": "object"
-      },
-      "reports.AssetHistoryResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/report.PublicAssetHistoryItem"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "reports.ListCurrentLocationsResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/report.PublicCurrentLocationItem"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
         ],
         "type": "object"
       },
@@ -996,7 +996,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/assets.ListAssetsResponse"
+                  "$ref": "#/components/schemas/asset.ListAssetsResponse"
                 }
               }
             },
@@ -1111,7 +1111,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/assets.CreateAssetResponse"
+                  "$ref": "#/components/schemas/asset.CreateAssetResponse"
                 }
               }
             },
@@ -1227,7 +1227,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/assets.GetAssetResponse"
+                  "$ref": "#/components/schemas/asset.GetAssetResponse"
                 }
               }
             },
@@ -1422,7 +1422,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/assets.GetAssetResponse"
+                  "$ref": "#/components/schemas/asset.GetAssetResponse"
                 }
               }
             },
@@ -1548,7 +1548,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/assets.UpdateAssetResponse"
+                  "$ref": "#/components/schemas/asset.UpdateAssetResponse"
                 }
               }
             },
@@ -1717,7 +1717,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/reports.AssetHistoryResponse"
+                  "$ref": "#/components/schemas/report.AssetHistoryResponse"
                 }
               }
             },
@@ -1855,7 +1855,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/assets.AddTagResponse"
+                  "$ref": "#/components/schemas/asset.AddTagResponse"
                 }
               }
             },
@@ -2117,7 +2117,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.ListLocationsResponse"
+                  "$ref": "#/components/schemas/location.ListLocationsResponse"
                 }
               }
             },
@@ -2194,7 +2194,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.CreateLocationResponse"
+                  "$ref": "#/components/schemas/location.CreateLocationResponse"
                 }
               }
             },
@@ -2373,7 +2373,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/reports.ListCurrentLocationsResponse"
+                  "$ref": "#/components/schemas/report.ListCurrentLocationsResponse"
                 }
               }
             },
@@ -2479,7 +2479,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.GetLocationResponse"
+                  "$ref": "#/components/schemas/location.GetLocationResponse"
                 }
               }
             },
@@ -2656,7 +2656,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.GetLocationResponse"
+                  "$ref": "#/components/schemas/location.GetLocationResponse"
                 }
               }
             },
@@ -2754,7 +2754,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.UpdateLocationResponse"
+                  "$ref": "#/components/schemas/location.UpdateLocationResponse"
                 }
               }
             },
@@ -2890,7 +2890,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.ListAncestorsResponse"
+                  "$ref": "#/components/schemas/location.ListAncestorsResponse"
                 }
               }
             },
@@ -3006,7 +3006,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.ListChildrenResponse"
+                  "$ref": "#/components/schemas/location.ListChildrenResponse"
                 }
               }
             },
@@ -3122,7 +3122,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.ListDescendantsResponse"
+                  "$ref": "#/components/schemas/location.ListDescendantsResponse"
                 }
               }
             },
@@ -3217,7 +3217,7 @@
         ],
         "requestBody": {
           "content": {
-            "*/*": {
+            "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/shared.TagRequest"
               }
@@ -3232,7 +3232,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/locations.AddTagResponse"
+                  "$ref": "#/components/schemas/location.AddTagResponse"
                 }
               }
             },
@@ -3419,7 +3419,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/orgs.GetOrgMeResponse"
+                  "$ref": "#/components/schemas/org.GetOrgMeResponse"
                 }
               }
             },

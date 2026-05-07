@@ -748,6 +748,248 @@ func TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs(t *testing.T) {
 		"old wording must be gone — it implies full compliance")
 }
 
+// TestConsolidateSchemaNamespaces_RenamesPluralPrefixes covers TRA-602
+// and the post-launch audit extension. Schemas in the consolidated set
+// (assets./locations./reports./users./orgs./organization./long-form
+// user import path) are renamed to the singular target. errors.*,
+// shared.*, apikey.*, and other already-singular namespaces are
+// untouched. $refs anywhere in the document are rewritten in lockstep.
+func TestConsolidateSchemaNamespaces_RenamesPluralPrefixes(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+		Paths:   openapi3.NewPaths(),
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"asset.PublicAssetView":                                        {Value: &openapi3.Schema{}},
+				"assets.CreateAssetResponse":                                   {Value: &openapi3.Schema{}},
+				"assets.AddTagResponse":                                        {Value: &openapi3.Schema{}},
+				"location.PublicLocationView":                                  {Value: &openapi3.Schema{}},
+				"locations.UpdateLocationResponse":                             {Value: &openapi3.Schema{}},
+				"reports.AssetHistoryResponse":                                 {Value: &openapi3.Schema{}},
+				"users.ListResponse":                                           {Value: &openapi3.Schema{}},
+				"user.CreateUserRequest":                                       {Value: &openapi3.Schema{}},
+				"github_com_trakrf_platform_backend_internal_models_user.User": {Value: &openapi3.Schema{}},
+				"organization.UserOrg":                                         {Value: &openapi3.Schema{}},
+				"orgs.GetOrgMeResponse":                                        {Value: &openapi3.Schema{}},
+				"errors.ErrorResponse":                                         {Value: &openapi3.Schema{}},
+				"shared.Tag":                                                   {Value: &openapi3.Schema{}},
+				"apikey.APIKeyListItem":                                        {Value: &openapi3.Schema{}},
+			},
+		},
+	}
+	// $ref pointing at a renamed schema (operation response) plus one
+	// at a non-renamed schema (errors envelope) so we can verify both.
+	doc.Paths.Set("/things", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Responses: openapi3.NewResponses(
+				openapi3.WithStatus(200, &openapi3.ResponseRef{Value: &openapi3.Response{
+					Content: openapi3.Content{
+						"application/json": &openapi3.MediaType{
+							Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/assets.CreateAssetResponse"},
+						},
+					},
+				}}),
+				openapi3.WithStatus(400, &openapi3.ResponseRef{Value: &openapi3.Response{
+					Content: openapi3.Content{
+						"application/json": &openapi3.MediaType{
+							Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/errors.ErrorResponse"},
+						},
+					},
+				}}),
+			),
+		},
+	})
+
+	consolidateSchemaNamespaces(doc)
+
+	schemas := doc.Components.Schemas
+	// Renamed targets present.
+	assert.Contains(t, schemas, "asset.CreateAssetResponse", "assets.CreateAssetResponse must be renamed to asset.CreateAssetResponse")
+	assert.Contains(t, schemas, "asset.AddTagResponse")
+	assert.Contains(t, schemas, "location.UpdateLocationResponse")
+	assert.Contains(t, schemas, "report.AssetHistoryResponse")
+	assert.Contains(t, schemas, "user.ListResponse", "users.ListResponse must collapse onto user.*")
+	assert.Contains(t, schemas, "user.User", "long-form user import path must collapse onto user.User")
+	assert.Contains(t, schemas, "org.UserOrg", "organization.* must collapse onto org.*")
+	assert.Contains(t, schemas, "org.GetOrgMeResponse", "orgs.* must collapse onto org.*")
+	// Old plural names gone.
+	assert.NotContains(t, schemas, "assets.CreateAssetResponse", "old plural name must be removed")
+	assert.NotContains(t, schemas, "assets.AddTagResponse")
+	assert.NotContains(t, schemas, "locations.UpdateLocationResponse")
+	assert.NotContains(t, schemas, "reports.AssetHistoryResponse")
+	assert.NotContains(t, schemas, "users.ListResponse")
+	assert.NotContains(t, schemas, "github_com_trakrf_platform_backend_internal_models_user.User")
+	assert.NotContains(t, schemas, "organization.UserOrg")
+	assert.NotContains(t, schemas, "orgs.GetOrgMeResponse")
+	// Already-singular and out-of-scope namespaces untouched.
+	assert.Contains(t, schemas, "asset.PublicAssetView")
+	assert.Contains(t, schemas, "location.PublicLocationView")
+	assert.Contains(t, schemas, "user.CreateUserRequest", "pre-existing user.* schemas survive the consolidation")
+	assert.Contains(t, schemas, "errors.ErrorResponse")
+	assert.Contains(t, schemas, "shared.Tag")
+	assert.Contains(t, schemas, "apikey.APIKeyListItem")
+
+	// Operation $refs rewritten.
+	op := doc.Paths.Find("/things").Get
+	require.NotNil(t, op)
+	require.NotNil(t, op.Responses)
+	r200 := op.Responses.Value("200").Value
+	assert.Equal(t, "#/components/schemas/asset.CreateAssetResponse",
+		r200.Content["application/json"].Schema.Ref,
+		"$ref to renamed schema must be rewritten")
+	r400 := op.Responses.Value("400").Value
+	assert.Equal(t, "#/components/schemas/errors.ErrorResponse",
+		r400.Content["application/json"].Schema.Ref,
+		"$ref to non-renamed schema must be left alone")
+}
+
+// TestConsolidateSchemaNamespaces_NoOpWithoutTargets verifies the pass
+// is a no-op when no plural-prefix schemas exist (e.g. minimal fixture).
+func TestConsolidateSchemaNamespaces_NoOpWithoutTargets(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+		Paths:   openapi3.NewPaths(),
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"errors.ErrorResponse":  {Value: &openapi3.Schema{}},
+				"shared.Tag":            {Value: &openapi3.Schema{}},
+				"asset.PublicAssetView": {Value: &openapi3.Schema{}},
+			},
+		},
+	}
+
+	consolidateSchemaNamespaces(doc)
+
+	assert.Len(t, doc.Components.Schemas, 3, "schemas map size must be unchanged")
+	assert.Contains(t, doc.Components.Schemas, "errors.ErrorResponse")
+	assert.Contains(t, doc.Components.Schemas, "shared.Tag")
+	assert.Contains(t, doc.Components.Schemas, "asset.PublicAssetView")
+}
+
+// TestConsolidateSchemaNamespaces_RewritesNestedRefs confirms nested
+// $refs (Properties, AllOf, Items) are rewritten alongside top-level
+// schema renames.
+func TestConsolidateSchemaNamespaces_RewritesNestedRefs(t *testing.T) {
+	envelope := &openapi3.Schema{
+		Type: &openapi3.Types{openapi3.TypeObject},
+		Properties: openapi3.Schemas{
+			"data": {Ref: "#/components/schemas/asset.PublicAssetView"},
+			"page": {Value: &openapi3.Schema{
+				AllOf: openapi3.SchemaRefs{
+					{Ref: "#/components/schemas/shared.Pagination"},
+				},
+			}},
+			"items": {Value: &openapi3.Schema{
+				Type:  &openapi3.Types{openapi3.TypeArray},
+				Items: &openapi3.SchemaRef{Ref: "#/components/schemas/reports.AssetHistoryResponse"},
+			}},
+		},
+	}
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+		Paths:   openapi3.NewPaths(),
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"asset.PublicAssetView":        {Value: &openapi3.Schema{}},
+				"shared.Pagination":            {Value: &openapi3.Schema{}},
+				"reports.AssetHistoryResponse": {Value: &openapi3.Schema{}},
+				"assets.ListAssetsResponse":    {Value: envelope},
+			},
+		},
+	}
+
+	consolidateSchemaNamespaces(doc)
+
+	renamed := doc.Components.Schemas["asset.ListAssetsResponse"].Value
+	require.NotNil(t, renamed)
+	assert.Equal(t, "#/components/schemas/asset.PublicAssetView",
+		renamed.Properties["data"].Ref, "data $ref to non-renamed schema is preserved")
+	assert.Equal(t, "#/components/schemas/shared.Pagination",
+		renamed.Properties["page"].Value.AllOf[0].Ref, "AllOf $ref unchanged")
+	assert.Equal(t, "#/components/schemas/report.AssetHistoryResponse",
+		renamed.Properties["items"].Value.Items.Ref, "nested array Items $ref must be rewritten")
+}
+
+// TestConsolidateSchemaNamespaces_SkipsCollidingTargets locks in the
+// collision guards in buildSchemaRenameSet:
+//
+//  1. A target name that already exists as a distinct schema (a real
+//     pre-existing user.User vs renaming users.User to user.User) — the
+//     rename for that conflicting source is skipped to avoid silent
+//     overwrite.
+//  2. Multiple sources mapping to the same target (e.g. orgs.X and
+//     organization.X both folding onto org.X) — every contributing
+//     source is dropped from the rename set so neither overwrites the
+//     other. Production case has disjoint type names per source, but
+//     the guard prevents silent breakage if that ever changes.
+func TestConsolidateSchemaNamespaces_SkipsCollidingTargets(t *testing.T) {
+	t.Run("pre-existing target schema blocks rename", func(t *testing.T) {
+		doc := &openapi3.T{
+			OpenAPI: "3.0.0",
+			Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+			Paths:   openapi3.NewPaths(),
+			Components: &openapi3.Components{
+				Schemas: openapi3.Schemas{
+					"users.ListResponse": {Value: &openapi3.Schema{Description: "rename source"}},
+					"user.ListResponse":  {Value: &openapi3.Schema{Description: "pre-existing target"}},
+				},
+			},
+		}
+
+		consolidateSchemaNamespaces(doc)
+
+		require.Contains(t, doc.Components.Schemas, "users.ListResponse",
+			"source must not be renamed when target already exists")
+		require.Contains(t, doc.Components.Schemas, "user.ListResponse")
+		assert.Equal(t, "pre-existing target",
+			doc.Components.Schemas["user.ListResponse"].Value.Description,
+			"pre-existing target must not be overwritten")
+	})
+
+	t.Run("two sources renaming to the same target are both skipped", func(t *testing.T) {
+		doc := &openapi3.T{
+			OpenAPI: "3.0.0",
+			Info:    &openapi3.Info{Title: "Test", Version: "v1"},
+			Paths:   openapi3.NewPaths(),
+			Components: &openapi3.Components{
+				Schemas: openapi3.Schemas{
+					"orgs.Conflict":         {Value: &openapi3.Schema{Description: "from orgs"}},
+					"organization.Conflict": {Value: &openapi3.Schema{Description: "from organization"}},
+					"orgs.OnlyOrgs":         {Value: &openapi3.Schema{}},
+				},
+			},
+		}
+
+		consolidateSchemaNamespaces(doc)
+
+		require.Contains(t, doc.Components.Schemas, "orgs.Conflict",
+			"colliding source must remain when two prefixes target the same name")
+		require.Contains(t, doc.Components.Schemas, "organization.Conflict",
+			"colliding source must remain when two prefixes target the same name")
+		require.NotContains(t, doc.Components.Schemas, "org.Conflict",
+			"the contested target must not be created when sources collide")
+		require.Contains(t, doc.Components.Schemas, "org.OnlyOrgs",
+			"non-colliding sources in the same prefix family still rename")
+	})
+}
+
+// TestConsolidateSchemaNamespaces_HandlesEmptyComponents covers the
+// guard for documents with no Components or empty Schemas.
+func TestConsolidateSchemaNamespaces_HandlesEmptyComponents(t *testing.T) {
+	doc := &openapi3.T{OpenAPI: "3.0.0", Info: &openapi3.Info{Title: "T", Version: "v1"}}
+	assert.NotPanics(t, func() { consolidateSchemaNamespaces(doc) })
+
+	doc2 := &openapi3.T{
+		OpenAPI:    "3.0.0",
+		Info:       &openapi3.Info{Title: "T", Version: "v1"},
+		Components: &openapi3.Components{},
+	}
+	assert.NotPanics(t, func() { consolidateSchemaNamespaces(doc2) })
+}
+
 // withEmptyRequiredFields clears the package-level requiredFields and
 // readOnlyFields maps for the duration of a test and restores them on
 // cleanup. Tests that exercise postprocessPublic / postprocessInternal

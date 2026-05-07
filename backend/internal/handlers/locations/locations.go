@@ -779,6 +779,7 @@ type AddTagResponse struct {
 // @Summary Add a tag to a location
 // @Tags locations,public
 // @ID locations.tags.add
+// @Accept json
 // @Param location_id path int               true "Location ID"
 // @Param request body shared.TagRequest true "Tag to attach"
 // @Success 201 {object} locations.AddTagResponse "tag attached"

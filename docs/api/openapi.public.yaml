@@ -12,6 +12,20 @@ components:
                     schema:
                         type: string
     schemas:
+        asset.AddTagResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/shared.Tag'
+            required:
+                - data
+            type: object
+        asset.CreateAssetResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/asset.PublicAssetView'
+            required:
+                - data
+            type: object
         asset.CreateAssetWithTagsRequest:
             properties:
                 description:
@@ -52,6 +66,34 @@ components:
                     type: string
             required:
                 - name
+            type: object
+        asset.GetAssetResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/asset.PublicAssetView'
+            required:
+                - data
+            type: object
+        asset.ListAssetsResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/asset.PublicAssetView'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         asset.PublicAssetView:
             properties:
@@ -142,49 +184,7 @@ components:
                     format: date-time
                     type: string
             type: object
-        assets.AddTagResponse:
-            properties:
-                data:
-                    $ref: '#/components/schemas/shared.Tag'
-            required:
-                - data
-            type: object
-        assets.CreateAssetResponse:
-            properties:
-                data:
-                    $ref: '#/components/schemas/asset.PublicAssetView'
-            required:
-                - data
-            type: object
-        assets.GetAssetResponse:
-            properties:
-                data:
-                    $ref: '#/components/schemas/asset.PublicAssetView'
-            required:
-                - data
-            type: object
-        assets.ListAssetsResponse:
-            properties:
-                data:
-                    items:
-                        $ref: '#/components/schemas/asset.PublicAssetView'
-                    type: array
-                limit:
-                    example: 50
-                    type: integer
-                offset:
-                    example: 0
-                    type: integer
-                total_count:
-                    example: 100
-                    type: integer
-            required:
-                - data
-                - limit
-                - offset
-                - total_count
-            type: object
-        assets.UpdateAssetResponse:
+        asset.UpdateAssetResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/asset.PublicAssetView'
@@ -248,6 +248,20 @@ components:
                 - code
                 - message
             type: object
+        location.AddTagResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/shared.Tag'
+            required:
+                - data
+            type: object
+        location.CreateLocationResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/location.PublicLocationView'
+            required:
+                - data
+            type: object
         location.CreateLocationWithTagsRequest:
             properties:
                 description:
@@ -291,6 +305,97 @@ components:
             required:
                 - external_key
                 - name
+            type: object
+        location.GetLocationResponse:
+            properties:
+                data:
+                    $ref: '#/components/schemas/location.PublicLocationView'
+            required:
+                - data
+            type: object
+        location.ListAncestorsResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/location.PublicLocationView'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
+            type: object
+        location.ListChildrenResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/location.PublicLocationView'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
+            type: object
+        location.ListDescendantsResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/location.PublicLocationView'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
+            type: object
+        location.ListLocationsResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/location.PublicLocationView'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         location.PublicLocationView:
             properties:
@@ -386,126 +491,21 @@ components:
                     format: date-time
                     type: string
             type: object
-        locations.AddTagResponse:
-            properties:
-                data:
-                    $ref: '#/components/schemas/shared.Tag'
-            required:
-                - data
-            type: object
-        locations.CreateLocationResponse:
+        location.UpdateLocationResponse:
             properties:
                 data:
                     $ref: '#/components/schemas/location.PublicLocationView'
             required:
                 - data
             type: object
-        locations.GetLocationResponse:
+        org.GetOrgMeResponse:
             properties:
                 data:
-                    $ref: '#/components/schemas/location.PublicLocationView'
+                    $ref: '#/components/schemas/org.OrgMeView'
             required:
                 - data
             type: object
-        locations.ListAncestorsResponse:
-            properties:
-                data:
-                    items:
-                        $ref: '#/components/schemas/location.PublicLocationView'
-                    type: array
-                limit:
-                    example: 50
-                    type: integer
-                offset:
-                    example: 0
-                    type: integer
-                total_count:
-                    example: 100
-                    type: integer
-            required:
-                - data
-                - limit
-                - offset
-                - total_count
-            type: object
-        locations.ListChildrenResponse:
-            properties:
-                data:
-                    items:
-                        $ref: '#/components/schemas/location.PublicLocationView'
-                    type: array
-                limit:
-                    example: 50
-                    type: integer
-                offset:
-                    example: 0
-                    type: integer
-                total_count:
-                    example: 100
-                    type: integer
-            required:
-                - data
-                - limit
-                - offset
-                - total_count
-            type: object
-        locations.ListDescendantsResponse:
-            properties:
-                data:
-                    items:
-                        $ref: '#/components/schemas/location.PublicLocationView'
-                    type: array
-                limit:
-                    example: 50
-                    type: integer
-                offset:
-                    example: 0
-                    type: integer
-                total_count:
-                    example: 100
-                    type: integer
-            required:
-                - data
-                - limit
-                - offset
-                - total_count
-            type: object
-        locations.ListLocationsResponse:
-            properties:
-                data:
-                    items:
-                        $ref: '#/components/schemas/location.PublicLocationView'
-                    type: array
-                limit:
-                    example: 50
-                    type: integer
-                offset:
-                    example: 0
-                    type: integer
-                total_count:
-                    example: 100
-                    type: integer
-            required:
-                - data
-                - limit
-                - offset
-                - total_count
-            type: object
-        locations.UpdateLocationResponse:
-            properties:
-                data:
-                    $ref: '#/components/schemas/location.PublicLocationView'
-            required:
-                - data
-            type: object
-        orgs.GetOrgMeResponse:
-            properties:
-                data:
-                    $ref: '#/components/schemas/orgs.OrgMeView'
-            required:
-                - data
-            type: object
-        orgs.OrgMeView:
+        org.OrgMeView:
             properties:
                 id:
                     example: 42
@@ -516,6 +516,48 @@ components:
             required:
                 - id
                 - name
+            type: object
+        report.AssetHistoryResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/report.PublicAssetHistoryItem'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
+            type: object
+        report.ListCurrentLocationsResponse:
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/report.PublicCurrentLocationItem'
+                    type: array
+                limit:
+                    example: 50
+                    type: integer
+                offset:
+                    example: 0
+                    type: integer
+                total_count:
+                    example: 100
+                    type: integer
+            required:
+                - data
+                - limit
+                - offset
+                - total_count
             type: object
         report.PublicAssetHistoryItem:
             properties:
@@ -563,48 +605,6 @@ components:
                 - location_id
                 - location_external_key
                 - last_seen
-            type: object
-        reports.AssetHistoryResponse:
-            properties:
-                data:
-                    items:
-                        $ref: '#/components/schemas/report.PublicAssetHistoryItem'
-                    type: array
-                limit:
-                    example: 50
-                    type: integer
-                offset:
-                    example: 0
-                    type: integer
-                total_count:
-                    example: 100
-                    type: integer
-            required:
-                - data
-                - limit
-                - offset
-                - total_count
-            type: object
-        reports.ListCurrentLocationsResponse:
-            properties:
-                data:
-                    items:
-                        $ref: '#/components/schemas/report.PublicCurrentLocationItem'
-                    type: array
-                limit:
-                    example: 50
-                    type: integer
-                offset:
-                    example: 0
-                    type: integer
-                total_count:
-                    example: 100
-                    type: integer
-            required:
-                - data
-                - limit
-                - offset
-                - total_count
             type: object
         shared.Tag:
             properties:
@@ -728,7 +728,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/assets.ListAssetsResponse'
+                                $ref: '#/components/schemas/asset.ListAssetsResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:
@@ -809,7 +809,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/assets.CreateAssetResponse'
+                                $ref: '#/components/schemas/asset.CreateAssetResponse'
                     description: Created
                     headers:
                         Location:
@@ -933,7 +933,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/assets.GetAssetResponse'
+                                $ref: '#/components/schemas/asset.GetAssetResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:
@@ -1014,7 +1014,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/assets.UpdateAssetResponse'
+                                $ref: '#/components/schemas/asset.UpdateAssetResponse'
                     description: OK
                 "400":
                     content:
@@ -1122,7 +1122,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/reports.AssetHistoryResponse'
+                                $ref: '#/components/schemas/report.AssetHistoryResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:
@@ -1211,7 +1211,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/assets.AddTagResponse'
+                                $ref: '#/components/schemas/asset.AddTagResponse'
                     description: tag attached
                 "400":
                     content:
@@ -1340,7 +1340,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/assets.GetAssetResponse'
+                                $ref: '#/components/schemas/asset.GetAssetResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:
@@ -1455,7 +1455,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.ListLocationsResponse'
+                                $ref: '#/components/schemas/location.ListLocationsResponse'
                     description: OK
                 "400":
                     content:
@@ -1506,7 +1506,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.CreateLocationResponse'
+                                $ref: '#/components/schemas/location.CreateLocationResponse'
                     description: Created
                     headers:
                         Location:
@@ -1636,7 +1636,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.GetLocationResponse'
+                                $ref: '#/components/schemas/location.GetLocationResponse'
                     description: OK
                 "400":
                     content:
@@ -1699,7 +1699,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.UpdateLocationResponse'
+                                $ref: '#/components/schemas/location.UpdateLocationResponse'
                     description: OK
                 "400":
                     content:
@@ -1782,7 +1782,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.ListAncestorsResponse'
+                                $ref: '#/components/schemas/location.ListAncestorsResponse'
                     description: OK
                 "400":
                     content:
@@ -1853,7 +1853,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.ListChildrenResponse'
+                                $ref: '#/components/schemas/location.ListChildrenResponse'
                     description: OK
                 "400":
                     content:
@@ -1924,7 +1924,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.ListDescendantsResponse'
+                                $ref: '#/components/schemas/location.ListDescendantsResponse'
                     description: OK
                 "400":
                     content:
@@ -1980,7 +1980,7 @@ paths:
                     type: integer
             requestBody:
                 content:
-                    '*/*':
+                    application/json:
                         schema:
                             $ref: '#/components/schemas/shared.TagRequest'
                 description: Tag to attach
@@ -1991,7 +1991,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.AddTagResponse'
+                                $ref: '#/components/schemas/location.AddTagResponse'
                     description: tag attached
                 "400":
                     content:
@@ -2161,7 +2161,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/reports.ListCurrentLocationsResponse'
+                                $ref: '#/components/schemas/report.ListCurrentLocationsResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:
@@ -2230,7 +2230,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/locations.GetLocationResponse'
+                                $ref: '#/components/schemas/location.GetLocationResponse'
                     description: OK
                 "400":
                     content:
@@ -2276,7 +2276,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/orgs.GetOrgMeResponse'
+                                $ref: '#/components/schemas/org.GetOrgMeResponse'
                     description: OK
                 "401":
                     content:
