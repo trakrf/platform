@@ -29,6 +29,8 @@ type GetOrgMeResponse struct {
 // @Produce json
 // @Success 200 {object} orgs.GetOrgMeResponse
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
+// @Header  429 {integer} Retry-After "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security APIKey
 // @Router /api/v1/orgs/me [get]
