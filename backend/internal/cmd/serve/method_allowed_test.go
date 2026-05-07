@@ -63,8 +63,8 @@ func TestComputeAllowedMethods(t *testing.T) {
 		{
 			name: "path-param route",
 			setup: func(r *chi.Mux) {
-				r.Get("/api/v1/assets/{id}", noop)
-				r.Put("/api/v1/assets/{id}", noop)
+				r.Get("/api/v1/assets/{asset_id}", noop)
+				r.Put("/api/v1/assets/{asset_id}", noop)
 			},
 			path:   "/api/v1/assets/123",
 			expect: []string{"GET", "HEAD", "PUT"},

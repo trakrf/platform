@@ -207,7 +207,7 @@ func TestContract_BB12_401Reproductions(t *testing.T) {
 func TestContract_NotFound_FixedTitleAndDetail(t *testing.T) {
 	mux := chi.NewRouter()
 	mux.Use(middleware.RequestID)
-	mux.Get("/api/v1/assets/{id}", func(w http.ResponseWriter, req *http.Request) {
+	mux.Get("/api/v1/assets/{asset_id}", func(w http.ResponseWriter, req *http.Request) {
 		httputil.Respond404(w, req, "Asset not found",
 			middleware.GetRequestID(req.Context()))
 	})
