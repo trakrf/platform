@@ -424,6 +424,100 @@ func TestMarkRequiredFields_ErrorsOnMissingField(t *testing.T) {
 	}
 }
 
+// TestPostprocess_MarksReadOnlyFields covers TRA-587 / BB16 S8: server-managed
+// fields on read views must be tagged readOnly so codegen splits read and
+// write types and a verbatim GET → PUT round-trip is type-safe.
+func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := docWithSchemas(openapi3.Schemas{
+		"asset.PublicAssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"id":         &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"created_at": stringProp("date-time"),
+				"updated_at": stringProp("date-time"),
+				"tags": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type:  &openapi3.Types{openapi3.TypeArray},
+					Items: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeObject}}},
+				}},
+				"name":         stringProp(""), // not on the allowlist — must remain writable
+				"external_key": stringProp(""), // mutable lookup key (TRA-555) — must remain writable
+			},
+		}},
+		"location.PublicLocationView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"id":         &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"created_at": stringProp("date-time"),
+				"updated_at": stringProp("date-time"),
+				"tree_path":  stringProp(""),
+				"depth":      &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"tags": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type:  &openapi3.Types{openapi3.TypeArray},
+					Items: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeObject}}},
+				}},
+				"name": stringProp(""), // not on the allowlist
+			},
+		}},
+	})
+
+	readOnly := map[string][]string{
+		"asset.PublicAssetView":       {"id", "created_at", "updated_at", "tags"},
+		"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth", "tags"},
+	}
+	if err := markReadOnlyFields(doc, readOnly); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for schemaName, fields := range readOnly {
+		schema := doc.Components.Schemas[schemaName].Value
+		for _, field := range fields {
+			assert.True(t, schema.Properties[field].Value.ReadOnly,
+				"%s.%s must be marked readOnly", schemaName, field)
+		}
+	}
+
+	// fields NOT on the allowlist must remain writable
+	assert.False(t,
+		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["name"].Value.ReadOnly,
+		"name must remain writable")
+	assert.False(t,
+		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["external_key"].Value.ReadOnly,
+		"external_key must remain writable")
+	assert.False(t,
+		doc.Components.Schemas["location.PublicLocationView"].Value.Properties["name"].Value.ReadOnly,
+		"name must remain writable")
+}
+
+func TestMarkReadOnlyFields_ErrorsOnMissingSchema(t *testing.T) {
+	doc := &openapi3.T{Components: &openapi3.Components{Schemas: openapi3.Schemas{}}}
+	readOnly := map[string][]string{"thing.Missing": {"id"}}
+
+	err := markReadOnlyFields(doc, readOnly)
+	if err == nil {
+		t.Fatalf("expected error for missing schema, got nil")
+	}
+}
+
+func TestMarkReadOnlyFields_ErrorsOnMissingField(t *testing.T) {
+	doc := &openapi3.T{
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"thing.View": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type:       &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{"id": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}}},
+				}},
+			},
+		},
+	}
+	readOnly := map[string][]string{"thing.View": {"ghost"}}
+
+	err := markReadOnlyFields(doc, readOnly)
+	if err == nil {
+		t.Fatalf("expected error for missing field, got nil")
+	}
+}
+
 func docWithSchemas(schemas openapi3.Schemas) *openapi3.T {
 	return &openapi3.T{
 		OpenAPI: "3.0.0",
@@ -654,20 +748,24 @@ func TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs(t *testing.T) {
 		"old wording must be gone — it implies full compliance")
 }
 
-// withEmptyRequiredFields clears the package-level requiredFields map for the
-// duration of a test and restores it on cleanup. Tests that exercise
-// postprocessPublic / postprocessInternal against synthetic minimal docs use
-// this so the stale-entry guard in markRequiredFields doesn't bail out before
-// the assertions run. Tests that need to verify required-block injection
-// directly call markRequiredFields with their own map.
+// withEmptyRequiredFields clears the package-level requiredFields and
+// readOnlyFields maps for the duration of a test and restores them on
+// cleanup. Tests that exercise postprocessPublic / postprocessInternal
+// against synthetic minimal docs use this so the stale-entry guards in
+// markRequiredFields and markReadOnlyFields don't bail out before the
+// assertions run. Tests that verify either pass directly call
+// markRequiredFields / markReadOnlyFields with their own map.
 func withEmptyRequiredFields(t *testing.T) {
 	t.Helper()
 	saved := requiredFields
 	requiredFields = map[string][]string{}
 	savedInternal := internalOnlyRequiredFields
 	internalOnlyRequiredFields = map[string][]string{}
+	savedReadOnly := readOnlyFields
+	readOnlyFields = map[string][]string{}
 	t.Cleanup(func() {
 		requiredFields = saved
 		internalOnlyRequiredFields = savedInternal
+		readOnlyFields = savedReadOnly
 	})
 }

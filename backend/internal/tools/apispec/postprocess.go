@@ -26,6 +26,9 @@ func postprocessPublic(doc *openapi3.T) error {
 	if err := markRequiredFields(doc, requiredFields); err != nil {
 		return err
 	}
+	if err := markReadOnlyFields(doc, readOnlyFields); err != nil {
+		return err
+	}
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	normalizeArrayQueryParams(doc)
@@ -57,6 +60,9 @@ func postprocessInternal(doc *openapi3.T) error {
 		return err
 	}
 	if err := markRequiredFields(doc, internalOnlyRequiredFields); err != nil {
+		return err
+	}
+	if err := markReadOnlyFields(doc, readOnlyFields); err != nil {
 		return err
 	}
 	annotateErrorEnvelope(doc)
@@ -256,6 +262,22 @@ var internalOnlyRequiredFields = map[string][]string{
 	"orgs.ListAPIKeysResponse":    {"data", "limit", "offset", "total_count"},
 }
 
+// readOnlyFields names schema/field pairs whose values are server-managed and
+// must not be supplied on the write path (TRA-587 / BB16 S8). Generators that
+// honor `readOnly: true` (openapi-generator-cli, openapi-typescript) split the
+// schema into read and write variants so SDK consumers can't accidentally send
+// these fields back on a verbatim read → write round-trip.
+//
+// Tags are read-only on these views because tag mutation goes through the
+// dedicated POST/DELETE /tags subresource endpoints, not the parent PUT.
+//
+// markReadOnlyFields errors if a configured schema or field is missing from
+// the spec — keeps this map honest as struct fields rename or move.
+var readOnlyFields = map[string][]string{
+	"asset.PublicAssetView":       {"id", "created_at", "updated_at", "tags"},
+	"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth", "tags"},
+}
+
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse
 // (and per-property descriptions on the title and detail fields) documenting
 // the title vs detail contract from TRA-517 AC4. swaggo doesn't propagate
@@ -308,6 +330,33 @@ func markNullableFields(doc *openapi3.T) {
 			prop.Value.Nullable = true
 		}
 	}
+}
+
+// markReadOnlyFields walks doc.Components.Schemas and sets ReadOnly on the
+// configured (schema, field) pairs. Errors if a configured schema or field
+// does not exist in the spec, so renames break the build instead of going
+// silently stale.
+func markReadOnlyFields(doc *openapi3.T, readOnly map[string][]string) error {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		if len(readOnly) == 0 {
+			return nil
+		}
+		return fmt.Errorf("apispec: components.schemas is empty but readOnlyFields has %d entries", len(readOnly))
+	}
+	for schemaName, fields := range readOnly {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			return fmt.Errorf("apispec: readOnlyFields references unknown schema %q", schemaName)
+		}
+		for _, fieldName := range fields {
+			prop, ok := ref.Value.Properties[fieldName]
+			if !ok || prop == nil || prop.Value == nil {
+				return fmt.Errorf("apispec: readOnlyFields references unknown field %q on schema %q", fieldName, schemaName)
+			}
+			prop.Value.ReadOnly = true
+		}
+	}
+	return nil
 }
 
 // markRequiredFields walks doc.Components.Schemas and sets the `required:`
