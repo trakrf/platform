@@ -858,6 +858,10 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 		clauses = append(clauses, fmt.Sprintf("l.external_key = ANY($%d::text[])", len(args)))
 	}
 
+	if len(f.ExternalKeys) > 0 {
+		args = append(args, f.ExternalKeys)
+		clauses = append(clauses, fmt.Sprintf("a.external_key = ANY($%d::text[])", len(args)))
+	}
 	if f.IsActive != nil {
 		args = append(args, *f.IsActive)
 		clauses = append(clauses, fmt.Sprintf("a.is_active = $%d", len(args)))

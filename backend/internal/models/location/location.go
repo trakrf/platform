@@ -100,11 +100,14 @@ type LocationWithParent struct {
 type ListFilter struct {
 	ParentIDs          []int
 	ParentExternalKeys []string
-	IsActive           *bool
-	Q                  *string
-	Sorts              []ListSort
-	Limit              int
-	Offset             int
+	// Equality match on l.external_key (any-of). Single value yields the
+	// natural-key lookup that lives on the collection per TRA-600.
+	ExternalKeys []string
+	IsActive     *bool
+	Q            *string
+	Sorts        []ListSort
+	Limit        int
+	Offset       int
 }
 
 type ListSort struct {

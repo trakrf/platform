@@ -355,6 +355,7 @@ type ListDescendantsResponse struct {
 // @Param offset              query int    false "min 0"   default(0)
 // @Param parent_id            query int    false "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key"
 // @Param parent_external_key query string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id"
+// @Param external_key         query string false "filter by location external_key, equality match (may repeat for any-of)"
 // @Param is_active           query bool   false "filter by active flag"
 // @Param q                   query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
 // @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(tree_path, -tree_path, external_key, -external_key, name, -name, created_at, -created_at)
@@ -375,7 +376,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"parent_id", "parent_external_key", "is_active", "q"},
+		Filters:     []string{"parent_id", "parent_external_key", "external_key", "is_active", "q"},
 		BoolFilters: []string{"is_active"},
 		Sorts:       []string{"tree_path", "external_key", "name", "created_at"},
 	})
@@ -401,6 +402,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 
 	f := location.ListFilter{
 		ParentExternalKeys: params.Filters["parent_external_key"],
+		ExternalKeys:       params.Filters["external_key"],
 		Limit:              params.Limit,
 		Offset:             params.Offset,
 	}
@@ -514,77 +516,6 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": location.ToPublicLocationView(withParent)})
-}
-
-// @Summary Lookup location by external_key
-// @Description Find a single live location by its external_key. Returns 404 if no match.
-// @Description Exactly one natural-key parameter is required; multiple or none returns 400.
-// @Tags locations,public
-// @ID locations.lookup
-// @Param external_key query string true "Location external_key (natural key)"
-// @Success 200 {object} locations.GetLocationResponse
-// @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
-// @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
-// @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
-// @Failure 404 {object} modelerrors.ErrorResponse "not_found"
-// @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
-// @Security APIKey[locations:read]
-// @Router /api/v1/locations/lookup [get]
-func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
-	reqID := middleware.GetRequestID(req.Context())
-
-	orgID, err := middleware.GetRequestOrgID(req)
-	if err != nil {
-		httputil.RespondMissingOrgContext(w, req, reqID)
-		return
-	}
-
-	q := req.URL.Query()
-	// D-4: duplicate external_key params silently first-wins is an LLM-hostile
-	// bug; reject them explicitly. Repeated values (same or different) → 400.
-	if len(q["external_key"]) > 1 {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"exactly one of: external_key", reqID)
-		return
-	}
-
-	naturalKeyParams := []string{"external_key"}
-	provided := 0
-	for _, k := range naturalKeyParams {
-		if q.Has(k) && q.Get(k) != "" {
-			provided++
-		}
-	}
-
-	if provided == 0 {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"exactly one of: external_key", reqID)
-
-		return
-	}
-	if provided > 1 {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"exactly one of: external_key", reqID)
-
-		return
-	}
-
-	externalKey := q.Get("external_key")
-	loc, err := handler.storage.GetLocationByExternalKey(req.Context(), orgID, externalKey)
-	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-			err.Error(), reqID)
-
-		return
-	}
-	if loc == nil {
-		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
-		return
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"data": location.ToPublicLocationView(*loc),
-	})
 }
 
 // @Summary List location ancestors

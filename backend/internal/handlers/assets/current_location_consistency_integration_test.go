@@ -1,9 +1,10 @@
 //go:build integration
 // +build integration
 
-// TRA-576: GET /assets, /assets/{id}, /assets/lookup must return the same
-// (current_location_id, current_location_external_key) pair — both
-// populated or both null — for any given asset.
+// TRA-576: GET /assets, GET /assets/{id}, and GET /assets?external_key= must
+// return the same (current_location_id, current_location_external_key) pair —
+// both populated or both null — for any given asset. The TRA-600 filter
+// replaces the retired /assets/lookup endpoint as the third read path.
 
 package assets
 
@@ -31,7 +32,6 @@ func setupConsistencyRouter(handler *Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Get("/api/v1/assets", handler.ListAssets)
-	r.Get("/api/v1/assets/lookup", handler.Lookup)
 	r.Get("/api/v1/assets/{asset_id}", handler.GetAsset)
 	return r
 }
@@ -127,19 +127,22 @@ func fetchDetailPair(t *testing.T, router *chi.Mux, orgID, assetID int) fkPair {
 	return fkPair{id: resp.Data.LocationID, externalKey: resp.Data.LocationExternalKey}
 }
 
-func fetchLookupPair(t *testing.T, router *chi.Mux, orgID int, externalKey string) fkPair {
+// fetchFilterPair fetches the same asset via GET /assets?external_key= and
+// returns its location FK pair. Replaces fetchLookupPair (TRA-600).
+func fetchFilterPair(t *testing.T, router *chi.Mux, orgID int, externalKey string) fkPair {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets/lookup?external_key="+externalKey, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?external_key="+externalKey, nil)
 	req = withConsistencyOrgContext(req, orgID)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var resp struct {
-		Data assetmodel.PublicAssetView `json:"data"`
+		Data []assetmodel.PublicAssetView `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	return fkPair{id: resp.Data.LocationID, externalKey: resp.Data.LocationExternalKey}
+	require.Len(t, resp.Data, 1, "external_key filter must return exactly one row")
+	return fkPair{id: resp.Data[0].LocationID, externalKey: resp.Data[0].LocationExternalKey}
 }
 
 // BB15 reproduction: asset has no explicit FK but has a scan pointing at a
@@ -162,7 +165,7 @@ func TestCurrentLocation_ScanInferred_ConsistentAcrossReads(t *testing.T) {
 
 	listPair := fetchListPair(t, router, orgID, assetID)
 	detailPair := fetchDetailPair(t, router, orgID, assetID)
-	lookupPair := fetchLookupPair(t, router, orgID, "ASSET-0001")
+	filterPair := fetchFilterPair(t, router, orgID, "ASSET-0001")
 
 	require.NotNil(t, listPair.id, "list FK should be populated; got %s", listPair)
 	require.NotNil(t, listPair.externalKey)
@@ -170,7 +173,7 @@ func TestCurrentLocation_ScanInferred_ConsistentAcrossReads(t *testing.T) {
 	assert.Equal(t, "WHS-01", *listPair.externalKey)
 
 	assert.Equal(t, listPair.String(), detailPair.String(), "detail FK pair must match list")
-	assert.Equal(t, listPair.String(), lookupPair.String(), "lookup FK pair must match list")
+	assert.Equal(t, listPair.String(), filterPair.String(), "filter FK pair must match list")
 }
 
 // No FK and no scan: all three endpoints return (null, null).
@@ -189,14 +192,14 @@ func TestCurrentLocation_NoLocation_AllNullAcrossReads(t *testing.T) {
 
 	listPair := fetchListPair(t, router, orgID, assetID)
 	detailPair := fetchDetailPair(t, router, orgID, assetID)
-	lookupPair := fetchLookupPair(t, router, orgID, "ASSET-NOLOC")
+	filterPair := fetchFilterPair(t, router, orgID, "ASSET-NOLOC")
 
 	assert.Nil(t, listPair.id)
 	assert.Nil(t, listPair.externalKey)
 	assert.Nil(t, detailPair.id)
 	assert.Nil(t, detailPair.externalKey)
-	assert.Nil(t, lookupPair.id)
-	assert.Nil(t, lookupPair.externalKey)
+	assert.Nil(t, filterPair.id)
+	assert.Nil(t, filterPair.externalKey)
 }
 
 // FK set but no scan: TRA-495 fallback. All three return the FK location.
@@ -216,12 +219,12 @@ func TestCurrentLocation_FKOnlyFallback_ConsistentAcrossReads(t *testing.T) {
 
 	listPair := fetchListPair(t, router, orgID, assetID)
 	detailPair := fetchDetailPair(t, router, orgID, assetID)
-	lookupPair := fetchLookupPair(t, router, orgID, "ASSET-FKONLY")
+	filterPair := fetchFilterPair(t, router, orgID, "ASSET-FKONLY")
 
 	require.NotNil(t, listPair.id)
 	assert.Equal(t, locID, *listPair.id)
 	assert.Equal(t, "WHS-FK", *listPair.externalKey)
 
 	assert.Equal(t, listPair.String(), detailPair.String())
-	assert.Equal(t, listPair.String(), lookupPair.String())
+	assert.Equal(t, listPair.String(), filterPair.String())
 }
