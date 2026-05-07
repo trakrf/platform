@@ -193,7 +193,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID           assets.update
 // @Accept       json
 // @Produce      json
-// @Param        id       path  int                       true  "Asset id (canonical)"
+// @Param        asset_id path  int                       true  "Asset id (canonical)"
 // @Param        request  body  asset.UpdateAssetRequest  true  "Fields to update"
 // @Success      200  {object}  assets.UpdateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -205,7 +205,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{id} [put]
+// @Router       /api/v1/assets/{asset_id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -297,7 +297,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @ID           assets.delete
 // @Accept       json
 // @Produce      json
-// @Param        id  path  int  true  "Asset id (canonical)"
+// @Param        asset_id  path  int  true  "Asset id (canonical)"
 // @Success      204  "deleted"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -305,7 +305,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{id} [delete]
+// @Router       /api/v1/assets/{asset_id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -348,7 +348,7 @@ type ListAssetsResponse struct {
 	TotalCount int                     `json:"total_count" example:"100"`
 }
 
-// GetAssetResponse is the typed envelope returned by GET /api/v1/assets/{id}.
+// GetAssetResponse is the typed envelope returned by GET /api/v1/assets/{asset_id}.
 type GetAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
@@ -358,7 +358,7 @@ type CreateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
 
-// UpdateAssetResponse is the typed envelope returned by PUT /api/v1/assets/{id}.
+// UpdateAssetResponse is the typed envelope returned by PUT /api/v1/assets/{asset_id}.
 type UpdateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
@@ -474,7 +474,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Description Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.
 // @Tags assets,public
 // @ID assets.get
-// @Param id path int true "Asset id (canonical)"
+// @Param asset_id path int true "Asset id (canonical)"
 // @Success 200 {object} assets.GetAssetResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
@@ -486,7 +486,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security APIKey[assets:read]
-// @Router /api/v1/assets/{id} [get]
+// @Router /api/v1/assets/{asset_id} [get]
 func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -496,7 +496,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
+	idParam := chi.URLParam(req, "asset_id")
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -598,7 +598,7 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
-// AddTagResponse is the typed envelope returned by POST /api/v1/assets/{id}/tags.
+// AddTagResponse is the typed envelope returned by POST /api/v1/assets/{asset_id}/tags.
 type AddTagResponse struct {
 	Data shared.Tag `json:"data"`
 }
@@ -610,7 +610,7 @@ type AddTagResponse struct {
 // @ID           assets.tags.add
 // @Accept       json
 // @Produce      json
-// @Param        id       path  int                true  "Asset id (canonical)"
+// @Param        asset_id path  int                true  "Asset id (canonical)"
 // @Param        request  body  shared.TagRequest  true  "Tag to attach"
 // @Success      201  {object}  assets.AddTagResponse         "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -621,7 +621,7 @@ type AddTagResponse struct {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
-// @Router       /api/v1/assets/{id}/tags [post]
+// @Router       /api/v1/assets/{asset_id}/tags [post]
 func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -747,11 +747,11 @@ func (handler *Handler) doRemoveAssetTag(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// parseAndVerifyAssetID extracts {id}, parses it as a surrogate int, and
-// verifies the asset exists and belongs to the caller's org. Writes an
+// parseAndVerifyAssetID extracts {asset_id}, parses it as a surrogate int,
+// and verifies the asset exists and belongs to the caller's org. Writes an
 // appropriate 400 / 404 / 500 response and returns ok=false on any failure.
 func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.Request, orgID int, reqID string) (int, bool) {
-	idParam := chi.URLParam(req, "id")
+	idParam := chi.URLParam(req, "asset_id")
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,

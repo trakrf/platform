@@ -1323,97 +1323,7 @@
         ]
       }
     },
-    "/api/v1/assets/{asset_id}/tags/{tag_id}": {
-      "delete": {
-        "description": "**Required scope:** `assets:write`\n\nDetach a tag from an asset by its tag record id.\nIdempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.",
-        "operationId": "assets.tags.remove",
-        "parameters": [
-          {
-            "description": "Asset id (canonical)",
-            "in": "path",
-            "name": "asset_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Tag id",
-            "in": "path",
-            "name": "tag_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "deleted"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "bad_request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "forbidden"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "rate_limited"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
-                }
-              }
-            },
-            "description": "internal_error"
-          }
-        },
-        "security": [
-          {
-            "APIKey": []
-          }
-        ],
-        "summary": "Remove a tag from an asset",
-        "tags": [
-          "assets"
-        ]
-      }
-    },
-    "/api/v1/assets/{id}": {
+    "/api/v1/assets/{asset_id}": {
       "delete": {
         "description": "**Required scope:** `assets:write`\n\nDelete an asset by its canonical id. The asset is removed from all subsequent queries and its external_key becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.",
         "operationId": "assets.delete",
@@ -1421,7 +1331,7 @@
           {
             "description": "Asset id (canonical)",
             "in": "path",
-            "name": "id",
+            "name": "asset_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -1500,7 +1410,7 @@
           {
             "description": "Asset id (canonical)",
             "in": "path",
-            "name": "id",
+            "name": "asset_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -1614,7 +1524,7 @@
           {
             "description": "Asset id (canonical)",
             "in": "path",
-            "name": "id",
+            "name": "asset_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -1736,7 +1646,7 @@
         ]
       }
     },
-    "/api/v1/assets/{id}/history": {
+    "/api/v1/assets/{asset_id}/history": {
       "get": {
         "description": "**Required scope:** `history:read`\n\nLocation history for an asset identified by its canonical id.",
         "operationId": "assets.history",
@@ -1744,7 +1654,7 @@
           {
             "description": "Asset id (canonical)",
             "in": "path",
-            "name": "id",
+            "name": "asset_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -1913,7 +1823,7 @@
         ]
       }
     },
-    "/api/v1/assets/{id}/tags": {
+    "/api/v1/assets/{asset_id}/tags": {
       "post": {
         "description": "**Required scope:** `assets:write`\n\nAttach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.\nThe tag must be unique within the organization.",
         "operationId": "assets.tags.add",
@@ -1921,7 +1831,7 @@
           {
             "description": "Asset id (canonical)",
             "in": "path",
-            "name": "id",
+            "name": "asset_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -2028,6 +1938,96 @@
           }
         ],
         "summary": "Add a tag to an asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/assets/{asset_id}/tags/{tag_id}": {
+      "delete": {
+        "description": "**Required scope:** `assets:write`\n\nDetach a tag from an asset by its tag record id.\nIdempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.",
+        "operationId": "assets.tags.remove",
+        "parameters": [
+          {
+            "description": "Asset id (canonical)",
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Tag id",
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "deleted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "rate_limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "internal_error"
+          }
+        },
+        "security": [
+          {
+            "APIKey": []
+          }
+        ],
+        "summary": "Remove a tag from an asset",
         "tags": [
           "assets"
         ]
@@ -2547,7 +2547,7 @@
         ]
       }
     },
-    "/api/v1/locations/{id}": {
+    "/api/v1/locations/{location_id}": {
       "delete": {
         "description": "**Required scope:** `locations:write`\n\nDelete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.",
         "operationId": "locations.delete",
@@ -2555,7 +2555,7 @@
           {
             "description": "Location ID",
             "in": "path",
-            "name": "id",
+            "name": "location_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -2644,7 +2644,7 @@
           {
             "description": "Location ID",
             "in": "path",
-            "name": "id",
+            "name": "location_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -2730,7 +2730,7 @@
           {
             "description": "Location ID",
             "in": "path",
-            "name": "id",
+            "name": "location_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -2852,7 +2852,7 @@
         ]
       }
     },
-    "/api/v1/locations/{id}/ancestors": {
+    "/api/v1/locations/{location_id}/ancestors": {
       "get": {
         "description": "**Required scope:** `locations:read`",
         "operationId": "locations.ancestors",
@@ -2860,7 +2860,7 @@
           {
             "description": "Location ID",
             "in": "path",
-            "name": "id",
+            "name": "location_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -2968,7 +2968,7 @@
         ]
       }
     },
-    "/api/v1/locations/{id}/children": {
+    "/api/v1/locations/{location_id}/children": {
       "get": {
         "description": "**Required scope:** `locations:read`",
         "operationId": "locations.children",
@@ -2976,7 +2976,7 @@
           {
             "description": "Location ID",
             "in": "path",
-            "name": "id",
+            "name": "location_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -3084,7 +3084,7 @@
         ]
       }
     },
-    "/api/v1/locations/{id}/descendants": {
+    "/api/v1/locations/{location_id}/descendants": {
       "get": {
         "description": "**Required scope:** `locations:read`",
         "operationId": "locations.descendants",
@@ -3092,7 +3092,7 @@
           {
             "description": "Location ID",
             "in": "path",
-            "name": "id",
+            "name": "location_id",
             "required": true,
             "schema": {
               "type": "integer"
@@ -3200,7 +3200,7 @@
         ]
       }
     },
-    "/api/v1/locations/{id}/tags": {
+    "/api/v1/locations/{location_id}/tags": {
       "post": {
         "description": "**Required scope:** `locations:write`",
         "operationId": "locations.tags.add",
@@ -3208,7 +3208,7 @@
           {
             "description": "Location ID",
             "in": "path",
-            "name": "id",
+            "name": "location_id",
             "required": true,
             "schema": {
               "type": "integer"

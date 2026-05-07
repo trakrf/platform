@@ -162,7 +162,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID           locations.update
 // @Accept       json
 // @Produce      json
-// @Param        id       path  int                              true  "Location ID"
+// @Param        location_id path  int                              true  "Location ID"
 // @Param        request  body  location.UpdateLocationRequest   true  "Fields to update"
 // @Success      200  {object}  locations.UpdateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -174,7 +174,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[locations:write]
-// @Router       /api/v1/locations/{id} [put]
+// @Router       /api/v1/locations/{location_id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -264,7 +264,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @ID locations.delete
 // @Accept json
 // @Produce json
-// @Param id path int true "Location ID"
+// @Param location_id path int true "Location ID"
 // @Success 204 "deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -273,7 +273,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:write]
-// @Router /api/v1/locations/{id} [delete]
+// @Router /api/v1/locations/{location_id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -465,7 +465,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Description Retrieve a location by its canonical ID. Returns 404 if not found.
 // @Tags locations,public
 // @ID locations.get
-// @Param id path int true "Location ID"
+// @Param location_id path int true "Location ID"
 // @Success 200 {object} locations.GetLocationResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -473,7 +473,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429 {object} modelerrors.ErrorResponse
 // @Security APIKey[locations:read]
-// @Router /api/v1/locations/{id} [get]
+// @Router /api/v1/locations/{location_id} [get]
 func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -483,7 +483,7 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "id")
+	idParam := chi.URLParam(req, "location_id")
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
@@ -590,7 +590,7 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 // @Summary List location ancestors
 // @Tags locations,public
 // @ID locations.ancestors
-// @Param id     path  int    true  "Location ID"
+// @Param location_id path  int    true  "Location ID"
 // @Param limit  query int    false "max 200"  default(50)
 // @Param offset query int    false "min 0"   default(0)
 // @Success 200 {object} locations.ListAncestorsResponse
@@ -601,7 +601,7 @@ func (handler *Handler) Lookup(w http.ResponseWriter, req *http.Request) {
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:read]
-// @Router /api/v1/locations/{id}/ancestors [get]
+// @Router /api/v1/locations/{location_id}/ancestors [get]
 func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -649,7 +649,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Summary List location descendants
 // @Tags locations,public
 // @ID locations.descendants
-// @Param id     path  int    true  "Location ID"
+// @Param location_id path  int    true  "Location ID"
 // @Param limit  query int    false "max 200"  default(50)
 // @Param offset query int    false "min 0"   default(0)
 // @Success 200 {object} locations.ListDescendantsResponse
@@ -660,7 +660,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:read]
-// @Router /api/v1/locations/{id}/descendants [get]
+// @Router /api/v1/locations/{location_id}/descendants [get]
 func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -708,7 +708,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Summary List location children
 // @Tags locations,public
 // @ID locations.children
-// @Param id     path  int    true  "Location ID"
+// @Param location_id path  int    true  "Location ID"
 // @Param limit  query int    false "max 200"  default(50)
 // @Param offset query int    false "min 0"   default(0)
 // @Success 200 {object} locations.ListChildrenResponse
@@ -719,7 +719,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:read]
-// @Router /api/v1/locations/{id}/children [get]
+// @Router /api/v1/locations/{location_id}/children [get]
 func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -779,7 +779,7 @@ type AddTagResponse struct {
 // @Summary Add a tag to a location
 // @Tags locations,public
 // @ID locations.tags.add
-// @Param id      path int               true "Location ID"
+// @Param location_id path int               true "Location ID"
 // @Param request body shared.TagRequest true "Tag to attach"
 // @Success 201 {object} locations.AddTagResponse "tag attached"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
@@ -790,7 +790,7 @@ type AddTagResponse struct {
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security APIKey[locations:write]
-// @Router /api/v1/locations/{id}/tags [post]
+// @Router /api/v1/locations/{location_id}/tags [post]
 func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
 
@@ -906,10 +906,10 @@ func (handler *Handler) doRemoveLocationTag(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// parseAndVerifyLocationID extracts {id}, parses it as a surrogate int, and
-// verifies the location exists and belongs to the caller's org.
+// parseAndVerifyLocationID extracts {location_id}, parses it as a surrogate
+// int, and verifies the location exists and belongs to the caller's org.
 func (handler *Handler) parseAndVerifyLocationID(w http.ResponseWriter, req *http.Request, orgID int, reqID string) (int, bool) {
-	idParam := chi.URLParam(req, "id")
+	idParam := chi.URLParam(req, "location_id")
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,

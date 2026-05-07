@@ -32,7 +32,7 @@ func respondInvalidTimestamp(w http.ResponseWriter, r *http.Request, field, reqI
 }
 
 // AssetHistoryResponse is the typed envelope returned by
-// GET /api/v1/assets/{id}/history. The body shape (report.PublicAssetHistoryItem)
+// GET /api/v1/assets/{asset_id}/history. The body shape (report.PublicAssetHistoryItem)
 // is owned by the Reports rename child of TRA-549, not by TRA-555.
 type AssetHistoryResponse struct {
 	Data       []report.PublicAssetHistoryItem `json:"data"`
@@ -45,7 +45,7 @@ type AssetHistoryResponse struct {
 // @Description Location history for an asset identified by its canonical id.
 // @Tags reports,public
 // @ID assets.history
-// @Param id path int true "Asset id (canonical)"
+// @Param asset_id path int true "Asset id (canonical)"
 // @Param limit query int false "max 200"   default(50)
 // @Param offset query int false "min 0"    default(0)
 // @Param from query string false "RFC 3339 start timestamp"
@@ -63,7 +63,7 @@ type AssetHistoryResponse struct {
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security APIKey[history:read]
-// @Router /api/v1/assets/{id}/history [get]
+// @Router /api/v1/assets/{asset_id}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 
@@ -73,7 +73,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
+	idParam := chi.URLParam(r, "asset_id")
 	id, err := httputil.ParseSurrogateID(idParam)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,

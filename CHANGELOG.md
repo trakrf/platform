@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Migrating handheld React app as frontend component
+- TRA-586 BB16 S7 path-param naming sweep (breaking for SDK consumers; no published SDK yet):
+  - Public API path parameters are now consistently qualified across all asset and location operations: `{id}` is renamed to `{asset_id}` on `/api/v1/assets/{asset_id}{,/history,/tags}` and to `{location_id}` on `/api/v1/locations/{location_id}{,/ancestors,/children,/descendants,/tags}`. The actual URL paths are unchanged — only the OpenAPI parameter names.
+  - Generated `typescript-fetch` SDK now uses consistent parameter names per resource: `assetsTagsAdd({ assetId, ... })` and `assetsTagsRemove({ assetId, tagId })` — same `assetId` field across both calls. Same on `locationsTagsAdd` / `locationsTagsRemove` (`locationId`).
 - TRA-579 BB15 D-4/D-6/D-10 platform-side fixes:
   - `error.title` is now a fixed string per `error.type` (e.g. `validation_error` → "Validation failed", `bad_request` → "Bad request"). Per-call specifics live in `error.detail` and `error.fields[]`. Generated clients should branch on `error.type` and `error.fields[].code`.
   - `GET /api/v1/assets/lookup` and `GET /api/v1/locations/lookup` now reject duplicate `external_key` query parameters with `400 bad_request` (previously: silent first-wins).

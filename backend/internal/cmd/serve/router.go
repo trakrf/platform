@@ -149,25 +149,25 @@ func setupRouter(
 		r.Use(middleware.SentryContext)
 
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
-		// /lookup must be registered BEFORE /{id} so chi resolves it as a literal,
-		// not as a {id} match with value "lookup".
+		// /lookup must be registered BEFORE /{asset_id} so chi resolves it as a
+		// literal, not as a {asset_id} match with value "lookup".
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/lookup", assetsHandler.Lookup)
-		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{id}", assetsHandler.GetAsset)
+		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{asset_id}", assetsHandler.GetAsset)
 
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
-		// /lookup must be registered BEFORE /{id} so chi resolves it as a literal,
-		// not as a {id} match with value "lookup".
+		// /lookup must be registered BEFORE /{location_id} so chi resolves it as a
+		// literal, not as a {location_id} match with value "lookup".
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/lookup", locationsHandler.Lookup)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}", locationsHandler.GetLocation)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}/ancestors", locationsHandler.GetAncestors)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}/children", locationsHandler.GetChildren)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{id}/descendants", locationsHandler.GetDescendants)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}", locationsHandler.GetLocation)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/ancestors", locationsHandler.GetAncestors)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/children", locationsHandler.GetChildren)
+		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/descendants", locationsHandler.GetDescendants)
 
 		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
 		// require history:read per TRA-578 — these endpoints expose scan-derived
 		// history data; the scope name aligns with the /history endpoint vocabulary.
 		r.With(middleware.RequireScope("history:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
-		r.With(middleware.RequireScope("history:read")).Get("/api/v1/assets/{id}/history", reportsHandler.GetAssetHistory)
+		r.With(middleware.RequireScope("history:read")).Get("/api/v1/assets/{asset_id}/history", reportsHandler.GetAssetHistory)
 	})
 
 	// TRA-397 public write surface — accepts API-key OR session auth via EitherAuth.
@@ -184,16 +184,16 @@ func setupRouter(
 
 		// Assets
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
-		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{id}", assetsHandler.Update)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{id}", assetsHandler.Delete)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{id}/tags", assetsHandler.AddTag)
+		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{asset_id}", assetsHandler.Update)
+		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}", assetsHandler.Delete)
+		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{asset_id}/tags", assetsHandler.AddTag)
 		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}/tags/{tag_id}", assetsHandler.RemoveTag)
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
-		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{id}", locationsHandler.Update)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{id}", locationsHandler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{id}/tags", locationsHandler.AddTag)
+		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{location_id}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}", locationsHandler.Delete)
+		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{location_id}/tags", locationsHandler.AddTag)
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}/tags/{tag_id}", locationsHandler.RemoveTag)
 
 		// Inventory (scan writes)

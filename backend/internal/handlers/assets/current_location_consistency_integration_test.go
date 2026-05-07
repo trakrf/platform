@@ -32,7 +32,7 @@ func setupConsistencyRouter(handler *Handler) *chi.Mux {
 	r.Use(middleware.RequestID)
 	r.Get("/api/v1/assets", handler.ListAssets)
 	r.Get("/api/v1/assets/lookup", handler.Lookup)
-	r.Get("/api/v1/assets/{id}", handler.GetAsset)
+	r.Get("/api/v1/assets/{asset_id}", handler.GetAsset)
 	return r
 }
 

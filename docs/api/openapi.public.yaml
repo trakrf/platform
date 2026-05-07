@@ -863,66 +863,7 @@ paths:
             summary: Create an asset
             tags:
                 - assets
-    /api/v1/assets/{asset_id}/tags/{tag_id}:
-        delete:
-            description: |-
-                **Required scope:** `assets:write`
-
-                Detach a tag from an asset by its tag record id.
-                Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
-            operationId: assets.tags.remove
-            parameters:
-                - description: Asset id (canonical)
-                  in: path
-                  name: asset_id
-                  required: true
-                  schema:
-                    type: integer
-                - description: Tag id
-                  in: path
-                  name: tag_id
-                  required: true
-                  schema:
-                    type: integer
-            responses:
-                "204":
-                    description: deleted
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: internal_error
-            security:
-                - APIKey: []
-            summary: Remove a tag from an asset
-            tags:
-                - assets
-    /api/v1/assets/{id}:
+    /api/v1/assets/{asset_id}:
         delete:
             description: |-
                 **Required scope:** `assets:write`
@@ -932,7 +873,7 @@ paths:
             parameters:
                 - description: Asset id (canonical)
                   in: path
-                  name: id
+                  name: asset_id
                   required: true
                   schema:
                     type: integer
@@ -983,7 +924,7 @@ paths:
             parameters:
                 - description: Asset id (canonical)
                   in: path
-                  name: id
+                  name: asset_id
                   required: true
                   schema:
                     type: integer
@@ -1056,7 +997,7 @@ paths:
             parameters:
                 - description: Asset id (canonical)
                   in: path
-                  name: id
+                  name: asset_id
                   required: true
                   schema:
                     type: integer
@@ -1128,7 +1069,7 @@ paths:
             summary: Update an asset
             tags:
                 - assets
-    /api/v1/assets/{id}/history:
+    /api/v1/assets/{asset_id}/history:
         get:
             description: |-
                 **Required scope:** `history:read`
@@ -1138,7 +1079,7 @@ paths:
             parameters:
                 - description: Asset id (canonical)
                   in: path
-                  name: id
+                  name: asset_id
                   required: true
                   schema:
                     type: integer
@@ -1242,7 +1183,7 @@ paths:
             summary: Asset movement history
             tags:
                 - reports
-    /api/v1/assets/{id}/tags:
+    /api/v1/assets/{asset_id}/tags:
         post:
             description: |-
                 **Required scope:** `assets:write`
@@ -1253,7 +1194,7 @@ paths:
             parameters:
                 - description: Asset id (canonical)
                   in: path
-                  name: id
+                  name: asset_id
                   required: true
                   schema:
                     type: integer
@@ -1317,6 +1258,65 @@ paths:
             security:
                 - APIKey: []
             summary: Add a tag to an asset
+            tags:
+                - assets
+    /api/v1/assets/{asset_id}/tags/{tag_id}:
+        delete:
+            description: |-
+                **Required scope:** `assets:write`
+
+                Detach a tag from an asset by its tag record id.
+                Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
+            operationId: assets.tags.remove
+            parameters:
+                - description: Asset id (canonical)
+                  in: path
+                  name: asset_id
+                  required: true
+                  schema:
+                    type: integer
+                - description: Tag id
+                  in: path
+                  name: tag_id
+                  required: true
+                  schema:
+                    type: integer
+            responses:
+                "204":
+                    description: deleted
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: bad_request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: unauthorized
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: forbidden
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: internal_error
+            security:
+                - APIKey: []
+            summary: Remove a tag from an asset
             tags:
                 - assets
     /api/v1/assets/lookup:
@@ -1560,7 +1560,7 @@ paths:
             summary: Create a location
             tags:
                 - locations
-    /api/v1/locations/{id}:
+    /api/v1/locations/{location_id}:
         delete:
             description: |-
                 **Required scope:** `locations:write`
@@ -1570,7 +1570,7 @@ paths:
             parameters:
                 - description: Location ID
                   in: path
-                  name: id
+                  name: location_id
                   required: true
                   schema:
                     type: integer
@@ -1627,7 +1627,7 @@ paths:
             parameters:
                 - description: Location ID
                   in: path
-                  name: id
+                  name: location_id
                   required: true
                   schema:
                     type: integer
@@ -1682,7 +1682,7 @@ paths:
             parameters:
                 - description: Location ID
                   in: path
-                  name: id
+                  name: location_id
                   required: true
                   schema:
                     type: integer
@@ -1754,14 +1754,14 @@ paths:
             summary: Update a location
             tags:
                 - locations
-    /api/v1/locations/{id}/ancestors:
+    /api/v1/locations/{location_id}/ancestors:
         get:
             description: '**Required scope:** `locations:read`'
             operationId: locations.ancestors
             parameters:
                 - description: Location ID
                   in: path
-                  name: id
+                  name: location_id
                   required: true
                   schema:
                     type: integer
@@ -1825,14 +1825,14 @@ paths:
             summary: List location ancestors
             tags:
                 - locations
-    /api/v1/locations/{id}/children:
+    /api/v1/locations/{location_id}/children:
         get:
             description: '**Required scope:** `locations:read`'
             operationId: locations.children
             parameters:
                 - description: Location ID
                   in: path
-                  name: id
+                  name: location_id
                   required: true
                   schema:
                     type: integer
@@ -1896,14 +1896,14 @@ paths:
             summary: List location children
             tags:
                 - locations
-    /api/v1/locations/{id}/descendants:
+    /api/v1/locations/{location_id}/descendants:
         get:
             description: '**Required scope:** `locations:read`'
             operationId: locations.descendants
             parameters:
                 - description: Location ID
                   in: path
-                  name: id
+                  name: location_id
                   required: true
                   schema:
                     type: integer
@@ -1967,14 +1967,14 @@ paths:
             summary: List location descendants
             tags:
                 - locations
-    /api/v1/locations/{id}/tags:
+    /api/v1/locations/{location_id}/tags:
         post:
             description: '**Required scope:** `locations:write`'
             operationId: locations.tags.add
             parameters:
                 - description: Location ID
                   in: path
-                  name: id
+                  name: location_id
                   required: true
                   schema:
                     type: integer
