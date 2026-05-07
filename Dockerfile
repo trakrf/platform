@@ -15,8 +15,11 @@ ARG BUILD_TAG=dev
 ENV VITE_COMMIT_SHA=$COMMIT_SHA
 ENV VITE_BUILD_TAG=$BUILD_TAG
 
-# Install pnpm
-RUN npm install -g pnpm@latest
+# Install pnpm — pinned to the version in package.json's `packageManager`
+# field. `pnpm@latest` resolved to 10.x in May 2026, which gates installs on
+# explicit build-script approval (ERR_PNPM_IGNORED_BUILDS) and breaks the
+# Docker build despite .npmrc carrying ignore-scripts=true.
+RUN npm install -g pnpm@9.12.3
 
 # Copy workspace configuration files
 COPY pnpm-workspace.yaml .npmrc pnpm-lock.yaml ./
