@@ -674,6 +674,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 
 // @Summary      Remove a tag from an asset
 // @Description  Detach a tag from an asset by its tag record id.
+// @Description  Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
 // @Tags         assets,public
 // @ID           assets.tags.remove
 // @Accept       json
@@ -684,7 +685,6 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
-// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
