@@ -507,6 +507,40 @@ func TestNormalizeArrayQueryParams(t *testing.T) {
 	})
 }
 
+// TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs locks in TRA-585 S1.
+// The errors page declares the envelope is "modeled on RFC 7807 but not
+// 7807-compliant" — the spec description must match instead of claiming
+// full RFC 7807 compliance.
+func TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	doc.Components.Schemas["errors.ErrorResponse"] = &openapi3.SchemaRef{
+		Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: map[string]*openapi3.SchemaRef{
+				"error": {Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeObject},
+					Properties: map[string]*openapi3.SchemaRef{
+						"title":  {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+						"detail": {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+					},
+				}},
+			},
+		},
+	}
+	require.NoError(t, postprocessPublic(doc))
+
+	desc := doc.Components.Schemas["errors.ErrorResponse"].Value.Description
+	assert.Contains(t, desc, "modeled on RFC 7807 but not 7807-compliant",
+		"description must match the docs/api/errors page wording (TRA-585 S1)")
+	assert.Contains(t, desc, "application/json",
+		"description must call out that content-type is application/json, not application/problem+json")
+	assert.Contains(t, desc, "nested under `error.*`",
+		"description must call out the non-7807 nesting")
+	assert.NotContains(t, desc, "RFC 7807 Problem Details envelope.",
+		"old wording must be gone — it implies full compliance")
+}
+
 // withEmptyRequiredFields clears the package-level requiredFields map for the
 // duration of a test and restores it on cleanup. Tests that exercise
 // postprocessPublic / postprocessInternal against synthetic minimal docs use

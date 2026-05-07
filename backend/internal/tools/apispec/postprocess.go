@@ -215,7 +215,9 @@ func annotateErrorEnvelope(doc *openapi3.T) {
 	if ref == nil || ref.Value == nil {
 		return
 	}
-	ref.Value.Description = "RFC 7807 Problem Details envelope. Generated clients should branch on `error.type` and `error.title`, not `error.detail`. " +
+	ref.Value.Description = "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. " +
+		"Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). " +
+		"Generated clients should branch on `error.type` and `error.title`, not `error.detail`. " +
 		"`error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. " +
 		"`error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition."
 
