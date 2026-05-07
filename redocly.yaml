@@ -10,3 +10,10 @@ rules:
   # path-parameter types. Merging them into one path item would force a
   # single ambiguous parameter description, which would mislead consumers.
   no-identical-paths: off
+
+  # TRA-588: components.responses.MethodNotAllowed is declared as a reusable
+  # response with the Allow header (RFC 7231 §6.5.5) for operations to $ref
+  # in future PRs. Bulk-attaching to every operation is explicitly out of
+  # scope per the ticket — the component ships unused-but-defined as the
+  # "single pattern reusable across endpoints" it documents.
+  no-unused-components: off

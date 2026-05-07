@@ -1,4 +1,16 @@
 components:
+    responses:
+        MethodNotAllowed:
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/errors.ErrorResponse'
+            description: Method not allowed
+            headers:
+                Allow:
+                    description: Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5).
+                    schema:
+                        type: string
     schemas:
         asset.CreateAssetWithTagsRequest:
             properties:

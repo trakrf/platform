@@ -2,6 +2,7 @@ package httputil
 
 import (
 	"net/http"
+	"strings"
 
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
 )
@@ -10,11 +11,21 @@ import (
 // chi's MethodNotAllowed handler on the root mux so unknown method/path
 // combinations return the standard envelope instead of an empty body.
 //
-// detail is intentionally empty — the path and method are already in the
-// access log; no useful per-call variability remains.
-func Respond405(w http.ResponseWriter, r *http.Request, requestID string) {
+// allowed is the set of HTTP methods the route accepts, in canonical order.
+// When non-empty, it is emitted as both the Allow response header (RFC 7231
+// §6.5.5) and the human-readable error.detail. An empty allowed slice
+// signals a programming error in the caller — at 405 time at least one
+// method must match — but is handled defensively: the envelope is written
+// without the Allow header and with empty detail.
+func Respond405(w http.ResponseWriter, r *http.Request, allowed []string, requestID string) {
+	detail := ""
+	if len(allowed) > 0 {
+		joined := strings.Join(allowed, ", ")
+		w.Header().Set("Allow", joined)
+		detail = "Allowed methods: " + joined
+	}
 	WriteJSONError(w, r, http.StatusMethodNotAllowed, apierrors.ErrMethodNotAllowed,
-		"", requestID)
+		detail, requestID)
 }
 
 // Respond415 writes a normalized unsupported-media-type response. Used by the

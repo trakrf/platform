@@ -10,6 +10,56 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestPostprocess_InjectsMethodNotAllowedResponse covers TRA-588: the
+// public spec must declare a reusable MethodNotAllowed response component
+// with an Allow header, ready for operations to $ref. Internal spec gets
+// the same treatment.
+func TestPostprocess_InjectsMethodNotAllowedResponse(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	require.NoError(t, postprocessPublic(doc))
+
+	require.NotNil(t, doc.Components)
+	require.NotNil(t, doc.Components.Responses)
+
+	respRef := doc.Components.Responses["MethodNotAllowed"]
+	require.NotNil(t, respRef, "components.responses.MethodNotAllowed must be present")
+	require.NotNil(t, respRef.Value)
+
+	require.NotNil(t, respRef.Value.Description)
+	assert.Equal(t, "Method not allowed", *respRef.Value.Description)
+
+	allow := respRef.Value.Headers["Allow"]
+	require.NotNil(t, allow, "Allow header must be declared on the MethodNotAllowed response")
+	require.NotNil(t, allow.Value)
+	require.NotNil(t, allow.Value.Schema)
+	require.NotNil(t, allow.Value.Schema.Value)
+	assert.True(t, allow.Value.Schema.Value.Type.Is(openapi3.TypeString),
+		"Allow header schema must be type:string")
+	assert.Contains(t, allow.Value.Description, "RFC 7231",
+		"Allow header description should cite the relevant RFC clause")
+
+	media := respRef.Value.Content["application/json"]
+	require.NotNil(t, media, "MethodNotAllowed must declare application/json content")
+	require.NotNil(t, media.Schema)
+	assert.Equal(t, "#/components/schemas/errors.ErrorResponse", media.Schema.Ref,
+		"content schema must reference the canonical error envelope")
+}
+
+// TestPostprocess_InjectMethodNotAllowed_Idempotent verifies running the
+// postprocess twice does not duplicate or replace the component.
+func TestPostprocess_InjectMethodNotAllowed_Idempotent(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	require.NoError(t, postprocessPublic(doc))
+	first := doc.Components.Responses["MethodNotAllowed"]
+	require.NotNil(t, first)
+
+	require.NoError(t, postprocessPublic(doc))
+	second := doc.Components.Responses["MethodNotAllowed"]
+	assert.Same(t, first, second, "second pass must not replace the existing response")
+}
+
 func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")

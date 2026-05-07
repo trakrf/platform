@@ -113,9 +113,11 @@ smoke-test:
     exit 1
     fi
 
-# Lint the public OpenAPI spec with Redocly CLI (uses pnpm)
+# Lint the public OpenAPI spec with Redocly CLI (uses pnpm). Mirrors CI:
+# runs from the repo root so redocly auto-discovers ../redocly.yaml; the
+# config there extends `recommended` and overrides repo-specific rules.
 api-lint:
-    pnpm --package=@redocly/cli dlx redocly lint ../docs/api/openapi.public.yaml --extends=recommended
+    cd .. && pnpm --package=@redocly/cli dlx redocly lint docs/api/openapi.public.yaml --extends=recommended
 
 # TRA-455: Fail if pool.Query/Exec/Begin reappears in non-test storage code
 # on RLS-protected tables. Coarse grep-based guard; a proper analyzer is a
