@@ -126,6 +126,7 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid JSON or validation error"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security BearerAuth
 // @Router /api/v1/users [post]
@@ -175,6 +176,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 404 {object} modelerrors.ErrorResponse "User not found"
 // @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security BearerAuth
 // @Router /api/v1/users/{id} [put]

@@ -67,6 +67,7 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse "Not a member of the target org"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth
 // @Router /api/v1/users/me/current-org [post]

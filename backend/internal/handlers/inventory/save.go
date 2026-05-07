@@ -68,6 +68,7 @@ type SaveResponse struct {
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid request"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "Location or assets not owned by org"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"

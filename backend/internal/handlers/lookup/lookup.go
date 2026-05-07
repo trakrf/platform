@@ -92,6 +92,7 @@ type BatchLookupRequest struct {
 // @Param request body BatchLookupRequest true "Batch lookup request"
 // @Success 200 {object} map[string]any "data: map[string]*storage.LookupResult"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid request body or missing required fields"
+// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
 // @Security BearerAuth
 // @Router /api/v1/lookup/tags [post]

@@ -100,6 +100,7 @@ func (handler *Handler) resolveLocation(
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
@@ -200,6 +201,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
 // @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
@@ -615,6 +617,7 @@ type AddTagResponse struct {
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     APIKey[assets:write]
