@@ -50,7 +50,8 @@ func setupRouter(
 	r := chi.NewRouter()
 
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
-		httputil.Respond405(w, req, middleware.GetRequestID(req.Context()))
+		allowed := computeAllowedMethods(r, req.URL.Path)
+		httputil.Respond405(w, req, allowed, middleware.GetRequestID(req.Context()))
 	})
 
 	r.Use(middleware.RequestID)

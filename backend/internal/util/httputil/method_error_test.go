@@ -13,13 +13,16 @@ import (
 func TestRespond405_EnvelopeShape(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("PATCH", "/api/v1/assets", nil)
-	httputil.Respond405(w, r, "req-3")
+	httputil.Respond405(w, r, []string{"GET", "POST"}, "req-3")
 
 	if w.Code != 405 {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}
 	if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
 		t.Errorf("Content-Type = %q, want application/json; charset=utf-8", got)
+	}
+	if got := w.Header().Get("Allow"); got != "GET, POST" {
+		t.Errorf("Allow = %q, want GET, POST", got)
 	}
 
 	var resp apierrors.ErrorResponse
@@ -33,11 +36,32 @@ func TestRespond405_EnvelopeShape(t *testing.T) {
 	if resp.Error.Status != 405 {
 		t.Errorf("status field = %d, want 405", resp.Error.Status)
 	}
-	if resp.Error.Detail != "" {
-		t.Errorf("detail = %q, want empty", resp.Error.Detail)
+	if resp.Error.Detail != "Allowed methods: GET, POST" {
+		t.Errorf("detail = %q, want Allowed methods: GET, POST", resp.Error.Detail)
 	}
 	if resp.Error.RequestID != "req-3" {
 		t.Errorf("request_id = %q, want req-3", resp.Error.RequestID)
+	}
+}
+
+// TestRespond405_EmptyAllowed verifies the defensive path: when allowed is
+// empty (a caller bug — at 405 time at least one method must match) the
+// envelope still writes cleanly with no Allow header and empty detail.
+func TestRespond405_EmptyAllowed(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("PATCH", "/api/v1/assets", nil)
+	httputil.Respond405(w, r, nil, "req-3b")
+
+	if w.Code != 405 {
+		t.Fatalf("status = %d, want 405", w.Code)
+	}
+	if got := w.Header().Get("Allow"); got != "" {
+		t.Errorf("Allow = %q, want empty", got)
+	}
+	var resp apierrors.ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Error.Detail != "" {
+		t.Errorf("detail = %q, want empty", resp.Error.Detail)
 	}
 }
 

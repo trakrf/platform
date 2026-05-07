@@ -30,6 +30,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	normalizeSchemaQuirks(doc)
 	normalizeArrayQueryParams(doc)
 	injectTopLevelSecurity(doc)
+	injectMethodNotAllowedResponse(doc)
 	stripBearerScopeArrays(doc)
 	stripBearerAuthScheme(doc)
 	doc.Info.Title = "TrakRF API"
@@ -123,6 +124,56 @@ func injectTopLevelSecurity(doc *openapi3.T) {
 	doc.Security = openapi3.SecurityRequirements{
 		openapi3.SecurityRequirement{"APIKey": []string{}},
 	}
+}
+
+// injectMethodNotAllowedResponse adds a reusable 405 response under
+// components.responses.MethodNotAllowed. The response declares the Allow
+// header (RFC 7231 §6.5.5) so a future operation that references this
+// component documents the header without each operation re-declaring it.
+//
+// TRA-588 scopes this to the component definition only — operations are
+// not bulk-attached, since most operations don't currently declare 405
+// and the spec defaults to "method not in this operation list" implying
+// 405. Operations may $ref this component in a follow-up change.
+func injectMethodNotAllowedResponse(doc *openapi3.T) {
+	if doc.Components == nil {
+		doc.Components = &openapi3.Components{}
+	}
+	if doc.Components.Responses == nil {
+		doc.Components.Responses = openapi3.ResponseBodies{}
+	}
+	if _, exists := doc.Components.Responses["MethodNotAllowed"]; exists {
+		return
+	}
+
+	desc := "Method not allowed"
+	stringType := &openapi3.Types{openapi3.TypeString}
+	allowHeader := &openapi3.HeaderRef{
+		Value: &openapi3.Header{
+			Parameter: openapi3.Parameter{
+				Description: "Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5).",
+				Schema: &openapi3.SchemaRef{
+					Value: &openapi3.Schema{Type: stringType},
+				},
+			},
+		},
+	}
+
+	resp := &openapi3.Response{
+		Description: &desc,
+		Headers: openapi3.Headers{
+			"Allow": allowHeader,
+		},
+		Content: openapi3.Content{
+			"application/json": &openapi3.MediaType{
+				Schema: &openapi3.SchemaRef{
+					Ref: "#/components/schemas/errors.ErrorResponse",
+				},
+			},
+		},
+	}
+
+	doc.Components.Responses["MethodNotAllowed"] = &openapi3.ResponseRef{Value: resp}
 }
 
 // nullableFields names schema/field pairs whose response payload may be

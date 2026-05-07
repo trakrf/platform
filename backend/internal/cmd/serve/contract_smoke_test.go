@@ -53,9 +53,13 @@ func TestContract_MethodNotAllowed_EmitsEnvelope(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
-		httputil.Respond405(w, req, middleware.GetRequestID(req.Context()))
+		allowed := computeAllowedMethods(r, req.URL.Path)
+		httputil.Respond405(w, req, allowed, middleware.GetRequestID(req.Context()))
 	})
 	r.Get("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	r.Post("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -65,12 +69,15 @@ func TestContract_MethodNotAllowed_EmitsEnvelope(t *testing.T) {
 
 	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 	require.NotEmpty(t, rec.Body.String(), "405 must carry an envelope, not an empty body")
+	require.Equal(t, "GET, HEAD, POST", rec.Header().Get("Allow"),
+		"Allow header must enumerate the methods the route accepts (HEAD synthesized from GET)")
 
 	var resp apierrors.ErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, "method_not_allowed", resp.Error.Type)
 	require.Equal(t, 405, resp.Error.Status)
 	require.Equal(t, "Method not allowed", resp.Error.Title)
+	require.Equal(t, "Allowed methods: GET, HEAD, POST", resp.Error.Detail)
 }
 
 // TestContract_MissingAuthHeader_WWWAuthenticate verifies that a request to an
