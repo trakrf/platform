@@ -5,7 +5,7 @@
   "basePath": "/api/v1",
   "schemes": ["https"],
   "securityDefinitions": {
-    "APIKey": {
+    "BearerAuth": {
       "type": "apiKey",
       "in": "header",
       "name": "Authorization",
@@ -18,7 +18,7 @@
         "summary": "List assets",
         "description": "Paginated list of assets.",
         "tags": ["assets"],
-        "security": [{"APIKey": []}],
+        "security": [{"BearerAuth": []}],
         "responses": {
           "200": { "description": "OK", "schema": { "type": "object" } }
         }

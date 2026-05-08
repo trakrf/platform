@@ -25,7 +25,7 @@ import (
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id}/members [get]
 // ListMembers returns all members of an organization.
 func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +63,7 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id}/members/{userId} [put]
 // UpdateMemberRole updates a member's role in an organization.
 func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +140,7 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id}/members/{userId} [delete]
 // RemoveMember removes a member from an organization.
 func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {

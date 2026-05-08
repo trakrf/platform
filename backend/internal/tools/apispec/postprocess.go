@@ -8,6 +8,49 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
+// externalKeyPattern is the canonical character class for caller-supplied
+// external_keys, declared as the spec-side `pattern` constraint on every
+// write schema where external_key (or *_external_key) is writable
+// (TRA-615 / BB19 §S5). Source of truth: ExternalKeyPattern in
+// internal/util/httputil/validation.go — the server-side validator.
+const externalKeyPattern = "^[A-Za-z0-9-]+$"
+
+// externalKeyPatternFields names schema/field pairs that should declare the
+// external_key_pattern constraint in the spec. Mirrors the
+// `validate:"...,external_key_pattern"` tags on the matching Go structs.
+var externalKeyPatternFields = map[string][]string{
+	"asset.UpdateAssetRequest":               {"external_key", "location_external_key"},
+	"asset.CreateAssetRequest":               {"external_key", "location_external_key"},
+	"asset.CreateAssetWithTagsRequest":       {"external_key", "location_external_key"},
+	"location.UpdateLocationRequest":         {"external_key", "parent_external_key"},
+	"location.CreateLocationRequest":         {"external_key", "parent_external_key"},
+	"location.CreateLocationWithTagsRequest": {"external_key", "parent_external_key"},
+}
+
+// markExternalKeyPattern walks doc.Components.Schemas and sets the
+// external_key_pattern on the curated (schema, field) pairs in
+// externalKeyPatternFields. The server enforces the same pattern via the
+// `external_key_pattern` validator tag — pattern in spec is a documentation /
+// codegen alignment, not a second enforcement layer.
+func markExternalKeyPattern(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+	for schemaName, fields := range externalKeyPatternFields {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		for _, fieldName := range fields {
+			prop := ref.Value.Properties[fieldName]
+			if prop == nil || prop.Value == nil {
+				continue
+			}
+			prop.Value.Pattern = externalKeyPattern
+		}
+	}
+}
+
 // postprocessPublic rewrites the doc for customer-facing publication:
 // converts the security schemes from swaggo's 2.0 "apiKey" form to 3.0
 // HTTP-Bearer, sets the customer-facing info and server URLs, marks fields
@@ -24,6 +67,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
 	consolidateSchemaNamespaces(doc)
 	markNullableFields(doc)
+	markExternalKeyPattern(doc)
 	if err := markRequiredFields(doc, requiredFields); err != nil {
 		return err
 	}
@@ -36,7 +80,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	injectTopLevelSecurity(doc)
 	injectMethodNotAllowedResponse(doc)
 	stripBearerScopeArrays(doc)
-	stripBearerAuthScheme(doc)
+	stripSessionAuthScheme(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -58,6 +102,7 @@ func postprocessInternal(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
 	consolidateSchemaNamespaces(doc)
 	markNullableFields(doc)
+	markExternalKeyPattern(doc)
 	if err := markRequiredFields(doc, requiredFields); err != nil {
 		return err
 	}
@@ -329,17 +374,22 @@ func rewriteSchemaRefs(doc *openapi3.T, renames map[string]string) {
 // rewriteBearerSchemes promotes the security schemes from swaggo's
 // apiKey/header emission to http/bearer/JWT so generated SDKs send
 // "Authorization: Bearer <token>" instead of just the raw token.
-// Per TRA-517 AC1 this applies to BOTH "APIKey" (the public API key, a
-// JWT) and "BearerAuth" (the session JWT) — the platform rejects requests
+// Per TRA-517 AC1 this applies to BOTH "BearerAuth" (the public API key, a
+// JWT — TRA-616 renamed from "APIKey") and "SessionAuth" (the SPA session
+// JWT — TRA-616 renamed from "BearerAuth"); the platform rejects requests
 // without the Bearer prefix, so both must declare http/bearer.
 //
-// This reverses the TRA-480 §3.3 decision to keep APIKey as type=apiKey
-// for cosmetic SDK-naming alignment. Over-the-wire correctness wins.
+// This reverses the TRA-480 §3.3 decision to keep the public scheme as
+// type=apiKey for cosmetic SDK-naming alignment — over-the-wire correctness
+// wins. The TRA-616 rename to BearerAuth restores the OpenAPI convention
+// for HTTP-Bearer schemes so class-emitting codegen tools (typescript-fetch,
+// java, python) produce a `Configuration.accessToken`-shaped client rather
+// than an `apiKey`-shaped one.
 func rewriteBearerSchemes(doc *openapi3.T) {
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil {
 		return
 	}
-	for _, name := range []string{"APIKey", "BearerAuth"} {
+	for _, name := range []string{"BearerAuth", "SessionAuth"} {
 		ref := doc.Components.SecuritySchemes[name]
 		if ref == nil || ref.Value == nil {
 			continue
@@ -354,30 +404,30 @@ func rewriteBearerSchemes(doc *openapi3.T) {
 	}
 }
 
-// stripBearerAuthScheme removes the BearerAuth security scheme from the
-// public spec's components. BearerAuth is the SPA session JWT and is not
+// stripSessionAuthScheme removes the SessionAuth security scheme from the
+// public spec's components. SessionAuth is the SPA session JWT and is not
 // part of the v1 public API surface (TRA-568). The internal postprocess
 // keeps it. Safe to call when the scheme is absent — no-ops in that case.
-func stripBearerAuthScheme(doc *openapi3.T) {
+func stripSessionAuthScheme(doc *openapi3.T) {
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil {
 		return
 	}
-	delete(doc.Components.SecuritySchemes, "BearerAuth")
+	delete(doc.Components.SecuritySchemes, "SessionAuth")
 }
 
 // injectTopLevelSecurity sets the document-level security requirement to
-// [{APIKey: []}] (TRA-539 §2.6). This declares that every operation
-// requires the APIKey scheme by default, so generated SDK clients
-// authenticate every call automatically. Per-operation security
-// overrides (e.g. security: [] on public or login endpoints) are
-// respected by generators and are not disturbed here — we only set the
-// document-level default if it is currently absent.
+// [{BearerAuth: []}] (TRA-539 §2.6, renamed from APIKey by TRA-616). This
+// declares that every operation requires the BearerAuth scheme by default,
+// so generated SDK clients authenticate every call automatically.
+// Per-operation security overrides (e.g. security: [] on public or login
+// endpoints) are respected by generators and are not disturbed here — we
+// only set the document-level default if it is currently absent.
 func injectTopLevelSecurity(doc *openapi3.T) {
 	if len(doc.Security) > 0 {
 		return
 	}
 	doc.Security = openapi3.SecurityRequirements{
-		openapi3.SecurityRequirement{"APIKey": []string{}},
+		openapi3.SecurityRequirement{"BearerAuth": []string{}},
 	}
 }
 
@@ -435,12 +485,31 @@ func injectMethodNotAllowedResponse(doc *openapi3.T) {
 // null (or omitted when also non-required). swaggo doesn't emit
 // nullable:true for Go *Type pointers, so we add it here. The list is
 // curated from BB10/BB11 audit findings (TRA-517 AC2, AC9, AC11).
+//
+// Write-side asymmetry: every field declared nullable on a *PublicXxxView
+// read schema MUST also be declared nullable on the matching write schemas
+// (Update + CreateWithTags) where the field is writable. The PUT / POST
+// handlers translate explicit JSON null into a column-clear via Clear*
+// sentinels (TRA-614 / BB19 §S1). Read-only fields (id, *_at, tags) are
+// not writable and don't appear on the write side.
 var nullableFields = map[string][]string{
+	// --- read views (response payloads) ---
 	"asset.PublicAssetView":            {"location_id", "location_external_key", "description", "valid_to"},
 	"apikey.APIKeyListItem":            {"created_by", "created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem":    {"duration_seconds", "location_id", "location_external_key"},
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "asset_deleted_at"},
 	"location.PublicLocationView":      {"parent_id", "parent_external_key", "description", "valid_to", "updated_at"},
+
+	// --- write schemas (request payloads) — TRA-614 / BB19 §S1 ---
+	// Mirror the read-view asymmetry: anything nullable above is nullable
+	// here too where writable. valid_to was already correct via the
+	// ClearValidTo sentinel; the rest are added by TRA-614.
+	"asset.UpdateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
+	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
+	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_to"},
+	"location.UpdateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
+	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
+	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_to"},
 }
 
 // requiredFields names the response fields that are guaranteed present in
@@ -803,7 +872,7 @@ func normalizeArrayQueryParams(doc *openapi3.T) {
 // stripBearerScopeArrays strips non-empty scope arrays from operation-level
 // SecurityRequirements where the underlying scheme is http or apiKey.
 // OpenAPI 3.0 §4.8.30 only permits scope arrays for oauth2 and openIdConnect
-// schemes; swaggo's `@Security APIKey[assets:read]` syntax produces invalid
+// schemes; swaggo's `@Security BearerAuth[assets:read]` syntax produces invalid
 // arrays under http-bearer. To preserve the scope information for human
 // readers, the captured scopes are injected into the operation's
 // description as a "**Required scope:** `<scope>`" markdown line. The pass

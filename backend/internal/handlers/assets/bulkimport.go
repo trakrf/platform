@@ -24,7 +24,7 @@ import (
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid job ID"
 // @Failure 404 {object} modelerrors.ErrorResponse "Job not found or access denied"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/assets/bulk/{jobId} [get]
 func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
@@ -94,7 +94,7 @@ func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid file or headers"
 // @Failure 413 {object} modelerrors.ErrorResponse "File too large"
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/assets/bulk [post]
 func (handler *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())

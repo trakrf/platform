@@ -8,11 +8,11 @@
 // @host app.trakrf.id
 // @BasePath /api/v1
 // @schemes https
-// @securityDefinitions.apikey APIKey
+// @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
 // @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account.
-// @securityDefinitions.apikey BearerAuth
+// @securityDefinitions.apikey SessionAuth
 // @in header
 // @name Authorization
 // @description Session JWT for internal endpoints (platform frontend uses this).

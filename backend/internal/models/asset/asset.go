@@ -26,11 +26,11 @@ type Asset struct {
 
 type CreateAssetRequest struct {
 	OrgID               int                  `json:"-" swaggerignore:"true"`
-	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,max=255"`
+	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,max=255,external_key_pattern"`
 	Name                string               `json:"name" validate:"required,min=1,max=255"`
 	Description         string               `json:"description,omitempty" validate:"omitempty,max=1024"`
 	LocationID          *int                 `json:"location_id,omitempty" example:"42"`
-	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
+	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
 	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
 	Metadata            any                  `json:"metadata,omitempty"`
@@ -52,19 +52,28 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tags"}
 // PublicAssetView's read-only fields (id, created_at, updated_at, tags)
 // are silently ignored on a verbatim GET → PUT round-trip while any
 // other unknown field still produces a 400.
+//
+// description, location_id, location_external_key, and valid_to all accept
+// JSON null on the wire and clear the field server-side (TRA-614 / BB19
+// §S1). Each null surfaces here as a Clear* sentinel set by the handler;
+// the underlying pointer remains nil because Go's json decoder treats
+// `null` and "omitted" the same on pointer fields.
 type UpdateAssetRequest struct {
-	ExternalKey         *string              `json:"external_key" validate:"omitempty,min=1,max=255"`
+	ExternalKey         *string              `json:"external_key" validate:"omitempty,min=1,max=255,external_key_pattern"`
 	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`
 	Description         *string              `json:"description" validate:"omitempty,max=1024"`
 	LocationID          *int                 `json:"location_id" example:"42"`
-	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"WHS-01"`
+	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
 	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
-	// Set by the PUT handler when the body had `"valid_to": null`, to request
-	// an SQL NULL write. Not decoded from JSON directly.
-	ClearValidTo bool  `json:"-" swaggerignore:"true"`
-	Metadata     *any  `json:"metadata"`
-	IsActive     *bool `json:"is_active"`
+	// Set by the PUT handler when the body had an explicit `null` for the
+	// corresponding read-side-nullable field, to request a column-clear
+	// (TRA-614 / TRA-468). Not decoded from JSON directly.
+	ClearDescription bool  `json:"-" swaggerignore:"true"`
+	ClearLocationID  bool  `json:"-" swaggerignore:"true"`
+	ClearValidTo     bool  `json:"-" swaggerignore:"true"`
+	Metadata         *any  `json:"metadata"`
+	IsActive         *bool `json:"is_active"`
 }
 
 type AssetListResponse struct {

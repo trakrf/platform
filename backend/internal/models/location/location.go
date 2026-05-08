@@ -36,9 +36,9 @@ type LocationWithRelations struct {
 
 type CreateLocationRequest struct {
 	Name              string               `json:"name" validate:"required,min=1,max=255" example:"Warehouse 1"`
-	ExternalKey       string               `json:"external_key" validate:"required,min=1,max=255" example:"wh1"`
+	ExternalKey       string               `json:"external_key" validate:"required,min=1,max=255,external_key_pattern" example:"wh1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
-	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
+	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	Description       string               `json:"description,omitempty" validate:"omitempty,max=1024" example:"Main warehouse location"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
@@ -59,18 +59,27 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path
 // PublicLocationView's read-only fields (id, created_at, updated_at,
 // tree_path, depth, tags) are silently ignored on a verbatim GET → PUT
 // round-trip while any other unknown field still produces a 400.
+//
+// description, parent_id, parent_external_key, and valid_to all accept
+// JSON null on the wire and clear the field server-side (TRA-614 / BB19
+// §S1). Each null surfaces here as a Clear* sentinel set by the handler;
+// the underlying pointer remains nil because Go's json decoder treats
+// `null` and "omitted" the same on pointer fields.
 type UpdateLocationRequest struct {
 	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
-	ExternalKey       *string              `json:"external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
+	ExternalKey       *string              `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
-	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`
+	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	Description       *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
-	// Set by the PUT handler when the body had `"valid_to": null`, to request
-	// an SQL NULL write. Not decoded from JSON directly.
-	ClearValidTo bool  `json:"-" swaggerignore:"true"`
-	IsActive     *bool `json:"is_active,omitempty" example:"true"`
+	// Set by the PUT handler when the body had an explicit `null` for the
+	// corresponding read-side-nullable field, to request a column-clear
+	// (TRA-614 / TRA-468). Not decoded from JSON directly.
+	ClearDescription bool  `json:"-" swaggerignore:"true"`
+	ClearParentID    bool  `json:"-" swaggerignore:"true"`
+	ClearValidTo     bool  `json:"-" swaggerignore:"true"`
+	IsActive         *bool `json:"is_active,omitempty" example:"true"`
 }
 
 type LocationListResponse struct {

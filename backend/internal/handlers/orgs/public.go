@@ -34,7 +34,7 @@ type GetOrgMeResponse struct {
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Header  429 {integer} Retry-After "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security APIKey
+// @Security BearerAuth
 // @Router /api/v1/orgs/me [get]
 // GetOrgMe returns the org that the authenticated API key belongs to.
 // Scoped to API-key auth (not session auth); serves as the canary endpoint

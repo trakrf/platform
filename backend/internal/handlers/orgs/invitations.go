@@ -25,7 +25,7 @@ import (
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id}/invitations [get]
 // ListInvitations returns pending invitations for an organization.
 func (h *Handler) ListInvitations(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func (h *Handler) ListInvitations(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} modelerrors.ErrorResponse "Already invited or member"
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id}/invitations [post]
 // CreateInvitation creates an invitation and sends an email.
 func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +137,7 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id}/invitations/{inviteId} [delete]
 // CancelInvitation cancels a pending invitation.
 func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +177,7 @@ func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id}/invitations/{inviteId}/resend [post]
 // ResendInvitation generates a new token and resends the email.
 func (h *Handler) ResendInvitation(w http.ResponseWriter, r *http.Request) {

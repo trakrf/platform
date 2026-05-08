@@ -35,7 +35,7 @@ type SetCurrentOrgResponse struct {
 // @Success 200 {object} orgs.GetMeResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/users/me [get]
 // GetMe returns the authenticated user's profile with orgs.
 func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +69,7 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} modelerrors.ErrorResponse "Not a member of the target org"
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/users/me/current-org [post]
 // SetCurrentOrg updates the user's current organization.
 func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {

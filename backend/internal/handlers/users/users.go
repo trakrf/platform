@@ -43,7 +43,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Success 200 {object} users.ListResponse
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/users [get]
 func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -89,7 +89,7 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 404 {object} modelerrors.ErrorResponse "User not found"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/users/{id} [get]
 func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -128,7 +128,7 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/users [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request user.CreateUserRequest
@@ -178,7 +178,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/users/{id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -237,7 +237,7 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 404 {object} modelerrors.ErrorResponse "User not found"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/users/{id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
