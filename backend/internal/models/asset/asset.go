@@ -37,15 +37,21 @@ type CreateAssetRequest struct {
 	IsActive            *bool                `json:"is_active,omitempty" example:"true"`
 }
 
+// PublicReadOnlyFields names the JSON keys on PublicAssetView that are
+// server-managed (`readOnly: true` in the spec). The PUT handler strips
+// them from the request body before strict decoding so a verbatim GET →
+// PUT round-trip succeeds (TRA-608 / BB18 §1.7). Fields not listed here
+// (typos, write-only fields off this resource) still produce a 400.
+//
+// Source of truth for the corresponding spec annotations:
+// internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"].
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tags"}
+
 // UpdateAssetRequest is the PUT body. The handler decodes it via
-// DecodeJSONStrict, so unknown fields (including the read-only fields on
-// PublicAssetView like id, created_at, updated_at, tags) produce a 400.
-// TRA-587 / BB16 S8 considered relaxing this to silently ignore read-only
-// fields (Stripe/GitHub style) for sync-job ergonomics; we kept strict
-// reject because the round-trip case is now type-system-enforced via
-// `readOnly: true` on the read schema, and A → B is a non-breaking
-// transition if TRA-592 personas show sync workflows are the dominant
-// integration shape.
+// DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
+// PublicAssetView's read-only fields (id, created_at, updated_at, tags)
+// are silently ignored on a verbatim GET → PUT round-trip while any
+// other unknown field still produces a 400.
 type UpdateAssetRequest struct {
 	ExternalKey         *string              `json:"external_key" validate:"omitempty,min=1,max=255"`
 	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`

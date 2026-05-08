@@ -196,7 +196,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	reqID := middleware.GetRequestID(req.Context())
 
 	var request location.UpdateLocationRequest
-	explicitNulls, err := httputil.DecodeJSONStrictWithNulls(req, &request)
+	explicitNulls, err := httputil.DecodeJSONStrictWithNullsTolerant(req, &request, location.PublicReadOnlyFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return

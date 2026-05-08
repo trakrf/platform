@@ -227,7 +227,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	reqID := middleware.GetRequestID(req.Context())
 
 	var request asset.UpdateAssetRequest
-	explicitNulls, err := httputil.DecodeJSONStrictWithNulls(req, &request)
+	explicitNulls, err := httputil.DecodeJSONStrictWithNullsTolerant(req, &request, asset.PublicReadOnlyFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return

@@ -45,10 +45,20 @@ type CreateLocationRequest struct {
 	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
 }
 
-// UpdateLocationRequest is the PUT body. Strict-decoded — unknown fields
-// (including the read-only fields on PublicLocationView like id, created_at,
-// updated_at, tree_path, depth, tags) produce a 400. See the same comment
-// on asset.UpdateAssetRequest for the TRA-587 / TRA-592 context.
+// PublicReadOnlyFields names the JSON keys on PublicLocationView that are
+// server-managed (`readOnly: true` in the spec). The PUT handler strips
+// them from the request body before strict decoding so a verbatim GET →
+// PUT round-trip succeeds (TRA-608 / BB18 §1.7).
+//
+// Source of truth for the corresponding spec annotations:
+// internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"].
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "tags"}
+
+// UpdateLocationRequest is the PUT body. The handler decodes it via
+// DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
+// PublicLocationView's read-only fields (id, created_at, updated_at,
+// tree_path, depth, tags) are silently ignored on a verbatim GET → PUT
+// round-trip while any other unknown field still produces a 400.
 type UpdateLocationRequest struct {
 	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
 	ExternalKey       *string              `json:"external_key,omitempty" validate:"omitempty,min=1,max=255" example:"wh1"`

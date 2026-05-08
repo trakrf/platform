@@ -436,11 +436,11 @@ func injectMethodNotAllowedResponse(doc *openapi3.T) {
 // nullable:true for Go *Type pointers, so we add it here. The list is
 // curated from BB10/BB11 audit findings (TRA-517 AC2, AC9, AC11).
 var nullableFields = map[string][]string{
-	"asset.PublicAssetView":            {"location_id", "location_external_key"},
+	"asset.PublicAssetView":            {"location_id", "location_external_key", "description", "valid_to"},
 	"apikey.APIKeyListItem":            {"created_by", "created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem":    {"duration_seconds", "location_id", "location_external_key"},
-	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key"},
-	"location.PublicLocationView":      {"parent_id", "parent_external_key"},
+	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "asset_deleted_at"},
+	"location.PublicLocationView":      {"parent_id", "parent_external_key", "description", "valid_to", "updated_at"},
 }
 
 // requiredFields names the response fields that are guaranteed present in
@@ -449,8 +449,12 @@ var nullableFields = map[string][]string{
 // non-optional. Source of truth: the Go struct's `json:` tag — a field is
 // required iff its tag does NOT contain `,omitempty`. Pointer-typed fields
 // without `,omitempty` are required-and-nullable; they belong here AND in
-// `nullableFields`. Fields with `,omitempty` (e.g. description, valid_to)
-// are excluded.
+// `nullableFields`. Fields with `,omitempty` are excluded.
+//
+// PublicAssetView / PublicLocationView always emit description, valid_to,
+// (and updated_at on location) as null when unset per TRA-610 / BB18 §1.8;
+// that's why those fields appear here even though their underlying Go
+// types are pointer-or-string with no ,omitempty.
 //
 // markRequiredFields errors if a configured schema or field is missing from
 // the spec — keeps this map honest as struct fields rename or move.
@@ -463,13 +467,13 @@ var requiredFields = map[string][]string{
 	"shared.Tag": {"tag_type", "value", "is_active"},
 
 	// asset
-	"asset.PublicAssetView": {"id", "external_key", "name", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "created_at", "updated_at", "tags"},
+	"asset.PublicAssetView": {"id", "external_key", "name", "description", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "tags"},
 
 	// location
-	"location.PublicLocationView": {"id", "external_key", "name", "parent_id", "parent_external_key", "tree_path", "depth", "is_active", "valid_from", "created_at", "tags"},
+	"location.PublicLocationView": {"id", "external_key", "name", "description", "parent_id", "parent_external_key", "tree_path", "depth", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "tags"},
 
 	// report
-	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen"},
+	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen", "asset_deleted_at"},
 	"report.PublicAssetHistoryItem":    {"timestamp", "location_id", "location_external_key", "duration_seconds"},
 
 	// org (post namespace consolidation — TRA-602)
