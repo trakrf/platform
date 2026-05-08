@@ -83,7 +83,7 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Tags users,internal
 // @Accept json
 // @Produce json
-// @Param id path int true "User ID"
+// @Param id path int true "User ID" minimum(1) maximum(2147483647)
 // @Success 200 {object} map[string]any "data: user.User"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid user ID"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
@@ -169,7 +169,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Tags users,internal
 // @Accept json
 // @Produce json
-// @Param id path int true "User ID"
+// @Param id path int true "User ID" minimum(1) maximum(2147483647)
 // @Param request body user.UpdateUserRequest true "User update data"
 // @Success 200 {object} map[string]any "data: user.User"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid ID, JSON, or validation error"
@@ -231,7 +231,7 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @Tags users,internal
 // @Accept json
 // @Produce json
-// @Param id path int true "User ID"
+// @Param id path int true "User ID" minimum(1) maximum(2147483647)
 // @Success 204 "No content"
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid user ID"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"

@@ -45,11 +45,11 @@ type AssetHistoryResponse struct {
 // @Description Location history for an asset identified by its canonical id.
 // @Tags reports,public
 // @ID assets.history
-// @Param asset_id path int true "Asset id (canonical)"
-// @Param limit query int false "max 200"   default(50)
-// @Param offset query int false "min 0"    default(0)
-// @Param from query string false "RFC 3339 start timestamp"
-// @Param to query string false "RFC 3339 end timestamp"
+// @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(2147483647)
+// @Param limit query int false "max 200"   default(50) minimum(1) maximum(200)
+// @Param offset query int false "min 0"    default(0) minimum(0)
+// @Param from query string false "RFC 3339 start timestamp" format(date-time)
+// @Param to query string false "RFC 3339 end timestamp" format(date-time)
 // @Param sort query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(timestamp, -timestamp)
 // @Success 200 {object} reports.AssetHistoryResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
