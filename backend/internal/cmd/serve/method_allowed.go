@@ -7,6 +7,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// apiCatchallPattern is the pattern of the /api/* unknown-route catchall
+// (see router.go). computeAllowedMethods deliberately excludes it from the
+// probe — chi's tree treats the catchall as a real method match for any
+// /api/* path, which would otherwise pollute Allow headers with phantom
+// "GET, HEAD" entries for paths where GET isn't an actual handler (TRA-605).
+const apiCatchallPattern = "/api/*"
+
 // methodProbeOrder lists the canonical HTTP methods we probe at 405 time
 // to discover the Allow set. HEAD is omitted because chimiddleware.GetHead
 // rewrites HEAD→GET upstream — HEAD is implicitly accepted wherever GET is.
@@ -39,13 +46,16 @@ var methodCanonicalRank = map[string]int{
 //
 // chi v5 does not expose its internal allowed-method list to custom
 // MethodNotAllowed handlers. We probe the routing tree directly via
-// (*Mux).Match. Each call uses a fresh RouteContext per chi's contract.
+// (*Mux).Find — Match would also work, but Find returns the matched
+// pattern so we can filter out the /api/* catchall (TRA-605).
 func computeAllowedMethods(mux *chi.Mux, path string) []string {
 	seen := make(map[string]bool, len(methodProbeOrder)+1)
 	for _, m := range methodProbeOrder {
-		if mux.Match(chi.NewRouteContext(), m, path) {
-			seen[m] = true
+		pattern := mux.Find(chi.NewRouteContext(), m, path)
+		if pattern == "" || pattern == apiCatchallPattern {
+			continue
 		}
+		seen[m] = true
 	}
 	if seen[http.MethodGet] {
 		seen[http.MethodHead] = true

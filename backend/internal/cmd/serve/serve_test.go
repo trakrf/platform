@@ -286,6 +286,43 @@ func TestRouter_AuditedStatic_405WithCorrectAllow(t *testing.T) {
 		{"/api/v1/assets/bulk", http.MethodDelete, "POST"},
 		{"/api/v1/assets/bulk/abc123", http.MethodPut, "GET, HEAD"},
 		{"/api/v1/assets/bulk/abc123", http.MethodDelete, "GET, HEAD"},
+
+		// TRA-604: parametric /orgs/{id} sub-tree must 405 with the
+		// real Allow set on wrong methods. Previously these emitted 401
+		// because middleware.Auth ran before chi's MethodNotAllowed
+		// determination on the r.Route() sub-router mount.
+		{"/api/v1/orgs/abc", http.MethodPost, "GET, HEAD, PUT, DELETE"},
+		{"/api/v1/orgs/abc", http.MethodPatch, "GET, HEAD, PUT, DELETE"},
+		{"/api/v1/orgs/abc/members", http.MethodPost, "GET, HEAD"},
+		{"/api/v1/orgs/abc/members", http.MethodPut, "GET, HEAD"},
+		{"/api/v1/orgs/abc/members/2", http.MethodGet, "PUT, DELETE"},
+		{"/api/v1/orgs/abc/members/2", http.MethodPatch, "PUT, DELETE"},
+		{"/api/v1/orgs/abc/invitations", http.MethodPut, "GET, HEAD, POST"},
+		{"/api/v1/orgs/abc/invitations", http.MethodDelete, "GET, HEAD, POST"},
+		{"/api/v1/orgs/abc/invitations/5", http.MethodGet, "DELETE"},
+		{"/api/v1/orgs/abc/invitations/5", http.MethodPost, "DELETE"},
+		{"/api/v1/orgs/abc/invitations/5/resend", http.MethodGet, "POST"},
+		{"/api/v1/orgs/abc/invitations/5/resend", http.MethodDelete, "POST"},
+		{"/api/v1/orgs/abc/api-keys", http.MethodPut, "GET, HEAD, POST"},
+		{"/api/v1/orgs/abc/api-keys", http.MethodPatch, "GET, HEAD, POST"},
+		{"/api/v1/orgs/abc/api-keys/key123", http.MethodGet, "DELETE"},
+		{"/api/v1/orgs/abc/api-keys/key123", http.MethodPut, "DELETE"},
+		{"/api/v1/orgs/abc/api-keys/by-jti/abc", http.MethodGet, "DELETE"},
+		{"/api/v1/orgs/abc/api-keys/by-jti/abc", http.MethodPut, "DELETE"},
+
+		// TRA-605: write-only paths must 405 (not 404 via the catchall)
+		// on GET, with Allow reflecting the real method set — not a
+		// phantom GET, HEAD synthesized from the catchall.
+		{"/api/v1/assets/abc/tags", http.MethodGet, "POST"},
+		{"/api/v1/assets/abc/tags", http.MethodPatch, "POST"},
+		{"/api/v1/assets/abc/tags/tag1", http.MethodGet, "DELETE"},
+		{"/api/v1/assets/abc/tags/tag1", http.MethodPut, "DELETE"},
+		{"/api/v1/locations/abc/tags", http.MethodGet, "POST"},
+		{"/api/v1/locations/abc/tags", http.MethodPatch, "POST"},
+		{"/api/v1/locations/abc/tags/tag1", http.MethodGet, "DELETE"},
+		{"/api/v1/locations/abc/tags/tag1", http.MethodPut, "DELETE"},
+		{"/api/v1/inventory/save", http.MethodGet, "POST"},
+		{"/api/v1/inventory/save", http.MethodPatch, "POST"},
 	}
 
 	for _, tc := range cases {
@@ -299,6 +336,79 @@ func TestRouter_AuditedStatic_405WithCorrectAllow(t *testing.T) {
 			if got := rec.Header().Get("Allow"); got != tc.wantAllow {
 				t.Errorf("%s %s Allow = %q, want %q",
 					tc.wrongVerb, tc.path, got, tc.wantAllow)
+			}
+			if wwwAuth := rec.Header().Get("WWW-Authenticate"); wwwAuth != "" {
+				t.Errorf("%s %s WWW-Authenticate header leaked on 405: %q",
+					tc.wrongVerb, tc.path, wwwAuth)
+			}
+		})
+	}
+}
+
+// TestRouter_OrgsSubtree_RegisteredMethodsStill401 — TRA-604 acceptance.
+// Flattening r.Route() must NOT regress the auth chain on registered
+// methods: GET/PUT/DELETE on /api/v1/orgs/{id} and friends still 401
+// without credentials. The fix only affects wrong-method paths.
+func TestRouter_OrgsSubtree_RegisteredMethodsStill401(t *testing.T) {
+	r := setupTestRouter(t)
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/orgs/abc"},
+		{http.MethodPut, "/api/v1/orgs/abc"},
+		{http.MethodDelete, "/api/v1/orgs/abc"},
+		{http.MethodGet, "/api/v1/orgs/abc/members"},
+		{http.MethodPut, "/api/v1/orgs/abc/members/2"},
+		{http.MethodDelete, "/api/v1/orgs/abc/members/2"},
+		{http.MethodGet, "/api/v1/orgs/abc/invitations"},
+		{http.MethodPost, "/api/v1/orgs/abc/invitations"},
+		{http.MethodDelete, "/api/v1/orgs/abc/invitations/5"},
+		{http.MethodPost, "/api/v1/orgs/abc/invitations/5/resend"},
+		{http.MethodGet, "/api/v1/orgs/abc/api-keys"},
+		{http.MethodPost, "/api/v1/orgs/abc/api-keys"},
+		{http.MethodDelete, "/api/v1/orgs/abc/api-keys/key123"},
+		{http.MethodDelete, "/api/v1/orgs/abc/api-keys/by-jti/abc"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+			if rec.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s = %d, want 401; body: %s",
+					tc.method, tc.path, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestRouter_UnknownAPIPath_Returns404 — TRA-605. Truly-unknown /api/*
+// paths still return 404 via the catchall. This is the success case the
+// catchall was originally introduced for; the TRA-605 fix must preserve
+// it while distinguishing wrong-method on a registered path (405).
+func TestRouter_UnknownAPIPath_Returns404(t *testing.T) {
+	r := setupTestRouter(t)
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/totally-not-a-route"},
+		{http.MethodPost, "/api/v1/also-fake"},
+		{http.MethodPatch, "/api/v2/anything"},
+		{http.MethodDelete, "/api/v1/foo/bar/baz"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("%s %s = %d, want 404; body: %s",
+					tc.method, tc.path, rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "Unknown API route") {
+				t.Errorf("404 body missing Unknown-API marker: %s", rec.Body.String())
 			}
 		})
 	}
