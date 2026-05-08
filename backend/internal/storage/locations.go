@@ -899,6 +899,10 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 		args = append(args, f.ParentExternalKeys)
 		clauses = append(clauses, fmt.Sprintf("p.external_key = ANY($%d::text[])", len(args)))
 	}
+	if len(f.ExternalKeys) > 0 {
+		args = append(args, f.ExternalKeys)
+		clauses = append(clauses, fmt.Sprintf("l.external_key = ANY($%d::text[])", len(args)))
+	}
 	if f.IsActive != nil {
 		args = append(args, *f.IsActive)
 		clauses = append(clauses, fmt.Sprintf("l.is_active = $%d", len(args)))

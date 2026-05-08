@@ -230,3 +230,72 @@ func TestHeadRequestMatches_OpenAPISpec(t *testing.T) {
 		t.Fatalf("HEAD /api/v1/openapi.json = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestRouter_RetiredLookupPath_Returns404 — TRA-600. The retired
+// /assets/lookup and /locations/lookup paths must return 404 for every
+// method against the full production router, not fall through to /{id}
+// and return 400 invalid-id or 405 with a misleading Allow header.
+func TestRouter_RetiredLookupPath_Returns404(t *testing.T) {
+	r := setupTestRouter(t)
+
+	for _, path := range []string{"/api/v1/assets/lookup", "/api/v1/locations/lookup"} {
+		for _, method := range []string{
+			http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete,
+		} {
+			t.Run(method+" "+path, func(t *testing.T) {
+				rec := httptest.NewRecorder()
+				r.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+				if rec.Code != http.StatusNotFound {
+					t.Fatalf("%s %s = %d, want 404; body: %s",
+						method, path, rec.Code, rec.Body.String())
+				}
+				if !strings.Contains(rec.Body.String(), "external_key=") {
+					t.Errorf("retired-path 404 must point clients at the replacement; body: %s",
+						rec.Body.String())
+				}
+			})
+		}
+	}
+}
+
+// TestRouter_AuditedStatic_405WithCorrectAllow — TRA-600 audit. The
+// audited static paths (orgs/me, users/me, locations/current,
+// assets/bulk, …) must emit 405 with an Allow header that reflects only
+// the static path's actual methods, never the sibling /{id}'s.
+func TestRouter_AuditedStatic_405WithCorrectAllow(t *testing.T) {
+	r := setupTestRouter(t)
+
+	cases := []struct {
+		path      string
+		wrongVerb string
+		wantAllow string
+	}{
+		{"/api/v1/orgs/me", http.MethodPut, "GET, HEAD"},
+		{"/api/v1/orgs/me", http.MethodDelete, "GET, HEAD"},
+		{"/api/v1/users/me", http.MethodPut, "GET, HEAD"},
+		{"/api/v1/users/me", http.MethodDelete, "GET, HEAD"},
+		{"/api/v1/users/me/current-org", http.MethodGet, "POST"},
+		{"/api/v1/users/me/current-org", http.MethodDelete, "POST"},
+		{"/api/v1/locations/current", http.MethodPut, "GET, HEAD"},
+		{"/api/v1/locations/current", http.MethodDelete, "GET, HEAD"},
+		{"/api/v1/assets/bulk", http.MethodGet, "POST"},
+		{"/api/v1/assets/bulk", http.MethodDelete, "POST"},
+		{"/api/v1/assets/bulk/abc123", http.MethodPut, "GET, HEAD"},
+		{"/api/v1/assets/bulk/abc123", http.MethodDelete, "GET, HEAD"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.wrongVerb+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(tc.wrongVerb, tc.path, nil))
+			if rec.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("%s %s = %d, want 405; body: %s",
+					tc.wrongVerb, tc.path, rec.Code, rec.Body.String())
+			}
+			if got := rec.Header().Get("Allow"); got != tc.wantAllow {
+				t.Errorf("%s %s Allow = %q, want %q",
+					tc.wrongVerb, tc.path, got, tc.wantAllow)
+			}
+		})
+	}
+}

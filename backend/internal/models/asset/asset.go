@@ -96,11 +96,14 @@ type ListFilter struct {
 	// a row matches if its current location appears in either set.
 	LocationIDs          []int
 	LocationExternalKeys []string
-	IsActive             *bool
-	Q                    *string // substring match (case-insensitive) on name, external_key, description, and active tag values
-	Sorts                []ListSort
-	Limit                int
-	Offset               int
+	// Equality match on a.external_key (any-of). Single value yields the
+	// natural-key lookup that lives on the collection per TRA-600.
+	ExternalKeys []string
+	IsActive     *bool
+	Q            *string // substring match (case-insensitive) on name, external_key, description, and active tag values
+	Sorts        []ListSort
+	Limit        int
+	Offset       int
 }
 
 // ListSort is one (field, direction) entry.

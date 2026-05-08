@@ -149,15 +149,9 @@ func setupRouter(
 		r.Use(middleware.SentryContext)
 
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
-		// /lookup must be registered BEFORE /{asset_id} so chi resolves it as a
-		// literal, not as a {asset_id} match with value "lookup".
-		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/lookup", assetsHandler.Lookup)
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{asset_id}", assetsHandler.GetAsset)
 
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
-		// /lookup must be registered BEFORE /{location_id} so chi resolves it as a
-		// literal, not as a {location_id} match with value "lookup".
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/lookup", locationsHandler.Lookup)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}", locationsHandler.GetLocation)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/ancestors", locationsHandler.GetAncestors)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/children", locationsHandler.GetChildren)
@@ -203,6 +197,36 @@ func setupRouter(
 	// TRA-555 / TRA-554: Internal /by-id/ families removed. Public
 	// /api/v1/{assets,locations}/{id} routes already accept session JWT via
 	// EitherAuth, so frontend session-auth flows hit canonical routes directly.
+
+	// TRA-600 routing-precedence guards. Every static path on this list
+	// competes with a sibling /{id} parameter route at the same level. Without
+	// these registrations chi v5 falls through to the sibling for the methods
+	// it doesn't see registered on the static path, surfacing a 400
+	// "invalid id" or a 405 with a misleading Allow header. Registered on the
+	// top-level mux (no auth) so the 405/404 fires regardless of auth state —
+	// chi merges per-method handlers across groups into the same path node.
+	//
+	// Wrapped with DefaultRateLimitHeaders so the static-vs-{id} guard
+	// responses carry X-RateLimit-* headers, matching the /api/v1/* contract
+	// from TRA-518.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.DefaultRateLimitHeaders(rl))
+
+		// Retired endpoints (TRA-600 Option 3): natural-key lookup moved to
+		// `?external_key=` filter on the collection. Old paths return 404.
+		register404Static(r, "/api/v1/assets/lookup",
+			"This endpoint has been removed. Use GET /api/v1/assets?external_key= to find an asset by external_key.")
+		register404Static(r, "/api/v1/locations/lookup",
+			"This endpoint has been removed. Use GET /api/v1/locations?external_key= to find a location by external_key.")
+
+		// Live static endpoints with a single supported method.
+		register405Static(r, "/api/v1/orgs/me", []string{http.MethodGet})
+		register405Static(r, "/api/v1/users/me", []string{http.MethodGet})
+		register405Static(r, "/api/v1/users/me/current-org", []string{http.MethodPost})
+		register405Static(r, "/api/v1/locations/current", []string{http.MethodGet})
+		register405Static(r, "/api/v1/assets/bulk", []string{http.MethodPost})
+		register405Static(r, "/api/v1/assets/bulk/{jobId}", []string{http.MethodGet})
+	})
 
 	if os.Getenv("APP_ENV") != "production" {
 		testHandler.RegisterRoutes(r)

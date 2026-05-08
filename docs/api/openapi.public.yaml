@@ -695,6 +695,11 @@ paths:
                   name: location_external_key
                   schema:
                     type: string
+                - description: filter by asset external_key, equality match (may repeat for any-of)
+                  in: query
+                  name: external_key
+                  schema:
+                    type: string
                 - description: filter by active flag
                   in: query
                   name: is_active
@@ -1319,82 +1324,6 @@ paths:
             summary: Remove a tag from an asset
             tags:
                 - assets
-    /api/v1/assets/lookup:
-        get:
-            description: |-
-                **Required scope:** `assets:read`
-
-                Find a single live asset by its external_key. Equality match only.
-                Returns the matching object (200) or 404. Multiple natural-key parameters or none returns 400.
-                Soft-deleted rows are not addressable through this endpoint.
-            operationId: assets.lookup
-            parameters:
-                - description: Asset external_key (natural key)
-                  in: query
-                  name: external_key
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/asset.GetAssetResponse'
-                    description: OK
-                    headers:
-                        X-RateLimit-Limit:
-                            description: Steady-state requests/min for this API key
-                            schema:
-                                type: integer
-                        X-RateLimit-Remaining:
-                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
-                            schema:
-                                type: integer
-                        X-RateLimit-Reset:
-                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
-                            schema:
-                                type: integer
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                    headers:
-                        Retry-After:
-                            description: Seconds to wait before retrying
-                            schema:
-                                type: integer
-            security:
-                - APIKey: []
-            summary: Look up an asset by external_key
-            tags:
-                - assets
     /api/v1/locations:
         get:
             description: '**Required scope:** `locations:read`'
@@ -1420,6 +1349,11 @@ paths:
                 - description: filter by parent's external_key (may repeat); mutually exclusive with parent_id
                   in: query
                   name: parent_external_key
+                  schema:
+                    type: string
+                - description: filter by location external_key, equality match (may repeat for any-of)
+                  in: query
+                  name: external_key
                   schema:
                     type: string
                 - description: filter by active flag
@@ -2210,63 +2144,6 @@ paths:
             summary: List current asset locations
             tags:
                 - reports
-    /api/v1/locations/lookup:
-        get:
-            description: |-
-                **Required scope:** `locations:read`
-
-                Find a single live location by its external_key. Returns 404 if no match.
-                Exactly one natural-key parameter is required; multiple or none returns 400.
-            operationId: locations.lookup
-            parameters:
-                - description: Location external_key (natural key)
-                  in: query
-                  name: external_key
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/location.GetLocationResponse'
-                    description: OK
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: bad_request
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: unauthorized
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: forbidden
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: not_found
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-            security:
-                - APIKey: []
-            summary: Lookup location by external_key
-            tags:
-                - locations
     /api/v1/orgs/me:
         get:
             description: Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.
