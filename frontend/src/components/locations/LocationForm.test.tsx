@@ -94,7 +94,7 @@ describe('LocationForm - Scanner Integration', () => {
       description: '',
       parent_id: null,
       valid_from: '2025-01-01T00:00:00Z',
-      valid_to: '2099-12-31T00:00:00Z',
+      valid_to: null,
       is_active: true,
       created_at: '2025-01-01T00:00:00Z',
       updated_at: '2025-01-01T00:00:00Z',

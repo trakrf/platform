@@ -43,7 +43,7 @@ export interface CreateAssetRequest {
   location_id?: number | null;
   location_external_key?: string | null;
   valid_from: string;
-  valid_to: string;
+  valid_to: string | null;
   is_active: boolean;
   metadata?: Record<string, any>;
 }
@@ -58,7 +58,7 @@ export interface UpdateAssetRequest {
   location_id?: number | null;
   location_external_key?: string | null;
   valid_from?: string;
-  valid_to?: string;
+  valid_to?: string | null;
   is_active?: boolean;
   metadata?: Record<string, any>;
 }
