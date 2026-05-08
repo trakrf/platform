@@ -270,6 +270,10 @@ func TestRouter_AuditedStatic_405WithCorrectAllow(t *testing.T) {
 		wrongVerb string
 		wantAllow string
 	}{
+		// TRA-599: /orgs/me four-method coverage (the ticket's
+		// repro spans POST/PATCH/DELETE/PUT — pin all four).
+		{"/api/v1/orgs/me", http.MethodPost, "GET, HEAD"},
+		{"/api/v1/orgs/me", http.MethodPatch, "GET, HEAD"},
 		{"/api/v1/orgs/me", http.MethodPut, "GET, HEAD"},
 		{"/api/v1/orgs/me", http.MethodDelete, "GET, HEAD"},
 		{"/api/v1/users/me", http.MethodPut, "GET, HEAD"},

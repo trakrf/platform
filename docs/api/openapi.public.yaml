@@ -2161,6 +2161,17 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                "405":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            description: Allowed methods
+                            schema:
+                                type: string
                 "429":
                     content:
                         application/json:
