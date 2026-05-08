@@ -271,40 +271,50 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 // RegisterRoutes registers org endpoints on the given router.
 // NOTE: API-key endpoints are registered separately via RegisterAPIKeyRoutes —
 // they live under EitherAuth because they accept api-key auth, not just session.
+//
+// TRA-604: routes are registered flat with absolute paths (no r.Route(...)
+// sub-router mount). Mounting via r.Route(...) inside an r.Group(...) with
+// r.Use(middleware.Auth) caused wrong-method requests to emit 401 instead of
+// 405, because group middleware wraps the entire sub-router mount before
+// chi's MethodNotAllowed determination runs. Flat registration keeps each
+// method registered at the parent mux level so wrong methods short-circuit
+// to the root MethodNotAllowed handler without auth running.
 func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
+	member := middleware.RequireOrgMember(store)
+	admin := middleware.RequireOrgAdmin(store)
+
 	// Public routes (any authenticated user)
 	r.Get("/api/v1/orgs", h.List)
 	r.Post("/api/v1/orgs", h.Create)
 
 	// Protected routes (require org membership/admin)
-	r.Route("/api/v1/orgs/{id}", func(r chi.Router) {
-		r.With(middleware.RequireOrgMember(store)).Get("/", h.Get)
-		r.With(middleware.RequireOrgAdmin(store)).Put("/", h.Update)
-		r.With(middleware.RequireOrgAdmin(store)).Delete("/", h.Delete)
+	r.With(member).Get("/api/v1/orgs/{id}", h.Get)
+	r.With(admin).Put("/api/v1/orgs/{id}", h.Update)
+	r.With(admin).Delete("/api/v1/orgs/{id}", h.Delete)
 
-		// Member management routes
-		r.With(middleware.RequireOrgMember(store)).Get("/members", h.ListMembers)
-		r.With(middleware.RequireOrgAdmin(store)).Put("/members/{userId}", h.UpdateMemberRole)
-		r.With(middleware.RequireOrgAdmin(store)).Delete("/members/{userId}", h.RemoveMember)
+	// Member management routes
+	r.With(member).Get("/api/v1/orgs/{id}/members", h.ListMembers)
+	r.With(admin).Put("/api/v1/orgs/{id}/members/{userId}", h.UpdateMemberRole)
+	r.With(admin).Delete("/api/v1/orgs/{id}/members/{userId}", h.RemoveMember)
 
-		// Invitation routes (admin only)
-		r.With(middleware.RequireOrgAdmin(store)).Get("/invitations", h.ListInvitations)
-		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations", h.CreateInvitation)
-		r.With(middleware.RequireOrgAdmin(store)).Delete("/invitations/{inviteId}", h.CancelInvitation)
-		r.With(middleware.RequireOrgAdmin(store)).Post("/invitations/{inviteId}/resend", h.ResendInvitation)
-	})
+	// Invitation routes (admin only)
+	r.With(admin).Get("/api/v1/orgs/{id}/invitations", h.ListInvitations)
+	r.With(admin).Post("/api/v1/orgs/{id}/invitations", h.CreateInvitation)
+	r.With(admin).Delete("/api/v1/orgs/{id}/invitations/{inviteId}", h.CancelInvitation)
+	r.With(admin).Post("/api/v1/orgs/{id}/invitations/{inviteId}/resend", h.ResendInvitation)
 }
 
 // RegisterAPIKeyRoutes registers the /api/v1/orgs/{id}/api-keys endpoints.
 // Registered SEPARATELY from RegisterRoutes because these routes accept api-key
 // auth via keys:admin scope — they must live under an EitherAuth group, not
 // the session-only middleware.Auth group used by the rest of the org subtree.
+//
+// TRA-604: flat registration (no r.Route(...) sub-router mount) so wrong-method
+// requests short-circuit to chi's MethodNotAllowed before EitherAuth runs.
 func (h *Handler) RegisterAPIKeyRoutes(r chi.Router, store middleware.OrgRoleStore) {
-	r.Route("/api/v1/orgs/{id}/api-keys", func(r chi.Router) {
-		r.Use(middleware.RequireOrgAdminOrKeysAdmin(store))
-		r.Post("/", h.CreateAPIKey)
-		r.Get("/", h.ListAPIKeys)
-		r.Delete("/by-jti/{jti}", h.RevokeAPIKeyByJTI)
-		r.Delete("/{key_id}", h.RevokeAPIKey)
-	})
+	gate := middleware.RequireOrgAdminOrKeysAdmin(store)
+	r.With(gate).Post("/api/v1/orgs/{id}/api-keys", h.CreateAPIKey)
+	r.With(gate).Get("/api/v1/orgs/{id}/api-keys", h.ListAPIKeys)
+	r.With(gate).Delete("/api/v1/orgs/{id}/api-keys/by-jti/{jti}", h.RevokeAPIKeyByJTI)
+	r.With(gate).Delete("/api/v1/orgs/{id}/api-keys/{key_id}", h.RevokeAPIKey)
 }

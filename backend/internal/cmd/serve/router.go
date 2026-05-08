@@ -232,15 +232,37 @@ func setupRouter(
 		testHandler.RegisterRoutes(r)
 	}
 
-	// JSON 404 for unknown /api/* paths so clients don't blow up mid-deserialize
+	// JSON 404/405 for unknown /api/* paths so clients don't blow up mid-deserialize
 	// on the SPA's index.html fallback. Must be registered before the /* wildcard.
-	// Registered as GET (not HandleFunc) so the chimiddleware.GetHead rewrite works
-	// for HEAD requests to known GET routes above this catch-all.
-	// TRA-518: wrapped with DefaultRateLimitHeaders so 404s under /api/v1/* carry
-	// rate-limit headers too.
-	r.With(middleware.DefaultRateLimitHeaders(rl)).Get("/api/*", func(w http.ResponseWriter, req *http.Request) {
+	//
+	// Registered per-method (GET, POST, PUT, PATCH, DELETE, OPTIONS) rather than
+	// via HandleFunc so HEAD is NOT registered on the catchall — chimiddleware.GetHead
+	// rewrites HEAD→GET only when no HEAD handler matches, and a method-agnostic
+	// HandleFunc would register HEAD on /api/* and short-circuit the rewrite for
+	// every /api/v1/* HEAD probe.
+	//
+	// The handler distinguishes (TRA-605):
+	//   - other methods are registered for this path → 405 with real Allow
+	//   - no methods are registered for this path → 404 unknown-route
+	// computeAllowedMethods filters out the /api/* pattern so probes for the
+	// "real" Allow set don't see the catchall as a phantom GET handler.
+	//
+	// TRA-518: wrapped with DefaultRateLimitHeaders so responses under /api/v1/*
+	// carry rate-limit headers too.
+	apiCatchall := func(w http.ResponseWriter, req *http.Request) {
+		allowed := computeAllowedMethods(r, req.URL.Path)
+		if len(allowed) > 0 {
+			httputil.Respond405(w, req, allowed, middleware.GetRequestID(req.Context()))
+			return
+		}
 		httputil.Respond404(w, req, "Unknown API route: "+req.URL.Path, middleware.GetRequestID(req.Context()))
-	})
+	}
+	for _, m := range []string{
+		http.MethodGet, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodOptions,
+	} {
+		r.With(middleware.DefaultRateLimitHeaders(rl)).MethodFunc(m, "/api/*", apiCatchall)
+	}
 
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		frontendHandler.ServeSPA(w, r, "frontend/dist/index.html")
