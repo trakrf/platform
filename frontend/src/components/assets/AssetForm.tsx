@@ -253,7 +253,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       description: formData.description,
       location_id: formData.location_id,
       valid_from: toRFC3339(formData.valid_from),
-      valid_to: toRFC3339(formData.valid_to || '2099-12-31'),
+      valid_to: formData.valid_to ? toRFC3339(formData.valid_to) : null,
       is_active: formData.is_active,
       metadata: {},
     };

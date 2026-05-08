@@ -106,6 +106,27 @@ describe('AssetForm', () => {
     });
   });
 
+  // TRA-624 / BB20 §F1: empty valid_to must serialize as null, never the
+  // 2099-12-31 sentinel. The docs forbid sentinel emission server-side, and
+  // a docs-compliant null-checking client treats 2099-12-31 as "expires in
+  // 2099" rather than "no expiry" — silently inverting meaning.
+  it('submits valid_to as null when the user leaves the field empty', async () => {
+    mockOnSubmit.mockResolvedValue(undefined);
+    render(<AssetForm mode="create" onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
+
+    fireEvent.change(screen.getByLabelText(/Identifier/), { target: { value: 'TEST-001' } });
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Test Asset' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Asset/ }));
+
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalled();
+    });
+
+    const submitted = mockOnSubmit.mock.calls[0]![0] as { valid_to: string | null };
+    expect(submitted.valid_to).toBeNull();
+  });
+
   it('calls onCancel when cancel button is clicked', () => {
     render(<AssetForm mode="create" onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 
@@ -224,7 +245,7 @@ describe('AssetForm - Scanner Integration', () => {
       type: 'device',
       description: '',
       valid_from: '2024-01-01T00:00:00Z',
-      valid_to: '2099-12-31T00:00:00Z',
+      valid_to: null,
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z',
