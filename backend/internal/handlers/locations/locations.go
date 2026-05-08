@@ -21,6 +21,7 @@ import (
 var validate = func() *validator.Validate {
 	v := validator.New()
 	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+	httputil.RegisterCustomValidations(v)
 	return v
 }()
 
@@ -93,7 +94,7 @@ func (handler *Handler) resolveParent(
 // @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[locations:write]
+// @Security     BearerAuth[locations:write]
 // @Router       /api/v1/locations [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
@@ -173,7 +174,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[locations:write]
+// @Security     BearerAuth[locations:write]
 // @Router       /api/v1/locations/{location_id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -202,19 +203,64 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	if _, ok := explicitNulls["valid_from"]; ok {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"validation failed", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "valid_from",
-				Code:    "invalid_value",
-				Message: "valid_from cannot be null; omit the field to leave unchanged, or provide a date",
-			}})
+	// valid_from / external_key / name are non-nullable on the read view; an
+	// explicit null in the PUT body is a validation error, not a clear-request.
+	for _, f := range []string{"valid_from", "external_key", "name", "is_active"} {
+		if _, ok := explicitNulls[f]; ok {
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+				"validation failed", reqID,
+				[]modelerrors.FieldError{{
+					Field:   f,
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("%s cannot be null; omit the field to leave unchanged, or provide a value", f),
+				}})
 
-		return
+			return
+		}
 	}
 	if _, ok := explicitNulls["valid_to"]; ok {
 		request.ClearValidTo = true
+	}
+	// description, parent_id, parent_external_key are read-side-nullable per
+	// PublicLocationView. An explicit null on PUT clears the corresponding
+	// column, per TRA-614 / BB19 §S1. parent_id and parent_external_key are
+	// alternate references to the same FK (parent_location_id); a null on
+	// either implies clearing that FK; conflicting forms are 400.
+	if _, ok := explicitNulls["description"]; ok {
+		request.ClearDescription = true
+	}
+	nullParentID := false
+	if _, ok := explicitNulls["parent_id"]; ok {
+		nullParentID = true
+	}
+	nullParentExt := false
+	if _, ok := explicitNulls["parent_external_key"]; ok {
+		nullParentExt = true
+	}
+	if nullParentID && request.ParentExternalKey != nil && *request.ParentExternalKey != "" {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"parent_id and parent_external_key disagree", reqID,
+			[]modelerrors.FieldError{{
+				Field:   "parent_external_key",
+				Code:    "invalid_value",
+				Message: "parent_id is null but parent_external_key has a value",
+			}})
+		return
+	}
+	if nullParentExt && request.ParentID != nil {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"parent_id and parent_external_key disagree", reqID,
+			[]modelerrors.FieldError{{
+				Field:   "parent_external_key",
+				Code:    "invalid_value",
+				Message: "parent_external_key is null but parent_id has a value",
+			}})
+		return
+	}
+	if nullParentID || nullParentExt {
+		request.ClearParentID = true
+		request.ParentID = nil
+		request.ParentExternalKey = nil
 	}
 
 	if err := validate.Struct(request); err != nil {
@@ -272,7 +318,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @Failure 404 {object} modelerrors.ErrorResponse "not_found"
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
-// @Security APIKey[locations:write]
+// @Security BearerAuth[locations:write]
 // @Router /api/v1/locations/{location_id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -364,7 +410,7 @@ type ListDescendantsResponse struct {
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
-// @Security APIKey[locations:read]
+// @Security BearerAuth[locations:read]
 // @Router /api/v1/locations [get]
 func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -474,7 +520,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429 {object} modelerrors.ErrorResponse
-// @Security APIKey[locations:read]
+// @Security BearerAuth[locations:read]
 // @Router /api/v1/locations/{location_id} [get]
 func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -531,7 +577,7 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse "not_found"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
-// @Security APIKey[locations:read]
+// @Security BearerAuth[locations:read]
 // @Router /api/v1/locations/{location_id}/ancestors [get]
 func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -590,7 +636,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse "not_found"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
-// @Security APIKey[locations:read]
+// @Security BearerAuth[locations:read]
 // @Router /api/v1/locations/{location_id}/descendants [get]
 func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -649,7 +695,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Failure 404 {object} modelerrors.ErrorResponse "not_found"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
-// @Security APIKey[locations:read]
+// @Security BearerAuth[locations:read]
 // @Router /api/v1/locations/{location_id}/children [get]
 func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -721,7 +767,7 @@ type AddTagResponse struct {
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
-// @Security APIKey[locations:write]
+// @Security BearerAuth[locations:write]
 // @Router /api/v1/locations/{location_id}/tags [post]
 func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
@@ -782,7 +828,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 // @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
-// @Security APIKey[locations:write]
+// @Security BearerAuth[locations:write]
 // @Router /api/v1/locations/{location_id}/tags/{tag_id} [delete]
 func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())

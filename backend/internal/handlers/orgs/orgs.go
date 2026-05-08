@@ -39,7 +39,7 @@ func NewHandler(storage *storage.Storage, service *orgsservice.Service) *Handler
 // @Success 200 {object} map[string]any "data: []organization.Organization"
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs [get]
 // List returns all organizations the authenticated user belongs to.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +73,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} modelerrors.ErrorResponse "Identifier already taken"
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs [post]
 // Create creates a new team organization with the creator as admin.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +128,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id} [get]
 // Get returns a single organization by ID.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +170,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id} [put]
 // Update updates an organization's name.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +227,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/orgs/{id} [delete]
 // Delete soft-deletes an organization after confirming the name matches.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {

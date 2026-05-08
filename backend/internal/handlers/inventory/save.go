@@ -72,7 +72,7 @@ type SaveResponse struct {
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security APIKey[scans:write]
+// @Security BearerAuth[scans:write]
 // @Router /api/v1/inventory/save [post]
 func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())

@@ -62,7 +62,7 @@ type AssetHistoryResponse struct {
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security APIKey[history:read]
+// @Security BearerAuth[history:read]
 // @Router /api/v1/assets/{asset_id}/history [get]
 func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())

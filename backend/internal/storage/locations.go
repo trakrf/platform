@@ -959,10 +959,18 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	if req.ExternalKey != nil {
 		fields["external_key"] = *req.ExternalKey
 	}
-	if req.ParentID != nil {
+	// parent_location_id is nullable in the DB; SQL NULL on clear.
+	if req.ClearParentID {
+		fields["parent_location_id"] = nil
+	} else if req.ParentID != nil {
 		fields["parent_location_id"] = *req.ParentID
 	}
-	if req.Description != nil {
+	// description: explicit null on PUT clears to empty string. Same rationale
+	// as assets — preserves the null-on-read contract without changing every
+	// existing scan to handle SQL NULL into a Go string. (TRA-614 / BB19 §S1.)
+	if req.ClearDescription {
+		fields["description"] = ""
+	} else if req.Description != nil {
 		fields["description"] = *req.Description
 	}
 	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {

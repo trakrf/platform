@@ -171,3 +171,180 @@ func TestGetLocation_OptionalFieldsAlwaysEmittedNullWhenUnset(t *testing.T) {
 	assert.True(t, present, "valid_to must always be present (TRA-610)")
 	assert.Nil(t, vtRaw, "valid_to must be JSON null when nil (TRA-610)")
 }
+
+// TRA-614 / BB19 §S1: PUT with explicit `null` on read-side-nullable
+// location fields must succeed and clear the column.
+func TestPutLocation_NullClearsReadSideNullableFields(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	// Seed a parent + child so the child has a non-null parent_location_id
+	// and a non-null description; nulls on PUT must clear both.
+	parentID := seedLocationRoundTrip(t, pool, orgID, "PARENT-NULL", "parent")
+	var childID int
+	vt := time.Now().UTC().Add(24 * time.Hour)
+	err := pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations
+		  (org_id, external_key, name, description, parent_location_id, valid_from, valid_to, is_active)
+		VALUES ($1, 'CHILD-NULL', 'child', 'has description', $2, $3, $4, true) RETURNING id
+	`, orgID, parentID, time.Now().UTC(), vt).Scan(&childID)
+	require.NoError(t, err)
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	body := []byte(`{
+		"description": null,
+		"parent_id": null,
+		"parent_external_key": null,
+		"valid_to": null
+	}`)
+	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/locations/%d", childID), bytes.NewReader(body))
+	putReq.Header.Set("Content-Type", "application/json")
+	putReq = withLocationRoundTripOrgContext(putReq, orgID)
+	putRec := httptest.NewRecorder()
+	router.ServeHTTP(putRec, putReq)
+
+	require.Equal(t, http.StatusOK, putRec.Code, "PUT null on nullable fields must succeed: %s", putRec.Body.String())
+
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
+	assert.Nil(t, resp.Data["description"], "description cleared")
+	assert.Nil(t, resp.Data["parent_id"], "parent_id cleared")
+	assert.Nil(t, resp.Data["parent_external_key"], "parent_external_key cleared")
+	assert.Nil(t, resp.Data["valid_to"], "valid_to cleared")
+
+	var dbDesc string
+	var dbParent, dbValidTo *string
+	err = pool.QueryRow(context.Background(),
+		`SELECT description, parent_location_id::text, valid_to::text FROM trakrf.locations WHERE id = $1`,
+		childID).Scan(&dbDesc, &dbParent, &dbValidTo)
+	require.NoError(t, err)
+	assert.Equal(t, "", dbDesc)
+	assert.Nil(t, dbParent)
+	assert.Nil(t, dbValidTo)
+}
+
+// TRA-614: parent_id null + parent_external_key value is a conflict.
+func TestPutLocation_ParentNullVsValueIsConflict(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "PARENT-CONFLICT", "p")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	body := []byte(`{"parent_id": null, "parent_external_key": "X-99"}`)
+	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(body))
+	putReq.Header.Set("Content-Type", "application/json")
+	putReq = withLocationRoundTripOrgContext(putReq, orgID)
+	putRec := httptest.NewRecorder()
+	router.ServeHTTP(putRec, putReq)
+
+	require.Equal(t, http.StatusBadRequest, putRec.Code, "null/value conflict on parent pair must be 400: %s", putRec.Body.String())
+}
+
+// TRA-615 / BB19 §S5+§C2: external_key with reserved punctuation (space,
+// slash, colon, period, underscore) is rejected at the validator boundary
+// with 400 invalid_value rather than reaching storage and triggering 500.
+func TestPostLocation_BadExternalKeyPattern_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	cases := []struct {
+		name string
+		key  string
+	}{
+		{"space", "BB With Spaces"},
+		{"slash", "BB/slash"},
+		{"colon", "BB:colon"},
+		{"period", "BB.Dots.Hi"},
+		{"underscore", "BB-EVAL_L1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{
+				"external_key": tc.key,
+				"name":         "loc",
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req = withLocationRoundTripOrgContext(req, orgID)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code,
+				"external_key %q must be rejected with 400 (got %d): %s", tc.key, rec.Code, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.NotEmpty(t, resp.Error.Fields)
+			assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+		})
+	}
+	_ = pool
+}
+
+// TRA-615: well-formed external_keys (alphanumerics + hyphens) still succeed.
+func TestPostLocation_GoodExternalKeyPattern_Accepted(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	for _, k := range []string{"WHS-01", "BB-EVAL-L1", "abc123", "A1"} {
+		t.Run(k, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{
+				"external_key": k,
+				"name":         "loc",
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req = withLocationRoundTripOrgContext(req, orgID)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusCreated, rec.Code, "external_key %q must be accepted: %s", k, rec.Body.String())
+		})
+	}
+	_ = pool
+}

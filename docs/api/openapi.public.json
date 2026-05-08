@@ -47,10 +47,12 @@
         "properties": {
           "description": {
             "maxLength": 1024,
+            "nullable": true,
             "type": "string"
           },
           "external_key": {
             "maxLength": 255,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "is_active": {
@@ -61,10 +63,13 @@
             "example": "WHS-01",
             "maxLength": 255,
             "minLength": 1,
+            "nullable": true,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "location_id": {
             "example": 42,
+            "nullable": true,
             "type": "integer"
           },
           "metadata": {
@@ -90,6 +95,7 @@
           "valid_to": {
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           }
         },
@@ -217,11 +223,13 @@
         "properties": {
           "description": {
             "maxLength": 1024,
+            "nullable": true,
             "type": "string"
           },
           "external_key": {
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "is_active": {
@@ -231,10 +239,13 @@
             "example": "WHS-01",
             "maxLength": 255,
             "minLength": 1,
+            "nullable": true,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "location_id": {
             "example": 42,
+            "nullable": true,
             "type": "integer"
           },
           "metadata": {
@@ -254,6 +265,7 @@
           "valid_to": {
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           }
         },
@@ -375,12 +387,14 @@
           "description": {
             "example": "Main warehouse location",
             "maxLength": 1024,
+            "nullable": true,
             "type": "string"
           },
           "external_key": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "is_active": {
@@ -397,11 +411,14 @@
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
+            "nullable": true,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "parent_id": {
             "example": 42,
             "minimum": 1,
+            "nullable": true,
             "type": "integer"
           },
           "tags": {
@@ -418,6 +435,7 @@
           "valid_to": {
             "example": "2026-12-14T00:00:00Z",
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           }
         },
@@ -640,12 +658,14 @@
           "description": {
             "example": "Updated description",
             "maxLength": 1024,
+            "nullable": true,
             "type": "string"
           },
           "external_key": {
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "is_active": {
@@ -662,11 +682,14 @@
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
+            "nullable": true,
+            "pattern": "^[A-Za-z0-9-]+$",
             "type": "string"
           },
           "parent_id": {
             "example": 42,
             "minimum": 1,
+            "nullable": true,
             "type": "integer"
           },
           "valid_from": {
@@ -677,6 +700,7 @@
           "valid_to": {
             "example": "2026-12-14T00:00:00Z",
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           }
         },
@@ -901,7 +925,7 @@
       }
     },
     "securitySchemes": {
-      "APIKey": {
+      "BearerAuth": {
         "bearerFormat": "JWT",
         "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account.",
         "scheme": "bearer",
@@ -1103,7 +1127,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "List assets",
@@ -1218,7 +1242,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Create an asset",
@@ -1299,7 +1323,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Delete an asset",
@@ -1413,7 +1437,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Get asset by canonical id",
@@ -1541,7 +1565,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Update an asset",
@@ -1718,7 +1742,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Asset movement history",
@@ -1838,7 +1862,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Add a tag to an asset",
@@ -1928,7 +1952,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Remove a tag from an asset",
@@ -2078,7 +2102,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "List locations",
@@ -2193,7 +2217,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Create a location",
@@ -2362,7 +2386,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "List current asset locations",
@@ -2453,7 +2477,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Delete location",
@@ -2539,7 +2563,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Get location by ID",
@@ -2667,7 +2691,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Update a location",
@@ -2783,7 +2807,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "List location ancestors",
@@ -2899,7 +2923,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "List location children",
@@ -3015,7 +3039,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "List location descendants",
@@ -3135,7 +3159,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Add a tag to a location",
@@ -3225,7 +3249,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Remove a tag from a location",
@@ -3308,7 +3332,7 @@
         },
         "security": [
           {
-            "APIKey": []
+            "BearerAuth": []
           }
         ],
         "summary": "Get the org associated with the authenticated API key",
@@ -3320,7 +3344,7 @@
   },
   "security": [
     {
-      "APIKey": []
+      "BearerAuth": []
     }
   ],
   "servers": [

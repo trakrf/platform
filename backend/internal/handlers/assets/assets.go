@@ -22,6 +22,7 @@ import (
 var validate = func() *validator.Validate {
 	v := validator.New()
 	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+	httputil.RegisterCustomValidations(v)
 	return v
 }()
 
@@ -103,7 +104,7 @@ func (handler *Handler) resolveLocation(
 // @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[assets:write]
+// @Security     BearerAuth[assets:write]
 // @Router       /api/v1/assets [post]
 func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
@@ -204,7 +205,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[assets:write]
+// @Security     BearerAuth[assets:write]
 // @Router       /api/v1/assets/{asset_id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -233,21 +234,66 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	// valid_from is NOT NULL in the DB; explicit null is invalid. Explicit
-	// valid_to null requests a clear (SQL NULL), per TRA-468 wire convention.
-	if _, ok := explicitNulls["valid_from"]; ok {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"validation failed", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "valid_from",
-				Code:    "invalid_value",
-				Message: "valid_from cannot be null; omit the field to leave unchanged, or provide a date",
-			}})
+	// valid_from / external_key / name are non-nullable on the read view; an
+	// explicit null in the PUT body is a validation error, not a clear-request.
+	for _, f := range []string{"valid_from", "external_key", "name", "is_active", "metadata"} {
+		if _, ok := explicitNulls[f]; ok {
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+				"validation failed", reqID,
+				[]modelerrors.FieldError{{
+					Field:   f,
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("%s cannot be null; omit the field to leave unchanged, or provide a value", f),
+				}})
 
-		return
+			return
+		}
 	}
 	if _, ok := explicitNulls["valid_to"]; ok {
 		request.ClearValidTo = true
+	}
+	// description, location_id, location_external_key are read-side-nullable
+	// per PublicAssetView. An explicit null on PUT clears the corresponding
+	// column, per TRA-614 / BB19 §S1. location_id and location_external_key
+	// are alternate references to the same FK (current_location_id), so a
+	// null on either implies clearing that FK; conflicting forms (one null,
+	// the other a value) are 400.
+	if _, ok := explicitNulls["description"]; ok {
+		request.ClearDescription = true
+	}
+	nullLocID := false
+	if _, ok := explicitNulls["location_id"]; ok {
+		nullLocID = true
+	}
+	nullLocExt := false
+	if _, ok := explicitNulls["location_external_key"]; ok {
+		nullLocExt = true
+	}
+	if nullLocID && request.LocationExternalKey != nil && *request.LocationExternalKey != "" {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"location_id and location_external_key disagree", reqID,
+			[]modelerrors.FieldError{{
+				Field:   "location_external_key",
+				Code:    "invalid_value",
+				Message: "location_id is null but location_external_key has a value",
+			}})
+		return
+	}
+	if nullLocExt && request.LocationID != nil {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"location_id and location_external_key disagree", reqID,
+			[]modelerrors.FieldError{{
+				Field:   "location_external_key",
+				Code:    "invalid_value",
+				Message: "location_external_key is null but location_id has a value",
+			}})
+		return
+	}
+	if nullLocID || nullLocExt {
+		request.ClearLocationID = true
+		// Skip the resolveLocation lookup when we're clearing.
+		request.LocationID = nil
+		request.LocationExternalKey = nil
 	}
 
 	if err := validate.Struct(request); err != nil {
@@ -304,7 +350,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[assets:write]
+// @Security     BearerAuth[assets:write]
 // @Router       /api/v1/assets/{asset_id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -387,7 +433,7 @@ type UpdateAssetResponse struct {
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse
-// @Security APIKey[assets:read]
+// @Security BearerAuth[assets:read]
 // @Router /api/v1/assets [get]
 func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -487,7 +533,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
-// @Security APIKey[assets:read]
+// @Security BearerAuth[assets:read]
 // @Router /api/v1/assets/{asset_id} [get]
 func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
@@ -546,7 +592,7 @@ type AddTagResponse struct {
 // @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[assets:write]
+// @Security     BearerAuth[assets:write]
 // @Router       /api/v1/assets/{asset_id}/tags [post]
 func (handler *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
@@ -613,7 +659,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
-// @Security     APIKey[assets:write]
+// @Security     BearerAuth[assets:write]
 // @Router       /api/v1/assets/{asset_id}/tags/{tag_id} [delete]
 func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -21,6 +22,28 @@ func JSONTagNameFunc(f reflect.StructField) string {
 		return f.Name
 	}
 	return name
+}
+
+// ExternalKeyPattern is the canonical character set for caller-supplied
+// external_keys on the public API: ASCII alphanumerics plus hyphen. Underscore
+// is reserved as the segment-internal separator after tree_path normalization,
+// and period is the segment separator itself; both must not appear in a
+// caller-supplied key. Whitespace, slash, and colon previously triggered 500s
+// at the storage layer (TRA-615 / BB19 §S5) — the validator now rejects them
+// with 400 invalid_value before they reach storage.
+var ExternalKeyPattern = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+
+// RegisterCustomValidations registers the cross-handler custom tags used by
+// public input schemas. Call after RegisterTagNameFunc so messages emit the
+// JSON field name. Idempotent; cheap enough to run once per handler factory.
+func RegisterCustomValidations(v *validator.Validate) {
+	_ = v.RegisterValidation("external_key_pattern", func(fl validator.FieldLevel) bool {
+		val := fl.Field().String()
+		if val == "" {
+			return true // length validators handle empty
+		}
+		return ExternalKeyPattern.MatchString(val)
+	})
 }
 
 // tagToCode maps go-playground/validator tag names to our public error
@@ -108,6 +131,10 @@ func messageForField(fe validator.FieldError) string {
 			return fmt.Sprintf("%s must be one of: %s", fe.Field(),
 				strings.Join(strings.Fields(fe.Param()), ", "))
 		}
+		if fe.Tag() == "external_key_pattern" {
+			return fmt.Sprintf("%s must match %s (alphanumerics and hyphens only — underscore, period, whitespace, slash, and colon are reserved)",
+				fe.Field(), ExternalKeyPattern.String())
+		}
 		return fmt.Sprintf("%s is not a valid value", fe.Field())
 	}
 	return fmt.Sprintf("%s failed validation", fe.Field())
@@ -127,6 +154,9 @@ func paramsForField(fe validator.FieldError) map[string]any {
 				out[i] = v
 			}
 			return map[string]any{"allowed_values": out}
+		}
+		if fe.Tag() == "external_key_pattern" {
+			return map[string]any{"pattern": ExternalKeyPattern.String()}
 		}
 	case "too_short":
 		if n, err := strconv.ParseFloat(fe.Param(), 64); err == nil {

@@ -30,9 +30,11 @@ components:
             properties:
                 description:
                     maxLength: 1024
+                    nullable: true
                     type: string
                 external_key:
                     maxLength: 255
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 is_active:
                     example: true
@@ -41,9 +43,12 @@ components:
                     example: WHS-01
                     maxLength: 255
                     minLength: 1
+                    nullable: true
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 location_id:
                     example: 42
+                    nullable: true
                     type: integer
                 metadata:
                     additionalProperties: true
@@ -63,6 +68,7 @@ components:
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
                     format: date-time
+                    nullable: true
                     type: string
             required:
                 - name
@@ -157,10 +163,12 @@ components:
             properties:
                 description:
                     maxLength: 1024
+                    nullable: true
                     type: string
                 external_key:
                     maxLength: 255
                     minLength: 1
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 is_active:
                     type: boolean
@@ -168,9 +176,12 @@ components:
                     example: WHS-01
                     maxLength: 255
                     minLength: 1
+                    nullable: true
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 location_id:
                     example: 42
+                    nullable: true
                     type: integer
                 metadata:
                     additionalProperties: true
@@ -186,6 +197,7 @@ components:
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
                     format: date-time
+                    nullable: true
                     type: string
             type: object
         asset.UpdateAssetResponse:
@@ -271,11 +283,13 @@ components:
                 description:
                     example: Main warehouse location
                     maxLength: 1024
+                    nullable: true
                     type: string
                 external_key:
                     example: wh1
                     maxLength: 255
                     minLength: 1
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 is_active:
                     example: true
@@ -289,10 +303,13 @@ components:
                     example: wh1
                     maxLength: 255
                     minLength: 1
+                    nullable: true
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 parent_id:
                     example: 42
                     minimum: 1
+                    nullable: true
                     type: integer
                 tags:
                     items:
@@ -305,6 +322,7 @@ components:
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
                     format: date-time
+                    nullable: true
                     type: string
             required:
                 - external_key
@@ -469,11 +487,13 @@ components:
                 description:
                     example: Updated description
                     maxLength: 1024
+                    nullable: true
                     type: string
                 external_key:
                     example: wh1
                     maxLength: 255
                     minLength: 1
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 is_active:
                     example: true
@@ -487,10 +507,13 @@ components:
                     example: wh1
                     maxLength: 255
                     minLength: 1
+                    nullable: true
+                    pattern: ^[A-Za-z0-9-]+$
                     type: string
                 parent_id:
                     example: 42
                     minimum: 1
+                    nullable: true
                     type: integer
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
@@ -499,6 +522,7 @@ components:
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
                     format: date-time
+                    nullable: true
                     type: string
             type: object
         location.UpdateLocationResponse:
@@ -660,7 +684,7 @@ components:
                 - value
             type: object
     securitySchemes:
-        APIKey:
+        BearerAuth:
             bearerFormat: JWT
             description: 'TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account.'
             scheme: bearer
@@ -796,7 +820,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: List assets
             tags:
                 - assets
@@ -876,7 +900,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Create an asset
             tags:
                 - assets
@@ -928,7 +952,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Delete an asset
             tags:
                 - assets
@@ -1001,7 +1025,7 @@ paths:
                             schema:
                                 type: integer
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Get asset by canonical id
             tags:
                 - assets
@@ -1082,7 +1106,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Update an asset
             tags:
                 - assets
@@ -1196,7 +1220,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Asset movement history
             tags:
                 - reports
@@ -1273,7 +1297,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Add a tag to an asset
             tags:
                 - assets
@@ -1332,7 +1356,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Remove a tag from an asset
             tags:
                 - assets
@@ -1428,7 +1452,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: List locations
             tags:
                 - locations
@@ -1502,7 +1526,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Create a location
             tags:
                 - locations
@@ -1560,7 +1584,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Delete location
             tags:
                 - locations
@@ -1615,7 +1639,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Too Many Requests
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Get location by ID
             tags:
                 - locations
@@ -1696,7 +1720,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Update a location
             tags:
                 - locations
@@ -1767,7 +1791,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: List location ancestors
             tags:
                 - locations
@@ -1838,7 +1862,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: List location children
             tags:
                 - locations
@@ -1909,7 +1933,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: List location descendants
             tags:
                 - locations
@@ -1982,7 +2006,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Add a tag to a location
             tags:
                 - locations
@@ -2041,7 +2065,7 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Remove a tag from a location
             tags:
                 - locations
@@ -2152,7 +2176,7 @@ paths:
                             schema:
                                 type: integer
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: List current asset locations
             tags:
                 - reports
@@ -2202,12 +2226,12 @@ paths:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal server error
             security:
-                - APIKey: []
+                - BearerAuth: []
             summary: Get the org associated with the authenticated API key
             tags:
                 - orgs
 security:
-    - APIKey: []
+    - BearerAuth: []
 servers:
     - description: Preview (per-PR deploys). Preview-scoped API keys authenticate here only — they will fail with 401 against Production, and Production keys will fail here.
       url: https://app.preview.trakrf.id

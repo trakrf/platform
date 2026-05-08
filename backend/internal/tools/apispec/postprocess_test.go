@@ -60,12 +60,12 @@ func TestPostprocess_InjectMethodNotAllowed_Idempotent(t *testing.T) {
 	assert.Same(t, first, second, "second pass must not replace the existing response")
 }
 
-func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
+func TestPostprocess_RewritesSessionAuthToHTTPBearer(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
-	// minimal fixture carries only APIKey; synthesize BearerAuth the way
+	// minimal fixture carries only BearerAuth; synthesize SessionAuth the way
 	// swaggo emits it so we can verify the rewrite.
-	doc.Components.SecuritySchemes["BearerAuth"] = &openapi3.SecuritySchemeRef{
+	doc.Components.SecuritySchemes["SessionAuth"] = &openapi3.SecuritySchemeRef{
 		Value: &openapi3.SecurityScheme{
 			Type: "apiKey", In: "header", Name: "Authorization",
 			Description: "Session JWT for internal endpoints.",
@@ -73,8 +73,8 @@ func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
 	}
 	postprocessInternal(doc)
 
-	scheme := doc.Components.SecuritySchemes["BearerAuth"]
-	require.NotNil(t, scheme, "BearerAuth scheme must be present")
+	scheme := doc.Components.SecuritySchemes["SessionAuth"]
+	require.NotNil(t, scheme, "SessionAuth scheme must be present")
 	require.NotNil(t, scheme.Value)
 
 	assert.Equal(t, "http", scheme.Value.Type)
@@ -83,19 +83,19 @@ func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
 	assert.Contains(t, scheme.Value.Description, "Session JWT")
 }
 
-// TestPostprocess_RewritesAPIKeyToHTTPBearer reverses the TRA-480 §3.3
+// TestPostprocess_RewritesBearerAuthToHTTPBearer reverses the TRA-480 §3.3
 // decision per TRA-517 AC1. The token is consumed as a Bearer JWT; declaring
 // the scheme as type=apiKey makes generated SDKs send the raw value in an
 // Authorization header without the "Bearer " prefix, which the platform
 // rejects. type=http/scheme=bearer/bearerFormat=JWT is the correct shape.
-// We accept the cosmetic SDK-naming churn (e.g. setApiKeyAuth → setBearerAuth)
-// in exchange for over-the-wire correctness.
-func TestPostprocess_RewritesAPIKeyToHTTPBearer(t *testing.T) {
+// TRA-616 renamed the public scheme APIKey → BearerAuth so class-emitting
+// codegen tools produce a `Configuration.accessToken`-shaped client.
+func TestPostprocess_RewritesBearerAuthToHTTPBearer(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	postprocessPublic(doc)
 
-	scheme := doc.Components.SecuritySchemes["APIKey"]
+	scheme := doc.Components.SecuritySchemes["BearerAuth"]
 	require.NotNil(t, scheme)
 	require.NotNil(t, scheme.Value)
 	assert.Equal(t, "http", scheme.Value.Type)
@@ -347,18 +347,18 @@ func TestInjectTopLevelSecurity_AddsDefaultWhenAbsent(t *testing.T) {
 	doc := &openapi3.T{}
 	injectTopLevelSecurity(doc)
 	require.Len(t, doc.Security, 1)
-	assert.Equal(t, []string{}, doc.Security[0]["APIKey"])
+	assert.Equal(t, []string{}, doc.Security[0]["BearerAuth"])
 }
 
 func TestInjectTopLevelSecurity_PreservesExisting(t *testing.T) {
 	doc := &openapi3.T{
 		Security: openapi3.SecurityRequirements{
-			openapi3.SecurityRequirement{"BearerAuth": []string{"read"}},
+			openapi3.SecurityRequirement{"SessionAuth": []string{"read"}},
 		},
 	}
 	injectTopLevelSecurity(doc)
 	require.Len(t, doc.Security, 1)
-	assert.Equal(t, []string{"read"}, doc.Security[0]["BearerAuth"])
+	assert.Equal(t, []string{"read"}, doc.Security[0]["SessionAuth"])
 }
 
 func TestMarkRequiredFields_AddsRequiredBlock(t *testing.T) {
@@ -526,7 +526,7 @@ func docWithSchemas(schemas openapi3.Schemas) *openapi3.T {
 		Components: &openapi3.Components{
 			Schemas: schemas,
 			SecuritySchemes: openapi3.SecuritySchemes{
-				"APIKey": &openapi3.SecuritySchemeRef{Value: &openapi3.SecurityScheme{
+				"BearerAuth": &openapi3.SecuritySchemeRef{Value: &openapi3.SecurityScheme{
 					Type: "apiKey", In: "header", Name: "Authorization",
 				}},
 			},
@@ -540,10 +540,10 @@ func stringProp(format string) *openapi3.SchemaRef {
 	}}
 }
 
-func TestPostprocessPublic_StripsBearerAuth(t *testing.T) {
+func TestPostprocessPublic_StripsSessionAuth(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
-	doc.Components.SecuritySchemes["BearerAuth"] = &openapi3.SecuritySchemeRef{
+	doc.Components.SecuritySchemes["SessionAuth"] = &openapi3.SecuritySchemeRef{
 		Value: &openapi3.SecurityScheme{
 			Type:        "apiKey",
 			In:          "header",
@@ -554,16 +554,16 @@ func TestPostprocessPublic_StripsBearerAuth(t *testing.T) {
 
 	require.NoError(t, postprocessPublic(doc))
 
+	_, hasSession := doc.Components.SecuritySchemes["SessionAuth"]
+	assert.False(t, hasSession, "SessionAuth must be stripped from public components")
 	_, hasBearer := doc.Components.SecuritySchemes["BearerAuth"]
-	assert.False(t, hasBearer, "BearerAuth must be stripped from public components")
-	_, hasAPIKey := doc.Components.SecuritySchemes["APIKey"]
-	assert.True(t, hasAPIKey, "APIKey must remain in public components")
+	assert.True(t, hasBearer, "BearerAuth must remain in public components")
 }
 
-func TestPostprocessInternal_KeepsBearerAuth(t *testing.T) {
+func TestPostprocessInternal_KeepsSessionAuth(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
-	doc.Components.SecuritySchemes["BearerAuth"] = &openapi3.SecuritySchemeRef{
+	doc.Components.SecuritySchemes["SessionAuth"] = &openapi3.SecuritySchemeRef{
 		Value: &openapi3.SecurityScheme{
 			Type:        "apiKey",
 			In:          "header",
@@ -574,8 +574,8 @@ func TestPostprocessInternal_KeepsBearerAuth(t *testing.T) {
 
 	require.NoError(t, postprocessInternal(doc))
 
-	scheme, ok := doc.Components.SecuritySchemes["BearerAuth"]
-	require.True(t, ok, "BearerAuth must remain in internal components")
+	scheme, ok := doc.Components.SecuritySchemes["SessionAuth"]
+	require.True(t, ok, "SessionAuth must remain in internal components")
 	require.NotNil(t, scheme.Value)
 	assert.Equal(t, "http", scheme.Value.Type)
 	assert.Equal(t, "bearer", scheme.Value.Scheme)
@@ -655,7 +655,7 @@ func TestNormalizeArrayQueryParams(t *testing.T) {
 // TestPostprocess_StripsBearerScopeArrays_InjectsDescription locks in
 // TRA-585 S2. OpenAPI 3.0 §4.8.30 forbids non-empty scope arrays on
 // non-oauth2 / non-openIdConnect schemes. Swaggo's
-// `@Security APIKey[assets:read]` syntax produces an invalid spec under
+// `@Security BearerAuth[assets:read]` syntax produces an invalid spec under
 // http-bearer. The pass strips the arrays and prepends a
 // "**Required scope:** `<scope>`" line to the operation description.
 func TestPostprocess_StripsBearerScopeArrays_InjectsDescription(t *testing.T) {
@@ -665,13 +665,13 @@ func TestPostprocess_StripsBearerScopeArrays_InjectsDescription(t *testing.T) {
 	require.NotNil(t, op)
 	op.Description = "Paginated list of assets."
 	op.Security = openapi3.NewSecurityRequirements().With(
-		openapi3.SecurityRequirement{"APIKey": []string{"assets:read"}},
+		openapi3.SecurityRequirement{"BearerAuth": []string{"assets:read"}},
 	)
 
 	require.NoError(t, postprocessPublic(doc))
 
 	require.Len(t, *op.Security, 1)
-	assert.Equal(t, []string{}, (*op.Security)[0]["APIKey"],
+	assert.Equal(t, []string{}, (*op.Security)[0]["BearerAuth"],
 		"scope array must be empty after the pass — non-empty arrays are invalid for http-bearer")
 
 	assert.True(t, strings.HasPrefix(op.Description, "**Required scope:** `assets:read`"),
@@ -688,7 +688,7 @@ func TestPostprocess_StripsBearerScopeArrays_Idempotent(t *testing.T) {
 	op := doc.Paths.Find("/assets").Get
 	op.Description = "Paginated list of assets."
 	op.Security = openapi3.NewSecurityRequirements().With(
-		openapi3.SecurityRequirement{"APIKey": []string{"assets:read"}},
+		openapi3.SecurityRequirement{"BearerAuth": []string{"assets:read"}},
 	)
 
 	require.NoError(t, postprocessPublic(doc))
@@ -706,7 +706,7 @@ func TestPostprocess_StripsBearerScopeArrays_NoOpWithoutScopes(t *testing.T) {
 	op := doc.Paths.Find("/assets").Get
 	op.Description = "Paginated list of assets."
 	op.Security = openapi3.NewSecurityRequirements().With(
-		openapi3.SecurityRequirement{"APIKey": []string{}},
+		openapi3.SecurityRequirement{"BearerAuth": []string{}},
 	)
 
 	require.NoError(t, postprocessPublic(doc))

@@ -390,10 +390,19 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
-	if req.Description != nil {
+	// description: explicit null on PUT clears to empty string. The DB column
+	// is nullable but ToPublicAssetView projects "" → null on read, so storing
+	// "" preserves the null-on-read contract without forcing every scan call
+	// to handle SQL NULL into a Go string. (TRA-614 / BB19 §S1.)
+	if req.ClearDescription {
+		fields["description"] = ""
+	} else if req.Description != nil {
 		fields["description"] = *req.Description
 	}
-	if req.LocationID != nil {
+	// current_location_id is *int → SQL NULL is the natural representation.
+	if req.ClearLocationID {
+		fields["current_location_id"] = nil
+	} else if req.LocationID != nil {
 		fields["current_location_id"] = *req.LocationID
 	}
 	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {

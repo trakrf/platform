@@ -33,7 +33,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // @Failure 400 {object} modelerrors.ErrorResponse "Missing required parameters"
 // @Failure 404 {object} modelerrors.ErrorResponse "No entity found with this tag"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/lookup/tag [get]
 func (h *Handler) LookupByTag(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
@@ -94,7 +94,7 @@ type BatchLookupRequest struct {
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid request body or missing required fields"
 // @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/lookup/tags [post]
 func (h *Handler) LookupByTags(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())

@@ -258,7 +258,7 @@ func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} errors.ErrorResponse "Already a member"
 // @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} errors.ErrorResponse "Internal server error"
-// @Security BearerAuth
+// @Security SessionAuth
 // @Router /api/v1/auth/accept-invite [post]
 func (handler *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
