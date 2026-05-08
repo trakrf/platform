@@ -33,13 +33,16 @@ func TestToPublicCurrentLocationItem_LiveAsset(t *testing.T) {
 	assert.Equal(t, "BAY-3", *got.LocationExternalKey)
 	assert.Nil(t, got.AssetDeletedAt)
 
-	// Live row must omit asset_deleted_at from JSON entirely.
+	// TRA-610 / BB18 §1.10: live row must always emit asset_deleted_at
+	// as null (not omit). Generated clients see a stable shape across
+	// live and deleted assets.
 	data, err := json.Marshal(got)
 	require.NoError(t, err)
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(data, &parsed))
-	_, present := parsed["asset_deleted_at"]
-	assert.False(t, present, "asset_deleted_at must be omitted when nil")
+	raw, present := parsed["asset_deleted_at"]
+	assert.True(t, present, "asset_deleted_at must always be present (TRA-610)")
+	assert.Nil(t, raw, "asset_deleted_at must be JSON null for live assets (TRA-610)")
 }
 
 // AC11: open dwell period (most recent scan, no later scan) must serialize
@@ -90,8 +93,10 @@ func TestToPublicAssetHistoryItem_ClosedPeriodEmitsDuration(t *testing.T) {
 	assert.EqualValues(t, 3600, parsed["duration_seconds"])
 }
 
-// TRA-547 §2.3: PublicCurrentLocationItem.asset_deleted_at is omitted for live assets.
-func TestPublicCurrentLocationItem_AssetDeletedAtAbsentWhenNil(t *testing.T) {
+// TRA-610 / BB18 §1.10: PublicCurrentLocationItem.asset_deleted_at is
+// always emitted (null for live assets). Supersedes the TRA-547 §2.3
+// omit-when-nil behavior.
+func TestPublicCurrentLocationItem_AssetDeletedAtAlwaysEmittedNullWhenNil(t *testing.T) {
 	id := 1
 	key := "A1"
 	locID := 9
@@ -106,8 +111,9 @@ func TestPublicCurrentLocationItem_AssetDeletedAtAbsentWhenNil(t *testing.T) {
 	require.NoError(t, err)
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(data, &parsed))
-	_, present := parsed["asset_deleted_at"]
-	assert.False(t, present, "asset_deleted_at must be omitted when nil per TRA-547 §2.3")
+	raw, present := parsed["asset_deleted_at"]
+	assert.True(t, present, "asset_deleted_at must always be present (TRA-610)")
+	assert.Nil(t, raw, "asset_deleted_at must be JSON null for live assets (TRA-610)")
 }
 
 func TestToPublicCurrentLocationItem_DeletedAsset(t *testing.T) {

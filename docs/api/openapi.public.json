@@ -146,6 +146,7 @@
             "type": "string"
           },
           "description": {
+            "nullable": true,
             "type": "string"
           },
           "external_key": {
@@ -191,6 +192,7 @@
           },
           "valid_to": {
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           }
         },
@@ -198,11 +200,13 @@
           "id",
           "external_key",
           "name",
+          "description",
           "location_id",
           "location_external_key",
           "metadata",
           "is_active",
           "valid_from",
+          "valid_to",
           "created_at",
           "updated_at",
           "tags"
@@ -562,6 +566,7 @@
             "type": "integer"
           },
           "description": {
+            "nullable": true,
             "type": "string"
           },
           "external_key": {
@@ -598,6 +603,7 @@
           },
           "updated_at": {
             "format": "date-time",
+            "nullable": true,
             "readOnly": true,
             "type": "string"
           },
@@ -607,6 +613,7 @@
           },
           "valid_to": {
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           }
         },
@@ -614,13 +621,16 @@
           "id",
           "external_key",
           "name",
+          "description",
           "parent_id",
           "parent_external_key",
           "tree_path",
           "depth",
           "is_active",
           "valid_from",
+          "valid_to",
           "created_at",
+          "updated_at",
           "tags"
         ],
         "type": "object"
@@ -800,6 +810,7 @@
         "properties": {
           "asset_deleted_at": {
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           },
           "asset_external_key": {
@@ -828,7 +839,8 @@
           "asset_external_key",
           "location_id",
           "location_external_key",
-          "last_seen"
+          "last_seen",
+          "asset_deleted_at"
         ],
         "type": "object"
       },

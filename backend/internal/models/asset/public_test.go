@@ -3,6 +3,7 @@ package asset
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,12 +58,14 @@ func TestToPublicAssetView_PopulatedMetadataPreserved(t *testing.T) {
 	assert.Equal(t, map[string]any{"color": "red"}, parsed["metadata"])
 }
 
-// TRA-547 §2.2: PublicAssetView.description is omitted when empty.
-func TestPublicAssetView_DescriptionAbsentWhenEmpty(t *testing.T) {
-	v := PublicAssetView{
-		ExternalKey: "A1",
-		Name:        "n",
-	}
+// TRA-610 / BB18 §1.8: description is always emitted (null when unset).
+// Supersedes the TRA-547 §2.2 omit-when-empty test.
+func TestPublicAssetView_DescriptionAlwaysEmittedNullWhenEmpty(t *testing.T) {
+	v := ToPublicAssetView(AssetWithLocation{
+		AssetView: AssetView{
+			Asset: Asset{ExternalKey: "A1", Name: "n"},
+		},
+	})
 
 	data, err := json.Marshal(v)
 	require.NoError(t, err)
@@ -70,16 +73,17 @@ func TestPublicAssetView_DescriptionAbsentWhenEmpty(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(data, &parsed))
 
-	_, present := parsed["description"]
-	assert.False(t, present, "description must be omitted when empty per TRA-547 §2.2")
+	desc, present := parsed["description"]
+	assert.True(t, present, "description must always be present (TRA-610)")
+	assert.Nil(t, desc, "description must be JSON null when empty (TRA-610)")
 }
 
-// TRA-547 §2.2: PublicAssetView.valid_to is omitted when nil.
-func TestPublicAssetView_ValidToAbsentWhenNil(t *testing.T) {
-	v := PublicAssetView{
-		ExternalKey: "A1",
-		Name:        "n",
-	}
+func TestPublicAssetView_DescriptionEmittedWhenPopulated(t *testing.T) {
+	v := ToPublicAssetView(AssetWithLocation{
+		AssetView: AssetView{
+			Asset: Asset{ExternalKey: "A1", Name: "n", Description: "the description"},
+		},
+	})
 
 	data, err := json.Marshal(v)
 	require.NoError(t, err)
@@ -87,6 +91,34 @@ func TestPublicAssetView_ValidToAbsentWhenNil(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(data, &parsed))
 
-	_, present := parsed["valid_to"]
-	assert.False(t, present, "valid_to must be omitted when nil per TRA-547 §2.2")
+	assert.Equal(t, "the description", parsed["description"])
+}
+
+// TRA-610 / BB18 §1.8: valid_to is always emitted (null when nil).
+// Supersedes the TRA-547 §2.2 omit-when-nil test.
+func TestPublicAssetView_ValidToAlwaysEmittedNullWhenNil(t *testing.T) {
+	v := PublicAssetView{ExternalKey: "A1", Name: "n"}
+
+	data, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	vt, present := parsed["valid_to"]
+	assert.True(t, present, "valid_to must always be present (TRA-610)")
+	assert.Nil(t, vt, "valid_to must be JSON null when nil (TRA-610)")
+}
+
+func TestPublicAssetView_ValidToEmittedWhenPopulated(t *testing.T) {
+	when := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	v := PublicAssetView{ExternalKey: "A1", Name: "n", ValidTo: &when}
+
+	data, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	assert.Equal(t, "2026-01-01T00:00:00Z", parsed["valid_to"])
 }

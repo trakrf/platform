@@ -123,3 +123,83 @@ func TestDecodeJSONStrict_AcceptsKnownFieldsOnly(t *testing.T) {
 		t.Fatalf("Name = %q, want %q", got.Name, "x")
 	}
 }
+
+// TRA-608 / BB18 §1.7: GET → PUT round-trip must succeed, with read-only
+// fields silently stripped from the request body before strict decoding.
+func TestDecodeJSONStrictWithNullsTolerant_DropsReadOnlyFields(t *testing.T) {
+	type target struct {
+		Name *string `json:"name"`
+	}
+	var got target
+	body := `{"id":42,"name":"x","created_at":"2026-01-01T00:00:00Z","tags":[{"value":"abc"}]}`
+	r := httptest.NewRequest("PUT", "/", bytes.NewBufferString(body))
+
+	nulls, err := httputil.DecodeJSONStrictWithNullsTolerant(r, &got, []string{"id", "created_at", "updated_at", "tags"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Name == nil || *got.Name != "x" {
+		t.Fatalf("Name = %v, want \"x\"", got.Name)
+	}
+	if _, ok := nulls["id"]; ok {
+		t.Fatalf("id should not appear in explicit-nulls (it was stripped)")
+	}
+}
+
+// Strict-unknown-field still applies for fields that are not in the drop set.
+func TestDecodeJSONStrictWithNullsTolerant_RejectsTypoFields(t *testing.T) {
+	type target struct {
+		Name *string `json:"name"`
+	}
+	var got target
+	body := `{"id":42,"nme":"x"}` // "nme" is a typo, not in drop set
+	r := httptest.NewRequest("PUT", "/", bytes.NewBufferString(body))
+
+	_, err := httputil.DecodeJSONStrictWithNullsTolerant(r, &got, []string{"id"})
+	if err == nil {
+		t.Fatalf("expected strict decode to reject typo'd field, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("err = %v, want unknown-field error", err)
+	}
+}
+
+// Explicit null on a kept field is still reported via the nulls map; explicit
+// null on a stripped field is suppressed (we already removed the key).
+func TestDecodeJSONStrictWithNullsTolerant_NullSemanticsOnKeptVsStripped(t *testing.T) {
+	type target struct {
+		ValidTo *string `json:"valid_to"`
+		Name    *string `json:"name"`
+	}
+	var got target
+	body := `{"valid_to":null,"name":null,"updated_at":null}`
+	r := httptest.NewRequest("PUT", "/", bytes.NewBufferString(body))
+
+	nulls, err := httputil.DecodeJSONStrictWithNullsTolerant(r, &got, []string{"updated_at"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := nulls["valid_to"]; !ok {
+		t.Fatalf("valid_to null should be reported (kept field)")
+	}
+	if _, ok := nulls["name"]; !ok {
+		t.Fatalf("name null should be reported (kept field)")
+	}
+	if _, ok := nulls["updated_at"]; ok {
+		t.Fatalf("updated_at null should be suppressed (stripped field)")
+	}
+}
+
+// Empty drop list reduces to plain DecodeJSONStrictWithNulls behavior.
+func TestDecodeJSONStrictWithNullsTolerant_EmptyDropListEquivalent(t *testing.T) {
+	type target struct {
+		Name *string `json:"name"`
+	}
+	var got target
+	r := httptest.NewRequest("PUT", "/", bytes.NewBufferString(`{"id":1}`))
+
+	_, err := httputil.DecodeJSONStrictWithNullsTolerant(r, &got, nil)
+	if err == nil {
+		t.Fatalf("expected unknown-field error with empty drop list, got nil")
+	}
+}

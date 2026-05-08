@@ -53,6 +53,20 @@ func DecodeJSONStrict(r *http.Request, dst any) error {
 // A non-object body (array, string, number) yields the usual strict-decode
 // failure and an empty null set.
 func DecodeJSONStrictWithNulls(r *http.Request, dst any) (map[string]struct{}, error) {
+	return DecodeJSONStrictWithNullsTolerant(r, dst, nil)
+}
+
+// DecodeJSONStrictWithNullsTolerant is DecodeJSONStrictWithNulls that
+// additionally drops the named top-level keys from the body before strict
+// decoding. Use on PUT / PATCH endpoints to allow a verbatim GET → PUT
+// round-trip: read-only response fields (id, created_at, updated_at, tags,
+// …) are silently ignored, while typo'd or otherwise unknown fields still
+// produce a 400 (TRA-608 / BB18 §1.7).
+//
+// The drop set should mirror the readOnly fields on the corresponding
+// PublicXxxView in the OpenAPI spec; the asset and location packages export
+// PublicReadOnlyFields for this purpose.
+func DecodeJSONStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map[string]struct{}, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, &JSONDecodeError{Cause: err}
@@ -60,10 +74,28 @@ func DecodeJSONStrictWithNulls(r *http.Request, dst any) (map[string]struct{}, e
 
 	explicitNulls := map[string]struct{}{}
 	var raw map[string]json.RawMessage
-	if jsonErr := json.Unmarshal(body, &raw); jsonErr == nil {
+	objectBody := json.Unmarshal(body, &raw) == nil
+
+	if objectBody {
 		for k, v := range raw {
 			if bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
 				explicitNulls[k] = struct{}{}
+			}
+		}
+		if len(drop) > 0 {
+			mutated := false
+			for _, k := range drop {
+				if _, ok := raw[k]; ok {
+					delete(raw, k)
+					delete(explicitNulls, k)
+					mutated = true
+				}
+			}
+			if mutated {
+				body, err = json.Marshal(raw)
+				if err != nil {
+					return nil, &JSONDecodeError{Cause: err}
+				}
 			}
 		}
 	}
