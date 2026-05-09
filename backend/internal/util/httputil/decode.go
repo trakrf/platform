@@ -3,6 +3,7 @@ package httputil
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -129,7 +130,26 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 				}})
 			return
 		}
+
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) {
+			detail := typeMismatchDetail(typeErr)
+			WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
+				detail, requestID)
+			return
+		}
 	}
 	WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
 		"Request body is not valid JSON", requestID)
+}
+
+// typeMismatchDetail renders a stable detail string for a json type-mismatch
+// failure: the body parsed as JSON, but a value did not fit its destination
+// Go field. Returns a generic message when no field name is available
+// (e.g., the entire body was a JSON array where an object was expected).
+func typeMismatchDetail(e *json.UnmarshalTypeError) string {
+	if e.Field != "" {
+		return fmt.Sprintf("Body field %q could not be decoded as the expected type", e.Field)
+	}
+	return "Request body could not be decoded as the expected type"
 }
