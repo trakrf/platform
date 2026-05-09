@@ -82,7 +82,7 @@ func (handler *Handler) resolveLocation(
 }
 
 // @Summary      Create an asset
-// @Description  Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).
+// @Description  Create a new asset record, optionally with one or more tags (RFID, BLE, barcode).
 // @Description
 // @Description  The `external_key` field is optional. Provide a value from your system of record
 // @Description  (ERP, WMS, asset management) for natural-key joins, or omit it to receive a

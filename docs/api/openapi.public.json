@@ -1254,7 +1254,7 @@
         ]
       },
       "post": {
-        "description": "**Required scope:** `assets:write`\n\nCreate a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
+        "description": "**Required scope:** `assets:write`\n\nCreate a new asset record, optionally with one or more tags (RFID, BLE, barcode).\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
         "operationId": "assets.create",
         "requestBody": {
           "content": {
