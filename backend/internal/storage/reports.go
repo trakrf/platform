@@ -214,7 +214,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 				l.external_key AS location_external_key,
 				LEAD(s.timestamp) OVER (ORDER BY s.timestamp) AS next_timestamp
 			FROM trakrf.asset_scans s
-			LEFT JOIN trakrf.locations l ON l.id = s.location_id AND l.org_id = $2 AND l.deleted_at IS NULL
+			LEFT JOIN trakrf.locations l ON l.id = s.location_id AND l.org_id = $2 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
 			WHERE s.asset_id = $1
 			  AND s.org_id = $2
 			  AND ($3::timestamptz IS NULL OR s.timestamp >= $3)
