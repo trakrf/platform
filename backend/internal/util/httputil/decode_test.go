@@ -93,6 +93,76 @@ func TestRespondDecodeError_UnknownField_EmitsValidationError(t *testing.T) {
 	}
 }
 
+// TRA-634: a body that parses as JSON but mismatches a Go field type must
+// produce a wording that describes the type mismatch with the offending
+// field name — not "Request body is not valid JSON", which is misleading
+// because the body IS valid JSON.
+func TestRespondDecodeError_TypeMismatch_NamesFieldAndAvoidsInvalidJSONWording(t *testing.T) {
+	type target struct {
+		Count int `json:"count"`
+	}
+	var dst target
+	decErr := json.Unmarshal([]byte(`{"count":"not a number"}`), &dst)
+	if decErr == nil {
+		t.Fatalf("expected json.Unmarshal to return an UnmarshalTypeError, got nil")
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+	if resp.Error.Type != string(apierrors.ErrBadRequest) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrBadRequest)
+	}
+	if resp.Error.Detail == "Request body is not valid JSON" {
+		t.Fatalf("detail = %q, must not claim the body is invalid JSON — it is valid, just wrong type", resp.Error.Detail)
+	}
+	if !strings.Contains(resp.Error.Detail, "count") {
+		t.Fatalf("detail = %q, should name the offending field 'count'", resp.Error.Detail)
+	}
+	if !strings.Contains(resp.Error.Detail, "expected type") {
+		t.Fatalf("detail = %q, should describe the type-mismatch nature of the failure", resp.Error.Detail)
+	}
+}
+
+// Top-level type mismatch (no field name available) must still avoid the
+// misleading "not valid JSON" wording.
+func TestRespondDecodeError_TypeMismatch_TopLevel_GenericWording(t *testing.T) {
+	type target struct {
+		Name string `json:"name"`
+	}
+	var dst target
+	decErr := json.Unmarshal([]byte(`[1,2,3]`), &dst)
+	if decErr == nil {
+		t.Fatalf("expected json.Unmarshal to return an UnmarshalTypeError, got nil")
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+	if resp.Error.Detail == "Request body is not valid JSON" {
+		t.Fatalf("detail = %q, must not claim the body is invalid JSON", resp.Error.Detail)
+	}
+	if !strings.Contains(resp.Error.Detail, "expected type") {
+		t.Fatalf("detail = %q, should describe a type-decoding failure", resp.Error.Detail)
+	}
+}
+
 func TestDecodeJSONStrict_RejectsUnknownField(t *testing.T) {
 	type target struct {
 		Name string `json:"name"`
