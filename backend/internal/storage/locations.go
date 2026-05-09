@@ -888,7 +888,11 @@ func (s *Storage) CountLocationsFiltered(
 }
 
 func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
-	clauses := []string{"l.org_id = $1", "l.deleted_at IS NULL"}
+	clauses := []string{
+		"l.org_id = $1",
+		"l.deleted_at IS NULL",
+		temporallyEffective("l"),
+	}
 	args := []any{orgID}
 
 	if len(f.ParentIDs) > 0 {
@@ -913,8 +917,8 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 		clauses = append(clauses, fmt.Sprintf(
 			"(l.name ILIKE $%d OR l.external_key ILIKE $%d OR l.description ILIKE $%d "+
 				"OR EXISTS (SELECT 1 FROM trakrf.tags i "+
-				"WHERE i.location_id = l.id AND i.is_active = true "+
-				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
+				"WHERE i.location_id = l.id AND i.deleted_at IS NULL "+
+				"AND "+temporallyEffective("i")+" AND i.value ILIKE $%d))",
 			idx, idx, idx, idx))
 	}
 	return strings.Join(clauses, " AND "), args
