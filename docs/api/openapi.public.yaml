@@ -1,4 +1,25 @@
 components:
+    headers:
+        RetryAfter:
+            description: Seconds to wait before retrying.
+            schema:
+                type: integer
+        XRateLimitLimit:
+            description: Steady-state requests/min for this API key.
+            schema:
+                type: integer
+        XRateLimitRemaining:
+            description: Requests remaining before throttling; bounded by X-RateLimit-Limit.
+            schema:
+                type: integer
+        XRateLimitReset:
+            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit.
+            schema:
+                type: integer
+        XRequestId:
+            description: Server-assigned request correlation identifier; mirrored as error.request_id in error envelopes and echoed in server logs. Quote this when filing support tickets.
+            schema:
+                type: string
     responses:
         MethodNotAllowed:
             content:
@@ -701,7 +722,16 @@ info:
     contact:
         email: support@trakrf.id
         name: TrakRF Support
-    description: TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.
+    description: |-
+        TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.
+
+        ## HTTP method coverage
+
+        **HEAD** — supported on every endpoint that declares `get`. The server transparently strips the response body and returns the same status and headers as the matching `GET`. HEAD operations are not enumerated per path; assume HEAD wherever GET is declared.
+
+        **OPTIONS** — reserved for CORS preflight. Returns `204 No Content` with `Access-Control-*` headers when a browser origin is allowed; otherwise `204` with no CORS headers. OPTIONS is not part of the resource API surface and is not enumerated per path.
+
+        To probe which methods a path supports, send any request and inspect the `Allow` header on the resulting `405 Method Not Allowed` response (RFC 7231 §6.5.5).
     license:
         name: Business Source License 1.1
         url: https://github.com/trakrf/platform/blob/main/LICENSE
@@ -798,35 +828,58 @@ paths:
                     description: OK
                     headers:
                         X-RateLimit-Limit:
-                            description: Steady-state requests/min for this API key
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
-                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitRemaining'
                         X-RateLimit-Reset:
-                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Bad Request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -835,15 +888,30 @@ paths:
                     description: rate_limited
                     headers:
                         Retry-After:
-                            description: Seconds to wait before retrying
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: List assets
@@ -882,48 +950,121 @@ paths:
                             description: Canonical URL of the created resource
                             schema:
                                 type: string
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "415":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unsupported_media_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Create an asset
@@ -948,36 +1089,92 @@ paths:
             responses:
                 "204":
                     description: deleted
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Delete an asset
@@ -1009,41 +1206,73 @@ paths:
                     description: OK
                     headers:
                         X-RateLimit-Limit:
-                            description: Steady-state requests/min for this API key
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
-                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitRemaining'
                         X-RateLimit-Reset:
-                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Bad Request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Not Found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -1052,9 +1281,15 @@ paths:
                     description: rate_limited
                     headers:
                         Retry-After:
-                            description: Seconds to wait before retrying
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Get asset by canonical id
@@ -1090,54 +1325,137 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/asset.UpdateAssetResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "415":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unsupported_media_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Update an asset
@@ -1209,41 +1527,73 @@ paths:
                     description: OK
                     headers:
                         X-RateLimit-Limit:
-                            description: Steady-state requests/min for this API key
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
-                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitRemaining'
                         X-RateLimit-Reset:
-                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Bad Request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Not Found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -1252,15 +1602,30 @@ paths:
                     description: rate_limited
                     headers:
                         Retry-After:
-                            description: Seconds to wait before retrying
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal Server Error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Asset movement history
@@ -1298,48 +1663,137 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/asset.AddTagResponse'
                     description: tag attached
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: conflict
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "415":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unsupported_media_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Add a tag to an asset
@@ -1373,36 +1827,92 @@ paths:
             responses:
                 "204":
                     description: deleted
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Remove a tag from an asset
@@ -1495,30 +2005,77 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/location.ListLocationsResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: List locations
@@ -1551,48 +2108,121 @@ paths:
                             description: Canonical URL of the created resource
                             schema:
                                 type: string
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "415":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unsupported_media_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Create a location
@@ -1617,42 +2247,107 @@ paths:
             responses:
                 "204":
                     description: deleted
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Delete location
@@ -1682,36 +2377,92 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/location.GetLocationResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Bad Request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Not Found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Too Many Requests
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Get location by ID
@@ -1747,54 +2498,137 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/location.UpdateLocationResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: conflict
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "415":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unsupported_media_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Update a location
@@ -1835,42 +2669,107 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/location.ListAncestorsResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: List location ancestors
@@ -1911,42 +2810,107 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/location.ListChildrenResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: List location children
@@ -1987,42 +2951,107 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/location.ListDescendantsResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: List location descendants
@@ -2056,48 +3085,137 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/location.AddTagResponse'
                     description: tag attached
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "404":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: conflict
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "415":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unsupported_media_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Add a tag to a location
@@ -2131,36 +3249,92 @@ paths:
             responses:
                 "204":
                     description: deleted
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: bad_request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: internal_error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Remove a tag from a location
@@ -2245,35 +3419,58 @@ paths:
                     description: OK
                     headers:
                         X-RateLimit-Limit:
-                            description: Steady-state requests/min for this API key
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
-                            description: Requests remaining before throttling; bounded by X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitRemaining'
                         X-RateLimit-Reset:
-                            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "400":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Bad Request
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "403":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Forbidden
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -2282,9 +3479,15 @@ paths:
                     description: rate_limited
                     headers:
                         Retry-After:
-                            description: Seconds to wait before retrying
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: List current asset locations
@@ -2301,12 +3504,30 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/org.GetOrgMeResponse'
                     description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "401":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Unauthorized
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "405":
                     content:
                         application/json:
@@ -2318,6 +3539,14 @@ paths:
                             description: Allowed methods
                             schema:
                                 type: string
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -2326,15 +3555,30 @@ paths:
                     description: rate_limited
                     headers:
                         Retry-After:
-                            description: Seconds to wait before retrying
-                            schema:
-                                type: integer
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "500":
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: Internal server error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
             security:
                 - BearerAuth: []
             summary: Get the org associated with the authenticated API key

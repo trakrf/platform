@@ -1005,6 +1005,118 @@ func TestConsolidateSchemaNamespaces_HandlesEmptyComponents(t *testing.T) {
 	assert.NotPanics(t, func() { consolidateSchemaNamespaces(doc2) })
 }
 
+// TestInjectGlobalHeaderRefs covers TRA-633 B3: rate-limit and
+// request-correlation headers must live in components.headers, and every
+// operation response must reference them. Inline header definitions on
+// individual responses are flattened to the canonical $ref.
+func TestInjectGlobalHeaderRefs(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "T", Version: "v1"},
+		Paths:   &openapi3.Paths{},
+	}
+	desc200 := "OK"
+	desc429 := "rate_limited"
+	// 200 carries a stale inline X-RateLimit-Limit; the pass must replace
+	// it with a $ref to the components.headers entry.
+	resp200 := &openapi3.ResponseRef{Value: &openapi3.Response{
+		Description: &desc200,
+		Headers: openapi3.Headers{
+			"X-RateLimit-Limit": &openapi3.HeaderRef{Value: &openapi3.Header{Parameter: openapi3.Parameter{
+				Description: "stale inline copy",
+				Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
+			}}},
+		},
+	}}
+	resp429 := &openapi3.ResponseRef{Value: &openapi3.Response{Description: &desc429}}
+
+	responses := openapi3.NewResponses()
+	responses.Set("200", resp200)
+	responses.Set("429", resp429)
+	doc.Paths.Set("/widgets", &openapi3.PathItem{
+		Get: &openapi3.Operation{Responses: responses},
+	})
+
+	injectGlobalHeaderRefs(doc)
+
+	require.NotNil(t, doc.Components)
+	require.NotNil(t, doc.Components.Headers)
+	for _, name := range []string{"XRateLimitLimit", "XRateLimitRemaining", "XRateLimitReset", "RetryAfter", "XRequestId"} {
+		ref := doc.Components.Headers[name]
+		require.NotNil(t, ref, "components.headers.%s must be defined", name)
+		require.NotNil(t, ref.Value)
+		require.NotNil(t, ref.Value.Schema)
+	}
+
+	for _, code := range []string{"200", "429"} {
+		resp := doc.Paths.Find("/widgets").Get.Responses.Value(code)
+		require.NotNil(t, resp, "response %s must be present", code)
+		for _, name := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "X-Request-Id"} {
+			h := resp.Value.Headers[name]
+			require.NotNil(t, h, "response %s missing %s", code, name)
+			assert.Equal(t, "#/components/headers/"+canonicalizeHeaderName(name), h.Ref,
+				"response %s header %s must be a $ref", code, name)
+			assert.Nil(t, h.Value, "$ref headers must not carry inline values (response %s, %s)", code, name)
+		}
+	}
+	retryAfter := doc.Paths.Find("/widgets").Get.Responses.Value("429").Value.Headers["Retry-After"]
+	require.NotNil(t, retryAfter, "429 must declare Retry-After")
+	assert.Equal(t, "#/components/headers/RetryAfter", retryAfter.Ref)
+	assert.Nil(t, doc.Paths.Find("/widgets").Get.Responses.Value("200").Value.Headers["Retry-After"],
+		"non-429 responses must not declare Retry-After")
+}
+
+// canonicalizeHeaderName maps an HTTP header name to its components.headers
+// component name. Used by the test only.
+func canonicalizeHeaderName(h string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(h, "-", ""), "_", "")
+}
+
+// TestInjectGlobalHeaderRefs_Idempotent verifies a second pass does not
+// duplicate or corrupt the components or response wiring.
+func TestInjectGlobalHeaderRefs_Idempotent(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "T", Version: "v1"},
+		Paths:   &openapi3.Paths{},
+	}
+	desc := "OK"
+	responses := openapi3.NewResponses()
+	responses.Set("200", &openapi3.ResponseRef{Value: &openapi3.Response{Description: &desc}})
+	doc.Paths.Set("/x", &openapi3.PathItem{Get: &openapi3.Operation{Responses: responses}})
+
+	injectGlobalHeaderRefs(doc)
+	first := doc.Components.Headers["XRequestId"]
+	require.NotNil(t, first)
+	injectGlobalHeaderRefs(doc)
+	assert.Same(t, first, doc.Components.Headers["XRequestId"], "components.headers entry must be reused, not replaced")
+
+	headers := doc.Paths.Find("/x").Get.Responses.Value("200").Value.Headers
+	assert.Len(t, headers, 4, "200 must declare exactly the 4 global headers (no Retry-After)")
+}
+
+// TestAppendMethodPolicyDescription covers TRA-633 B1/B4: HEAD and OPTIONS
+// behavior is documented once at the spec level, not declared per path.
+func TestAppendMethodPolicyDescription(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "T", Version: "v1", Description: "Existing prose."},
+	}
+	appendMethodPolicyDescription(doc)
+
+	assert.Contains(t, doc.Info.Description, "Existing prose.", "existing description must be preserved")
+	assert.Contains(t, doc.Info.Description, "## HTTP method coverage")
+	assert.Contains(t, doc.Info.Description, "HEAD", "HEAD policy must be documented")
+	assert.Contains(t, doc.Info.Description, "OPTIONS", "OPTIONS policy must be documented")
+	assert.Contains(t, doc.Info.Description, "Allow",
+		"description must point readers at the Allow header for method discovery")
+
+	// Idempotency: a second call must not duplicate the section.
+	before := doc.Info.Description
+	appendMethodPolicyDescription(doc)
+	assert.Equal(t, before, doc.Info.Description, "second call must be a no-op")
+}
+
 // withEmptyRequiredFields clears the package-level requiredFields and
 // readOnlyFields maps for the duration of a test and restores them on
 // cleanup. Tests that exercise postprocessPublic / postprocessInternal
