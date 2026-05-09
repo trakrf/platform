@@ -35,7 +35,7 @@ const (
 // Params is omitted entirely when no structured data is available.
 type FieldError struct {
 	Field   string         `json:"field"`
-	Code    string         `json:"code"`
+	Code    string         `json:"code" example:"required" enums:"required,invalid_value,too_short,too_long,too_small,too_large" extensions:"x-extensible-enum=true"`
 	Message string         `json:"message"`
 	Params  map[string]any `json:"params,omitempty"`
 }

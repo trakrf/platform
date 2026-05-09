@@ -76,11 +76,22 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 		switch key {
 		case "limit":
 			n, err := strconv.Atoi(values[0])
-			if err != nil || n < 1 {
+			if err != nil {
 				return out, &ListParamError{Fields: []apierrors.FieldError{{
 					Field:   "limit",
 					Code:    "invalid_value",
 					Message: "limit must be a positive integer",
+				}}}
+			}
+			// Bounds violations on limit / offset emit too_small / too_large
+			// to match the path-param validator (TRA-641 / BB21 §2.3). Same
+			// constraint, same code regardless of where the value was carried.
+			if n < 1 {
+				return out, &ListParamError{Fields: []apierrors.FieldError{{
+					Field:   "limit",
+					Code:    "too_small",
+					Message: "limit must be ≥ 1",
+					Params:  map[string]any{"min": float64(1)},
 				}}}
 			}
 			if n > maxListLimit {
@@ -94,11 +105,19 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 			out.Limit = n
 		case "offset":
 			n, err := strconv.Atoi(values[0])
-			if err != nil || n < 0 {
+			if err != nil {
 				return out, &ListParamError{Fields: []apierrors.FieldError{{
 					Field:   "offset",
 					Code:    "invalid_value",
 					Message: "offset must be a non-negative integer",
+				}}}
+			}
+			if n < 0 {
+				return out, &ListParamError{Fields: []apierrors.FieldError{{
+					Field:   "offset",
+					Code:    "too_small",
+					Message: "offset must be ≥ 0",
+					Params:  map[string]any{"min": float64(0)},
 				}}}
 			}
 			out.Offset = n
