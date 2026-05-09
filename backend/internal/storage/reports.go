@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/report"
@@ -47,11 +48,13 @@ func currentLocationsArgs(filter report.CurrentLocationFilter) (locIDsArg, locKe
 func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter report.CurrentLocationFilter) ([]report.CurrentLocationItem, error) {
 	engine := getReportsQueryEngine()
 
+	orderBy := buildCurrentLocationsOrderBy(filter.Sorts)
+
 	var query string
 	if engine == QueryEngineTimescaleLast {
-		query = buildCurrentLocationsQueryTimescale()
+		query = buildCurrentLocationsQueryTimescale(orderBy)
 	} else {
-		query = buildCurrentLocationsQueryDistinctOn()
+		query = buildCurrentLocationsQueryDistinctOn(orderBy)
 	}
 
 	locIDsArg, locKeysArg, qArg := currentLocationsArgs(filter)
@@ -131,7 +134,43 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 	return count, nil
 }
 
-func buildCurrentLocationsQueryDistinctOn() string {
+// buildCurrentLocationsOrderBy resolves the documented sort enum
+// (last_seen, asset_external_key, location_external_key) into the SQL
+// ORDER BY fragment used by both query strategies. Default order — when
+// no sort is supplied — is most-recent-first by last_seen, with a stable
+// tiebreaker on asset id so pagination is deterministic across pages.
+//
+// "no prefix means ASC" per the public API convention (TRA-641 / BB21 §2.6).
+func buildCurrentLocationsOrderBy(sorts []report.CurrentLocationSort) string {
+	if len(sorts) == 0 {
+		return "ls.last_seen DESC, a.id ASC"
+	}
+	out := make([]string, 0, len(sorts))
+	for _, s := range sorts {
+		var col string
+		switch s.Field {
+		case "last_seen":
+			col = "ls.last_seen"
+		case "asset_external_key":
+			col = "a.external_key"
+		case "location_external_key":
+			col = "l.external_key"
+		default:
+			continue
+		}
+		dir := "ASC"
+		if s.Desc {
+			dir = "DESC"
+		}
+		out = append(out, col+" "+dir)
+	}
+	if len(out) == 0 {
+		return "ls.last_seen DESC, a.id ASC"
+	}
+	return strings.Join(out, ", ")
+}
+
+func buildCurrentLocationsQueryDistinctOn(orderBy string) string {
 	return `
 		WITH latest_scans AS (
 			SELECT DISTINCT ON (s.asset_id)
@@ -162,12 +201,12 @@ func buildCurrentLocationsQueryDistinctOn() string {
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
-		ORDER BY a.name
+		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
 	`
 }
 
-func buildCurrentLocationsQueryTimescale() string {
+func buildCurrentLocationsQueryTimescale(orderBy string) string {
 	return `
 		WITH latest_scans AS (
 			SELECT
@@ -198,7 +237,7 @@ func buildCurrentLocationsQueryTimescale() string {
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
-		ORDER BY a.name
+		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
 	`
 }

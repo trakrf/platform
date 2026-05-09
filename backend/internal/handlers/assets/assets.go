@@ -116,7 +116,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request asset.CreateAssetWithTagsRequest
-	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
+	presentKeys, err := httputil.DecodeJSONStrictWithPresence(r, &request)
+	if err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
@@ -150,7 +151,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, r, err, requestID)
+		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys)
 		return
 	}
 
@@ -228,7 +229,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	reqID := middleware.GetRequestID(req.Context())
 
 	var request asset.UpdateAssetRequest
-	explicitNulls, err := httputil.DecodeJSONStrictWithNullsTolerant(req, &request, asset.PublicReadOnlyFields)
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, asset.PublicReadOnlyFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
@@ -316,7 +317,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, reqID)
+		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys)
 		return
 	}
 
@@ -472,6 +473,22 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, req, err, reqID)
+		return
+	}
+
+	// location_id and location_external_key reference the same FK; passing
+	// both is ambiguous. Reject with the same shape /locations uses for
+	// parent_id + parent_external_key (TRA-641 / BB21 §2.4).
+	_, hasLocID := params.Filters["location_id"]
+	_, hasLocExtKey := params.Filters["location_external_key"]
+	if hasLocID && hasLocExtKey {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"location_id and location_external_key are mutually exclusive", reqID,
+			[]modelerrors.FieldError{{
+				Field:   "location_external_key",
+				Code:    "invalid_value",
+				Message: "location_id and location_external_key are mutually exclusive",
+			}})
 		return
 	}
 

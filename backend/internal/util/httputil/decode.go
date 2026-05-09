@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"regexp"
+	"time"
 
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
 )
@@ -46,6 +48,34 @@ func DecodeJSONStrict(r *http.Request, dst any) error {
 	return nil
 }
 
+// DecodeJSONStrictWithPresence is DecodeJSONStrict that additionally returns
+// the set of top-level keys that appeared in the request body. Pair with
+// RespondValidationErrorWithPresence so missing required fields are reported
+// as code=required while present-but-empty values stay as code=too_short
+// (TRA-641 / BB21 §2.2).
+//
+// A non-object body produces an empty key set and the usual strict-decode
+// failure.
+func DecodeJSONStrictWithPresence(r *http.Request, dst any) (map[string]struct{}, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, &JSONDecodeError{Cause: err}
+	}
+	present := map[string]struct{}{}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(body, &raw) == nil {
+		for k := range raw {
+			present[k] = struct{}{}
+		}
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return present, &JSONDecodeError{Cause: err}
+	}
+	return present, nil
+}
+
 // DecodeJSONStrictWithNulls is DecodeJSONStrict that additionally reports
 // which top-level JSON keys held the explicit literal `null`. Use on
 // PATCH / PUT endpoints where `null` has semantic meaning distinct from
@@ -67,13 +97,34 @@ func DecodeJSONStrictWithNulls(r *http.Request, dst any) (map[string]struct{}, e
 // The drop set should mirror the readOnly fields on the corresponding
 // PublicXxxView in the OpenAPI spec; the asset and location packages export
 // PublicReadOnlyFields for this purpose.
+//
+// Returns the set of explicit-null keys (after the drop set is applied).
+// Use DecodeJSONStrictWithNullsTolerantAndPresence when you also need the
+// full set of keys present in the body (e.g. for TRA-641 required vs
+// too_short discrimination on PUT bodies).
 func DecodeJSONStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map[string]struct{}, error) {
+	nulls, _, err := decodeStrictWithNullsTolerant(r, dst, drop)
+	return nulls, err
+}
+
+// DecodeJSONStrictWithNullsTolerantAndPresence is DecodeJSONStrictWithNullsTolerant
+// that additionally returns the full set of top-level keys present in the
+// request body (after the drop set is applied). Pair with
+// RespondValidationErrorWithPresence so missing required fields surface as
+// code=required while present-but-empty values keep code=too_short
+// (TRA-641 / BB21 §2.2).
+func DecodeJSONStrictWithNullsTolerantAndPresence(r *http.Request, dst any, drop []string) (nulls, present map[string]struct{}, err error) {
+	return decodeStrictWithNullsTolerant(r, dst, drop)
+}
+
+func decodeStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map[string]struct{}, map[string]struct{}, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return nil, &JSONDecodeError{Cause: err}
+		return nil, nil, &JSONDecodeError{Cause: err}
 	}
 
 	explicitNulls := map[string]struct{}{}
+	present := map[string]struct{}{}
 	var raw map[string]json.RawMessage
 	objectBody := json.Unmarshal(body, &raw) == nil
 
@@ -95,18 +146,21 @@ func DecodeJSONStrictWithNullsTolerant(r *http.Request, dst any, drop []string) 
 			if mutated {
 				body, err = json.Marshal(raw)
 				if err != nil {
-					return nil, &JSONDecodeError{Cause: err}
+					return nil, nil, &JSONDecodeError{Cause: err}
 				}
 			}
+		}
+		for k := range raw {
+			present[k] = struct{}{}
 		}
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if decErr := dec.Decode(dst); decErr != nil {
-		return nil, &JSONDecodeError{Cause: decErr}
+		return nil, present, &JSONDecodeError{Cause: decErr}
 	}
-	return explicitNulls, nil
+	return explicitNulls, present, nil
 }
 
 // RespondDecodeError writes a 400 with a stable, human-safe detail string.
@@ -133,6 +187,29 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 
 		var typeErr *json.UnmarshalTypeError
 		if errors.As(err, &typeErr) {
+			// Format-validation failures from custom UnmarshalJSON on date types
+			// reach us as *json.UnmarshalTypeError with Type == time.Time
+			// (TRA-641 / BB21 §2.1). Surface those as validation_error with
+			// fields[] populated so clients branch on type=validation_error +
+			// fields[].field, like every other field-level body failure. The
+			// scalar-type-mismatch case (e.g. {"count":"x"} when count is int)
+			// stays as bad_request because no per-field validation pass would
+			// have caught it either.
+			if isTimeTarget(typeErr.Type) {
+				field := typeErr.Field
+				if field == "" {
+					field = "(body)"
+				}
+				msg := fmt.Sprintf("%s must be an RFC3339 date or datetime string", field)
+				WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
+					msg, requestID,
+					[]apierrors.FieldError{{
+						Field:   field,
+						Code:    "invalid_value",
+						Message: msg,
+					}})
+				return
+			}
 			detail := typeMismatchDetail(typeErr)
 			WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
 				detail, requestID)
@@ -152,4 +229,19 @@ func typeMismatchDetail(e *json.UnmarshalTypeError) string {
 		return fmt.Sprintf("Body field %q could not be decoded as the expected type", e.Field)
 	}
 	return "Request body could not be decoded as the expected type"
+}
+
+// isTimeTarget reports whether t is time.Time or *time.Time, including
+// embedded variants such as shared.FlexibleDate which wraps time.Time.
+// Used by RespondDecodeError to detect format-validation failures that
+// originate from a custom UnmarshalJSON on a date type so the response can
+// be rendered as a validation_error rather than a generic bad_request.
+func isTimeTarget(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t == reflect.TypeOf(time.Time{})
 }

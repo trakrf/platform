@@ -106,13 +106,14 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request location.CreateLocationWithTagsRequest
-	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
+	presentKeys, err := httputil.DecodeJSONStrictWithPresence(r, &request)
+	if err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, r, err, requestID)
+		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys)
 		return
 	}
 
@@ -197,7 +198,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	reqID := middleware.GetRequestID(req.Context())
 
 	var request location.UpdateLocationRequest
-	explicitNulls, err := httputil.DecodeJSONStrictWithNullsTolerant(req, &request, location.PublicReadOnlyFields)
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, location.PublicReadOnlyFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
@@ -264,7 +265,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, reqID)
+		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys)
 		return
 	}
 

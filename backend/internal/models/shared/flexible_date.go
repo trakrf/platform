@@ -3,7 +3,7 @@ package shared
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -42,7 +42,16 @@ func (fd *FlexibleDate) UnmarshalJSON(b []byte) error {
 		}
 	}
 
-	return fmt.Errorf("invalid date format '%s'. Supported formats: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ, MM/DD/YYYY, DD/MM/YYYY", s)
+	// Return *json.UnmarshalTypeError so encoding/json fills in the field
+	// path. RespondDecodeError detects time.Time targets and renders the
+	// failure as a validation_error with fields[] (TRA-641 / BB21 §2.1).
+	// Value is the literal byte content of the JSON token, including quotes
+	// for strings — matches what UnmarshalTypeError carries for built-in
+	// type-mismatch failures.
+	return &json.UnmarshalTypeError{
+		Value: string(b),
+		Type:  reflect.TypeOf(time.Time{}),
+	}
 }
 
 // MarshalJSON implements custom JSON marshaling (uses RFC3339 for output)

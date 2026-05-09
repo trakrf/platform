@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
@@ -129,6 +130,46 @@ func TestRespondDecodeError_TypeMismatch_NamesFieldAndAvoidsInvalidJSONWording(t
 	}
 	if !strings.Contains(resp.Error.Detail, "expected type") {
 		t.Fatalf("detail = %q, should describe the type-mismatch nature of the failure", resp.Error.Detail)
+	}
+}
+
+// TRA-641 / BB21 §2.1: a malformed RFC3339 string in a date field surfaces
+// as validation_error with fields[].field naming the offending key — not
+// bad_request. The body is valid JSON; only the field value fails the
+// format check, so the failure belongs in the validation pass alongside
+// other field-level failures (required, too_short, ...).
+func TestRespondDecodeError_BadRFC3339_EmitsValidationError(t *testing.T) {
+	type target struct {
+		ValidFrom shared.FlexibleDate `json:"valid_from"`
+	}
+	var dst target
+	decErr := json.Unmarshal([]byte(`{"valid_from":"not-a-date"}`), &dst)
+	if decErr == nil {
+		t.Fatalf("expected json.Unmarshal to return an error, got nil")
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+	if resp.Error.Type != string(apierrors.ErrValidation) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrValidation)
+	}
+	if len(resp.Error.Fields) != 1 {
+		t.Fatalf("fields = %d, want 1", len(resp.Error.Fields))
+	}
+	if resp.Error.Fields[0].Field != "valid_from" {
+		t.Fatalf("fields[0].field = %q, want %q", resp.Error.Fields[0].Field, "valid_from")
+	}
+	if resp.Error.Fields[0].Code != "invalid_value" {
+		t.Fatalf("fields[0].code = %q, want %q", resp.Error.Fields[0].Code, "invalid_value")
 	}
 }
 

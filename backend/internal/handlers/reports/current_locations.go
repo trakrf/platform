@@ -44,7 +44,7 @@ type ListCurrentLocationsResponse struct {
 // @Param location_external_key query []string false "filter by location external_key (may repeat)" collectionFormat(multi)
 // @Param q                     query string false "substring search (case-insensitive) on asset name, external_key, and active tag values"
 // @Param include_deleted       query bool   false "include rows for soft-deleted assets" default(false)
-// @Param sort                  query []string false "comma-separated sort fields; prefix '-' for DESC" collectionFormat(csv) Enums(last_seen, -last_seen, asset, -asset, location, -location)
+// @Param sort                  query []string false "comma-separated sort fields; prefix '-' for DESC" collectionFormat(csv) Enums(last_seen, -last_seen, asset_external_key, -asset_external_key, location_external_key, -location_external_key)
 // @Success 200 {object} reports.ListCurrentLocationsResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
@@ -68,7 +68,10 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
 		Filters:     []string{"location_id", "location_external_key", "q", "include_deleted"},
 		BoolFilters: []string{"include_deleted"},
-		Sorts:       []string{"last_seen", "asset", "location"},
+		// TRA-641 / BB21 §2.6: sort keys renamed to match the spec convention
+		// used elsewhere — natural-key columns are addressed as
+		// `<entity>_external_key`, never the bare entity name.
+		Sorts: []string{"last_seen", "asset_external_key", "location_external_key"},
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, r, err, reqID)
@@ -103,6 +106,9 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 	if vs, ok := params.Filters["include_deleted"]; ok && len(vs) > 0 {
 		filter.IncludeDeleted = vs[0] == "true"
+	}
+	for _, s := range params.Sorts {
+		filter.Sorts = append(filter.Sorts, report.CurrentLocationSort{Field: s.Field, Desc: s.Desc})
 	}
 
 	items, err := h.storage.ListCurrentLocations(r.Context(), orgID, filter)

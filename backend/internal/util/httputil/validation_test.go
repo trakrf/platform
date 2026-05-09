@@ -270,6 +270,61 @@ func TestRespondValidationError_RequiredWithoutKeepsRequired(t *testing.T) {
 	assert.Equal(t, "required", resp.Error.Fields[0].Code)
 }
 
+// TRA-641 / BB21 §2.2: when the caller has presence info from the request
+// body, an absent required field is reported as code=required (the
+// historical too_short relabel only applied because we previously could
+// not distinguish missing from empty).
+func TestRespondValidationErrorWithPresence_AbsentRequiredEmitsRequired(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		Name string `json:"name" validate:"required,min=1,max=255"`
+	}
+	err := v.Struct(s{Name: ""}) // zero value — required fires
+	require.Error(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	// presentKeys is empty — name was not in the body
+	httputil.RespondValidationErrorWithPresence(w, r, err, "req-1", map[string]struct{}{})
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	f := resp.Error.Fields[0]
+	assert.Equal(t, "name", f.Field)
+	assert.Equal(t, "required", f.Code, "absent key must be reported as required, not too_short")
+	assert.Contains(t, f.Message, "is required")
+	assert.Nil(t, f.Params)
+}
+
+// TRA-641 / BB21 §2.2: a present-but-empty value keeps code=too_short
+// (TRA-637 contract preserved). The presence map distinguishes the two
+// cases that previously aliased.
+func TestRespondValidationErrorWithPresence_PresentButEmptyKeepsTooShort(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		Name string `json:"name" validate:"required,min=1,max=255"`
+	}
+	err := v.Struct(s{Name: ""}) // zero value — required fires
+	require.Error(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	// name appears in the body with an empty-string value
+	httputil.RespondValidationErrorWithPresence(w, r, err, "req-1", map[string]struct{}{"name": {}})
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	f := resp.Error.Fields[0]
+	assert.Equal(t, "too_short", f.Code, "empty present value stays as too_short")
+	assert.Contains(t, f.Message, "characters")
+}
+
 func TestRespondValidationError_UnknownTagFallsBackToInvalidValue(t *testing.T) {
 	v := validator.New()
 	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)

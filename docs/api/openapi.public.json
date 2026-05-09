@@ -380,7 +380,17 @@
       "errors.FieldError": {
         "properties": {
           "code": {
-            "type": "string"
+            "enum": [
+              "required",
+              "invalid_value",
+              "too_short",
+              "too_long",
+              "too_small",
+              "too_large"
+            ],
+            "example": "required",
+            "type": "string",
+            "x-extensible-enum": true
           },
           "field": {
             "type": "string"
@@ -3333,10 +3343,10 @@
                 "enum": [
                   "last_seen",
                   "-last_seen",
-                  "asset",
-                  "-asset",
-                  "location",
-                  "-location"
+                  "asset_external_key",
+                  "-asset_external_key",
+                  "location_external_key",
+                  "-location_external_key"
                 ],
                 "type": "string"
               },

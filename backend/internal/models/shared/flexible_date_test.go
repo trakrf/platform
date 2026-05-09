@@ -85,8 +85,13 @@ func TestFlexibleDate_UnmarshalJSON(t *testing.T) {
 			err := json.Unmarshal([]byte(tt.input), &fd)
 
 			if tt.expectError {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "Supported formats")
+				require.Error(t, err)
+				// TRA-641 / BB21 §2.1: format failures surface as
+				// *json.UnmarshalTypeError so the decoder fills in the field
+				// path and RespondDecodeError can route to validation_error.
+				var typeErr *json.UnmarshalTypeError
+				require.ErrorAs(t, err, &typeErr, "expected *json.UnmarshalTypeError")
+				assert.Equal(t, "time.Time", typeErr.Type.String())
 			} else {
 				require.NoError(t, err)
 				if tt.checkFunc != nil {
