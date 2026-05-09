@@ -113,7 +113,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $5::bool)
 	`
@@ -159,7 +159,7 @@ func buildCurrentLocationsQueryDistinctOn() string {
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
 		ORDER BY a.name
@@ -195,7 +195,7 @@ func buildCurrentLocationsQueryTimescale() string {
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
+				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
 		ORDER BY a.name
