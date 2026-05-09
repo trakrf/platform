@@ -163,7 +163,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID           locations.update
 // @Accept       json
 // @Produce      json
-// @Param        location_id path  int                              true  "Location ID"
+// @Param        location_id path  int                              true  "Location ID" minimum(1) maximum(2147483647)
 // @Param        request  body  location.UpdateLocationRequest   true  "Fields to update"
 // @Success      200  {object}  locations.UpdateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -310,7 +310,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @ID locations.delete
 // @Accept json
 // @Produce json
-// @Param location_id path int true "Location ID"
+// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647)
 // @Success 204 "deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -397,11 +397,11 @@ type ListDescendantsResponse struct {
 // @Summary List locations
 // @Tags locations,public
 // @ID locations.list
-// @Param limit               query int    false "max 200"  default(50)
-// @Param offset              query int    false "min 0"   default(0)
-// @Param parent_id            query int    false "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key"
-// @Param parent_external_key query string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id"
-// @Param external_key         query string false "filter by location external_key, equality match (may repeat for any-of)"
+// @Param limit               query int    false "max 200"  default(50) minimum(1) maximum(200)
+// @Param offset              query int    false "min 0"   default(0) minimum(0)
+// @Param parent_id            query []int    false "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key" collectionFormat(multi)
+// @Param parent_external_key query []string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id" collectionFormat(multi)
+// @Param external_key         query []string false "filter by location external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active           query bool   false "filter by active flag"
 // @Param q                   query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
 // @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(tree_path, -tree_path, external_key, -external_key, name, -name, created_at, -created_at)
@@ -513,7 +513,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Description Retrieve a location by its canonical ID. Returns 404 if not found.
 // @Tags locations,public
 // @ID locations.get
-// @Param location_id path int true "Location ID"
+// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647)
 // @Success 200 {object} locations.GetLocationResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -567,9 +567,9 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 // @Summary List location ancestors
 // @Tags locations,public
 // @ID locations.ancestors
-// @Param location_id path  int    true  "Location ID"
-// @Param limit  query int    false "max 200"  default(50)
-// @Param offset query int    false "min 0"   default(0)
+// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647)
+// @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
+// @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListAncestorsResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -626,9 +626,9 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Summary List location descendants
 // @Tags locations,public
 // @ID locations.descendants
-// @Param location_id path  int    true  "Location ID"
-// @Param limit  query int    false "max 200"  default(50)
-// @Param offset query int    false "min 0"   default(0)
+// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647)
+// @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
+// @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListDescendantsResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -685,9 +685,9 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Summary List location children
 // @Tags locations,public
 // @ID locations.children
-// @Param location_id path  int    true  "Location ID"
-// @Param limit  query int    false "max 200"  default(50)
-// @Param offset query int    false "min 0"   default(0)
+// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647)
+// @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
+// @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListChildrenResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -757,7 +757,7 @@ type AddTagResponse struct {
 // @Tags locations,public
 // @ID locations.tags.add
 // @Accept json
-// @Param location_id path int               true "Location ID"
+// @Param location_id path int               true "Location ID" minimum(1) maximum(2147483647)
 // @Param request body shared.TagRequest true "Tag to attach"
 // @Success 201 {object} locations.AddTagResponse "tag attached"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
@@ -820,8 +820,8 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 // @Description Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
 // @Tags locations,public
 // @ID locations.tags.remove
-// @Param location_id path int true "Location ID"
-// @Param tag_id      path int true "Tag ID"
+// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647)
+// @Param tag_id      path int true "Tag ID" minimum(1) maximum(2147483647)
 // @Success 204 "deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"

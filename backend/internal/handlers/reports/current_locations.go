@@ -36,10 +36,10 @@ type ListCurrentLocationsResponse struct {
 // @Description Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 // @Tags reports,public
 // @ID locations.current
-// @Param limit                 query int    false "max 200"   default(50)
-// @Param offset                query int    false "min 0"    default(0)
-// @Param location_id           query int    false "filter by location id (canonical, may repeat)"
-// @Param location_external_key query string false "filter by location external_key (may repeat)"
+// @Param limit                 query int    false "max 200"   default(50) minimum(1) maximum(200)
+// @Param offset                query int    false "min 0"    default(0) minimum(0)
+// @Param location_id           query []int    false "filter by location id (canonical, may repeat)" collectionFormat(multi)
+// @Param location_external_key query []string false "filter by location external_key (may repeat)" collectionFormat(multi)
 // @Param q                     query string false "substring search (case-insensitive) on asset name, external_key, and active tag values"
 // @Param include_deleted       query bool   false "include rows for soft-deleted assets" default(false)
 // @Param sort                  query []string false "comma-separated sort fields; prefix '-' for DESC" collectionFormat(csv) Enums(last_seen, -last_seen, asset, -asset, location, -location)

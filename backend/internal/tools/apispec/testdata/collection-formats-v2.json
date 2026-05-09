@@ -1,0 +1,60 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Test", "version": "v1" },
+  "host": "example.com",
+  "basePath": "/api/v1",
+  "schemes": ["https"],
+  "paths": {
+    "/things": {
+      "get": {
+        "summary": "List things",
+        "tags": ["things", "public"],
+        "parameters": [
+          {
+            "name": "external_key",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "multi"
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "integer" },
+            "collectionFormat": "multi"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "csv"
+          },
+          {
+            "name": "tags_ssv",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "ssv"
+          },
+          {
+            "name": "tags_pipes",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "pipes"
+          },
+          {
+            "name": "scalar_no_format",
+            "in": "query",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": { "description": "OK", "schema": { "type": "object" } }
+        }
+      }
+    }
+  }
+}

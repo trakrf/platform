@@ -194,7 +194,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID           assets.update
 // @Accept       json
 // @Produce      json
-// @Param        asset_id path  int                       true  "Asset id (canonical)"
+// @Param        asset_id path  int                       true  "Asset id (canonical)" minimum(1) maximum(2147483647)
 // @Param        request  body  asset.UpdateAssetRequest  true  "Fields to update"
 // @Success      200  {object}  assets.UpdateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -343,7 +343,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @ID           assets.delete
 // @Accept       json
 // @Produce      json
-// @Param        asset_id  path  int  true  "Asset id (canonical)"
+// @Param        asset_id  path  int  true  "Asset id (canonical)" minimum(1) maximum(2147483647)
 // @Success      204  "deleted"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -415,11 +415,11 @@ type UpdateAssetResponse struct {
 // @ID assets.list
 // @Accept json
 // @Produce json
-// @Param limit                 query int    false "max 200"   default(50)
-// @Param offset                query int    false "min 0"     default(0)
-// @Param location_id           query int    false "filter by current location id (canonical, may repeat)"
-// @Param location_external_key query string false "filter by current location external_key (may repeat)"
-// @Param external_key          query string false "filter by asset external_key, equality match (may repeat for any-of)"
+// @Param limit                 query int    false "max 200"   default(50) minimum(1) maximum(200)
+// @Param offset                query int    false "min 0"     default(0) minimum(0)
+// @Param location_id           query []int    false "filter by current location id (canonical, may repeat)" collectionFormat(multi)
+// @Param location_external_key query []string false "filter by current location external_key (may repeat)" collectionFormat(multi)
+// @Param external_key          query []string false "filter by asset external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active             query bool   false "filter by active flag"
 // @Param q                     query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
 // @Param sort                  query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(external_key, -external_key, name, -name, created_at, -created_at, updated_at, -updated_at)
@@ -522,7 +522,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Description Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.
 // @Tags assets,public
 // @ID assets.get
-// @Param asset_id path int true "Asset id (canonical)"
+// @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(2147483647)
 // @Success 200 {object} assets.GetAssetResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
@@ -582,7 +582,7 @@ type AddTagResponse struct {
 // @ID           assets.tags.add
 // @Accept       json
 // @Produce      json
-// @Param        asset_id path  int                true  "Asset id (canonical)"
+// @Param        asset_id path  int                true  "Asset id (canonical)" minimum(1) maximum(2147483647)
 // @Param        request  body  shared.TagRequest  true  "Tag to attach"
 // @Success      201  {object}  assets.AddTagResponse         "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -651,8 +651,8 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 // @ID           assets.tags.remove
 // @Accept       json
 // @Produce      json
-// @Param        asset_id  path  int  true  "Asset id (canonical)"
-// @Param        tag_id    path  int  true  "Tag id"
+// @Param        asset_id  path  int  true  "Asset id (canonical)" minimum(1) maximum(2147483647)
+// @Param        tag_id    path  int  true  "Tag id" minimum(1) maximum(2147483647)
 // @Success      204  "deleted"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"

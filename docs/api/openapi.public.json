@@ -959,6 +959,8 @@
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 200,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -968,32 +970,48 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "minimum": 0,
               "type": "integer"
             }
           },
           {
             "description": "filter by current location id (canonical, may repeat)",
+            "explode": true,
             "in": "query",
             "name": "location_id",
             "schema": {
-              "type": "integer"
-            }
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "filter by current location external_key (may repeat)",
+            "explode": true,
             "in": "query",
             "name": "location_external_key",
             "schema": {
-              "type": "string"
-            }
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "filter by asset external_key, equality match (may repeat for any-of)",
+            "explode": true,
             "in": "query",
             "name": "external_key",
             "schema": {
-              "type": "string"
-            }
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "filter by active flag",
@@ -1262,6 +1280,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -1341,6 +1361,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -1455,6 +1477,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -1585,6 +1609,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -1594,6 +1620,8 @@
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 200,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -1603,6 +1631,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "minimum": 0,
               "type": "integer"
             }
           },
@@ -1611,6 +1640,7 @@
             "in": "query",
             "name": "from",
             "schema": {
+              "format": "date-time",
               "type": "string"
             }
           },
@@ -1619,6 +1649,7 @@
             "in": "query",
             "name": "to",
             "schema": {
+              "format": "date-time",
               "type": "string"
             }
           },
@@ -1762,6 +1793,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -1882,6 +1915,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -1891,6 +1926,8 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -1972,6 +2009,8 @@
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 200,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -1981,32 +2020,48 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "minimum": 0,
               "type": "integer"
             }
           },
           {
             "description": "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key",
+            "explode": true,
             "in": "query",
             "name": "parent_id",
             "schema": {
-              "type": "integer"
-            }
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "filter by parent's external_key (may repeat); mutually exclusive with parent_id",
+            "explode": true,
             "in": "query",
             "name": "parent_external_key",
             "schema": {
-              "type": "string"
-            }
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "filter by location external_key, equality match (may repeat for any-of)",
+            "explode": true,
             "in": "query",
             "name": "external_key",
             "schema": {
-              "type": "string"
-            }
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "filter by active flag",
@@ -2237,6 +2292,8 @@
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 200,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2246,24 +2303,35 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "minimum": 0,
               "type": "integer"
             }
           },
           {
             "description": "filter by location id (canonical, may repeat)",
+            "explode": true,
             "in": "query",
             "name": "location_id",
             "schema": {
-              "type": "integer"
-            }
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "filter by location external_key (may repeat)",
+            "explode": true,
             "in": "query",
             "name": "location_external_key",
             "schema": {
-              "type": "string"
-            }
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "style": "form"
           },
           {
             "description": "substring search (case-insensitive) on asset name, external_key, and active tag values",
@@ -2406,6 +2474,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -2495,6 +2565,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -2581,6 +2653,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -2711,6 +2785,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2720,6 +2796,8 @@
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 200,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2729,6 +2807,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "minimum": 0,
               "type": "integer"
             }
           }
@@ -2827,6 +2906,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2836,6 +2917,8 @@
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 200,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2845,6 +2928,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "minimum": 0,
               "type": "integer"
             }
           }
@@ -2943,6 +3027,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2952,6 +3038,8 @@
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 200,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2961,6 +3049,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "minimum": 0,
               "type": "integer"
             }
           }
@@ -3059,6 +3148,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -3179,6 +3270,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -3188,6 +3281,8 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "type": "integer"
             }
           }

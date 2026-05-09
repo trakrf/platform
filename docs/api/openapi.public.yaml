@@ -714,28 +714,43 @@ paths:
                   name: limit
                   schema:
                     default: 50
+                    maximum: 200
+                    minimum: 1
                     type: integer
                 - description: min 0
                   in: query
                   name: offset
                   schema:
                     default: 0
+                    minimum: 0
                     type: integer
                 - description: filter by current location id (canonical, may repeat)
+                  explode: true
                   in: query
                   name: location_id
                   schema:
-                    type: integer
+                    items:
+                        type: integer
+                    type: array
+                  style: form
                 - description: filter by current location external_key (may repeat)
+                  explode: true
                   in: query
                   name: location_external_key
                   schema:
-                    type: string
+                    items:
+                        type: string
+                    type: array
+                  style: form
                 - description: filter by asset external_key, equality match (may repeat for any-of)
+                  explode: true
                   in: query
                   name: external_key
                   schema:
-                    type: string
+                    items:
+                        type: string
+                    type: array
+                  style: form
                 - description: filter by active flag
                   in: query
                   name: is_active
@@ -917,6 +932,8 @@ paths:
                   name: asset_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             responses:
                 "204":
@@ -968,6 +985,8 @@ paths:
                   name: asset_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             responses:
                 "200":
@@ -1041,6 +1060,8 @@ paths:
                   name: asset_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             requestBody:
                 content:
@@ -1123,28 +1144,35 @@ paths:
                   name: asset_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
                 - description: max 200
                   in: query
                   name: limit
                   schema:
                     default: 50
+                    maximum: 200
+                    minimum: 1
                     type: integer
                 - description: min 0
                   in: query
                   name: offset
                   schema:
                     default: 0
+                    minimum: 0
                     type: integer
                 - description: RFC 3339 start timestamp
                   in: query
                   name: from
                   schema:
+                    format: date-time
                     type: string
                 - description: RFC 3339 end timestamp
                   in: query
                   name: to
                   schema:
+                    format: date-time
                     type: string
                 - description: comma-separated; prefix '-' for DESC
                   explode: false
@@ -1238,6 +1266,8 @@ paths:
                   name: asset_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             requestBody:
                 content:
@@ -1315,12 +1345,16 @@ paths:
                   name: asset_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
                 - description: Tag id
                   in: path
                   name: tag_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             responses:
                 "204":
@@ -1370,28 +1404,43 @@ paths:
                   name: limit
                   schema:
                     default: 50
+                    maximum: 200
+                    minimum: 1
                     type: integer
                 - description: min 0
                   in: query
                   name: offset
                   schema:
                     default: 0
+                    minimum: 0
                     type: integer
                 - description: filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key
+                  explode: true
                   in: query
                   name: parent_id
                   schema:
-                    type: integer
+                    items:
+                        type: integer
+                    type: array
+                  style: form
                 - description: filter by parent's external_key (may repeat); mutually exclusive with parent_id
+                  explode: true
                   in: query
                   name: parent_external_key
                   schema:
-                    type: string
+                    items:
+                        type: string
+                    type: array
+                  style: form
                 - description: filter by location external_key, equality match (may repeat for any-of)
+                  explode: true
                   in: query
                   name: external_key
                   schema:
-                    type: string
+                    items:
+                        type: string
+                    type: array
+                  style: form
                 - description: filter by active flag
                   in: query
                   name: is_active
@@ -1543,6 +1592,8 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             responses:
                 "204":
@@ -1600,6 +1651,8 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             responses:
                 "200":
@@ -1655,6 +1708,8 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             requestBody:
                 content:
@@ -1734,18 +1789,23 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
                 - description: max 200
                   in: query
                   name: limit
                   schema:
                     default: 50
+                    maximum: 200
+                    minimum: 1
                     type: integer
                 - description: min 0
                   in: query
                   name: offset
                   schema:
                     default: 0
+                    minimum: 0
                     type: integer
             responses:
                 "200":
@@ -1805,18 +1865,23 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
                 - description: max 200
                   in: query
                   name: limit
                   schema:
                     default: 50
+                    maximum: 200
+                    minimum: 1
                     type: integer
                 - description: min 0
                   in: query
                   name: offset
                   schema:
                     default: 0
+                    minimum: 0
                     type: integer
             responses:
                 "200":
@@ -1876,18 +1941,23 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
                 - description: max 200
                   in: query
                   name: limit
                   schema:
                     default: 50
+                    maximum: 200
+                    minimum: 1
                     type: integer
                 - description: min 0
                   in: query
                   name: offset
                   schema:
                     default: 0
+                    minimum: 0
                     type: integer
             responses:
                 "200":
@@ -1947,6 +2017,8 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             requestBody:
                 content:
@@ -2024,12 +2096,16 @@ paths:
                   name: location_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
                 - description: Tag ID
                   in: path
                   name: tag_id
                   required: true
                   schema:
+                    maximum: 2.147483647e+09
+                    minimum: 1
                     type: integer
             responses:
                 "204":
@@ -2082,23 +2158,34 @@ paths:
                   name: limit
                   schema:
                     default: 50
+                    maximum: 200
+                    minimum: 1
                     type: integer
                 - description: min 0
                   in: query
                   name: offset
                   schema:
                     default: 0
+                    minimum: 0
                     type: integer
                 - description: filter by location id (canonical, may repeat)
+                  explode: true
                   in: query
                   name: location_id
                   schema:
-                    type: integer
+                    items:
+                        type: integer
+                    type: array
+                  style: form
                 - description: filter by location external_key (may repeat)
+                  explode: true
                   in: query
                   name: location_external_key
                   schema:
-                    type: string
+                    items:
+                        type: string
+                    type: array
+                  style: form
                 - description: substring search (case-insensitive) on asset name, external_key, and active tag values
                   in: query
                   name: q

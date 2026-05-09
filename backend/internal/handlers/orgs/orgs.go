@@ -121,7 +121,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID orgs.get
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id"
+// @Param id path int true "Organization id" minimum(1) maximum(2147483647)
 // @Success 200 {object} map[string]any "data: organization.Organization"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -161,7 +161,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @ID orgs.update
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id"
+// @Param id path int true "Organization id" minimum(1) maximum(2147483647)
 // @Param request body organization.UpdateOrganizationRequest true "Update payload"
 // @Success 200 {object} map[string]any "data: organization.Organization"
 // @Failure 400 {object} modelerrors.ErrorResponse
@@ -219,7 +219,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @ID orgs.delete
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id"
+// @Param id path int true "Organization id" minimum(1) maximum(2147483647)
 // @Param request body organization.DeleteOrganizationRequest true "Confirmation payload"
 // @Success 200 {object} map[string]any "message: Organization deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "Name mismatch or invalid id"
