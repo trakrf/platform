@@ -410,7 +410,9 @@ type UpdateAssetResponse struct {
 }
 
 // @Summary List assets
-// @Description Paginated assets list with natural-key filters, sort, and substring search
+// @Description Paginated assets list with natural-key filters, sort, and substring search.
+// @Description
+// @Description Default scope returns currently-effective assets only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.
 // @Tags assets,public
 // @ID assets.list
 // @Accept json
@@ -520,6 +522,8 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 
 // @Summary Get asset by canonical id
 // @Description Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.
+// @Description
+// @Description Path-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted asset is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.
 // @Tags assets,public
 // @ID assets.get
 // @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(2147483647)

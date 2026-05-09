@@ -950,7 +950,7 @@
   "paths": {
     "/api/v1/assets": {
       "get": {
-        "description": "**Required scope:** `assets:read`\n\nPaginated assets list with natural-key filters, sort, and substring search",
+        "description": "**Required scope:** `assets:read`\n\nPaginated assets list with natural-key filters, sort, and substring search.\n\nDefault scope returns currently-effective assets only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.",
         "operationId": "assets.list",
         "parameters": [
           {
@@ -1352,7 +1352,7 @@
         ]
       },
       "get": {
-        "description": "**Required scope:** `assets:read`\n\nRetrieve an asset by its canonical id. Returns 404 if the asset does not exist.",
+        "description": "**Required scope:** `assets:read`\n\nRetrieve an asset by its canonical id. Returns 404 if the asset does not exist.\n\nPath-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted asset is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.",
         "operationId": "assets.get",
         "parameters": [
           {
@@ -1600,7 +1600,7 @@
     },
     "/api/v1/assets/{asset_id}/history": {
       "get": {
-        "description": "**Required scope:** `history:read`\n\nLocation history for an asset identified by its canonical id.",
+        "description": "**Required scope:** `history:read`\n\nLocation history for an asset identified by its canonical id.\n\nThe asset existence check follows path-addressed semantics — the asset is returned even if its `valid_to` has elapsed. Each history row's location reference applies the temporal-validity predicate, so an event referencing a location whose effective window is past surfaces with null `location_external_key`.",
         "operationId": "assets.history",
         "parameters": [
           {
@@ -2000,7 +2000,7 @@
     },
     "/api/v1/locations": {
       "get": {
-        "description": "**Required scope:** `locations:read`",
+        "description": "**Required scope:** `locations:read`\n\nPaginated locations list with natural-key filters, sort, and substring search.\n\nDefault scope returns currently-effective locations only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.",
         "operationId": "locations.list",
         "parameters": [
           {
@@ -2283,7 +2283,7 @@
     },
     "/api/v1/locations/current": {
       "get": {
-        "description": "**Required scope:** `history:read`\n\nSnapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.",
+        "description": "**Required scope:** `history:read`\n\nSnapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.\n\nTemporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible — matching how soft-deleted locations are projected.",
         "operationId": "locations.current",
         "parameters": [
           {
@@ -2556,7 +2556,7 @@
         ]
       },
       "get": {
-        "description": "**Required scope:** `locations:read`\n\nRetrieve a location by its canonical ID. Returns 404 if not found.",
+        "description": "**Required scope:** `locations:read`\n\nRetrieve a location by its canonical ID. Returns 404 if not found.\n\nPath-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted location is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.",
         "operationId": "locations.get",
         "parameters": [
           {

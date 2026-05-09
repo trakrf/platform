@@ -846,7 +846,11 @@ func (s *Storage) CountAssetsFiltered(
 }
 
 func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
-	clauses := []string{"a.org_id = $1", "a.deleted_at IS NULL"}
+	clauses := []string{
+		"a.org_id = $1",
+		"a.deleted_at IS NULL",
+		temporallyEffective("a"),
+	}
 	args := []any{orgID}
 
 	// location_id and location_external_key combine with OR semantics — a row
@@ -882,7 +886,8 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 			"(a.name ILIKE $%d OR a.external_key ILIKE $%d OR a.description ILIKE $%d "+
 				"OR EXISTS (SELECT 1 FROM trakrf.tags i "+
 				"WHERE i.asset_id = a.id AND i.is_active = true "+
-				"AND i.deleted_at IS NULL AND i.value ILIKE $%d))",
+				"AND i.deleted_at IS NULL AND "+temporallyEffective("i")+
+				" AND i.value ILIKE $%d))",
 			idx, idx, idx, idx))
 	}
 	return strings.Join(clauses, " AND "), args

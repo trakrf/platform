@@ -395,6 +395,9 @@ type ListDescendantsResponse struct {
 }
 
 // @Summary List locations
+// @Description Paginated locations list with natural-key filters, sort, and substring search.
+// @Description
+// @Description Default scope returns currently-effective locations only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.
 // @Tags locations,public
 // @ID locations.list
 // @Param limit               query int    false "max 200"  default(50) minimum(1) maximum(200)
@@ -511,6 +514,8 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 
 // @Summary Get location by ID
 // @Description Retrieve a location by its canonical ID. Returns 404 if not found.
+// @Description
+// @Description Path-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted location is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.
 // @Tags locations,public
 // @ID locations.get
 // @Param location_id path int true "Location ID" minimum(1) maximum(2147483647)
