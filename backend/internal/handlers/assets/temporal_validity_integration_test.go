@@ -133,6 +133,51 @@ func TestListAssets_TemporalValidity_DefaultScopeExcludesExpiredAndFuture(t *tes
 	assert.Equal(t, "EFFECTIVE", resp.Data[0].ExternalKey)
 }
 
+func seedTagOnAsset(t *testing.T, pool *pgxpool.Pool, orgID, assetID int, tagType, value string, validFrom time.Time, validTo *time.Time) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO trakrf.tags (org_id, asset_id, type, value, is_active, valid_from, valid_to)
+		VALUES ($1, $2, $3, $4, true, $5, $6)
+	`, orgID, assetID, tagType, value, validFrom, validTo)
+	require.NoError(t, err)
+}
+
+func TestGetAsset_TemporalValidity_EmbeddedTagsFilterPredicate(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	now := time.Now().UTC()
+	yesterday := now.Add(-24 * time.Hour)
+	weekAgo := now.Add(-7 * 24 * time.Hour)
+
+	assetID := seedAssetWithWindow(t, pool, orgID, "TAG-HOST", yesterday, nil)
+	seedTagOnAsset(t, pool, orgID, assetID, "rfid", "EFFECTIVE-TAG", yesterday, nil)
+	seedTagOnAsset(t, pool, orgID, assetID, "rfid", "EXPIRED-TAG", weekAgo, &yesterday)
+
+	handler := NewHandler(store)
+	router := setupTemporalRouter(handler)
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", assetID), nil)
+	req = withTemporalOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var envelope struct {
+		Data assetmodel.PublicAssetView `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+
+	tagValues := make([]string, 0, len(envelope.Data.Tags))
+	for _, tag := range envelope.Data.Tags {
+		tagValues = append(tagValues, tag.Value)
+	}
+	assert.Contains(t, tagValues, "EFFECTIVE-TAG")
+	assert.NotContains(t, tagValues, "EXPIRED-TAG", "embedded tags must respect temporal predicate")
+}
+
 func TestListAssets_TemporalValidity_IsActiveIndependentOfPredicate(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()

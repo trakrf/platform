@@ -16,8 +16,9 @@ import (
 func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]shared.Tag, error) {
 	query := `
 		SELECT id, type, value, is_active
-		FROM trakrf.tags
+		FROM trakrf.tags i
 		WHERE asset_id = $1 AND org_id = $2 AND deleted_at IS NULL
+		  AND ` + temporallyEffective("i") + `
 		ORDER BY created_at ASC
 	`
 
@@ -49,8 +50,9 @@ func (s *Storage) GetTagsByAssetID(ctx context.Context, orgID, assetID int) ([]s
 func (s *Storage) GetTagsByLocationID(ctx context.Context, orgID, locationID int) ([]shared.Tag, error) {
 	query := `
 		SELECT id, type, value, is_active
-		FROM trakrf.tags
+		FROM trakrf.tags i
 		WHERE location_id = $1 AND org_id = $2 AND deleted_at IS NULL
+		  AND ` + temporallyEffective("i") + `
 		ORDER BY created_at ASC
 	`
 
