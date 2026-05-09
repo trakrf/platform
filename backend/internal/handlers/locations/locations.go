@@ -536,12 +536,9 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "location_id")
-	id, err := httputil.ParseSurrogateID(idParam)
+	id, err := httputil.ParseSurrogateID("location_id", chi.URLParam(req, "location_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), reqID)
-
+		httputil.RespondPathParamError(w, req, err, reqID)
 		return
 	}
 
@@ -844,12 +841,9 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "location_id")
-	id, err := httputil.ParseSurrogateID(idParam)
+	id, err := httputil.ParseSurrogateID("location_id", chi.URLParam(r, "location_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), requestID)
-
+		httputil.RespondPathParamError(w, r, err, requestID)
 		return
 	}
 
@@ -871,12 +865,9 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) doRemoveLocationTag(w http.ResponseWriter, r *http.Request, orgID, locationID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	tagIDParam := chi.URLParam(r, "tag_id")
-	tagID, err := strconv.Atoi(tagIDParam)
+	tagID, err := httputil.ParseSurrogateID("tag_id", chi.URLParam(r, "tag_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), requestID)
-
+		httputil.RespondPathParamError(w, r, err, requestID)
 		return
 	}
 
@@ -892,12 +883,9 @@ func (handler *Handler) doRemoveLocationTag(w http.ResponseWriter, r *http.Reque
 // parseAndVerifyLocationID extracts {location_id}, parses it as a surrogate
 // int, and verifies the location exists and belongs to the caller's org.
 func (handler *Handler) parseAndVerifyLocationID(w http.ResponseWriter, req *http.Request, orgID int, reqID string) (int, bool) {
-	idParam := chi.URLParam(req, "location_id")
-	id, err := httputil.ParseSurrogateID(idParam)
+	id, err := httputil.ParseSurrogateID("location_id", chi.URLParam(req, "location_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), reqID)
-
+		httputil.RespondPathParamError(w, req, err, reqID)
 		return 0, false
 	}
 

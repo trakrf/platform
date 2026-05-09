@@ -3,7 +3,6 @@ package assets
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -28,13 +27,9 @@ import (
 // @Router /api/v1/assets/bulk/{jobId} [get]
 func (handler *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetRequestID(r.Context())
-	jobIDParam := chi.URLParam(r, "jobId")
-
-	jobID, err := strconv.Atoi(jobIDParam)
+	jobID, err := httputil.ParseSurrogateID("jobId", chi.URLParam(r, "jobId"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), requestID)
-
+		httputil.RespondPathParamError(w, r, err, requestID)
 		return
 	}
 

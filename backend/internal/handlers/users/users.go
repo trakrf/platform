@@ -92,11 +92,9 @@ func (handler *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Security SessionAuth
 // @Router /api/v1/users/{id} [get]
 func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	id, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.UserGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -181,11 +179,9 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Security SessionAuth
 // @Router /api/v1/users/{id} [put]
 func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	id, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.UserUpdateInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -240,11 +236,9 @@ func (handler *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @Security SessionAuth
 // @Router /api/v1/users/{id} [delete]
 func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	id, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.UserDeleteInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
