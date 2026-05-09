@@ -385,3 +385,132 @@ func TestPostAsset_BadExternalKeyPattern_Rejected400(t *testing.T) {
 	}
 	_ = pool
 }
+
+// TRA-619 finding 1: a PUT body that contains only read-only fields decodes
+// to an empty UpdateAssetRequest after the readOnly drop. The previous
+// behavior was a "no fields to update" error surfaced as 500 internal_error.
+// Expected behavior: 200 with the unchanged record (no-op write), matching
+// the GET → PUT round-trip ergonomic.
+func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-RO-NOOP", "ReadOnlyNoop")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"only id", `{"id":999}`},
+		{"only created_at", `{"created_at":"2020-01-01T00:00:00Z"}`},
+		{"only tags", `{"tags":[]}`},
+		{"empty object", `{}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+			putReq.Header.Set("Content-Type", "application/json")
+			putReq = withRoundTripOrgContext(putReq, orgID)
+			putRec := httptest.NewRecorder()
+			router.ServeHTTP(putRec, putReq)
+
+			require.Equal(t, http.StatusOK, putRec.Code,
+				"empty effective body must be no-op 200 (got %d): %s", putRec.Code, putRec.Body.String())
+
+			var resp struct {
+				Data map[string]any `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
+			assert.Equal(t, "ReadOnlyNoop", resp.Data["name"], "name unchanged")
+			assert.Equal(t, "ASSET-RO-NOOP", resp.Data["external_key"], "external_key unchanged")
+		})
+	}
+}
+
+// TRA-619 finding 2: metadata is `*any` on the Go struct but the public spec
+// declares it `type: object`. JSON-decoded scalars/arrays previously flowed
+// through to the jsonb column and got rejected by Postgres as 500. Expected:
+// 400 validation_error / invalid_value at the validator boundary.
+func TestPutAsset_MetadataNonObject_Returns400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-META-TYPE", "MetaType")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"string", `{"metadata":"not-an-object"}`},
+		{"number", `{"metadata":42}`},
+		{"bool", `{"metadata":true}`},
+		{"array", `{"metadata":[]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+			putReq.Header.Set("Content-Type", "application/json")
+			putReq = withRoundTripOrgContext(putReq, orgID)
+			putRec := httptest.NewRecorder()
+			router.ServeHTTP(putRec, putReq)
+
+			require.Equal(t, http.StatusBadRequest, putRec.Code,
+				"non-object metadata must be 400 (got %d): %s", putRec.Code, putRec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, "metadata", resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+		})
+	}
+}
+
+// TRA-619: an object metadata is still accepted (regression guard for the
+// type-check above — it must not reject the legitimate happy path).
+func TestPutAsset_MetadataObject_Accepted(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-META-OK", "MetaOk")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	body := []byte(`{"metadata":{"foo":"bar","n":1}}`)
+	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	putReq.Header.Set("Content-Type", "application/json")
+	putReq = withRoundTripOrgContext(putReq, orgID)
+	putRec := httptest.NewRecorder()
+	router.ServeHTTP(putRec, putReq)
+
+	require.Equal(t, http.StatusOK, putRec.Code,
+		"object metadata must be accepted: %s", putRec.Body.String())
+}

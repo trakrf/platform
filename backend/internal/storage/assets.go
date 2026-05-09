@@ -101,8 +101,12 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		argPos++
 	}
 
+	// Empty effective body (e.g. PUT body that decoded to no writable fields
+	// after the read-only drop in TRA-608, or a `{}` body) is a no-op success:
+	// return the unchanged record so a verbatim GET → PUT round-trip with only
+	// read-only fields succeeds. TRA-619.
 	if len(updates) == 0 {
-		return nil, fmt.Errorf("no fields to update")
+		return s.getAssetWithLocationByID(ctx, orgID, id)
 	}
 
 	query := fmt.Sprintf(`

@@ -60,8 +60,12 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		argPos++
 	}
 
+	// Empty effective body (e.g. PUT body that decoded to no writable fields
+	// after the read-only drop in TRA-608, or a `{}` body) is a no-op success:
+	// return the unchanged record so a verbatim GET → PUT round-trip with only
+	// read-only fields succeeds. TRA-619.
 	if len(updates) == 0 {
-		return nil, fmt.Errorf("no fields to update")
+		return s.getLocationWithParentByID(ctx, orgID, id)
 	}
 
 	query := fmt.Sprintf(`
