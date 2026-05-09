@@ -3,7 +3,6 @@ package orgs
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trakrf/platform/backend/internal/apierrors"
@@ -29,11 +28,9 @@ import (
 // @Router /api/v1/orgs/{id}/members [get]
 // ListMembers returns all members of an organization.
 func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -67,19 +64,15 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/orgs/{id}/members/{userId} [put]
 // UpdateMemberRole updates a member's role in an organization.
 func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
-	userID, err := strconv.Atoi(chi.URLParam(r, "userId"))
+	userID, err := httputil.ParseSurrogateID("userId", chi.URLParam(r, "userId"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.MemberUpdateInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -150,19 +143,15 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
-	userID, err := strconv.Atoi(chi.URLParam(r, "userId"))
+	userID, err := httputil.ParseSurrogateID("userId", chi.URLParam(r, "userId"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.MemberUpdateInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 

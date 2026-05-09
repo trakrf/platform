@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trakrf/platform/backend/internal/apierrors"
@@ -29,11 +28,9 @@ import (
 // @Router /api/v1/orgs/{id}/invitations [get]
 // ListInvitations returns pending invitations for an organization.
 func (h *Handler) ListInvitations(w http.ResponseWriter, r *http.Request) {
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -72,11 +69,9 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -141,11 +136,9 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/orgs/{id}/invitations/{inviteId} [delete]
 // CancelInvitation cancels a pending invitation.
 func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
-	inviteID, err := strconv.Atoi(chi.URLParam(r, "inviteId"))
+	inviteID, err := httputil.ParseSurrogateID("inviteId", chi.URLParam(r, "inviteId"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvitationInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -181,19 +174,15 @@ func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/orgs/{id}/invitations/{inviteId}/resend [post]
 // ResendInvitation generates a new token and resends the email.
 func (h *Handler) ResendInvitation(w http.ResponseWriter, r *http.Request) {
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
-	inviteID, err := strconv.Atoi(chi.URLParam(r, "inviteId"))
+	inviteID, err := httputil.ParseSurrogateID("inviteId", chi.URLParam(r, "inviteId"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.InvitationInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 

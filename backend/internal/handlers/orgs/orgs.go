@@ -132,11 +132,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/orgs/{id} [get]
 // Get returns a single organization by ID.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	id, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgGetInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -174,11 +172,9 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/orgs/{id} [put]
 // Update updates an organization's name.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	id, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgUpdateInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -231,11 +227,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/orgs/{id} [delete]
 // Delete soft-deletes an organization after confirming the name matches.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	id, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			apierrors.OrgDeleteInvalidID, middleware.GetRequestID(r.Context()))
-
+		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
 		return
 	}
 

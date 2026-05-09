@@ -75,12 +75,9 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "asset_id")
-	id, err := httputil.ParseSurrogateID(idParam)
+	id, err := httputil.ParseSurrogateID("asset_id", chi.URLParam(r, "asset_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), reqID)
-
+		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
 

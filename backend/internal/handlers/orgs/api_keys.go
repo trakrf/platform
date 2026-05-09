@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -77,11 +76,9 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", reqID)
-
+		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
 
@@ -169,11 +166,9 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 // ListAPIKeys handles GET /api/v1/orgs/{id}/api-keys.
 func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", reqID)
-
+		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
 
@@ -243,18 +238,14 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // and silently break int-path lookups in typed clients.
 func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", reqID)
-
+		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
-	keyID, err := strconv.Atoi(chi.URLParam(r, "key_id"))
+	keyID, err := httputil.ParseSurrogateID("key_id", chi.URLParam(r, "key_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid key id", reqID)
-
+		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
 
@@ -290,11 +281,9 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 // RevokeAPIKeyByJTI handles DELETE /api/v1/orgs/{id}/api-keys/by-jti/{jti}.
 func (h *Handler) RevokeAPIKeyByJTI(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
-	orgID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	orgID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			"Invalid org id", reqID)
-
+		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
 	jti, err := uuid.Parse(chi.URLParam(r, "jti"))

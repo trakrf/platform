@@ -801,29 +801,43 @@ func TestRevokeAPIKey_InvalidFormat(t *testing.T) {
 
 	r := newAdminRouter(t, store)
 
-	cases := []string{"foo", "12-not-a-uuid", "abc123", "123.456"}
-	for _, badID := range cases {
-		t.Run(badID, func(t *testing.T) {
+	// TRA-618 §S4: path-param failures surface as validation_error + fields[].
+	cases := []struct {
+		raw      string
+		wantCode string
+	}{
+		{"foo", "invalid_value"},
+		{"12-not-a-uuid", "invalid_value"},
+		{"abc123", "invalid_value"},
+		{"123.456", "invalid_value"},
+		// Negative parses but is below min(1) — same envelope, code: too_small.
+		{"-1", "too_small"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodDelete,
-				fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, badID), nil)
+				fmt.Sprintf("/api/v1/orgs/%d/api-keys/%s", orgID, tc.raw), nil)
 			req.Header.Set("Authorization", "Bearer "+sessionToken)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-			assert.Contains(t, w.Body.String(), "Invalid key id")
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, "key_id", resp.Error.Fields[0].Field)
+			assert.Equal(t, tc.wantCode, resp.Error.Fields[0].Code)
 		})
 	}
-
-	// Negative integer parses but is not a valid id — dispatched to integer
-	// path, hits storage, returns 404. Documents the behavior.
-	t.Run("negative_int", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete,
-			fmt.Sprintf("/api/v1/orgs/%d/api-keys/-1", orgID), nil)
-		req.Header.Set("Authorization", "Bearer "+sessionToken)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
-	})
 }
 
 // Mirror of TestRevokeAPIKey_KeyRevokesItself but using the JWT's jti instead

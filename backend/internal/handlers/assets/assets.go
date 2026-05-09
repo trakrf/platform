@@ -548,12 +548,9 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(req, "asset_id")
-	id, err := httputil.ParseSurrogateID(idParam)
+	id, err := httputil.ParseSurrogateID("asset_id", chi.URLParam(req, "asset_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), reqID)
-
+		httputil.RespondPathParamError(w, req, err, reqID)
 		return
 	}
 
@@ -674,12 +671,9 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "asset_id")
-	id, err := httputil.ParseSurrogateID(idParam)
+	id, err := httputil.ParseSurrogateID("asset_id", chi.URLParam(r, "asset_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), requestID)
-
+		httputil.RespondPathParamError(w, r, err, requestID)
 		return
 	}
 
@@ -705,12 +699,9 @@ func (handler *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) doRemoveAssetTag(w http.ResponseWriter, r *http.Request, orgID, assetID int) {
 	requestID := middleware.GetRequestID(r.Context())
 
-	tagIDParam := chi.URLParam(r, "tag_id")
-	tagID, err := strconv.Atoi(tagIDParam)
+	tagID, err := httputil.ParseSurrogateID("tag_id", chi.URLParam(r, "tag_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), requestID)
-
+		httputil.RespondPathParamError(w, r, err, requestID)
 		return
 	}
 
@@ -727,12 +718,9 @@ func (handler *Handler) doRemoveAssetTag(w http.ResponseWriter, r *http.Request,
 // and verifies the asset exists and belongs to the caller's org. Writes an
 // appropriate 400 / 404 / 500 response and returns ok=false on any failure.
 func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.Request, orgID int, reqID string) (int, bool) {
-	idParam := chi.URLParam(req, "asset_id")
-	id, err := httputil.ParseSurrogateID(idParam)
+	id, err := httputil.ParseSurrogateID("asset_id", chi.URLParam(req, "asset_id"))
 	if err != nil {
-		httputil.WriteJSONError(w, req, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), reqID)
-
+		httputil.RespondPathParamError(w, req, err, reqID)
 		return 0, false
 	}
 
