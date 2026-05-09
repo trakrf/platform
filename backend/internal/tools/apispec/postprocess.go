@@ -79,8 +79,10 @@ func postprocessPublic(doc *openapi3.T) error {
 	normalizeArrayQueryParams(doc)
 	injectTopLevelSecurity(doc)
 	injectMethodNotAllowedResponse(doc)
+	injectGlobalHeaderRefs(doc)
 	stripBearerScopeArrays(doc)
 	stripSessionAuthScheme(doc)
+	appendMethodPolicyDescription(doc)
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -115,7 +117,9 @@ func postprocessInternal(doc *openapi3.T) error {
 	annotateErrorEnvelope(doc)
 	normalizeSchemaQuirks(doc)
 	normalizeArrayQueryParams(doc)
+	injectGlobalHeaderRefs(doc)
 	stripBearerScopeArrays(doc)
+	appendMethodPolicyDescription(doc)
 	doc.Info.Title = "TrakRF Internal API — not for customer use"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{
@@ -428,6 +432,136 @@ func injectTopLevelSecurity(doc *openapi3.T) {
 	}
 	doc.Security = openapi3.SecurityRequirements{
 		openapi3.SecurityRequirement{"BearerAuth": []string{}},
+	}
+}
+
+// injectGlobalHeaderRefs (TRA-633 B3) consolidates the X-RateLimit-*,
+// Retry-After, and X-Request-Id headers under components.headers and
+// rewrites every operation response to reference them.
+//
+// Live behavior anchors the choice of which responses get which headers:
+//
+//   - DefaultRateLimitHeaders middleware (router.go) wraps every
+//     /api/v1/* response, so X-RateLimit-{Limit,Remaining,Reset} appear
+//     on every status — 200 and the full error family alike.
+//   - RequestID middleware sets X-Request-Id on every response and
+//     errors.ErrorResponse echoes it as error.request_id, which is the
+//     durable correlation handle support tickets quote.
+//   - Retry-After is emitted only on 429 by the rate limiter.
+//
+// The pass is idempotent: re-running on a doc whose responses already
+// hold the canonical $refs leaves them unchanged. Inline header
+// definitions emitted by swag (// @Header annotations) are flattened
+// to the $ref form here; the spec output should grep zero per-endpoint
+// duplications afterwards.
+func injectGlobalHeaderRefs(doc *openapi3.T) {
+	if doc.Components == nil {
+		doc.Components = &openapi3.Components{}
+	}
+	if doc.Components.Headers == nil {
+		doc.Components.Headers = openapi3.Headers{}
+	}
+
+	intSchema := func() *openapi3.SchemaRef {
+		return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}}
+	}
+	strSchema := func() *openapi3.SchemaRef {
+		return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}}
+	}
+
+	type headerDef struct {
+		name        string
+		description string
+		schema      func() *openapi3.SchemaRef
+	}
+	defs := []headerDef{
+		{"XRateLimitLimit", "Steady-state requests/min for this API key.", intSchema},
+		{"XRateLimitRemaining", "Requests remaining before throttling; bounded by X-RateLimit-Limit.", intSchema},
+		{"XRateLimitReset", "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit.", intSchema},
+		{"RetryAfter", "Seconds to wait before retrying.", intSchema},
+		{"XRequestId", "Server-assigned request correlation identifier; mirrored as error.request_id in error envelopes and echoed in server logs. Quote this when filing support tickets.", strSchema},
+	}
+	for _, d := range defs {
+		if _, exists := doc.Components.Headers[d.name]; exists {
+			continue
+		}
+		doc.Components.Headers[d.name] = &openapi3.HeaderRef{
+			Value: &openapi3.Header{
+				Parameter: openapi3.Parameter{
+					Description: d.description,
+					Schema:      d.schema(),
+				},
+			},
+		}
+	}
+
+	if doc.Paths == nil {
+		return
+	}
+
+	rateLimitLimit := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitLimit"}
+	rateLimitRemaining := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitRemaining"}
+	rateLimitReset := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitReset"}
+	retryAfter := &openapi3.HeaderRef{Ref: "#/components/headers/RetryAfter"}
+	requestID := &openapi3.HeaderRef{Ref: "#/components/headers/XRequestId"}
+
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil || op.Responses == nil {
+				continue
+			}
+			for code, resp := range op.Responses.Map() {
+				if resp == nil || resp.Value == nil {
+					continue
+				}
+				if resp.Value.Headers == nil {
+					resp.Value.Headers = openapi3.Headers{}
+				}
+				resp.Value.Headers["X-RateLimit-Limit"] = rateLimitLimit
+				resp.Value.Headers["X-RateLimit-Remaining"] = rateLimitRemaining
+				resp.Value.Headers["X-RateLimit-Reset"] = rateLimitReset
+				resp.Value.Headers["X-Request-Id"] = requestID
+				if code == "429" {
+					resp.Value.Headers["Retry-After"] = retryAfter
+				}
+			}
+		}
+	}
+}
+
+// appendMethodPolicyDescription (TRA-633 B1, B4) documents the universal
+// HEAD and OPTIONS behavior once, in spec.info.description, instead of
+// declaring per-path operations. The platform router exposes both methods
+// uniformly via middleware:
+//
+//   - chimiddleware.GetHead transparently rewrites HEAD→GET when no HEAD
+//     handler is registered, so HEAD works on every GET endpoint with
+//     identical headers and an empty body.
+//   - The CORS middleware short-circuits OPTIONS with a 204 No Content +
+//     Access-Control-* preflight response on every path, gated by
+//     BACKEND_CORS_ORIGIN.
+//
+// Per-path declarations would more than double the operation count for no
+// codegen value (HEAD has the same response shape as GET; OPTIONS is a
+// browser-only preflight mechanism outside the resource API surface).
+// Documenting the policy at the spec level satisfies "decide once, apply
+// uniformly" without bloating every path.
+func appendMethodPolicyDescription(doc *openapi3.T) {
+	const marker = "## HTTP method coverage"
+	if strings.Contains(doc.Info.Description, marker) {
+		return
+	}
+	policy := marker + "\n\n" +
+		"**HEAD** — supported on every endpoint that declares `get`. The server transparently strips the response body and returns the same status and headers as the matching `GET`. HEAD operations are not enumerated per path; assume HEAD wherever GET is declared.\n\n" +
+		"**OPTIONS** — reserved for CORS preflight. Returns `204 No Content` with `Access-Control-*` headers when a browser origin is allowed; otherwise `204` with no CORS headers. OPTIONS is not part of the resource API surface and is not enumerated per path.\n\n" +
+		"To probe which methods a path supports, send any request and inspect the `Allow` header on the resulting `405 Method Not Allowed` response (RFC 7231 §6.5.5)."
+	if doc.Info.Description == "" {
+		doc.Info.Description = policy
+	} else {
+		doc.Info.Description = doc.Info.Description + "\n\n" + policy
 	}
 }
 
