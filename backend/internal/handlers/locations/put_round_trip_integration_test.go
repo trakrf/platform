@@ -348,3 +348,52 @@ func TestPostLocation_GoodExternalKeyPattern_Accepted(t *testing.T) {
 	}
 	_ = pool
 }
+
+// TRA-619 finding 1 (locations parallel surface): a PUT body that contains
+// only read-only fields decodes to an empty UpdateLocationRequest after the
+// readOnly drop. Previous behavior was a "no fields to update" error
+// surfaced as 500 internal_error. Expected: 200 with the unchanged record.
+func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-RO-NOOP", "RoNoop")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"only id", `{"id":999}`},
+		{"only created_at", `{"created_at":"2020-01-01T00:00:00Z"}`},
+		{"only tree_path", `{"tree_path":"x"}`},
+		{"only depth", `{"depth":42}`},
+		{"only tags", `{"tags":[]}`},
+		{"empty object", `{}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(tc.body)))
+			putReq.Header.Set("Content-Type", "application/json")
+			putReq = withLocationRoundTripOrgContext(putReq, orgID)
+			putRec := httptest.NewRecorder()
+			router.ServeHTTP(putRec, putReq)
+
+			require.Equal(t, http.StatusOK, putRec.Code,
+				"empty effective body must be no-op 200 (got %d): %s", putRec.Code, putRec.Body.String())
+
+			var resp struct {
+				Data map[string]any `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
+			assert.Equal(t, "RoNoop", resp.Data["name"], "name unchanged")
+			assert.Equal(t, "LOC-RO-NOOP", resp.Data["external_key"], "external_key unchanged")
+		})
+	}
+}

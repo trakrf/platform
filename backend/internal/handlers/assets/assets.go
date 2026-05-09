@@ -296,6 +296,25 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		request.LocationExternalKey = nil
 	}
 
+	// metadata is declared `type: object` in the public spec (apispec
+	// postprocess upgrades the empty schema to a free-form object). The Go
+	// field is `*any`, so json.Decode happily accepts strings, numbers, bools,
+	// and arrays — but storage hands those straight through to the jsonb
+	// column where Postgres would reject them as a 500. Mirror the spec at
+	// the validator boundary: reject any non-object metadata as 400. TRA-619.
+	if request.Metadata != nil {
+		if _, ok := (*request.Metadata).(map[string]any); !ok {
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+				"validation failed", reqID,
+				[]modelerrors.FieldError{{
+					Field:   "metadata",
+					Code:    "invalid_value",
+					Message: "metadata must be a JSON object",
+				}})
+			return
+		}
+	}
+
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, req, err, reqID)
 		return

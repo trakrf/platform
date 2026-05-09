@@ -312,6 +312,9 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TRA-619: an empty UpdateLocationRequest (e.g. the PUT body decoded to no
+// writable fields after the read-only drop) is a no-op success — return the
+// unchanged record instead of surfacing as 500.
 func TestUpdateLocation_NoFields(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
@@ -319,14 +322,39 @@ func TestUpdateLocation_NoFields(t *testing.T) {
 
 	storage := &Storage{pool: mock}
 
+	now := time.Now()
 	locationID := 1
 	request := location.UpdateLocationRequest{}
 
+	// No UPDATE issued; storage short-circuits straight to
+	// getLocationWithParentByID + GetTagsByLocationID, both wrapped in WithOrgTx.
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
+	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).
+		WithArgs(locationID, 1).
+		WillReturnRows(pgxmock.NewRows([]string{
+			"id", "org_id", "name", "external_key", "parent_location_id", "path", "depth",
+			"description", "valid_from", "valid_to", "is_active",
+			"created_at", "updated_at", "deleted_at", "parent_external_key",
+		}).AddRow(
+			locationID, 1, "Warehouse 1", "warehouse_1", nil, "warehouse_1", 1,
+			"", now, nil, true, now, now, nil, nil,
+		))
+	mock.ExpectCommit()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
+	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
+		WithArgs(locationID, 1).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+	mock.ExpectCommit()
+
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
 
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "no fields to update")
+	assert.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, locationID, result.ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestUpdateLocation_NotFound(t *testing.T) {
