@@ -160,6 +160,116 @@ func TestRespondValidationError_StringMinMaxStillRendersCharacters(t *testing.T)
 	assert.Contains(t, resp.Error.Fields[0].Message, "characters")
 }
 
+// TRA-637: a `required` violation on a non-pointer string fires when the
+// field is the zero value — but Go's json decoder cannot distinguish a
+// missing key from `"field": ""`, so reporting `code: required` for the
+// empty-string case mislabels the error class. Public taxonomy reserves
+// `required` for missing-field violations and uses `too_short` for
+// zero-length strings; relabel accordingly.
+func TestRespondValidationError_RequiredOnEmptyStringRelabelsAsTooShort(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		Name string `json:"name" validate:"required,min=1,max=255"`
+	}
+	err := v.Struct(s{Name: ""}) // required fires (zero value), min=1 never reached
+	require.Error(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	httputil.RespondValidationError(w, r, err, "req-1")
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	f := resp.Error.Fields[0]
+	assert.Equal(t, "name", f.Field)
+	assert.Equal(t, "too_short", f.Code, "empty string must not be labeled `required`")
+	assert.Contains(t, f.Message, "characters",
+		"string min violation message should mention characters; got %q", f.Message)
+	assert.EqualValues(t, 1, f.Params["min_length"], "implicit min_length=1 from relabeled required")
+}
+
+// TRA-637: `required` on a slice fires for nil/empty slices. The same
+// length-vs-presence ambiguity applies; relabel to too_short with the
+// collection-shaped message.
+func TestRespondValidationError_RequiredOnEmptySliceRelabelsAsTooShort(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		AssetIdentifiers []string `json:"asset_identifiers" validate:"required"`
+	}
+	err := v.Struct(s{}) // nil slice → required fires
+	require.Error(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	httputil.RespondValidationError(w, r, err, "req-1")
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	f := resp.Error.Fields[0]
+	assert.Equal(t, "too_short", f.Code)
+	assert.NotContains(t, f.Message, "characters",
+		"slice required violation must not use string-length template; got %q", f.Message)
+	assert.Contains(t, f.Message, "item",
+		"slice required violation should mention items; got %q", f.Message)
+	assert.EqualValues(t, 1, f.Params["min_length"])
+}
+
+// TRA-637: `required` on a pointer field still means truly absent — the
+// nil pointer is the only way the tag fires, and Go's json decoder leaves
+// nil for a missing key. Keep `code: required`.
+func TestRespondValidationError_RequiredOnNilPointerKeepsRequired(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		Name *string `json:"name" validate:"required"`
+	}
+	err := v.Struct(s{}) // nil pointer → kind=Ptr, not a length kind
+	require.Error(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	httputil.RespondValidationError(w, r, err, "req-1")
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	f := resp.Error.Fields[0]
+	assert.Equal(t, "required", f.Code, "nil pointer required is a true presence violation")
+	assert.Contains(t, f.Message, "is required")
+	assert.Nil(t, f.Params, "required carries no structured params")
+}
+
+// TRA-637: `required_without` is a conditional presence constraint — the
+// violation reads "this field is mandatory when X is absent" regardless of
+// whether the offending value is missing or empty. Keep `code: required`.
+func TestRespondValidationError_RequiredWithoutKeepsRequired(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		OrgName     string `json:"org_name"      validate:"required_without=InviteToken"`
+		InviteToken string `json:"invite_token"`
+	}
+	err := v.Struct(s{}) // both empty → required_without fires on org_name
+	require.Error(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	httputil.RespondValidationError(w, r, err, "req-1")
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "required", resp.Error.Fields[0].Code)
+}
+
 func TestRespondValidationError_UnknownTagFallsBackToInvalidValue(t *testing.T) {
 	v := validator.New()
 	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)

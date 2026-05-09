@@ -48,8 +48,13 @@ func RegisterCustomValidations(v *validator.Validate) {
 
 // tagToCode maps go-playground/validator tag names to our public error
 // codes. Extend as new tags appear. Unknown tags fall back to invalid_value.
+//
+// `required_with` and `required_without` keep the `required` code: the
+// violation is "this field is mandatory under the stated condition", which
+// is presence-class regardless of whether the offending value is missing
+// or empty. The bare `required` tag is handled in codeForTag below because
+// it must branch on Kind. TRA-637.
 var tagToCode = map[string]string{
-	"required":         "required",
 	"required_without": "required",
 	"required_with":    "required",
 	"email":            "invalid_value",
@@ -64,6 +69,13 @@ var tagToCode = map[string]string{
 
 // codeForTag resolves a validator tag + field type into our public code.
 // "min" and "max" are context-sensitive: numeric vs string/slice length.
+// "required" is also context-sensitive: on length-bearing kinds (string,
+// slice, array, map) the validator's tag fires on zero-length values, which
+// our public taxonomy classifies as too_short (length below the minimum),
+// not required (field absent). Go's encoding/json cannot distinguish a
+// missing key from an explicit zero value on a non-pointer field, so the
+// validator can't tell those cases apart either — relabel rather than
+// pretend we have that signal. TRA-637.
 func codeForTag(fe validator.FieldError) string {
 	tag := fe.Tag()
 	switch tag {
@@ -77,11 +89,27 @@ func codeForTag(fe validator.FieldError) string {
 			return "too_large"
 		}
 		return "too_long"
+	case "required":
+		if isLengthKind(fe.Kind()) {
+			return "too_short"
+		}
+		return "required"
 	}
 	if code, ok := tagToCode[tag]; ok {
 		return code
 	}
 	return "invalid_value"
+}
+
+// isLengthKind reports whether the kind has a notion of length (string,
+// slice, array, map). Used by codeForTag to relabel a `required` violation
+// on these kinds as too_short.
+func isLengthKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.String, reflect.Slice, reflect.Array, reflect.Map:
+		return true
+	}
+	return false
 }
 
 // isCollectionKind reports whether the validator's reported Kind is a
@@ -113,10 +141,16 @@ func messageForField(fe validator.FieldError) string {
 	case "required":
 		return fmt.Sprintf("%s is required", fe.Field())
 	case "too_short":
-		if isCollectionKind(fe.Kind()) {
-			return fmt.Sprintf("%s must contain at least %s items", fe.Field(), fe.Param())
+		// fe.Param() is "" when this code came from a relabeled `required`
+		// tag (TRA-637); the implicit minimum is 1 in that case.
+		minLen := fe.Param()
+		if minLen == "" {
+			minLen = "1"
 		}
-		return fmt.Sprintf("%s must be at least %s characters", fe.Field(), fe.Param())
+		if isCollectionKind(fe.Kind()) {
+			return fmt.Sprintf("%s must contain at least %s items", fe.Field(), minLen)
+		}
+		return fmt.Sprintf("%s must be at least %s characters", fe.Field(), minLen)
 	case "too_long":
 		if isCollectionKind(fe.Kind()) {
 			return fmt.Sprintf("%s must contain at most %s items", fe.Field(), fe.Param())
@@ -159,7 +193,13 @@ func paramsForField(fe validator.FieldError) map[string]any {
 			return map[string]any{"pattern": ExternalKeyPattern.String()}
 		}
 	case "too_short":
-		if n, err := strconv.ParseFloat(fe.Param(), 64); err == nil {
+		// fe.Param() is "" when this code came from a relabeled `required`
+		// tag (TRA-637); the implicit minimum is 1 in that case.
+		p := fe.Param()
+		if p == "" {
+			p = "1"
+		}
+		if n, err := strconv.ParseFloat(p, 64); err == nil {
 			return map[string]any{"min_length": n}
 		}
 	case "too_long":

@@ -427,7 +427,11 @@ func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
 // Bug reproduction: TRA-478 — validation errors surface as validation_error
 // with fields[] so clients have a single branch on type + fields[].code.
 // TRA-533: both fields are now required by struct tags; {} produces 2 field
-// errors (location_identifier + asset_identifiers), both with code "required".
+// errors. TRA-637: location_identifier (*string) reports `required` when the
+// pointer is nil (truly absent); asset_identifiers ([]string) reports
+// `too_short` because the validator's `required` tag fires on zero-length
+// values for length-bearing kinds, which the public taxonomy classifies as
+// too_short, not required.
 func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	orgID := 1
 	claims := &jwt.Claims{UserID: 1, Email: "test@example.com", CurrentOrgID: &orgID}
@@ -455,7 +459,7 @@ func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 		codesByField[f.Field] = f.Code
 	}
 	assert.Equal(t, "required", codesByField["location_identifier"])
-	assert.Equal(t, "required", codesByField["asset_identifiers"])
+	assert.Equal(t, "too_short", codesByField["asset_identifiers"])
 }
 
 // --- Handler-level tests using mockInventoryStorage ---
