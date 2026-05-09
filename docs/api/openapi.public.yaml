@@ -706,7 +706,9 @@ paths:
             description: |-
                 **Required scope:** `assets:read`
 
-                Paginated assets list with natural-key filters, sort, and substring search
+                Paginated assets list with natural-key filters, sort, and substring search.
+
+                Default scope returns currently-effective assets only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.
             operationId: assets.list
             parameters:
                 - description: max 200
@@ -978,6 +980,8 @@ paths:
                 **Required scope:** `assets:read`
 
                 Retrieve an asset by its canonical id. Returns 404 if the asset does not exist.
+
+                Path-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted asset is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.
             operationId: assets.get
             parameters:
                 - description: Asset id (canonical)
@@ -1137,6 +1141,8 @@ paths:
                 **Required scope:** `history:read`
 
                 Location history for an asset identified by its canonical id.
+
+                The asset existence check follows path-addressed semantics — the asset is returned even if its `valid_to` has elapsed. Each history row's location reference applies the temporal-validity predicate, so an event referencing a location whose effective window is past surfaces with null `location_external_key`.
             operationId: assets.history
             parameters:
                 - description: Asset id (canonical)
@@ -1396,7 +1402,12 @@ paths:
                 - assets
     /api/v1/locations:
         get:
-            description: '**Required scope:** `locations:read`'
+            description: |-
+                **Required scope:** `locations:read`
+
+                Paginated locations list with natural-key filters, sort, and substring search.
+
+                Default scope returns currently-effective locations only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.
             operationId: locations.list
             parameters:
                 - description: max 200
@@ -1644,6 +1655,8 @@ paths:
                 **Required scope:** `locations:read`
 
                 Retrieve a location by its canonical ID. Returns 404 if not found.
+
+                Path-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted location is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.
             operationId: locations.get
             parameters:
                 - description: Location ID
@@ -2151,6 +2164,8 @@ paths:
                 **Required scope:** `history:read`
 
                 Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
+
+                Temporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible — matching how soft-deleted locations are projected.
             operationId: locations.current
             parameters:
                 - description: max 200

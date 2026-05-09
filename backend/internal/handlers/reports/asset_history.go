@@ -43,6 +43,8 @@ type AssetHistoryResponse struct {
 
 // @Summary Asset movement history
 // @Description Location history for an asset identified by its canonical id.
+// @Description
+// @Description The asset existence check follows path-addressed semantics — the asset is returned even if its `valid_to` has elapsed. Each history row's location reference applies the temporal-validity predicate, so an event referencing a location whose effective window is past surfaces with null `location_external_key`.
 // @Tags reports,public
 // @ID assets.history
 // @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(2147483647)
