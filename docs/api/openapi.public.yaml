@@ -244,6 +244,13 @@ components:
                             example: validation_error
                             type: string
                             x-extensible-enum: true
+                    required:
+                        - type
+                        - title
+                        - status
+                        - detail
+                        - instance
+                        - request_id
                     type: object
             required:
                 - error
@@ -661,6 +668,7 @@ components:
                     minLength: 1
                     type: string
             required:
+                - id
                 - tag_type
                 - value
                 - is_active
@@ -1257,7 +1265,7 @@ paths:
                 - BearerAuth: []
             summary: Asset movement history
             tags:
-                - reports
+                - assets
     /api/v1/assets/{asset_id}/tags:
         post:
             description: |-
@@ -2281,7 +2289,7 @@ paths:
                 - BearerAuth: []
             summary: List current asset locations
             tags:
-                - reports
+                - locations
     /api/v1/orgs/me:
         get:
             description: Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.

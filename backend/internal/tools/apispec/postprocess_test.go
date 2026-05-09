@@ -207,6 +207,11 @@ func TestPostprocess_ConvertsExtensibleEnumStringToBool(t *testing.T) {
 // schema description, and the title/detail properties must each describe
 // their semantics. swaggo doesn't propagate godoc through an outer struct
 // that wraps an anonymous nested struct, so this is applied here.
+//
+// Also locks in TRA-632 / A1: the inner anonymous `error` object's required
+// list must include every field the service always emits (type, title,
+// status, detail, instance, request_id). Fields with json `,omitempty`
+// (fields[]) stay optional.
 func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
@@ -216,9 +221,12 @@ func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
 				"error": &openapi3.SchemaRef{Value: &openapi3.Schema{
 					Type: &openapi3.Types{openapi3.TypeObject},
 					Properties: openapi3.Schemas{
-						"type":   stringProp(""),
-						"title":  stringProp(""),
-						"detail": stringProp(""),
+						"type":       stringProp(""),
+						"title":      stringProp(""),
+						"status":     &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+						"detail":     stringProp(""),
+						"instance":   stringProp(""),
+						"request_id": stringProp(""),
 					},
 				}},
 			},
@@ -232,9 +240,16 @@ func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
 	assert.Contains(t, envelope.Description, "detail")
 	assert.Contains(t, envelope.Description, "stable", "description must say title is stable")
 
-	errProps := envelope.Properties["error"].Value.Properties
+	errInner := envelope.Properties["error"].Value
+	errProps := errInner.Properties
 	assert.NotEmpty(t, errProps["title"].Value.Description, "title field needs its own description")
 	assert.NotEmpty(t, errProps["detail"].Value.Description, "detail field needs its own description")
+
+	assert.ElementsMatch(t,
+		[]string{"type", "title", "status", "detail", "instance", "request_id"},
+		errInner.Required,
+		"inner error object must mark every always-emitted field as required",
+	)
 }
 
 // TestPostprocess_MarksNullableFields locks in TRA-517 AC2/AC9/AC11. Go

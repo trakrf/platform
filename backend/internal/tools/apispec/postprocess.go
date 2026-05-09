@@ -533,7 +533,7 @@ var requiredFields = map[string][]string{
 	"errors.FieldError":    {"field", "code", "message"},
 
 	// shared
-	"shared.Tag": {"tag_type", "value", "is_active"},
+	"shared.Tag": {"id", "tag_type", "value", "is_active"},
 
 	// asset
 	"asset.PublicAssetView": {"id", "external_key", "name", "description", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "tags"},
@@ -605,6 +605,12 @@ var readOnlyFields = map[string][]string{
 // the title vs detail contract from TRA-517 AC4. swaggo doesn't propagate
 // godoc on a struct that wraps an anonymous nested struct, so the
 // description has to be applied here.
+//
+// Also sets the required: list on the inner anonymous `error` object. The
+// generator only writes a top-level required: for the wrapper struct, so the
+// inner Type/Title/Status/Detail/Instance/RequestID fields — which the
+// service always emits — never get marked required. Fields with json
+// `,omitempty` (e.g. Fields []FieldError) stay optional. TRA-632 / A1.
 func annotateErrorEnvelope(doc *openapi3.T) {
 	if doc.Components == nil || doc.Components.Schemas == nil {
 		return
@@ -629,6 +635,7 @@ func annotateErrorEnvelope(doc *openapi3.T) {
 	if detail := errProp.Value.Properties["detail"]; detail != nil && detail.Value != nil {
 		detail.Value.Description = "Specific, human-readable cause of this particular failure. May be empty when title alone fully describes the condition. Do not branch on this value."
 	}
+	errProp.Value.Required = []string{"type", "title", "status", "detail", "instance", "request_id"}
 }
 
 // markNullableFields walks doc.Components.Schemas and sets nullable:true

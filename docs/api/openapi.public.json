@@ -329,6 +329,14 @@
                 "x-extensible-enum": true
               }
             },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "detail",
+              "instance",
+              "request_id"
+            ],
             "type": "object"
           }
         },
@@ -893,6 +901,7 @@
           }
         },
         "required": [
+          "id",
           "tag_type",
           "value",
           "is_active"
@@ -1778,7 +1787,7 @@
         ],
         "summary": "Asset movement history",
         "tags": [
-          "reports"
+          "assets"
         ]
       }
     },
@@ -2459,7 +2468,7 @@
         ],
         "summary": "List current asset locations",
         "tags": [
-          "reports"
+          "locations"
         ]
       }
     },
