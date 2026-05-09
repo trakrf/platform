@@ -921,7 +921,7 @@ paths:
             description: |-
                 **Required scope:** `assets:write`
 
-                Create a new asset record, optionally with one or more tags (RFID, BLE, NFC, barcode).
+                Create a new asset record, optionally with one or more tags (RFID, BLE, barcode).
 
                 The `external_key` field is optional. Provide a value from your system of record
                 (ERP, WMS, asset management) for natural-key joins, or omit it to receive a
