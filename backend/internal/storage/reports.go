@@ -106,14 +106,14 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		)
 		SELECT COUNT(*)
 		FROM latest_scans ls
-		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
+		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
 		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
 		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $4
+				   WHERE ai.asset_id = a.id AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $5::bool)
 	`
@@ -152,14 +152,14 @@ func buildCurrentLocationsQueryDistinctOn() string {
 			ls.last_seen,
 			a.deleted_at    AS asset_deleted_at
 		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
+		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
 		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
 		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $4
+				   WHERE ai.asset_id = a.id AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
 		ORDER BY a.name
@@ -188,14 +188,14 @@ func buildCurrentLocationsQueryTimescale() string {
 			ls.last_seen,
 			a.deleted_at    AS asset_deleted_at
 		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL
+		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
+		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
 		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
 		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
 				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ai.value ILIKE $4
+				   WHERE ai.asset_id = a.id AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
 		ORDER BY a.name
