@@ -1,7 +1,6 @@
 import type { Scope } from '@/types/apiKey';
 
 type ResourceLevel = 'none' | 'read' | 'readwrite';
-type AdminLevel = 'none' | 'admin';
 
 interface Props {
   value: Scope[];
@@ -30,19 +29,14 @@ function scopesFor(resource: ResourceKey, level: ResourceLevel): Scope[] {
   return [`${resource}:read` as Scope, `${resource}:write` as Scope];
 }
 
-function adminLevelFor(scopes: Scope[]): AdminLevel {
-  return scopes.includes('keys:admin') ? 'admin' : 'none';
-}
-
+// TRA-621: Key management dropdown intentionally omitted. The `keys:admin`
+// scope gates real backend endpoints, but those endpoints are internal-only
+// in v1 (TRA-578 stripped them from the public spec). Reintroduce when v2
+// programmatic-mint ships publicly.
 export function ScopeSelector({ value, onChange }: Props) {
   const setLevel = (resource: ResourceKey, level: ResourceLevel) => {
     const without = value.filter((s) => !s.startsWith(`${resource}:`));
     onChange([...without, ...scopesFor(resource, level)]);
-  };
-
-  const setAdmin = (level: AdminLevel) => {
-    const without = value.filter((s) => s !== 'keys:admin');
-    onChange(level === 'admin' ? [...without, 'keys:admin'] : without);
   };
 
   return (
@@ -74,24 +68,6 @@ export function ScopeSelector({ value, onChange }: Props) {
           </div>
         );
       })}
-      <div className="flex items-center gap-3">
-        <label
-          htmlFor="scope-keys"
-          className="w-32 text-sm text-gray-800 dark:text-gray-200"
-        >
-          Key management
-        </label>
-        <select
-          id="scope-keys"
-          aria-label="Key management"
-          value={adminLevelFor(value)}
-          onChange={(e) => setAdmin(e.target.value as AdminLevel)}
-          className="border rounded px-2 py-1 text-sm bg-white dark:bg-gray-800"
-        >
-          <option value="none">None</option>
-          <option value="admin">Admin</option>
-        </select>
-      </div>
     </fieldset>
   );
 }
