@@ -259,7 +259,7 @@ func TestRouter_RetiredLookupPath_Returns404(t *testing.T) {
 }
 
 // TestRouter_AuditedStatic_405WithCorrectAllow — TRA-600 audit. The
-// audited static paths (orgs/me, users/me, locations/current,
+// audited static paths (orgs/me, users/me, reports/asset-locations,
 // assets/bulk, …) must emit 405 with an Allow header that reflects only
 // the static path's actual methods, never the sibling /{id}'s.
 func TestRouter_AuditedStatic_405WithCorrectAllow(t *testing.T) {
@@ -280,8 +280,8 @@ func TestRouter_AuditedStatic_405WithCorrectAllow(t *testing.T) {
 		{"/api/v1/users/me", http.MethodDelete, "GET, HEAD"},
 		{"/api/v1/users/me/current-org", http.MethodGet, "POST"},
 		{"/api/v1/users/me/current-org", http.MethodDelete, "POST"},
-		{"/api/v1/locations/current", http.MethodPut, "GET, HEAD"},
-		{"/api/v1/locations/current", http.MethodDelete, "GET, HEAD"},
+		{"/api/v1/reports/asset-locations", http.MethodPut, "GET, HEAD"},
+		{"/api/v1/reports/asset-locations", http.MethodDelete, "GET, HEAD"},
 		{"/api/v1/assets/bulk", http.MethodGet, "POST"},
 		{"/api/v1/assets/bulk", http.MethodDelete, "POST"},
 		{"/api/v1/assets/bulk/abc123", http.MethodPut, "GET, HEAD"},

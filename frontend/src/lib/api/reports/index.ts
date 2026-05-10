@@ -29,7 +29,7 @@ function appendRepeatable(
 export const reportsApi = {
   /**
    * Get current locations for all assets
-   * GET /api/v1/locations/current
+   * GET /api/v1/reports/asset-locations
    */
   getCurrentLocations: (options: CurrentLocationsParams = {}) => {
     const params = new URLSearchParams();
@@ -45,8 +45,8 @@ export const reportsApi = {
 
     const queryString = params.toString();
     const url = queryString
-      ? `/locations/current?${queryString}`
-      : '/locations/current';
+      ? `/reports/asset-locations?${queryString}`
+      : '/reports/asset-locations';
     return apiClient.get<CurrentLocationsResponse>(url);
   },
 

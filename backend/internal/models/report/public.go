@@ -2,7 +2,7 @@ package report
 
 import "time"
 
-// PublicCurrentLocationItem is the public shape for /api/v1/locations/current items.
+// PublicCurrentLocationItem is the public shape for /api/v1/reports/asset-locations items.
 //
 // asset_deleted_at is always emitted (null when the asset is live) per the
 // TRA-610 / BB18 §1.8 + §1.10 audit alignment. The default ?include_deleted

@@ -160,7 +160,7 @@ func setupRouter(
 		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
 		// require history:read per TRA-578 — these endpoints expose scan-derived
 		// history data; the scope name aligns with the /history endpoint vocabulary.
-		r.With(middleware.RequireScope("history:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
+		r.With(middleware.RequireScope("history:read")).Get("/api/v1/reports/asset-locations", reportsHandler.ListCurrentLocations)
 		r.With(middleware.RequireScope("history:read")).Get("/api/v1/assets/{asset_id}/history", reportsHandler.GetAssetHistory)
 	})
 
@@ -223,7 +223,7 @@ func setupRouter(
 		register405Static(r, "/api/v1/orgs/me", []string{http.MethodGet})
 		register405Static(r, "/api/v1/users/me", []string{http.MethodGet})
 		register405Static(r, "/api/v1/users/me/current-org", []string{http.MethodPost})
-		register405Static(r, "/api/v1/locations/current", []string{http.MethodGet})
+		register405Static(r, "/api/v1/reports/asset-locations", []string{http.MethodGet})
 		register405Static(r, "/api/v1/assets/bulk", []string{http.MethodPost})
 		register405Static(r, "/api/v1/assets/bulk/{jobId}", []string{http.MethodGet})
 	})
