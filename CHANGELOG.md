@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Migrating handheld React app as frontend component
+- TRA-660 BB25 C1 public-spec schema namespace restructure (breaking for SDK consumers; no published SDK yet):
+  - Schema components no longer carry Go-package prefixes. `asset.PublicAssetView` → `AssetView`, `location.UpdateLocationRequest` → `UpdateLocationRequest`, `errors.ErrorResponse` → `ErrorResponse`, `shared.Tag` → `Tag`, etc. Codegen tools that flatten `.` to a legal identifier (most do) no longer emit doubled-prefix model classes (`AssetPublicAssetView`).
+  - The redundant `Public` qualifier is dropped — the spec is the public surface; the Go-side distinction is invisible to SDK consumers.
+  - Where the clean name would collide across resources, the rename keeps a resource prefix in verb-noun form: `asset.AddTagResponse` → `AddAssetTagResponse`, `location.AddTagResponse` → `AddLocationTagResponse`.
+  - Report-package wrappers fold onto resource-shaped names matching what the operation returns: `report.ListCurrentLocationsResponse` → `AssetLocationsResponse`, `report.PublicCurrentLocationItem` → `AssetLocationItem`.
+  - operationIds adopt camelCase `verbResource` form: `assets.create` → `createAsset`, `locations.tags.add` → `addLocationTag`, `reports.asset-locations` → `getAssetLocations`. Generated SDK calls read `client.createAsset()` rather than `client.assets_create()`.
+  - Top-level `tags` array now carries descriptions for each resource grouping (assets, locations, orgs, reports) — used by docs renderers.
+  - Internal spec is unchanged. Go source is unchanged (rename happens entirely in the apispec transformer). No wire-level behavior changes.
 - TRA-602 BB17 S2 schema namespace consolidation (breaking for SDK consumers; no published SDK yet):
   - Asset, location, and report schema components are now under a single (singular) namespace: `asset.*`, `location.*`, `report.*`. Response wrappers that previously lived under `assets.*` / `locations.*` / `reports.*` (e.g. `assets.CreateAssetResponse`, `locations.ListLocationsResponse`, `reports.AssetHistoryResponse`) are renamed to the singular form (`asset.CreateAssetResponse`, `location.ListLocationsResponse`, `report.AssetHistoryResponse`).
   - Org schemas are now under `org.*` (matches the `/api/v1/orgs/...` URL prefix). Public spec: `orgs.GetOrgMeResponse` → `org.GetOrgMeResponse`, `orgs.OrgMeView` → `org.OrgMeView`. Internal spec also folds the model package `organization.*` (full word) onto `org.*` for consistency.
