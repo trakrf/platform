@@ -441,6 +441,7 @@ type ListDescendantsResponse struct {
 // @Param parent_external_key query []string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id" collectionFormat(multi)
 // @Param external_key         query []string false "filter by location external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active           query bool   false "filter by active flag"
+// @Param include_deleted     query bool   false "when true, include soft-deleted rows in the response. location_deleted_at is populated for those rows. Orthogonal to is_active." default(false)
 // @Param q                   query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
 // @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(tree_path, -tree_path, external_key, -external_key, name, -name, created_at, -created_at)
 // @Success 200 {object} locations.ListLocationsResponse
@@ -460,8 +461,8 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"parent_id", "parent_external_key", "external_key", "is_active", "q"},
-		BoolFilters: []string{"is_active"},
+		Filters:     []string{"parent_id", "parent_external_key", "external_key", "is_active", "include_deleted", "q"},
+		BoolFilters: []string{"is_active", "include_deleted"},
 		Sorts:       []string{"tree_path", "external_key", "name", "created_at"},
 	})
 	if err != nil {
@@ -510,6 +511,9 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	if vs, ok := params.Filters["is_active"]; ok && len(vs) > 0 {
 		b := vs[0] == "true"
 		f.IsActive = &b
+	}
+	if vs, ok := params.Filters["include_deleted"]; ok && len(vs) > 0 {
+		f.IncludeDeleted = vs[0] == "true"
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
 		f.Q = &vs[0]

@@ -7,13 +7,17 @@ import (
 )
 
 // PublicAssetView is the HTTP shape emitted by read endpoints. It drops
-// org_id and deleted_at and exposes the asset's location as both the
-// canonical int FK and its natural-key external_key (TRA-555). The wire
-// fields are `location_id` and `location_external_key` (TRA-580 C-3 dropped
-// the `current_` prefix that conflicted with the report row shape).
+// org_id and exposes the asset's location as both the canonical int FK and
+// its natural-key external_key (TRA-555). The wire fields are `location_id`
+// and `location_external_key` (TRA-580 C-3 dropped the `current_` prefix
+// that conflicted with the report row shape).
 //
 // description and valid_to are always emitted (null when unset) per
 // TRA-610 / BB18 §1.8 audit alignment with PublicLocationView.
+//
+// asset_deleted_at is always emitted (null for live rows, populated for
+// soft-deleted rows surfaced via ?include_deleted=true) per TRA-659 / BB25
+// A3 — matches the field shape /api/v1/locations/current emits per TRA-610.
 type PublicAssetView struct {
 	ID                  int          `json:"id"`
 	ExternalKey         string       `json:"external_key"`
@@ -27,6 +31,7 @@ type PublicAssetView struct {
 	ValidTo             *time.Time   `json:"valid_to"`
 	CreatedAt           time.Time    `json:"created_at"`
 	UpdatedAt           time.Time    `json:"updated_at"`
+	AssetDeletedAt      *time.Time   `json:"asset_deleted_at"`
 	Tags                []shared.Tag `json:"tags"`
 }
 
@@ -55,6 +60,7 @@ func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
 		ValidTo:             a.ValidTo,
 		CreatedAt:           a.CreatedAt,
 		UpdatedAt:           a.UpdatedAt,
+		AssetDeletedAt:      a.DeletedAt,
 		Tags:                a.Tags,
 	}
 }

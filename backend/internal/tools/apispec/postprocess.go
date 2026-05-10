@@ -816,11 +816,11 @@ func markResponseSchemasAdditive(doc *openapi3.T, schemas []string) error {
 // not writable and don't appear on the write side.
 var nullableFields = map[string][]string{
 	// --- read views (response payloads) ---
-	"asset.PublicAssetView":            {"location_id", "location_external_key", "description", "valid_to"},
+	"asset.PublicAssetView":            {"location_id", "location_external_key", "description", "valid_to", "asset_deleted_at"},
 	"apikey.APIKeyListItem":            {"created_by", "created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem":    {"duration_seconds", "location_id", "location_external_key"},
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "asset_deleted_at"},
-	"location.PublicLocationView":      {"parent_id", "parent_external_key", "description", "valid_to"},
+	"location.PublicLocationView":      {"parent_id", "parent_external_key", "description", "valid_to", "location_deleted_at"},
 
 	// --- write schemas (request payloads) — TRA-614 / BB19 §S1 ---
 	// Mirror the read-view asymmetry: anything nullable above is nullable
@@ -858,10 +858,10 @@ var requiredFields = map[string][]string{
 	"shared.Tag": {"id", "tag_type", "value", "is_active"},
 
 	// asset
-	"asset.PublicAssetView": {"id", "external_key", "name", "description", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "tags"},
+	"asset.PublicAssetView": {"id", "external_key", "name", "description", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "asset_deleted_at", "tags"},
 
 	// location
-	"location.PublicLocationView": {"id", "external_key", "name", "description", "parent_id", "parent_external_key", "tree_path", "depth", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "tags"},
+	"location.PublicLocationView": {"id", "external_key", "name", "description", "parent_id", "parent_external_key", "tree_path", "depth", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "location_deleted_at", "tags"},
 
 	// report
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen", "asset_deleted_at"},

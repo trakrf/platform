@@ -58,7 +58,7 @@ type CreateLocationRequest struct {
 //
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"].
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at"}
 
 // UpdateLocationRequest is the PUT body. The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
@@ -132,9 +132,13 @@ type ListFilter struct {
 	ExternalKeys []string
 	IsActive     *bool
 	Q            *string
-	Sorts        []ListSort
-	Limit        int
-	Offset       int
+	// IncludeDeleted relaxes the default l.deleted_at IS NULL filter so
+	// soft-deleted rows are returned alongside live rows. Orthogonal to
+	// IsActive (TRA-659 / BB25 A3). Temporal validity still applies.
+	IncludeDeleted bool
+	Sorts          []ListSort
+	Limit          int
+	Offset         int
 }
 
 type ListSort struct {

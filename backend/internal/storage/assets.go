@@ -850,10 +850,16 @@ func (s *Storage) CountAssetsFiltered(
 }
 
 func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
+	// TRA-659 / BB25 A3: include_deleted relaxes the soft-delete filter so
+	// callers reconciling against an external system of record can enumerate
+	// deleted rows alongside live ones. Temporal validity still applies.
+	// Orthogonal to is_active.
 	clauses := []string{
 		"a.org_id = $1",
-		"a.deleted_at IS NULL",
 		temporallyEffective("a"),
+	}
+	if !f.IncludeDeleted {
+		clauses = append(clauses, "a.deleted_at IS NULL")
 	}
 	args := []any{orgID}
 

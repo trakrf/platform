@@ -51,7 +51,7 @@ type CreateAssetRequest struct {
 //
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"].
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_deleted_at"}
 
 // UpdateAssetRequest is the PUT body. The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
@@ -123,9 +123,13 @@ type ListFilter struct {
 	ExternalKeys []string
 	IsActive     *bool
 	Q            *string // substring match (case-insensitive) on name, external_key, description, and active tag values
-	Sorts        []ListSort
-	Limit        int
-	Offset       int
+	// IncludeDeleted relaxes the default a.deleted_at IS NULL filter so
+	// soft-deleted rows are returned alongside live rows. Orthogonal to
+	// IsActive (TRA-659 / BB25 A3). Temporal validity still applies.
+	IncludeDeleted bool
+	Sorts          []ListSort
+	Limit          int
+	Offset         int
 }
 
 // ListSort is one (field, direction) entry.

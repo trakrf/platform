@@ -20,6 +20,10 @@ import (
 // row — including freshly minted ones — carries a timestamp. The prior
 // `*time.Time` shape generated `Date | null` in typescript-fetch and
 // forced null-checks the asset side never required.
+//
+// location_deleted_at is always emitted (null for live rows, populated for
+// soft-deleted rows surfaced via ?include_deleted=true) per TRA-659 / BB25
+// A3 — matches the asset_deleted_at shape on /api/v1/locations/current.
 type PublicLocationView struct {
 	ID                int          `json:"id"`
 	ExternalKey       string       `json:"external_key"`
@@ -34,6 +38,7 @@ type PublicLocationView struct {
 	ValidTo           *time.Time   `json:"valid_to"`
 	CreatedAt         time.Time    `json:"created_at"`
 	UpdatedAt         time.Time    `json:"updated_at"`
+	LocationDeletedAt *time.Time   `json:"location_deleted_at"`
 	Tags              []shared.Tag `json:"tags"`
 }
 
@@ -61,6 +66,7 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 		ValidTo:           l.ValidTo,
 		CreatedAt:         l.CreatedAt,
 		UpdatedAt:         updatedAt,
+		LocationDeletedAt: l.DeletedAt,
 		Tags:              l.Tags,
 	}
 }
