@@ -785,6 +785,8 @@ info:
     description: |-
         TrakRF public REST API. See /api for the customer-facing reference.
 
+        Spec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).
+
         HTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage
     license:
         name: Business Source License 1.1

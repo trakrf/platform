@@ -87,6 +87,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	injectGlobalHeaderRefs(doc)
 	stripBearerScopeArrays(doc)
 	stripSessionAuthScheme(doc)
+	appendSpecVariantsDescription(doc)
 	appendMethodPolicyDescription(doc)
 	if err := renamePublicSpec(doc); err != nil {
 		return fmt.Errorf("rename public spec: %w", err)
@@ -546,6 +547,26 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 				}
 			}
 		}
+	}
+}
+
+// appendSpecVariantsDescription (TRA-657 BB25 A8) advertises both spec
+// variants in info.description on the public spec. The /api Redoc page
+// exposes a single download button that pulls only the YAML; consumers
+// preferring JSON must already know the canonical /api/openapi.json URL
+// or look at a sibling docs page that advertises both. The
+// info.description is the natural surface for that pointer. Site-relative
+// paths match the rationale in appendMethodPolicyDescription.
+func appendSpecVariantsDescription(doc *openapi3.T) {
+	const marker = "Spec available as YAML"
+	if strings.Contains(doc.Info.Description, marker) {
+		return
+	}
+	advert := "Spec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json)."
+	if doc.Info.Description == "" {
+		doc.Info.Description = advert
+	} else {
+		doc.Info.Description = doc.Info.Description + "\n\n" + advert
 	}
 }
 
