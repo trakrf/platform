@@ -213,6 +213,11 @@
       "asset.PublicAssetView": {
         "additionalProperties": true,
         "properties": {
+          "asset_deleted_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "readOnly": true,
@@ -281,6 +286,7 @@
           "valid_to",
           "created_at",
           "updated_at",
+          "asset_deleted_at",
           "tags"
         ],
         "type": "object"
@@ -692,6 +698,11 @@
           "is_active": {
             "type": "boolean"
           },
+          "location_deleted_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -742,6 +753,7 @@
           "valid_to",
           "created_at",
           "updated_at",
+          "location_deleted_at",
           "tags"
         ],
         "type": "object"
@@ -1120,6 +1132,15 @@
             "in": "query",
             "name": "is_active",
             "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "when true, include soft-deleted rows in the response. asset_deleted_at is populated for those rows. Orthogonal to is_active.",
+            "in": "query",
+            "name": "include_deleted",
+            "schema": {
+              "default": false,
               "type": "boolean"
             }
           },
@@ -2964,6 +2985,15 @@
             "in": "query",
             "name": "is_active",
             "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "when true, include soft-deleted rows in the response. location_deleted_at is populated for those rows. Orthogonal to is_active.",
+            "in": "query",
+            "name": "include_deleted",
+            "schema": {
+              "default": false,
               "type": "boolean"
             }
           },

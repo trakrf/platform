@@ -449,6 +449,7 @@ type UpdateAssetResponse struct {
 // @Param location_external_key query []string false "filter by current location external_key (may repeat)" collectionFormat(multi)
 // @Param external_key          query []string false "filter by asset external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active             query bool   false "filter by active flag"
+// @Param include_deleted       query bool   false "when true, include soft-deleted rows in the response. asset_deleted_at is populated for those rows. Orthogonal to is_active." default(false)
 // @Param q                     query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
 // @Param sort                  query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(external_key, -external_key, name, -name, created_at, -created_at, updated_at, -updated_at)
 // @Success 200 {object} assets.ListAssetsResponse
@@ -473,8 +474,8 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"location_id", "location_external_key", "external_key", "is_active", "q"},
-		BoolFilters: []string{"is_active"},
+		Filters:     []string{"location_id", "location_external_key", "external_key", "is_active", "include_deleted", "q"},
+		BoolFilters: []string{"is_active", "include_deleted"},
 		Sorts:       []string{"external_key", "name", "created_at", "updated_at"},
 	})
 	if err != nil {
@@ -525,6 +526,9 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	if vs, ok := params.Filters["is_active"]; ok && len(vs) > 0 {
 		b := vs[0] == "true"
 		f.IsActive = &b
+	}
+	if vs, ok := params.Filters["include_deleted"]; ok && len(vs) > 0 {
+		f.IncludeDeleted = vs[0] == "true"
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
 		f.Q = &vs[0]
