@@ -2240,7 +2240,7 @@ paths:
             description: |-
                 **Required scope:** `locations:write`
 
-                Delete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.
+                Delete a location by its ID. Returns 204 on success, 404 if the location does not exist or has already been deleted, and 409 if the location has descendant locations or assets placed directly at it. Descendants must be reassigned or removed and placed assets must be moved or removed before their parent location can be deleted; bulk cascade is not supported.
             operationId: locations.delete
             parameters:
                 - description: Location ID
@@ -2314,6 +2314,21 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/errors.ErrorResponse'
                     description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: conflict — has descendants or placed assets
                     headers:
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'

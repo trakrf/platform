@@ -306,7 +306,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 }
 
 // @Summary Delete location
-// @Description Delete a location by its ID. The location is removed from all subsequent queries. Returns 204 on success, 404 if the location does not exist or has already been deleted.
+// @Description Delete a location by its ID. Returns 204 on success, 404 if the location does not exist or has already been deleted, and 409 if the location has descendant locations or assets placed directly at it. Descendants must be reassigned or removed and placed assets must be moved or removed before their parent location can be deleted; bulk cascade is not supported.
 // @Tags locations,public
 // @ID locations.delete
 // @Accept json
@@ -317,6 +317,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
 // @Failure 404 {object} modelerrors.ErrorResponse "not_found"
+// @Failure 409 {object} modelerrors.ErrorResponse "conflict — has descendants or placed assets"
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security BearerAuth[locations:write]
@@ -340,6 +341,35 @@ func (handler *Handler) Delete(w http.ResponseWriter, req *http.Request) {
 
 func (handler *Handler) doDelete(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
+
+	// Pre-check: refuse to delete a location that would orphan descendants
+	// or leave placed assets pointing at a soft-deleted location (TRA-644 /
+	// BB22 F2). Distinct detail strings let integrators react correctly —
+	// reassign descendants vs move assets are different remediations. v1
+	// has no ?cascade=true; bulk is a separate ticket if customers ask.
+	childCount, err := handler.storage.CountActiveChildLocations(req.Context(), orgID, id)
+	if err != nil {
+		httputil.RespondStorageError(w, req, err, reqID)
+		return
+	}
+	if childCount > 0 {
+		httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
+			"location has descendant locations; reassign or remove them before deleting (cascade is not supported)",
+			reqID)
+		return
+	}
+
+	assetCount, err := handler.storage.CountActiveAssetsAtLocation(req.Context(), orgID, id)
+	if err != nil {
+		httputil.RespondStorageError(w, req, err, reqID)
+		return
+	}
+	if assetCount > 0 {
+		httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
+			"location has assets placed at it; move or remove them before deleting (cascade is not supported)",
+			reqID)
+		return
+	}
 
 	deleted, err := handler.storage.DeleteLocation(req.Context(), orgID, id)
 	if err != nil {

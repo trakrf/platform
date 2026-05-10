@@ -304,6 +304,46 @@ func (s *Storage) CountAllLocations(ctx context.Context, orgID int) (int, error)
 	return count, nil
 }
 
+// CountActiveChildLocations returns the number of non-deleted locations whose
+// parent_location_id points at id. Used by DELETE /locations/{id} to refuse a
+// delete that would orphan descendants and leave their parent_id / path
+// pointing at a soft-deleted parent (TRA-644 / BB22 F2).
+func (s *Storage) CountActiveChildLocations(ctx context.Context, orgID, id int) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM trakrf.locations
+		WHERE org_id = $1 AND parent_location_id = $2 AND deleted_at IS NULL
+	`
+	var count int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, id).Scan(&count)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count child locations: %w", err)
+	}
+	return count, nil
+}
+
+// CountActiveAssetsAtLocation returns the number of non-deleted assets placed
+// directly at the location. Used by DELETE /locations/{id} to refuse a delete
+// that would leave assets pointing at a soft-deleted location (TRA-644 / BB22
+// F2).
+func (s *Storage) CountActiveAssetsAtLocation(ctx context.Context, orgID, locationID int) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM trakrf.assets
+		WHERE org_id = $1 AND current_location_id = $2 AND deleted_at IS NULL
+	`
+	var count int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, locationID).Scan(&count)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count assets at location: %w", err)
+	}
+	return count, nil
+}
+
 func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, error) {
 	query := `UPDATE trakrf.locations SET deleted_at = NOW() WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`
 	var rowsAffected int64
