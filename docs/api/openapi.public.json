@@ -1,10 +1,23 @@
 {
   "components": {
     "headers": {
+      "Deprecation": {
+        "description": "RFC 8594 deprecation indicator. Either the literal value `true` or an HTTP-date marking when the endpoint became deprecated. Present on every response from a deprecated endpoint until the sunset date.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "RetryAfter": {
         "description": "Seconds to wait before retrying.",
         "schema": {
           "type": "integer"
+        }
+      },
+      "Sunset": {
+        "description": "RFC 8594 sunset date. HTTP-date marking when the endpoint will stop responding (200 series replaced by 410 Gone). Pairs with Deprecation; appears on every response from a deprecated endpoint.",
+        "schema": {
+          "format": "http-date",
+          "type": "string"
         }
       },
       "XRateLimitLimit": {
@@ -33,6 +46,16 @@
       }
     },
     "responses": {
+      "Gone": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/errors.ErrorResponse"
+            }
+          }
+        },
+        "description": "Endpoint sunset. The endpoint was deprecated and has now passed its Sunset date; clients should migrate to the documented replacement (RFC 8594)."
+      },
       "MethodNotAllowed": {
         "content": {
           "application/json": {
@@ -54,6 +77,7 @@
     },
     "schemas": {
       "asset.AddTagResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/shared.Tag"
@@ -65,6 +89,7 @@
         "type": "object"
       },
       "asset.CreateAssetResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/asset.PublicAssetView"
@@ -137,6 +162,7 @@
         "type": "object"
       },
       "asset.GetAssetResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/asset.PublicAssetView"
@@ -148,6 +174,7 @@
         "type": "object"
       },
       "asset.ListAssetsResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -177,6 +204,7 @@
         "type": "object"
       },
       "asset.PublicAssetView": {
+        "additionalProperties": true,
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -303,6 +331,7 @@
         "type": "object"
       },
       "asset.UpdateAssetResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/asset.PublicAssetView"
@@ -314,6 +343,7 @@
         "type": "object"
       },
       "errors.ErrorResponse": {
+        "additionalProperties": true,
         "description": "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
         "properties": {
           "error": {
@@ -377,6 +407,7 @@
         "type": "object"
       },
       "errors.FieldError": {
+        "additionalProperties": true,
         "properties": {
           "code": {
             "enum": [
@@ -410,6 +441,7 @@
         "type": "object"
       },
       "location.AddTagResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/shared.Tag"
@@ -421,6 +453,7 @@
         "type": "object"
       },
       "location.CreateLocationResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/location.PublicLocationView"
@@ -495,6 +528,7 @@
         "type": "object"
       },
       "location.GetLocationResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/location.PublicLocationView"
@@ -506,6 +540,7 @@
         "type": "object"
       },
       "location.ListAncestorsResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -535,6 +570,7 @@
         "type": "object"
       },
       "location.ListChildrenResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -564,6 +600,7 @@
         "type": "object"
       },
       "location.ListDescendantsResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -593,6 +630,7 @@
         "type": "object"
       },
       "location.ListLocationsResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -622,6 +660,7 @@
         "type": "object"
       },
       "location.PublicLocationView": {
+        "additionalProperties": true,
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -755,6 +794,7 @@
         "type": "object"
       },
       "location.UpdateLocationResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/location.PublicLocationView"
@@ -766,6 +806,7 @@
         "type": "object"
       },
       "org.GetOrgMeResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/org.OrgMeView"
@@ -777,6 +818,7 @@
         "type": "object"
       },
       "org.OrgMeView": {
+        "additionalProperties": true,
         "properties": {
           "id": {
             "example": 42,
@@ -794,6 +836,7 @@
         "type": "object"
       },
       "report.AssetHistoryResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -823,6 +866,7 @@
         "type": "object"
       },
       "report.ListCurrentLocationsResponse": {
+        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -852,6 +896,7 @@
         "type": "object"
       },
       "report.PublicAssetHistoryItem": {
+        "additionalProperties": true,
         "properties": {
           "duration_seconds": {
             "nullable": true,
@@ -879,6 +924,7 @@
         "type": "object"
       },
       "report.PublicCurrentLocationItem": {
+        "additionalProperties": true,
         "properties": {
           "asset_deleted_at": {
             "format": "date-time",
@@ -917,6 +963,7 @@
         "type": "object"
       },
       "shared.Tag": {
+        "additionalProperties": true,
         "properties": {
           "id": {
             "type": "integer"
@@ -976,7 +1023,7 @@
     "securitySchemes": {
       "BearerAuth": {
         "bearerFormat": "JWT",
-        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account.",
+        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account. Some OpenAPI generators (e.g. openapi-fetch) do not auto-attach the Authorization header from this scheme — set it manually if your generated client does not.",
         "scheme": "bearer",
         "type": "http"
       }
@@ -1199,6 +1246,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1378,6 +1428,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "content": {
@@ -1597,6 +1650,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1796,6 +1852,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1982,6 +2041,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "content": {
@@ -2288,6 +2350,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2500,6 +2565,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "content": {
@@ -2729,6 +2797,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "429": {
             "content": {
@@ -2995,6 +3066,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3150,6 +3224,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "content": {
@@ -3450,6 +3527,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3619,6 +3699,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "content": {
@@ -3843,6 +3926,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -4029,6 +4115,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "content": {
@@ -4300,6 +4389,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -4521,6 +4613,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "429": {
             "content": {
@@ -4744,6 +4839,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -4956,6 +5054,9 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "content": {
@@ -5186,6 +5287,9 @@
               }
             }
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -5318,6 +5422,30 @@
                   "type": "string"
                 }
               },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                }
+              }
+            },
+            "description": "missing_org_context — the API key authenticated but its org no longer exists",
+            "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },

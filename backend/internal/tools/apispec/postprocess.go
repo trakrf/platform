@@ -79,6 +79,11 @@ func postprocessPublic(doc *openapi3.T) error {
 	normalizeArrayQueryParams(doc)
 	injectTopLevelSecurity(doc)
 	injectMethodNotAllowedResponse(doc)
+	attachMethodNotAllowedToOperations(doc)
+	injectDeprecationComponents(doc)
+	if err := markResponseSchemasAdditive(doc, publicResponseSchemas); err != nil {
+		return err
+	}
 	injectGlobalHeaderRefs(doc)
 	stripBearerScopeArrays(doc)
 	stripSessionAuthScheme(doc)
@@ -567,13 +572,11 @@ func appendMethodPolicyDescription(doc *openapi3.T) {
 
 // injectMethodNotAllowedResponse adds a reusable 405 response under
 // components.responses.MethodNotAllowed. The response declares the Allow
-// header (RFC 7231 §6.5.5) so a future operation that references this
-// component documents the header without each operation re-declaring it.
-//
-// TRA-588 scopes this to the component definition only — operations are
-// not bulk-attached, since most operations don't currently declare 405
-// and the spec defaults to "method not in this operation list" implying
-// 405. Operations may $ref this component in a follow-up change.
+// header (RFC 7231 §6.5.5) so an operation that references this component
+// documents the header without each operation re-declaring it. The
+// companion attachMethodNotAllowedToOperations pass bulk-references this
+// component from every operation so codegens can model 405 as a possible
+// response on every endpoint (TRA-646 / BB22 S1).
 func injectMethodNotAllowedResponse(doc *openapi3.T) {
 	if doc.Components == nil {
 		doc.Components = &openapi3.Components{}
@@ -613,6 +616,183 @@ func injectMethodNotAllowedResponse(doc *openapi3.T) {
 	}
 
 	doc.Components.Responses["MethodNotAllowed"] = &openapi3.ResponseRef{Value: resp}
+}
+
+// attachMethodNotAllowedToOperations references the MethodNotAllowed
+// component from every operation that does not already declare a "405"
+// response (TRA-646 / BB22 S1). Codegens that pre-allocate response arms
+// from the spec need the per-operation declaration; the universal
+// behavior is documented in info.description but is not machine-readable
+// without each operation enumerating it.
+func attachMethodNotAllowedToOperations(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	if doc.Components == nil || doc.Components.Responses == nil {
+		return
+	}
+	if _, ok := doc.Components.Responses["MethodNotAllowed"]; !ok {
+		return
+	}
+	ref := &openapi3.ResponseRef{Ref: "#/components/responses/MethodNotAllowed"}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			if op.Responses == nil {
+				op.Responses = openapi3.NewResponses()
+			}
+			if existing := op.Responses.Value("405"); existing != nil {
+				continue
+			}
+			op.Responses.Set("405", ref)
+		}
+	}
+}
+
+// injectDeprecationComponents adds the response/header pair the
+// RFC 8594 deprecation+sunset flow needs (TRA-646 / BB22 S3). No path
+// references these yet — they are forward-looking so codegens can model
+// "endpoint returns 410 after sunset" and "Deprecation/Sunset headers may
+// appear on a deprecated endpoint" before the first endpoint sunset.
+//
+// Components added:
+//   - components.headers.Deprecation: RFC 8594 boolean/date header.
+//   - components.headers.Sunset:      RFC 8594 sunset date header.
+//   - components.responses.Gone:      410 response after sunset.
+func injectDeprecationComponents(doc *openapi3.T) {
+	if doc.Components == nil {
+		doc.Components = &openapi3.Components{}
+	}
+	if doc.Components.Headers == nil {
+		doc.Components.Headers = openapi3.Headers{}
+	}
+	if doc.Components.Responses == nil {
+		doc.Components.Responses = openapi3.ResponseBodies{}
+	}
+
+	stringType := &openapi3.Types{openapi3.TypeString}
+
+	if _, exists := doc.Components.Headers["Deprecation"]; !exists {
+		doc.Components.Headers["Deprecation"] = &openapi3.HeaderRef{
+			Value: &openapi3.Header{
+				Parameter: openapi3.Parameter{
+					Description: "RFC 8594 deprecation indicator. Either the literal value `true` or an HTTP-date marking when the endpoint became deprecated. Present on every response from a deprecated endpoint until the sunset date.",
+					Schema: &openapi3.SchemaRef{
+						Value: &openapi3.Schema{Type: stringType},
+					},
+				},
+			},
+		}
+	}
+	if _, exists := doc.Components.Headers["Sunset"]; !exists {
+		doc.Components.Headers["Sunset"] = &openapi3.HeaderRef{
+			Value: &openapi3.Header{
+				Parameter: openapi3.Parameter{
+					Description: "RFC 8594 sunset date. HTTP-date marking when the endpoint will stop responding (200 series replaced by 410 Gone). Pairs with Deprecation; appears on every response from a deprecated endpoint.",
+					Schema: &openapi3.SchemaRef{
+						Value: &openapi3.Schema{Type: stringType, Format: "http-date"},
+					},
+				},
+			},
+		}
+	}
+
+	if _, exists := doc.Components.Responses["Gone"]; !exists {
+		desc := "Endpoint sunset. The endpoint was deprecated and has now passed its Sunset date; clients should migrate to the documented replacement (RFC 8594)."
+		doc.Components.Responses["Gone"] = &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: &desc,
+				Content: openapi3.Content{
+					"application/json": &openapi3.MediaType{
+						Schema: &openapi3.SchemaRef{
+							Ref: "#/components/schemas/errors.ErrorResponse",
+						},
+					},
+				},
+			},
+		}
+	}
+}
+
+// publicResponseSchemas names the public response models that the
+// Versioning page commits to additive-stable evolution. Setting
+// additionalProperties:true explicitly tells codegens whose default is
+// strict (some Java/TypeScript generators) to accept unknown fields,
+// matching OpenAPI 3.0's permissive default for those that honor it
+// (TRA-646 / BB22 S4).
+//
+// Includes view models, response envelopes, error envelopes, and
+// shared.Tag (carried in tag responses). Internal-only schemas are
+// excluded — internalOnlyRequiredFields names them.
+var publicResponseSchemas = []string{
+	// view models
+	"asset.PublicAssetView",
+	"location.PublicLocationView",
+	"report.PublicAssetHistoryItem",
+	"report.PublicCurrentLocationItem",
+	"org.OrgMeView",
+
+	// asset envelopes
+	"asset.AddTagResponse",
+	"asset.CreateAssetResponse",
+	"asset.GetAssetResponse",
+	"asset.ListAssetsResponse",
+	"asset.UpdateAssetResponse",
+
+	// location envelopes
+	"location.AddTagResponse",
+	"location.CreateLocationResponse",
+	"location.GetLocationResponse",
+	"location.ListAncestorsResponse",
+	"location.ListChildrenResponse",
+	"location.ListDescendantsResponse",
+	"location.ListLocationsResponse",
+	"location.UpdateLocationResponse",
+
+	// org envelope
+	"org.GetOrgMeResponse",
+
+	// report envelopes
+	"report.AssetHistoryResponse",
+	"report.ListCurrentLocationsResponse",
+
+	// shared payloads carried in responses
+	"shared.Tag",
+
+	// error envelopes — also returned over the wire
+	"errors.ErrorResponse",
+	"errors.FieldError",
+}
+
+// markResponseSchemasAdditive sets additionalProperties:true on each
+// public response model, making the additive-stable contract explicit
+// for codegens whose default is strict (TRA-646 / BB22 S4). Errors if
+// a configured schema is missing — keeps the list honest as schemas
+// rename or move.
+func markResponseSchemasAdditive(doc *openapi3.T, schemas []string) error {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		if len(schemas) == 0 {
+			return nil
+		}
+		return fmt.Errorf("apispec: components.schemas is empty but publicResponseSchemas has %d entries", len(schemas))
+	}
+	t := true
+	for _, name := range schemas {
+		ref := doc.Components.Schemas[name]
+		if ref == nil || ref.Value == nil {
+			return fmt.Errorf("apispec: publicResponseSchemas references unknown schema %q", name)
+		}
+		if ref.Value.AdditionalProperties.Has != nil || ref.Value.AdditionalProperties.Schema != nil {
+			continue
+		}
+		ref.Value.AdditionalProperties = openapi3.AdditionalProperties{Has: &t}
+	}
+	return nil
 }
 
 // nullableFields names schema/field pairs whose response payload may be

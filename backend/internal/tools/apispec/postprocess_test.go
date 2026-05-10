@@ -60,6 +60,169 @@ func TestPostprocess_InjectMethodNotAllowed_Idempotent(t *testing.T) {
 	assert.Same(t, first, second, "second pass must not replace the existing response")
 }
 
+// TestPostprocess_AttachesMethodNotAllowedToEveryOperation covers TRA-646
+// BB22 S1: codegens that pre-allocate response arms can only model 405 if
+// every operation declares it. The MethodNotAllowed component must be
+// referenced from every operation that does not already declare 405.
+func TestPostprocess_AttachesMethodNotAllowedToEveryOperation(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	require.NoError(t, postprocessPublic(doc))
+
+	require.NotNil(t, doc.Paths)
+	opCount := 0
+	for path, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for method, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			opCount++
+			require.NotNil(t, op.Responses, "%s %s missing responses", method, path)
+			r405 := op.Responses.Value("405")
+			require.NotNil(t, r405, "%s %s must declare 405", method, path)
+			assert.Equal(t, "#/components/responses/MethodNotAllowed", r405.Ref,
+				"%s %s 405 must $ref MethodNotAllowed", method, path)
+		}
+	}
+	require.Greater(t, opCount, 0, "fixture must have at least one operation")
+}
+
+// TestPostprocess_AttachesMethodNotAllowed_PreservesExisting verifies an
+// operation that already declares 405 is left alone.
+func TestPostprocess_AttachesMethodNotAllowed_PreservesExisting(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	// Pre-seed an inline 405 on the first operation we find.
+	var seeded *openapi3.ResponseRef
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil || op.Responses == nil {
+				continue
+			}
+			desc := "operation-specific"
+			seeded = &openapi3.ResponseRef{Value: &openapi3.Response{Description: &desc}}
+			op.Responses.Set("405", seeded)
+			break
+		}
+		if seeded != nil {
+			break
+		}
+	}
+	require.NotNil(t, seeded, "fixture must let us seed an operation-level 405")
+
+	require.NoError(t, postprocessPublic(doc))
+
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil || op.Responses == nil {
+				continue
+			}
+			r405 := op.Responses.Value("405")
+			if r405 == seeded {
+				return
+			}
+		}
+	}
+	t.Fatalf("operation-level 405 was overwritten by the bulk-attach pass")
+}
+
+// TestPostprocess_InjectsDeprecationComponents covers TRA-646 BB22 S3.
+// The Deprecation/Sunset header components and the Gone (410) response
+// must exist as reusable components so codegens can model RFC 8594
+// deprecation+sunset before the first endpoint sunset ships.
+func TestPostprocess_InjectsDeprecationComponents(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	require.NoError(t, postprocessPublic(doc))
+
+	require.NotNil(t, doc.Components)
+	require.NotNil(t, doc.Components.Headers)
+	require.NotNil(t, doc.Components.Responses)
+
+	dep := doc.Components.Headers["Deprecation"]
+	require.NotNil(t, dep, "components.headers.Deprecation must be present")
+	require.NotNil(t, dep.Value)
+	assert.Contains(t, dep.Value.Description, "RFC 8594")
+
+	sun := doc.Components.Headers["Sunset"]
+	require.NotNil(t, sun, "components.headers.Sunset must be present")
+	require.NotNil(t, sun.Value)
+	assert.Contains(t, sun.Value.Description, "RFC 8594")
+
+	gone := doc.Components.Responses["Gone"]
+	require.NotNil(t, gone, "components.responses.Gone must be present")
+	require.NotNil(t, gone.Value)
+	require.NotNil(t, gone.Value.Description)
+	assert.Contains(t, *gone.Value.Description, "Sunset")
+	media := gone.Value.Content["application/json"]
+	require.NotNil(t, media)
+	assert.Equal(t, "#/components/schemas/errors.ErrorResponse", media.Schema.Ref)
+}
+
+// TestPostprocess_MarksResponseSchemasAdditive covers TRA-646 BB22 S4:
+// the Versioning page commits to additive-stable evolution; every public
+// response model must declare additionalProperties:true so codegens whose
+// default is strict accept unknown fields.
+func TestPostprocess_MarksResponseSchemasAdditive(t *testing.T) {
+	doc := docWithSchemas(openapi3.Schemas{
+		"asset.PublicAssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+		}},
+		"location.PublicLocationView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+		}},
+	})
+
+	err := markResponseSchemasAdditive(doc, []string{"asset.PublicAssetView", "location.PublicLocationView"})
+	require.NoError(t, err)
+
+	for _, name := range []string{"asset.PublicAssetView", "location.PublicLocationView"} {
+		ref := doc.Components.Schemas[name]
+		require.NotNil(t, ref.Value.AdditionalProperties.Has, "%s must set additionalProperties bool", name)
+		assert.True(t, *ref.Value.AdditionalProperties.Has, "%s must be additive", name)
+	}
+}
+
+// TestPostprocess_MarksResponseSchemasAdditive_PreservesStructured verifies
+// the pass does not clobber a schema that already declares a structured
+// additionalProperties (e.g. errors.FieldError.params, which carries
+// `additionalProperties: {}` from swag).
+func TestPostprocess_MarksResponseSchemasAdditive_PreservesStructured(t *testing.T) {
+	preset := &openapi3.SchemaRef{Value: &openapi3.Schema{
+		Type: &openapi3.Types{openapi3.TypeObject},
+	}}
+	doc := docWithSchemas(openapi3.Schemas{
+		"asset.PublicAssetView": preset,
+	})
+	// Already has an additionalProperties schema set.
+	preset.Value.AdditionalProperties = openapi3.AdditionalProperties{
+		Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema()},
+	}
+
+	require.NoError(t, markResponseSchemasAdditive(doc, []string{"asset.PublicAssetView"}))
+	assert.NotNil(t, preset.Value.AdditionalProperties.Schema, "structured additionalProperties must survive")
+	assert.Nil(t, preset.Value.AdditionalProperties.Has, "Has must remain unset when Schema is preserved")
+}
+
+// TestPostprocess_MarksResponseSchemasAdditive_MissingSchemaErrors locks in
+// the safety guard: a stale entry in publicResponseSchemas breaks the
+// build instead of going silently unenforced.
+func TestPostprocess_MarksResponseSchemasAdditive_MissingSchemaErrors(t *testing.T) {
+	doc := docWithSchemas(openapi3.Schemas{})
+	err := markResponseSchemasAdditive(doc, []string{"asset.GhostView"})
+	require.Error(t, err, "missing schema must surface as an error")
+	assert.Contains(t, err.Error(), "asset.GhostView")
+}
+
 func TestPostprocess_RewritesSessionAuthToHTTPBearer(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
@@ -1148,9 +1311,12 @@ func withEmptyRequiredFields(t *testing.T) {
 	internalOnlyRequiredFields = map[string][]string{}
 	savedReadOnly := readOnlyFields
 	readOnlyFields = map[string][]string{}
+	savedAdditive := publicResponseSchemas
+	publicResponseSchemas = nil
 	t.Cleanup(func() {
 		requiredFields = saved
 		internalOnlyRequiredFields = savedInternal
 		readOnlyFields = savedReadOnly
+		publicResponseSchemas = savedAdditive
 	})
 }
