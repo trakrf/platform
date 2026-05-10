@@ -439,9 +439,15 @@ func TestMarkRequiredFields_ErrorsOnMissingField(t *testing.T) {
 	}
 }
 
-// TestPostprocess_MarksReadOnlyFields covers TRA-587 / BB16 S8: server-managed
-// fields on read views must be tagged readOnly so codegen splits read and
-// write types and a verbatim GET → PUT round-trip is type-safe.
+// TestPostprocess_MarksReadOnlyFields covers TRA-587 / BB16 S8: round-trip-safe
+// server-managed fields on read views are tagged readOnly so codegen splits
+// read and write types and a verbatim GET → PUT round-trip is type-safe.
+//
+// `tags` is intentionally excluded from the readOnly list (TRA-643 / BB22 F1):
+// tag mutation goes through the /tags subresource, and the PUT validator
+// rejects a `tags` body field with 400 invalid_value. Keeping `tags` writable
+// in the spec preserves that signal — codegen tools won't strip it, so an SDK
+// that mistakenly sends it surfaces the failure.
 func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
@@ -477,8 +483,8 @@ func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 	})
 
 	readOnly := map[string][]string{
-		"asset.PublicAssetView":       {"id", "created_at", "updated_at", "tags"},
-		"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth", "tags"},
+		"asset.PublicAssetView":       {"id", "created_at", "updated_at"},
+		"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth"},
 	}
 	if err := markReadOnlyFields(doc, readOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -502,6 +508,16 @@ func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 	assert.False(t,
 		doc.Components.Schemas["location.PublicLocationView"].Value.Properties["name"].Value.ReadOnly,
 		"name must remain writable")
+
+	// `tags` is managed via subresource and rejected by the PUT validator
+	// (TRA-643 / BB22 F1); it must NOT be marked readOnly so codegen keeps it
+	// in the request shape and SDK consumers see the rejection signal.
+	assert.False(t,
+		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["tags"].Value.ReadOnly,
+		"asset tags must remain writable so SDK callers see the rejection")
+	assert.False(t,
+		doc.Components.Schemas["location.PublicLocationView"].Value.Properties["tags"].Value.ReadOnly,
+		"location tags must remain writable so SDK callers see the rejection")
 }
 
 func TestMarkReadOnlyFields_ErrorsOnMissingSchema(t *testing.T) {

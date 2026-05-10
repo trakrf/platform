@@ -2,10 +2,15 @@
 // +build integration
 
 // TRA-608 / BB18 §1.7: GET → PUT round-trip must succeed. The PUT handler
-// strips the read-only fields on PublicAssetView (id, created_at,
-// updated_at, tags) from the request body before strict-decoding so a
-// naive read-mutate-write client doesn't trip over schema asymmetry. Typo'd
-// fields not in that drop set still produce a 400 validation_error.
+// strips the round-trip-safe read-only fields on PublicAssetView (id,
+// created_at, updated_at) from the request body before strict-decoding so
+// a naive read-mutate-write client doesn't trip over schema asymmetry.
+// Typo'd fields not in that drop set still produce a 400 validation_error.
+//
+// TRA-643 / BB22 F1: `tags` is managed via the /assets/{id}/tags subresource,
+// not the parent PUT. The validator rejects a `tags` body field with 400
+// invalid_value rather than silently dropping it — the silent-drop pattern
+// hid bugs in read-modify-write integrations.
 //
 // TRA-610 / BB18 §1.8: description and valid_to are always emitted (null
 // when unset) on the response.
@@ -57,8 +62,11 @@ func seedRoundTripAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, nam
 	return id
 }
 
-// TRA-608 acceptance: GET /api/v1/assets/{id} → unmodified body →
-// PUT /api/v1/assets/{id} succeeds with 200.
+// TRA-608 / TRA-643 acceptance: GET /api/v1/assets/{id} → strip the
+// subresource-managed `tags` field → PUT /api/v1/assets/{id} succeeds with
+// 200. id, created_at, updated_at remain round-trip safe and may be sent
+// back verbatim; `tags` must be hand-stripped because it is rejected with
+// 400 invalid_value (managed via /assets/{id}/tags).
 func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -89,8 +97,11 @@ func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
-	// Naive mutate-and-PUT: take the entire GET body verbatim, change name.
+	// Mutate name and PUT back. `tags` is managed via subresource and must
+	// be stripped (TRA-643 / BB22 F1); other read-only fields stay on the
+	// body to exercise the round-trip-safe drop list.
 	getResp.Data["name"] = "Forklift 7 (renamed)"
+	delete(getResp.Data, "tags")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -286,7 +297,10 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	assert.Nil(t, getResp.Data["location_external_key"])
 	assert.Nil(t, getResp.Data["valid_to"])
 
-	// Verbatim PUT-back of the GET body — the connector flow from §S2.
+	// PUT-back of the GET body — the connector flow from §S2. `tags` is
+	// the only subresource-managed field on PublicAssetView and must be
+	// stripped (TRA-643); the rest is round-trip safe.
+	delete(getResp.Data, "tags")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -391,6 +405,10 @@ func TestPostAsset_BadExternalKeyPattern_Rejected400(t *testing.T) {
 // behavior was a "no fields to update" error surfaced as 500 internal_error.
 // Expected behavior: 200 with the unchanged record (no-op write), matching
 // the GET → PUT round-trip ergonomic.
+//
+// TRA-643: only round-trip-safe read-only fields are silently dropped. The
+// subresource-managed `tags` field has its own assertion below
+// (TestPutAsset_TagsRejected400).
 func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -410,7 +428,7 @@ func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}{
 		{"only id", `{"id":999}`},
 		{"only created_at", `{"created_at":"2020-01-01T00:00:00Z"}`},
-		{"only tags", `{"tags":[]}`},
+		{"only updated_at", `{"updated_at":"2020-01-01T00:00:00Z"}`},
 		{"empty object", `{}`},
 	}
 	for _, tc := range cases {
@@ -430,6 +448,60 @@ func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
 			assert.Equal(t, "ReadOnlyNoop", resp.Data["name"], "name unchanged")
 			assert.Equal(t, "ASSET-RO-NOOP", resp.Data["external_key"], "external_key unchanged")
+		})
+	}
+}
+
+// TRA-643 / BB22 F1: `tags` is managed via the /assets/{id}/tags subresource.
+// A `tags` key in the PUT body must be rejected with 400 invalid_value
+// (matching the unknown-field response shape) so a read-modify-write
+// integrator gets a clear signal instead of a silent no-op.
+func TestPutAsset_TagsRejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-TAGS-REJ", "TagsRej")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"empty array", `{"tags":[]}`},
+		{"tags with values", `{"tags":[{"key":"foo","value":"bar"}]}`},
+		{"tags alongside name", `{"name":"x","tags":[]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+			putReq.Header.Set("Content-Type", "application/json")
+			putReq = withRoundTripOrgContext(putReq, orgID)
+			putRec := httptest.NewRecorder()
+			router.ServeHTTP(putRec, putReq)
+
+			require.Equal(t, http.StatusBadRequest, putRec.Code,
+				"tags in PUT body must be 400 (got %d): %s", putRec.Code, putRec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
 		})
 	}
 }

@@ -38,20 +38,27 @@ type CreateAssetRequest struct {
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicAssetView that are
-// server-managed (`readOnly: true` in the spec). The PUT handler strips
-// them from the request body before strict decoding so a verbatim GET →
-// PUT round-trip succeeds (TRA-608 / BB18 §1.7). Fields not listed here
-// (typos, write-only fields off this resource) still produce a 400.
+// server-owned and round-trip safe: the PUT handler strips them from the
+// request body before strict decoding so a verbatim GET → PUT round-trip
+// succeeds (TRA-608 / BB18 §1.7). Fields not listed here (typos, write-only
+// fields off this resource) still produce a 400.
+//
+// `tags` is intentionally NOT on this list. Tags are managed via the
+// /assets/{id}/tags subresource, so a `tags` key in a PUT body is a
+// caller-side mistake worth surfacing. Strict decode rejects it as an
+// unknown field with code=invalid_value, matching unknown-field behavior
+// (TRA-643 / BB22 F1).
 //
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"].
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tags"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at"}
 
 // UpdateAssetRequest is the PUT body. The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
-// PublicAssetView's read-only fields (id, created_at, updated_at, tags)
-// are silently ignored on a verbatim GET → PUT round-trip while any
-// other unknown field still produces a 400.
+// PublicAssetView's round-trip-safe read-only fields (id, created_at,
+// updated_at) are silently ignored on a verbatim GET → PUT round-trip
+// while any other unknown field — including `tags`, which is managed via
+// the /assets/{id}/tags subresource — still produces a 400.
 //
 // description, location_id, location_external_key, and valid_to all accept
 // JSON null on the wire and clear the field server-side (TRA-614 / BB19
