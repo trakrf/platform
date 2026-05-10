@@ -26,7 +26,7 @@ type Asset struct {
 
 type CreateAssetRequest struct {
 	OrgID               int                  `json:"-" swaggerignore:"true"`
-	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,max=255,external_key_pattern"`
+	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern"`
 	Name                string               `json:"name" validate:"required,min=1,max=255"`
 	Description         string               `json:"description,omitempty" validate:"omitempty,max=1024"`
 	LocationID          *int                 `json:"location_id,omitempty" example:"42"`

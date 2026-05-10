@@ -247,8 +247,12 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     // Filter out empty tags and include in request
     const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
+    // Omit external_key entirely when blank on create — the backend
+    // auto-mints ASSET-NNNN only on absence; an explicit empty string is
+    // rejected as 400 too_short (TRA-650 / BB23 F3).
+    const trimmedExternalKey = formData.external_key.trim();
     const data: CreateAssetRequest | UpdateAssetRequest = {
-      external_key: formData.external_key,
+      ...(trimmedExternalKey ? { external_key: formData.external_key } : {}),
       name: formData.name,
       description: formData.description,
       location_id: formData.location_id,

@@ -400,6 +400,91 @@ func TestPostAsset_BadExternalKeyPattern_Rejected400(t *testing.T) {
 	_ = pool
 }
 
+// TRA-650 / BB23 F3: POST /api/v1/assets must reject an explicit empty
+// external_key with 400 too_short, mirroring the PUT validator's min=1 on
+// UpdateAssetRequest.external_key. Absence of the key still triggers the
+// auto-mint of ASSET-NNNN.
+func TestPostAsset_EmptyExternalKey_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"external_key": "",
+		"name":         "n",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "explicit empty external_key must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.NotEmpty(t, resp.Error.Fields)
+	assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
+	assert.Equal(t, "too_short", resp.Error.Fields[0].Code)
+
+	_ = pool
+}
+
+// TRA-650 / BB23 F3: when external_key is omitted from the body, the server
+// continues to auto-mint an ASSET-NNNN value — the legitimate "omit means
+// auto-mint" path is preserved.
+func TestPostAsset_OmittedExternalKey_AutoMints(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body, err := json.Marshal(map[string]any{"name": "auto-mint-me"})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code, "omitted external_key must auto-mint: %s", rec.Body.String())
+
+	var resp struct {
+		Data struct {
+			ExternalKey string `json:"external_key"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Regexp(t, `^ASSET-\d+$`, resp.Data.ExternalKey)
+
+	_ = pool
+}
+
 // TRA-619 finding 1: a PUT body that contains only read-only fields decodes
 // to an empty UpdateAssetRequest after the readOnly drop. The previous
 // behavior was a "no fields to update" error surfaced as 500 internal_error.

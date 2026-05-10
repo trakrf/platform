@@ -324,6 +324,55 @@ func TestPostLocation_BadExternalKeyPattern_Rejected400(t *testing.T) {
 	_ = pool
 }
 
+// TRA-650 / BB23 F3 (audit): POST /api/v1/locations must reject an explicit
+// empty external_key with 400 too_short. Locations have always declared
+// `required,min=1,max=255,external_key_pattern` on the field, so this test
+// pins the symmetric behavior alongside the assets fix and guards against
+// regressions if the validator chain is ever reordered.
+func TestPostLocation_EmptyExternalKey_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"external_key": "",
+		"name":         "loc",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "explicit empty external_key must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.NotEmpty(t, resp.Error.Fields)
+	assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
+	assert.Equal(t, "too_short", resp.Error.Fields[0].Code)
+
+	_ = pool
+}
+
 // TRA-615: well-formed external_keys (alphanumerics + hyphens) still succeed.
 func TestPostLocation_GoodExternalKeyPattern_Accepted(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
