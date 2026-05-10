@@ -88,6 +88,9 @@ func postprocessPublic(doc *openapi3.T) error {
 	stripBearerScopeArrays(doc)
 	stripSessionAuthScheme(doc)
 	appendMethodPolicyDescription(doc)
+	if err := renamePublicSpec(doc); err != nil {
+		return fmt.Errorf("rename public spec: %w", err)
+	}
 	doc.Info.Title = "TrakRF API"
 	doc.Info.Version = "v1"
 	doc.Servers = openapi3.Servers{

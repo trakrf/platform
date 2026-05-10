@@ -1330,10 +1330,24 @@ func withEmptyRequiredFields(t *testing.T) {
 	readOnlyFields = map[string][]string{}
 	savedAdditive := publicResponseSchemas
 	publicResponseSchemas = nil
+	// TRA-660: existing tests pre-seed schemas under the dotted Go-package
+	// names and assert on those names after calling postprocessPublic. The
+	// public-spec rename pass would rewrite those keys, so disable it here
+	// — tests for the rename pass live in rename_public_test.go and don't
+	// use this helper.
+	savedSchemaRenames := publicSchemaRenames
+	publicSchemaRenames = map[string]string{}
+	savedOpIDRenames := publicOperationIdRenames
+	publicOperationIdRenames = map[string]string{}
+	savedTagDescriptions := publicTagDescriptions
+	publicTagDescriptions = nil
 	t.Cleanup(func() {
 		requiredFields = saved
 		internalOnlyRequiredFields = savedInternal
 		readOnlyFields = savedReadOnly
 		publicResponseSchemas = savedAdditive
+		publicSchemaRenames = savedSchemaRenames
+		publicOperationIdRenames = savedOpIDRenames
+		publicTagDescriptions = savedTagDescriptions
 	})
 }

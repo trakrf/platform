@@ -56,7 +56,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/errors.ErrorResponse"
+              "$ref": "#/components/schemas/ErrorResponse"
             }
           }
         },
@@ -66,7 +66,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/errors.ErrorResponse"
+              "$ref": "#/components/schemas/ErrorResponse"
             }
           }
         },
@@ -82,11 +82,11 @@
       }
     },
     "schemas": {
-      "asset.AddTagResponse": {
+      "AddAssetTagResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/shared.Tag"
+            "$ref": "#/components/schemas/Tag"
           }
         },
         "required": [
@@ -94,11 +94,11 @@
         ],
         "type": "object"
       },
-      "asset.CreateAssetResponse": {
+      "AddLocationTagResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/asset.PublicAssetView"
+            "$ref": "#/components/schemas/Tag"
           }
         },
         "required": [
@@ -106,86 +106,40 @@
         ],
         "type": "object"
       },
-      "asset.CreateAssetWithTagsRequest": {
+      "AssetHistoryItem": {
+        "additionalProperties": true,
         "properties": {
-          "description": {
-            "maxLength": 1024,
-            "nullable": true,
-            "type": "string"
-          },
-          "external_key": {
-            "maxLength": 255,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9-]+$",
-            "type": "string"
-          },
-          "is_active": {
-            "example": true,
-            "type": "boolean"
-          },
-          "location_external_key": {
-            "example": "WHS-01",
-            "maxLength": 255,
-            "minLength": 1,
-            "nullable": true,
-            "pattern": "^[A-Za-z0-9-]+$",
-            "type": "string"
-          },
-          "location_id": {
-            "example": 42,
+          "duration_seconds": {
             "nullable": true,
             "type": "integer"
           },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "name": {
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          },
-          "tags": {
-            "items": {
-              "$ref": "#/components/schemas/shared.TagRequest"
-            },
-            "type": "array"
-          },
-          "valid_from": {
-            "example": "2025-01-01T00:00:00Z",
-            "format": "date-time",
-            "type": "string"
-          },
-          "valid_to": {
-            "example": "2026-01-01T00:00:00Z",
-            "format": "date-time",
+          "location_external_key": {
             "nullable": true,
             "type": "string"
+          },
+          "location_id": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "type": "string"
           }
         },
         "required": [
-          "name"
+          "timestamp",
+          "location_id",
+          "location_external_key",
+          "duration_seconds"
         ],
         "type": "object"
       },
-      "asset.GetAssetResponse": {
-        "additionalProperties": true,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/asset.PublicAssetView"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "asset.ListAssetsResponse": {
+      "AssetHistoryResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/asset.PublicAssetView"
+              "$ref": "#/components/schemas/AssetHistoryItem"
             },
             "type": "array"
           },
@@ -210,7 +164,76 @@
         ],
         "type": "object"
       },
-      "asset.PublicAssetView": {
+      "AssetLocationItem": {
+        "additionalProperties": true,
+        "properties": {
+          "asset_deleted_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "asset_external_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "asset_id": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "location_external_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "location_id": {
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_id",
+          "asset_external_key",
+          "location_id",
+          "location_external_key",
+          "last_seen",
+          "asset_deleted_at"
+        ],
+        "type": "object"
+      },
+      "AssetLocationsResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AssetLocationItem"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
+        "type": "object"
+      },
+      "AssetView": {
         "additionalProperties": true,
         "properties": {
           "asset_deleted_at": {
@@ -254,7 +277,7 @@
           },
           "tags": {
             "items": {
-              "$ref": "#/components/schemas/shared.Tag"
+              "$ref": "#/components/schemas/Tag"
             },
             "type": "array"
           },
@@ -291,7 +314,19 @@
         ],
         "type": "object"
       },
-      "asset.UpdateAssetRequest": {
+      "CreateAssetResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssetView"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "CreateAssetWithTagsRequest": {
         "properties": {
           "description": {
             "maxLength": 1024,
@@ -305,6 +340,7 @@
             "type": "string"
           },
           "is_active": {
+            "example": true,
             "type": "boolean"
           },
           "location_external_key": {
@@ -329,6 +365,12 @@
             "minLength": 1,
             "type": "string"
           },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagRequest"
+            },
+            "type": "array"
+          },
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
@@ -341,13 +383,16 @@
             "type": "string"
           }
         },
+        "required": [
+          "name"
+        ],
         "type": "object"
       },
-      "asset.UpdateAssetResponse": {
+      "CreateLocationResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/asset.PublicAssetView"
+            "$ref": "#/components/schemas/LocationView"
           }
         },
         "required": [
@@ -355,7 +400,70 @@
         ],
         "type": "object"
       },
-      "errors.ErrorResponse": {
+      "CreateLocationWithTagsRequest": {
+        "properties": {
+          "description": {
+            "example": "Main warehouse location",
+            "maxLength": 1024,
+            "nullable": true,
+            "type": "string"
+          },
+          "external_key": {
+            "example": "wh1",
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9-]+$",
+            "type": "string"
+          },
+          "is_active": {
+            "example": true,
+            "type": "boolean"
+          },
+          "name": {
+            "example": "Warehouse 1",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "parent_external_key": {
+            "example": "wh1",
+            "maxLength": 255,
+            "minLength": 1,
+            "nullable": true,
+            "pattern": "^[A-Za-z0-9-]+$",
+            "type": "string"
+          },
+          "parent_id": {
+            "example": 42,
+            "minimum": 1,
+            "nullable": true,
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagRequest"
+            },
+            "type": "array"
+          },
+          "valid_from": {
+            "example": "2025-12-14T00:00:00Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "valid_to": {
+            "example": "2026-12-14T00:00:00Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "external_key",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
         "additionalProperties": true,
         "description": "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
         "properties": {
@@ -367,7 +475,7 @@
               },
               "fields": {
                 "items": {
-                  "$ref": "#/components/schemas/errors.FieldError"
+                  "$ref": "#/components/schemas/FieldError"
                 },
                 "type": "array"
               },
@@ -419,7 +527,7 @@
         ],
         "type": "object"
       },
-      "errors.FieldError": {
+      "FieldError": {
         "additionalProperties": true,
         "properties": {
           "code": {
@@ -453,11 +561,11 @@
         ],
         "type": "object"
       },
-      "location.AddTagResponse": {
+      "GetAssetResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/shared.Tag"
+            "$ref": "#/components/schemas/AssetView"
           }
         },
         "required": [
@@ -465,11 +573,11 @@
         ],
         "type": "object"
       },
-      "location.CreateLocationResponse": {
+      "GetCurrentOrgResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/location.PublicLocationView"
+            "$ref": "#/components/schemas/OrgView"
           }
         },
         "required": [
@@ -477,74 +585,11 @@
         ],
         "type": "object"
       },
-      "location.CreateLocationWithTagsRequest": {
-        "properties": {
-          "description": {
-            "example": "Main warehouse location",
-            "maxLength": 1024,
-            "nullable": true,
-            "type": "string"
-          },
-          "external_key": {
-            "example": "wh1",
-            "maxLength": 255,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9-]+$",
-            "type": "string"
-          },
-          "is_active": {
-            "example": true,
-            "type": "boolean"
-          },
-          "name": {
-            "example": "Warehouse 1",
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          },
-          "parent_external_key": {
-            "example": "wh1",
-            "maxLength": 255,
-            "minLength": 1,
-            "nullable": true,
-            "pattern": "^[A-Za-z0-9-]+$",
-            "type": "string"
-          },
-          "parent_id": {
-            "example": 42,
-            "minimum": 1,
-            "nullable": true,
-            "type": "integer"
-          },
-          "tags": {
-            "items": {
-              "$ref": "#/components/schemas/shared.TagRequest"
-            },
-            "type": "array"
-          },
-          "valid_from": {
-            "example": "2025-12-14T00:00:00Z",
-            "format": "date-time",
-            "type": "string"
-          },
-          "valid_to": {
-            "example": "2026-12-14T00:00:00Z",
-            "format": "date-time",
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "external_key",
-          "name"
-        ],
-        "type": "object"
-      },
-      "location.GetLocationResponse": {
+      "GetLocationResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/location.PublicLocationView"
+            "$ref": "#/components/schemas/LocationView"
           }
         },
         "required": [
@@ -552,12 +597,12 @@
         ],
         "type": "object"
       },
-      "location.ListAncestorsResponse": {
+      "ListAssetsResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
+              "$ref": "#/components/schemas/AssetView"
             },
             "type": "array"
           },
@@ -582,12 +627,12 @@
         ],
         "type": "object"
       },
-      "location.ListChildrenResponse": {
+      "ListLocationAncestorsResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
+              "$ref": "#/components/schemas/LocationView"
             },
             "type": "array"
           },
@@ -612,12 +657,12 @@
         ],
         "type": "object"
       },
-      "location.ListDescendantsResponse": {
+      "ListLocationChildrenResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
+              "$ref": "#/components/schemas/LocationView"
             },
             "type": "array"
           },
@@ -642,12 +687,12 @@
         ],
         "type": "object"
       },
-      "location.ListLocationsResponse": {
+      "ListLocationDescendantsResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/location.PublicLocationView"
+              "$ref": "#/components/schemas/LocationView"
             },
             "type": "array"
           },
@@ -672,7 +717,37 @@
         ],
         "type": "object"
       },
-      "location.PublicLocationView": {
+      "ListLocationsResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/LocationView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "example": 50,
+            "type": "integer"
+          },
+          "offset": {
+            "example": 0,
+            "type": "integer"
+          },
+          "total_count": {
+            "example": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "limit",
+          "offset",
+          "total_count"
+        ],
+        "type": "object"
+      },
+      "LocationView": {
         "additionalProperties": true,
         "properties": {
           "created_at": {
@@ -716,7 +791,7 @@
           },
           "tags": {
             "items": {
-              "$ref": "#/components/schemas/shared.Tag"
+              "$ref": "#/components/schemas/Tag"
             },
             "type": "array"
           },
@@ -758,7 +833,146 @@
         ],
         "type": "object"
       },
-      "location.UpdateLocationRequest": {
+      "OrgView": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "example": 42,
+            "type": "integer"
+          },
+          "name": {
+            "example": "Acme Logistics",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "Tag": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "tag_type": {
+            "enum": [
+              "rfid",
+              "ble",
+              "barcode"
+            ],
+            "example": "rfid",
+            "type": "string",
+            "x-extensible-enum": true
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tag_type",
+          "value",
+          "is_active"
+        ],
+        "type": "object"
+      },
+      "TagRequest": {
+        "properties": {
+          "tag_type": {
+            "default": "rfid",
+            "enum": [
+              "rfid",
+              "ble",
+              "barcode"
+            ],
+            "example": "rfid",
+            "type": "string",
+            "x-extensible-enum": true
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
+      "UpdateAssetRequest": {
+        "properties": {
+          "description": {
+            "maxLength": 1024,
+            "nullable": true,
+            "type": "string"
+          },
+          "external_key": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9-]+$",
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "location_external_key": {
+            "example": "WHS-01",
+            "maxLength": 255,
+            "minLength": 1,
+            "nullable": true,
+            "pattern": "^[A-Za-z0-9-]+$",
+            "type": "string"
+          },
+          "location_id": {
+            "example": 42,
+            "nullable": true,
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "valid_from": {
+            "example": "2025-01-01T00:00:00Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "valid_to": {
+            "example": "2026-01-01T00:00:00Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateAssetResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssetView"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "UpdateLocationRequest": {
         "properties": {
           "description": {
             "example": "Updated description",
@@ -811,229 +1025,15 @@
         },
         "type": "object"
       },
-      "location.UpdateLocationResponse": {
+      "UpdateLocationResponse": {
         "additionalProperties": true,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/location.PublicLocationView"
+            "$ref": "#/components/schemas/LocationView"
           }
         },
         "required": [
           "data"
-        ],
-        "type": "object"
-      },
-      "org.GetOrgMeResponse": {
-        "additionalProperties": true,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/org.OrgMeView"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "org.OrgMeView": {
-        "additionalProperties": true,
-        "properties": {
-          "id": {
-            "example": 42,
-            "type": "integer"
-          },
-          "name": {
-            "example": "Acme Logistics",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name"
-        ],
-        "type": "object"
-      },
-      "report.AssetHistoryResponse": {
-        "additionalProperties": true,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/report.PublicAssetHistoryItem"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "report.ListCurrentLocationsResponse": {
-        "additionalProperties": true,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/report.PublicCurrentLocationItem"
-            },
-            "type": "array"
-          },
-          "limit": {
-            "example": 50,
-            "type": "integer"
-          },
-          "offset": {
-            "example": 0,
-            "type": "integer"
-          },
-          "total_count": {
-            "example": 100,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "limit",
-          "offset",
-          "total_count"
-        ],
-        "type": "object"
-      },
-      "report.PublicAssetHistoryItem": {
-        "additionalProperties": true,
-        "properties": {
-          "duration_seconds": {
-            "nullable": true,
-            "type": "integer"
-          },
-          "location_external_key": {
-            "nullable": true,
-            "type": "string"
-          },
-          "location_id": {
-            "nullable": true,
-            "type": "integer"
-          },
-          "timestamp": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "timestamp",
-          "location_id",
-          "location_external_key",
-          "duration_seconds"
-        ],
-        "type": "object"
-      },
-      "report.PublicCurrentLocationItem": {
-        "additionalProperties": true,
-        "properties": {
-          "asset_deleted_at": {
-            "format": "date-time",
-            "nullable": true,
-            "type": "string"
-          },
-          "asset_external_key": {
-            "nullable": true,
-            "type": "string"
-          },
-          "asset_id": {
-            "nullable": true,
-            "type": "integer"
-          },
-          "last_seen": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "location_external_key": {
-            "nullable": true,
-            "type": "string"
-          },
-          "location_id": {
-            "nullable": true,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "asset_id",
-          "asset_external_key",
-          "location_id",
-          "location_external_key",
-          "last_seen",
-          "asset_deleted_at"
-        ],
-        "type": "object"
-      },
-      "shared.Tag": {
-        "additionalProperties": true,
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "is_active": {
-            "type": "boolean"
-          },
-          "tag_type": {
-            "enum": [
-              "rfid",
-              "ble",
-              "barcode"
-            ],
-            "example": "rfid",
-            "type": "string",
-            "x-extensible-enum": true
-          },
-          "value": {
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "tag_type",
-          "value",
-          "is_active"
-        ],
-        "type": "object"
-      },
-      "shared.TagRequest": {
-        "properties": {
-          "tag_type": {
-            "default": "rfid",
-            "enum": [
-              "rfid",
-              "ble",
-              "barcode"
-            ],
-            "example": "rfid",
-            "type": "string",
-            "x-extensible-enum": true
-          },
-          "value": {
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "value"
         ],
         "type": "object"
       }
@@ -1065,7 +1065,7 @@
     "/api/v1/assets": {
       "get": {
         "description": "**Required scope:** `assets:read`\n\nPaginated assets list with natural-key filters, sort, and substring search.\n\nDefault scope returns currently-effective assets only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.",
-        "operationId": "assets.list",
+        "operationId": "listAssets",
         "parameters": [
           {
             "description": "max 200",
@@ -1181,7 +1181,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/asset.ListAssetsResponse"
+                  "$ref": "#/components/schemas/ListAssetsResponse"
                 }
               }
             },
@@ -1205,7 +1205,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1229,7 +1229,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1256,7 +1256,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1283,7 +1283,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1310,7 +1310,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1343,12 +1343,12 @@
       },
       "post": {
         "description": "**Required scope:** `assets:write`\n\nCreate a new asset record, optionally with one or more tags (RFID, BLE, barcode).\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
-        "operationId": "assets.create",
+        "operationId": "createAsset",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/asset.CreateAssetWithTagsRequest"
+                "$ref": "#/components/schemas/CreateAssetWithTagsRequest"
               }
             }
           },
@@ -1361,7 +1361,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/asset.CreateAssetResponse"
+                  "$ref": "#/components/schemas/CreateAssetResponse"
                 }
               }
             },
@@ -1391,7 +1391,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1415,7 +1415,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1442,7 +1442,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1469,7 +1469,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1493,7 +1493,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1517,7 +1517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1544,7 +1544,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1579,7 +1579,7 @@
     "/api/v1/assets/{asset_id}": {
       "delete": {
         "description": "**Required scope:** `assets:write`\n\nDelete an asset by its canonical id. The asset is removed from all subsequent queries and its external_key becomes immediately available for reuse. Returns 204 on success, 404 if the asset does not exist or has already been deleted.",
-        "operationId": "assets.delete",
+        "operationId": "deleteAsset",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -1615,7 +1615,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1642,7 +1642,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1666,7 +1666,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1693,7 +1693,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1720,7 +1720,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1753,7 +1753,7 @@
       },
       "get": {
         "description": "**Required scope:** `assets:read`\n\nRetrieve an asset by its canonical id. Returns 404 if the asset does not exist.\n\nPath-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted asset is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.",
-        "operationId": "assets.get",
+        "operationId": "getAsset",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -1772,7 +1772,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/asset.GetAssetResponse"
+                  "$ref": "#/components/schemas/GetAssetResponse"
                 }
               }
             },
@@ -1796,7 +1796,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1820,7 +1820,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1847,7 +1847,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1871,7 +1871,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1898,7 +1898,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1934,7 +1934,7 @@
       },
       "put": {
         "description": "**Required scope:** `assets:write`\n\nUpdate mutable fields on an existing asset. Only fields included in the request body are changed.",
-        "operationId": "assets.update",
+        "operationId": "updateAsset",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -1952,7 +1952,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/asset.UpdateAssetRequest"
+                "$ref": "#/components/schemas/UpdateAssetRequest"
               }
             }
           },
@@ -1965,7 +1965,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/asset.UpdateAssetResponse"
+                  "$ref": "#/components/schemas/UpdateAssetResponse"
                 }
               }
             },
@@ -1989,7 +1989,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2013,7 +2013,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2040,7 +2040,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2064,7 +2064,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2091,7 +2091,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2115,7 +2115,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2139,7 +2139,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2166,7 +2166,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2201,7 +2201,7 @@
     "/api/v1/assets/{asset_id}/history": {
       "get": {
         "description": "**Required scope:** `history:read`\n\nLocation history for an asset identified by its canonical id.\n\nThe asset existence check follows path-addressed semantics — the asset is returned even if its `valid_to` has elapsed. Each history row's location reference applies the temporal-validity predicate, so an event referencing a location whose effective window is past surfaces with null `location_external_key`.",
-        "operationId": "assets.history",
+        "operationId": "getAssetHistory",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -2276,7 +2276,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/report.AssetHistoryResponse"
+                  "$ref": "#/components/schemas/AssetHistoryResponse"
                 }
               }
             },
@@ -2300,7 +2300,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2324,7 +2324,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2351,7 +2351,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2375,7 +2375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2402,7 +2402,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2429,7 +2429,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2464,7 +2464,7 @@
     "/api/v1/assets/{asset_id}/tags": {
       "post": {
         "description": "**Required scope:** `assets:write`\n\nAttach a tag (RFID EPC, BLE beacon ID, barcode, etc.) to an existing asset.\nThe tag must be unique within the organization.",
-        "operationId": "assets.tags.add",
+        "operationId": "addAssetTag",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -2482,7 +2482,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/shared.TagRequest"
+                "$ref": "#/components/schemas/TagRequest"
               }
             }
           },
@@ -2495,7 +2495,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/asset.AddTagResponse"
+                  "$ref": "#/components/schemas/AddAssetTagResponse"
                 }
               }
             },
@@ -2519,7 +2519,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2543,7 +2543,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2570,7 +2570,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2594,7 +2594,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2621,7 +2621,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2645,7 +2645,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2669,7 +2669,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2696,7 +2696,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2731,7 +2731,7 @@
     "/api/v1/assets/{asset_id}/tags/{tag_id}": {
       "delete": {
         "description": "**Required scope:** `assets:write`\n\nDetach a tag from an asset by its tag record id.\nIdempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.",
-        "operationId": "assets.tags.remove",
+        "operationId": "removeAssetTag",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -2778,7 +2778,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2802,7 +2802,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2829,7 +2829,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2856,7 +2856,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2883,7 +2883,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2918,7 +2918,7 @@
     "/api/v1/locations": {
       "get": {
         "description": "**Required scope:** `locations:read`\n\nPaginated locations list with natural-key filters, sort, and substring search.\n\nDefault scope returns currently-effective locations only — rows whose `valid_from` is in the past AND whose `valid_to` is null or in the future. The `is_active` filter is independent of temporal validity; omit it to include both active and inactive rows within the effective window, or pass `?is_active=true`/`false` to filter further.",
-        "operationId": "locations.list",
+        "operationId": "listLocations",
         "parameters": [
           {
             "description": "max 200",
@@ -3034,7 +3034,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.ListLocationsResponse"
+                  "$ref": "#/components/schemas/ListLocationsResponse"
                 }
               }
             },
@@ -3058,7 +3058,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3082,7 +3082,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3109,7 +3109,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3136,7 +3136,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3172,12 +3172,12 @@
       },
       "post": {
         "description": "**Required scope:** `locations:write`\n\nCreate a new location in the hierarchy, optionally with one or more tags.\nSet parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.",
-        "operationId": "locations.create",
+        "operationId": "createLocation",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/location.CreateLocationWithTagsRequest"
+                "$ref": "#/components/schemas/CreateLocationWithTagsRequest"
               }
             }
           },
@@ -3190,7 +3190,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.CreateLocationResponse"
+                  "$ref": "#/components/schemas/CreateLocationResponse"
                 }
               }
             },
@@ -3220,7 +3220,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3244,7 +3244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3271,7 +3271,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3298,7 +3298,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3322,7 +3322,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3346,7 +3346,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3373,7 +3373,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3408,7 +3408,7 @@
     "/api/v1/locations/{location_id}": {
       "delete": {
         "description": "**Required scope:** `locations:write`\n\nDelete a location by its ID. Returns 204 on success, 404 if the location does not exist or has already been deleted, and 409 if the location has descendant locations or assets placed directly at it. Descendants must be reassigned or removed and placed assets must be moved or removed before their parent location can be deleted; bulk cascade is not supported.",
-        "operationId": "locations.delete",
+        "operationId": "deleteLocation",
         "parameters": [
           {
             "description": "Location ID",
@@ -3444,7 +3444,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3468,7 +3468,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3495,7 +3495,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3519,7 +3519,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3546,7 +3546,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3570,7 +3570,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3597,7 +3597,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3630,7 +3630,7 @@
       },
       "get": {
         "description": "**Required scope:** `locations:read`\n\nRetrieve a location by its canonical ID. Returns 404 if not found.\n\nPath-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted location is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.",
-        "operationId": "locations.get",
+        "operationId": "getLocation",
         "parameters": [
           {
             "description": "Location ID",
@@ -3649,7 +3649,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.GetLocationResponse"
+                  "$ref": "#/components/schemas/GetLocationResponse"
                 }
               }
             },
@@ -3673,7 +3673,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3697,7 +3697,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3724,7 +3724,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3748,7 +3748,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3775,7 +3775,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3811,7 +3811,7 @@
       },
       "put": {
         "description": "**Required scope:** `locations:write`\n\nUpdate mutable fields on an existing location. Only fields included in the request body are changed.",
-        "operationId": "locations.update",
+        "operationId": "updateLocation",
         "parameters": [
           {
             "description": "Location ID",
@@ -3829,7 +3829,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/location.UpdateLocationRequest"
+                "$ref": "#/components/schemas/UpdateLocationRequest"
               }
             }
           },
@@ -3842,7 +3842,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.UpdateLocationResponse"
+                  "$ref": "#/components/schemas/UpdateLocationResponse"
                 }
               }
             },
@@ -3866,7 +3866,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3890,7 +3890,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3917,7 +3917,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3941,7 +3941,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3968,7 +3968,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3992,7 +3992,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4016,7 +4016,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4043,7 +4043,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4078,7 +4078,7 @@
     "/api/v1/locations/{location_id}/ancestors": {
       "get": {
         "description": "**Required scope:** `locations:read`",
-        "operationId": "locations.ancestors",
+        "operationId": "listLocationAncestors",
         "parameters": [
           {
             "description": "Location ID",
@@ -4118,7 +4118,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.ListAncestorsResponse"
+                  "$ref": "#/components/schemas/ListLocationAncestorsResponse"
                 }
               }
             },
@@ -4142,7 +4142,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4166,7 +4166,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4193,7 +4193,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4217,7 +4217,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4244,7 +4244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4271,7 +4271,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4306,7 +4306,7 @@
     "/api/v1/locations/{location_id}/children": {
       "get": {
         "description": "**Required scope:** `locations:read`",
-        "operationId": "locations.children",
+        "operationId": "listLocationChildren",
         "parameters": [
           {
             "description": "Location ID",
@@ -4346,7 +4346,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.ListChildrenResponse"
+                  "$ref": "#/components/schemas/ListLocationChildrenResponse"
                 }
               }
             },
@@ -4370,7 +4370,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4394,7 +4394,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4421,7 +4421,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4445,7 +4445,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4472,7 +4472,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4499,7 +4499,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4534,7 +4534,7 @@
     "/api/v1/locations/{location_id}/descendants": {
       "get": {
         "description": "**Required scope:** `locations:read`",
-        "operationId": "locations.descendants",
+        "operationId": "listLocationDescendants",
         "parameters": [
           {
             "description": "Location ID",
@@ -4574,7 +4574,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.ListDescendantsResponse"
+                  "$ref": "#/components/schemas/ListLocationDescendantsResponse"
                 }
               }
             },
@@ -4598,7 +4598,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4622,7 +4622,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4649,7 +4649,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4673,7 +4673,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4700,7 +4700,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4727,7 +4727,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4762,7 +4762,7 @@
     "/api/v1/locations/{location_id}/tags": {
       "post": {
         "description": "**Required scope:** `locations:write`",
-        "operationId": "locations.tags.add",
+        "operationId": "addLocationTag",
         "parameters": [
           {
             "description": "Location ID",
@@ -4780,7 +4780,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/shared.TagRequest"
+                "$ref": "#/components/schemas/TagRequest"
               }
             }
           },
@@ -4793,7 +4793,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/location.AddTagResponse"
+                  "$ref": "#/components/schemas/AddLocationTagResponse"
                 }
               }
             },
@@ -4817,7 +4817,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4841,7 +4841,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4868,7 +4868,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4892,7 +4892,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4919,7 +4919,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4943,7 +4943,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4967,7 +4967,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -4994,7 +4994,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5029,7 +5029,7 @@
     "/api/v1/locations/{location_id}/tags/{tag_id}": {
       "delete": {
         "description": "**Required scope:** `locations:write`\n\nDetach a tag from a location by its tag record id.\nIdempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.",
-        "operationId": "locations.tags.remove",
+        "operationId": "removeLocationTag",
         "parameters": [
           {
             "description": "Location ID",
@@ -5076,7 +5076,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5100,7 +5100,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5127,7 +5127,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5154,7 +5154,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5181,7 +5181,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5216,13 +5216,13 @@
     "/api/v1/orgs/me": {
       "get": {
         "description": "Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.",
-        "operationId": "orgs.me",
+        "operationId": "getCurrentOrg",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/org.GetOrgMeResponse"
+                  "$ref": "#/components/schemas/GetCurrentOrgResponse"
                 }
               }
             },
@@ -5246,7 +5246,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5273,7 +5273,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5303,7 +5303,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5327,7 +5327,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5354,7 +5354,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5389,7 +5389,7 @@
     "/api/v1/reports/asset-locations": {
       "get": {
         "description": "**Required scope:** `history:read`\n\nSnapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.\n\nTemporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible — matching how soft-deleted locations are projected.",
-        "operationId": "reports.asset-locations",
+        "operationId": "getAssetLocations",
         "parameters": [
           {
             "description": "max 200",
@@ -5482,7 +5482,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/report.ListCurrentLocationsResponse"
+                  "$ref": "#/components/schemas/AssetLocationsResponse"
                 }
               }
             },
@@ -5506,7 +5506,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5530,7 +5530,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5557,7 +5557,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5584,7 +5584,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/errors.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -5633,6 +5633,24 @@
     {
       "description": "Production. Production-scoped API keys authenticate here only — they will fail with 401 against Preview, and Preview keys will fail here.",
       "url": "https://app.trakrf.id"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Asset CRUD, history, and tag membership.",
+      "name": "assets"
+    },
+    {
+      "description": "Location CRUD, hierarchy traversal, and tag membership.",
+      "name": "locations"
+    },
+    {
+      "description": "Caller's organization context.",
+      "name": "orgs"
+    },
+    {
+      "description": "Cross-cutting reporting endpoints (asset locations, etc.).",
+      "name": "reports"
     }
   ]
 }
