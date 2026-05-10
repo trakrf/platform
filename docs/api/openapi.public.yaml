@@ -773,9 +773,9 @@ info:
         email: support@trakrf.id
         name: TrakRF Support
     description: |-
-        TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.
+        TrakRF public REST API. See /api for the customer-facing reference.
 
-        HTTP method coverage (HEAD, OPTIONS, 405 / Allow): https://docs.trakrf.id/api/http-method-coverage
+        HTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage
     license:
         name: Business Source License 1.1
         url: https://github.com/trakrf/platform/blob/main/LICENSE
@@ -1135,7 +1135,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             responses:
@@ -1250,7 +1250,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             responses:
@@ -1367,7 +1367,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             requestBody:
@@ -1540,7 +1540,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -1713,7 +1713,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             requestBody:
@@ -1885,7 +1885,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
                 - description: Tag id
@@ -1893,7 +1893,7 @@ paths:
                   name: tag_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             responses:
@@ -2325,7 +2325,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             responses:
@@ -2470,7 +2470,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             responses:
@@ -2587,7 +2587,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             requestBody:
@@ -2755,7 +2755,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -2900,7 +2900,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -3045,7 +3045,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -3190,7 +3190,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             requestBody:
@@ -3362,7 +3362,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
                 - description: Tag ID
@@ -3370,7 +3370,7 @@ paths:
                   name: tag_id
                   required: true
                   schema:
-                    maximum: 2.147483647e+09
+                    maximum: 9007199254740991
                     minimum: 1
                     type: integer
             responses:

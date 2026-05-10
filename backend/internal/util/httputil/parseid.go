@@ -3,7 +3,6 @@ package httputil
 import (
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"strconv"
 
@@ -59,14 +58,32 @@ func ParsePathInt(field, raw string, min, max int64) (int, error) {
 	return int(n), nil
 }
 
+// SurrogateIDMax is the upper bound declared on every numeric public path
+// param. Set to 2^53-1 (Number.MAX_SAFE_INTEGER) — the largest integer that
+// round-trips losslessly through every JSON parser, including JavaScript.
+// Surrogate columns themselves are int4; any value above 2^31-1 simply will
+// not match a row and surfaces as 404 not_found from the handler. The wider
+// bound is intentional to keep generated SDKs that don't enforce path-param
+// maximum from receiving 400 validation_error when their framework sends an
+// out-of-int32 value upstream — that was the launch-blocker B3 finding
+// folded into TRA-657 / BB25.
+//
+// Why not int64 max (2^63-1)? swag stores @Param maximum as a float64
+// before kin-openapi serializes it; 2^63-1 is not representable exactly in
+// float64 and round-trips to 9223372036854776000 (just above int64 max),
+// which trips strict integer validators. 2^53-1 is the canonical "safe"
+// integer upper bound and is still ~4 million× larger than the int4 column
+// range we are actually trying to relax around.
+const SurrogateIDMax = int64(1)<<53 - 1
+
 // ParseSurrogateID parses a path param into an int suitable for a Postgres
-// int4 surrogate column (e.g. /api/v1/assets/{asset_id}). Bounds match the
-// spec annotations declared on every numeric public path param: [1, 2^31-1].
+// surrogate-id column lookup (e.g. /api/v1/assets/{asset_id}). Bounds are
+// [1, SurrogateIDMax]; see SurrogateIDMax for the rationale.
 //
 // Returns *FieldParamError on validation failure; pair with
 // RespondPathParamError to render a 400 validation_error envelope.
 func ParseSurrogateID(field, raw string) (int, error) {
-	return ParsePathInt(field, raw, 1, math.MaxInt32)
+	return ParsePathInt(field, raw, 1, SurrogateIDMax)
 }
 
 // RespondPathParamError writes a 400 validation_error envelope populated

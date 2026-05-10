@@ -20,6 +20,12 @@ import (
 // validation_error + fields[] (matching limit-too-large), not bad_request.
 
 func TestParseSurrogateID_ValidValues(t *testing.T) {
+	// TRA-657 / BB25 B3: path-param max widened to SurrogateIDMax (2^53-1)
+	// so generated SDKs that don't enforce path-param maximum get 404
+	// not_found (handler returns no row when the int4 surrogate column
+	// can't hold the value) instead of 400 validation_error. In-range
+	// values that exceed int4 still parse cleanly here; the not-found
+	// surfacing is the handler's responsibility.
 	cases := []struct {
 		raw  string
 		want int
@@ -27,6 +33,9 @@ func TestParseSurrogateID_ValidValues(t *testing.T) {
 		{"1", 1},
 		{"42", 42},
 		{strconv.Itoa(math.MaxInt32), math.MaxInt32},
+		{strconv.FormatInt(int64(math.MaxInt32)+1, 10), int(math.MaxInt32) + 1},
+		{"999999999999", 999999999999},
+		{strconv.FormatInt(httputil.SurrogateIDMax, 10), int(httputil.SurrogateIDMax)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {
@@ -49,8 +58,10 @@ func TestParseSurrogateID_FieldParamErrors(t *testing.T) {
 		{"empty", "", "asset_id", "invalid_value", ""},
 		{"zero below min", "0", "asset_id", "too_small", "min"},
 		{"negative below min", "-1", "asset_id", "too_small", "min"},
-		{"one above max", strconv.FormatInt(int64(math.MaxInt32)+1, 10), "asset_id", "too_large", "max"},
-		{"way above max", "99999999999", "asset_id", "too_large", "max"},
+		{"one above SurrogateIDMax", strconv.FormatInt(httputil.SurrogateIDMax+1, 10), "asset_id", "too_large", "max"},
+		// strconv.ParseInt(_, 10, 64) returns ErrRange for values that
+		// don't fit in int64; surfaces as invalid_value via the parse path.
+		{"above int64 max", "9999999999999999999999", "asset_id", "invalid_value", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,10 +81,13 @@ func TestParseSurrogateID_FieldParamErrors(t *testing.T) {
 }
 
 func TestRespondPathParamError_ValidationEnvelopeWithFields(t *testing.T) {
+	// Build a too-small failure to exercise the validation_error envelope —
+	// after TRA-657 widening, out-of-int32 values no longer trip too_large
+	// (they pass through and become 404 from the handler).
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/api/v1/assets/99999999999", nil)
+	r := httptest.NewRequest("GET", "/api/v1/assets/0", nil)
 
-	_, err := httputil.ParseSurrogateID("asset_id", "99999999999")
+	_, err := httputil.ParseSurrogateID("asset_id", "0")
 	require.Error(t, err)
 	httputil.RespondPathParamError(w, r, err, "req-1")
 
@@ -86,8 +100,8 @@ func TestRespondPathParamError_ValidationEnvelopeWithFields(t *testing.T) {
 	assert.Equal(t, 400, resp.Error.Status)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "asset_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "too_large", resp.Error.Fields[0].Code)
-	assert.Equal(t, float64(math.MaxInt32), resp.Error.Fields[0].Params["max"])
+	assert.Equal(t, "too_small", resp.Error.Fields[0].Code)
+	assert.Equal(t, float64(1), resp.Error.Fields[0].Params["min"])
 }
 
 func TestRespondPathParamError_NonNumericSurfacesAsInvalidValue(t *testing.T) {

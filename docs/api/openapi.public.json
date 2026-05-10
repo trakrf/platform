@@ -1040,7 +1040,7 @@
       "email": "support@trakrf.id",
       "name": "TrakRF Support"
     },
-    "description": "TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.\n\nHTTP method coverage (HEAD, OPTIONS, 405 / Allow): https://docs.trakrf.id/api/http-method-coverage",
+    "description": "TrakRF public REST API. See /api for the customer-facing reference.\n\nHTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage",
     "license": {
       "name": "Business Source License 1.1",
       "url": "https://github.com/trakrf/platform/blob/main/LICENSE"
@@ -1566,7 +1566,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -1740,7 +1740,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -1921,7 +1921,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -2188,7 +2188,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -2451,7 +2451,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -2718,7 +2718,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -2729,7 +2729,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -3386,7 +3386,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -3608,7 +3608,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -3789,7 +3789,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -4056,7 +4056,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -4284,7 +4284,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -4512,7 +4512,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -4740,7 +4740,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -5007,7 +5007,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
@@ -5018,7 +5018,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
-              "maximum": 2147483647,
+              "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
             }
