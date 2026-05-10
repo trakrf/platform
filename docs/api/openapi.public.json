@@ -20,6 +20,12 @@
           "type": "string"
         }
       },
+      "WWWAuthenticate": {
+        "description": "RFC 7235 authentication challenge. Always `Bearer realm=\"trakrf-api\"` on 401 responses.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "XRateLimitLimit": {
         "description": "Steady-state requests/min for this API key.",
         "schema": {
@@ -1208,6 +1214,9 @@
             },
             "description": "Unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -1391,6 +1400,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -1588,6 +1600,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -1790,6 +1805,9 @@
             },
             "description": "Unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -1980,6 +1998,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -2288,6 +2309,9 @@
             },
             "description": "Unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -2504,6 +2528,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -2760,6 +2787,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -3028,6 +3058,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -3187,6 +3220,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -3489,6 +3525,9 @@
             },
             "description": "Unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -3638,6 +3677,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -3864,6 +3906,9 @@
             },
             "description": "Unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -4054,6 +4099,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -4327,6 +4375,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -4552,6 +4603,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -4777,6 +4831,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -4993,6 +5050,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -5249,6 +5309,9 @@
             },
             "description": "unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -5392,6 +5455,9 @@
             },
             "description": "Unauthorized",
             "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/WWWAuthenticate"
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
