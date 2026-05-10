@@ -646,6 +646,174 @@ func TestPutAsset_MetadataNonObject_Returns400(t *testing.T) {
 	}
 }
 
+// TRA-649 / BB23 F2: POST /api/v1/assets must reject loose date forms on
+// valid_from / valid_to. The body validator now matches the strict
+// query-param validator on /assets/{id}/history and the spec's
+// `format: date-time` declaration. Slash-separated dates, date-only
+// strings, empty strings, and the Go zero-time literal previously
+// round-tripped silently (slash forms got normalised; empty / zero values
+// got substituted with the request creation timestamp). Each must now
+// surface as 400 validation_error keyed on the offending field.
+func TestPostAsset_LooseDateForms_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	cases := []struct {
+		name      string
+		field     string
+		bodyValue string
+	}{
+		{"valid_from date-only", "valid_from", `"2026-05-10"`},
+		{"valid_from US slashes", "valid_from", `"05/10/2026"`},
+		{"valid_from ISO slashes", "valid_from", `"2026/05/10"`},
+		{"valid_from empty string", "valid_from", `""`},
+		{"valid_from Go zero-time", "valid_from", `"0001-01-01T00:00:00Z"`},
+		{"valid_to date-only", "valid_to", `"2027-05-10"`},
+		{"valid_to slashes", "valid_to", `"2027/05/10"`},
+		{"valid_to empty string", "valid_to", `""`},
+		{"valid_to Go zero-time", "valid_to", `"0001-01-01T00:00:00Z"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"external_key":"ASSET-LOOSE-%s","name":"loose","%s":%s}`,
+				tc.name, tc.field, tc.bodyValue)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader([]byte(body)))
+			req.Header.Set("Content-Type", "application/json")
+			req = withRoundTripOrgContext(req, orgID)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"%s body %q must be 400: %s", tc.field, tc.bodyValue, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.NotEmpty(t, resp.Error.Fields)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+		})
+	}
+
+	_ = pool
+}
+
+// TRA-649 / BB23 F2: PUT /api/v1/assets/{id} mirrors POST — body validator
+// rejects loose date forms with 400 validation_error.
+func TestPutAsset_LooseDateForms_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-PUT-LOOSE", "PutLoose")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	cases := []struct {
+		name      string
+		field     string
+		bodyValue string
+	}{
+		{"valid_from date-only", "valid_from", `"2026-05-10"`},
+		{"valid_from slashes", "valid_from", `"2026/05/10"`},
+		{"valid_from empty string", "valid_from", `""`},
+		{"valid_from Go zero-time", "valid_from", `"0001-01-01T00:00:00Z"`},
+		{"valid_to date-only", "valid_to", `"2027-05-10"`},
+		{"valid_to slashes", "valid_to", `"2027/05/10"`},
+		{"valid_to empty string", "valid_to", `""`},
+		{"valid_to Go zero-time", "valid_to", `"0001-01-01T00:00:00Z"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"%s":%s}`, tc.field, tc.bodyValue)
+			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(body)))
+			req.Header.Set("Content-Type", "application/json")
+			req = withRoundTripOrgContext(req, orgID)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"%s body %q must be 400: %s", tc.field, tc.bodyValue, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.NotEmpty(t, resp.Error.Fields)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+		})
+	}
+}
+
+// TRA-649: omitting valid_from on POST /api/v1/assets continues to default
+// to the request creation timestamp. The legitimate "absent means
+// server-defaults" path is preserved — only silent coercion of *explicit*
+// values went away.
+func TestPostAsset_OmittedValidFrom_DefaultsToNow(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body := []byte(`{"external_key":"ASSET-DEFAULT-VF","name":"defaultvf"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code, "omitted valid_from must default-to-now: %s", rec.Body.String())
+
+	var resp struct {
+		Data struct {
+			ValidFrom time.Time `json:"valid_from"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.False(t, resp.Data.ValidFrom.IsZero(), "valid_from must be populated")
+	assert.WithinDuration(t, time.Now().UTC(), resp.Data.ValidFrom, 5*time.Minute)
+
+	_ = pool
+}
+
 // TRA-619: an object metadata is still accepted (regression guard for the
 // type-check above — it must not reject the legitimate happy path).
 func TestPutAsset_MetadataObject_Accepted(t *testing.T) {

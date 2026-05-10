@@ -275,14 +275,21 @@ export function LocationForm({
     // Filter out empty tags
     const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
+    // TRA-649 / BB23 F2: the body date validator now rejects empty strings
+    // with 400 validation_error. Omit valid_from when blank so the backend
+    // applies its server-side default (now); send valid_to as null when
+    // blank to clear (PUT) or leave NULL (POST).
+    const { valid_from: _vf, valid_to: _vt, ...rest } = formData;
     const submitData = {
-      ...formData,
-      valid_from: formData.valid_from ? formatDateToRFC3339(formData.valid_from) : '',
-      valid_to: formData.valid_to ? formatDateToRFC3339(formData.valid_to) : '',
+      ...rest,
       tags: validTags,
+      ...(formData.valid_from
+        ? { valid_from: formatDateToRFC3339(formData.valid_from) }
+        : {}),
+      valid_to: formData.valid_to ? formatDateToRFC3339(formData.valid_to) : null,
     };
 
-    onSubmit(submitData as LocationFormData);
+    onSubmit(submitData as unknown as LocationFormData);
   };
 
   return (

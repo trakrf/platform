@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
@@ -197,6 +198,17 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 			// have caught it either.
 			if isTimeTarget(typeErr.Type) {
 				field := typeErr.Field
+				// encoding/json prefixes the field path with the struct
+				// name when an embedded struct is in play (e.g.
+				// CreateAssetWithTagsRequest embeds CreateAssetRequest, so
+				// a date failure on `valid_from` arrives as
+				// "CreateAssetRequest.valid_from"). The wire-facing field
+				// is the JSON-tag leaf — keep only the segment after the
+				// last "." so the response matches the request body
+				// shape integrators see.
+				if i := strings.LastIndex(field, "."); i >= 0 {
+					field = field[i+1:]
+				}
 				if field == "" {
 					field = "(body)"
 				}
