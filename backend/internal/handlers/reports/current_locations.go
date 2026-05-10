@@ -24,7 +24,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 // ListCurrentLocationsResponse is the typed envelope returned by
-// GET /api/v1/locations/current.
+// GET /api/v1/reports/asset-locations.
 type ListCurrentLocationsResponse struct {
 	Data       []report.PublicCurrentLocationItem `json:"data"`
 	Limit      int                                `json:"limit"       example:"50"`
@@ -36,8 +36,8 @@ type ListCurrentLocationsResponse struct {
 // @Description Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 // @Description
 // @Description Temporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible — matching how soft-deleted locations are projected.
-// @Tags locations,public
-// @ID locations.current
+// @Tags reports,public
+// @ID reports.asset-locations
 // @Param limit                 query int    false "max 200"   default(50) minimum(1) maximum(200)
 // @Param offset                query int    false "min 0"    default(0) minimum(0)
 // @Param location_id           query []int    false "filter by location id (canonical, may repeat)" collectionFormat(multi)
@@ -55,7 +55,7 @@ type ListCurrentLocationsResponse struct {
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
 // @Security BearerAuth[history:read]
-// @Router /api/v1/locations/current [get]
+// @Router /api/v1/reports/asset-locations [get]
 func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 

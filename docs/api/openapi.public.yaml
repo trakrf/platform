@@ -3471,7 +3471,115 @@ paths:
             summary: Remove a tag from a location
             tags:
                 - locations
-    /api/v1/locations/current:
+    /api/v1/orgs/me:
+        get:
+            description: Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.
+            operationId: orgs.me
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/org.GetOrgMeResponse'
+                    description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Unauthorized
+                    headers:
+                        WWW-Authenticate:
+                            $ref: '#/components/headers/WWWAuthenticate'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "405":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            description: Allowed methods
+                            schema:
+                                type: string
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: missing_org_context — the API key authenticated but its org no longer exists
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/errors.ErrorResponse'
+                    description: Internal server error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+            security:
+                - BearerAuth: []
+            summary: Get the org associated with the authenticated API key
+            tags:
+                - orgs
+    /api/v1/reports/asset-locations:
         get:
             description: |-
                 **Required scope:** `history:read`
@@ -3479,7 +3587,7 @@ paths:
                 Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 
                 Temporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible — matching how soft-deleted locations are projected.
-            operationId: locations.current
+            operationId: reports.asset-locations
             parameters:
                 - description: max 200
                   in: query
@@ -3627,115 +3735,7 @@ paths:
                 - BearerAuth: []
             summary: List current asset locations
             tags:
-                - locations
-    /api/v1/orgs/me:
-        get:
-            description: Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.
-            operationId: orgs.me
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/org.GetOrgMeResponse'
-                    description: OK
-                    headers:
-                        X-RateLimit-Limit:
-                            $ref: '#/components/headers/XRateLimitLimit'
-                        X-RateLimit-Remaining:
-                            $ref: '#/components/headers/XRateLimitRemaining'
-                        X-RateLimit-Reset:
-                            $ref: '#/components/headers/XRateLimitReset'
-                        X-Request-Id:
-                            $ref: '#/components/headers/XRequestId'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Unauthorized
-                    headers:
-                        WWW-Authenticate:
-                            $ref: '#/components/headers/WWWAuthenticate'
-                        X-RateLimit-Limit:
-                            $ref: '#/components/headers/XRateLimitLimit'
-                        X-RateLimit-Remaining:
-                            $ref: '#/components/headers/XRateLimitRemaining'
-                        X-RateLimit-Reset:
-                            $ref: '#/components/headers/XRateLimitReset'
-                        X-Request-Id:
-                            $ref: '#/components/headers/XRequestId'
-                "405":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Method not allowed
-                    headers:
-                        Allow:
-                            description: Allowed methods
-                            schema:
-                                type: string
-                        X-RateLimit-Limit:
-                            $ref: '#/components/headers/XRateLimitLimit'
-                        X-RateLimit-Remaining:
-                            $ref: '#/components/headers/XRateLimitRemaining'
-                        X-RateLimit-Reset:
-                            $ref: '#/components/headers/XRateLimitReset'
-                        X-Request-Id:
-                            $ref: '#/components/headers/XRequestId'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: missing_org_context — the API key authenticated but its org no longer exists
-                    headers:
-                        X-RateLimit-Limit:
-                            $ref: '#/components/headers/XRateLimitLimit'
-                        X-RateLimit-Remaining:
-                            $ref: '#/components/headers/XRateLimitRemaining'
-                        X-RateLimit-Reset:
-                            $ref: '#/components/headers/XRateLimitReset'
-                        X-Request-Id:
-                            $ref: '#/components/headers/XRequestId'
-                "429":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: rate_limited
-                    headers:
-                        Retry-After:
-                            $ref: '#/components/headers/RetryAfter'
-                        X-RateLimit-Limit:
-                            $ref: '#/components/headers/XRateLimitLimit'
-                        X-RateLimit-Remaining:
-                            $ref: '#/components/headers/XRateLimitRemaining'
-                        X-RateLimit-Reset:
-                            $ref: '#/components/headers/XRateLimitReset'
-                        X-Request-Id:
-                            $ref: '#/components/headers/XRequestId'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/errors.ErrorResponse'
-                    description: Internal server error
-                    headers:
-                        X-RateLimit-Limit:
-                            $ref: '#/components/headers/XRateLimitLimit'
-                        X-RateLimit-Remaining:
-                            $ref: '#/components/headers/XRateLimitRemaining'
-                        X-RateLimit-Reset:
-                            $ref: '#/components/headers/XRateLimitReset'
-                        X-Request-Id:
-                            $ref: '#/components/headers/XRequestId'
-            security:
-                - BearerAuth: []
-            summary: Get the org associated with the authenticated API key
-            tags:
-                - orgs
+                - reports
 security:
     - BearerAuth: []
 servers:

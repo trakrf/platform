@@ -15,7 +15,7 @@ type CurrentLocationItem struct {
 }
 
 // CurrentLocationSort declares one entry in a list-endpoint sort. Field is
-// one of the documented enum values for /locations/current; Desc is true for
+// one of the documented enum values for /reports/asset-locations; Desc is true for
 // "-prefixed" entries.
 type CurrentLocationSort struct {
 	Field string

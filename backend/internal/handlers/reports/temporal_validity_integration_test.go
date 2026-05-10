@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-// TRA-628: /locations/current and /assets/{id}/history must apply
+// TRA-628: /reports/asset-locations and /assets/{id}/history must apply
 // temporal-validity predicate on entity joins.
 
 package reports
@@ -39,7 +39,7 @@ type historyResp struct {
 func setupTemporalReportsRouter(handler *Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Get("/api/v1/locations/current", handler.ListCurrentLocations)
+	r.Get("/api/v1/reports/asset-locations", handler.ListCurrentLocations)
 	r.Get("/api/v1/assets/{asset_id}/history", handler.GetAssetHistory)
 	return r
 }
@@ -103,7 +103,7 @@ func TestListCurrentLocations_TemporalValidity_FiltersAssetsAndLocations(t *test
 	handler := NewHandler(store)
 	router := setupTemporalReportsRouter(handler)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations/current", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reports/asset-locations", nil)
 	req = withReportsOrg(req, orgID)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

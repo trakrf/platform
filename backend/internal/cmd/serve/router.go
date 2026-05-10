@@ -160,7 +160,7 @@ func setupRouter(
 		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
 		// require history:read per TRA-578 — these endpoints expose scan-derived
 		// history data; the scope name aligns with the /history endpoint vocabulary.
-		r.With(middleware.RequireScope("history:read")).Get("/api/v1/locations/current", reportsHandler.ListCurrentLocations)
+		r.With(middleware.RequireScope("history:read")).Get("/api/v1/reports/asset-locations", reportsHandler.ListCurrentLocations)
 		r.With(middleware.RequireScope("history:read")).Get("/api/v1/assets/{asset_id}/history", reportsHandler.GetAssetHistory)
 	})
 
@@ -218,12 +218,19 @@ func setupRouter(
 			"This endpoint has been removed. Use GET /api/v1/assets?external_key= to find an asset by external_key.")
 		register404Static(r, "/api/v1/locations/lookup",
 			"This endpoint has been removed. Use GET /api/v1/locations?external_key= to find a location by external_key.")
+		// TRA-658 BB25: path moved out of /locations/ — schema is in
+		// report.* and scope is history:read, so /reports/ is the
+		// correct namespace. Without this guard chi falls through to
+		// /api/v1/locations/{location_id} and surfaces 401 (auth runs
+		// before the sibling resolves to "current is not a valid id").
+		register404Static(r, "/api/v1/locations/current",
+			"This endpoint has moved. Use GET /api/v1/reports/asset-locations.")
 
 		// Live static endpoints with a single supported method.
 		register405Static(r, "/api/v1/orgs/me", []string{http.MethodGet})
 		register405Static(r, "/api/v1/users/me", []string{http.MethodGet})
 		register405Static(r, "/api/v1/users/me/current-org", []string{http.MethodPost})
-		register405Static(r, "/api/v1/locations/current", []string{http.MethodGet})
+		register405Static(r, "/api/v1/reports/asset-locations", []string{http.MethodGet})
 		register405Static(r, "/api/v1/assets/bulk", []string{http.MethodPost})
 		register405Static(r, "/api/v1/assets/bulk/{jobId}", []string{http.MethodGet})
 	})

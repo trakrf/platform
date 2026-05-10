@@ -210,12 +210,12 @@ export default function (data) {
       ok = check(res, { 'delete_asset 2xx': (r) => r.status === 200 || r.status === 204 });
     }
   } else if (action === 'reports_current_locations') {
-    res = http.get(`${API}/locations/current?limit=20`, {
+    res = http.get(`${API}/reports/asset-locations?limit=20`, {
       ...auth,
-      tags: { kind: 'read', op: 'locations_current' },
+      tags: { kind: 'read', op: 'reports_asset_locations' },
     });
     reportsLat.add(res.timings.duration);
-    ok = check(res, { 'locations_current 200': (r) => r.status === 200 });
+    ok = check(res, { 'reports_asset_locations 200': (r) => r.status === 200 });
   }
 
   okRate.add(ok);
