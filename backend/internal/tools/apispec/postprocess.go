@@ -546,25 +546,31 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 	}
 }
 
-// appendMethodPolicyDescription (TRA-633 B1, B4 / TRA-649 BB23 S4) keeps
-// info.description at a one-line pointer to the customer-facing reference.
-// The platform router exposes HEAD and OPTIONS uniformly via middleware
-// (chimiddleware.GetHead rewrites HEAD→GET; CORS middleware short-circuits
-// OPTIONS to 204), so per-path declarations would double the operation
-// count for no codegen value. Earlier iterations inlined the policy prose
-// directly into info.description, but generated SDK class docstrings
-// (AssetsApi.ts, LocationsApi.ts, OrgsApi.ts) carried the entire HTTP-
-// method-coverage paragraph at the top of every file — TRA-649 / BB23 S4
-// trimmed that bloat. The full policy now lives at
-// docs.trakrf.id/api/http-method-coverage; the spec only carries the
-// link.
+// appendMethodPolicyDescription (TRA-633 B1, B4 / TRA-649 BB23 S4 /
+// TRA-657 BB25 B4) keeps info.description at a one-line pointer to the
+// customer-facing reference. The platform router exposes HEAD and OPTIONS
+// uniformly via middleware (chimiddleware.GetHead rewrites HEAD→GET; CORS
+// middleware short-circuits OPTIONS to 204), so per-path declarations
+// would double the operation count for no codegen value. Earlier
+// iterations inlined the policy prose directly into info.description, but
+// generated SDK class docstrings (AssetsApi.ts, LocationsApi.ts,
+// OrgsApi.ts) carried the entire HTTP-method-coverage paragraph at the
+// top of every file — TRA-649 / BB23 S4 trimmed that bloat. The full
+// policy now lives at /api/http-method-coverage on the docs site.
+//
+// The link is emitted as a site-relative path (/api/http-method-coverage)
+// rather than the absolute https://docs.trakrf.id/... URL: the canonical
+// spec is published from docs.preview.trakrf.id during PR review and from
+// docs.trakrf.id in production, and a partner doing strict env isolation
+// should not see preview-spec links pointing at production docs
+// (TRA-657 / BB25 B4).
 func appendMethodPolicyDescription(doc *openapi3.T) {
 	const marker = "HTTP method coverage"
 	if strings.Contains(doc.Info.Description, marker) {
 		return
 	}
 	policy := "HTTP method coverage (HEAD, OPTIONS, 405 / Allow): " +
-		"https://docs.trakrf.id/api/http-method-coverage"
+		"/api/http-method-coverage"
 	if doc.Info.Description == "" {
 		doc.Info.Description = policy
 	} else {

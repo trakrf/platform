@@ -201,7 +201,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID           assets.update
 // @Accept       json
 // @Produce      json
-// @Param        asset_id path  int                       true  "Asset id (canonical)" minimum(1) maximum(2147483647)
+// @Param        asset_id path  int                       true  "Asset id (canonical)" minimum(1) maximum(9007199254740991)
 // @Param        request  body  asset.UpdateAssetRequest  true  "Fields to update"
 // @Success      200  {object}  assets.UpdateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -369,7 +369,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @ID           assets.delete
 // @Accept       json
 // @Produce      json
-// @Param        asset_id  path  int  true  "Asset id (canonical)" minimum(1) maximum(2147483647)
+// @Param        asset_id  path  int  true  "Asset id (canonical)" minimum(1) maximum(9007199254740991)
 // @Success      204  "deleted"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -568,7 +568,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Description Path-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted asset is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.
 // @Tags assets,public
 // @ID assets.get
-// @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(2147483647)
+// @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(9007199254740991)
 // @Success 200 {object} assets.GetAssetResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
@@ -625,7 +625,7 @@ type AddTagResponse struct {
 // @ID           assets.tags.add
 // @Accept       json
 // @Produce      json
-// @Param        asset_id path  int                true  "Asset id (canonical)" minimum(1) maximum(2147483647)
+// @Param        asset_id path  int                true  "Asset id (canonical)" minimum(1) maximum(9007199254740991)
 // @Param        request  body  shared.TagRequest  true  "Tag to attach"
 // @Success      201  {object}  assets.AddTagResponse         "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -695,8 +695,8 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 // @ID           assets.tags.remove
 // @Accept       json
 // @Produce      json
-// @Param        asset_id  path  int  true  "Asset id (canonical)" minimum(1) maximum(2147483647)
-// @Param        tag_id    path  int  true  "Tag id" minimum(1) maximum(2147483647)
+// @Param        asset_id  path  int  true  "Asset id (canonical)" minimum(1) maximum(9007199254740991)
+// @Param        tag_id    path  int  true  "Tag id" minimum(1) maximum(9007199254740991)
 // @Success      204  "deleted"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"

@@ -47,7 +47,7 @@ type AssetHistoryResponse struct {
 // @Description The asset existence check follows path-addressed semantics — the asset is returned even if its `valid_to` has elapsed. Each history row's location reference applies the temporal-validity predicate, so an event referencing a location whose effective window is past surfaces with null `location_external_key`.
 // @Tags assets,public
 // @ID assets.history
-// @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(2147483647)
+// @Param asset_id path int true "Asset id (canonical)" minimum(1) maximum(9007199254740991)
 // @Param limit query int false "max 200"   default(50) minimum(1) maximum(200)
 // @Param offset query int false "min 0"    default(0) minimum(0)
 // @Param from query string false "RFC 3339 start timestamp" format(date-time)

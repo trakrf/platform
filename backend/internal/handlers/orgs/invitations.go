@@ -18,7 +18,7 @@ import (
 // @ID org_invitations.list
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1) maximum(2147483647)
+// @Param id path int true "Organization id" minimum(1) maximum(9007199254740991)
 // @Success 200 {object} map[string]any "data: []organization.Invitation"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -50,7 +50,7 @@ func (h *Handler) ListInvitations(w http.ResponseWriter, r *http.Request) {
 // @ID org_invitations.create
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1) maximum(2147483647)
+// @Param id path int true "Organization id" minimum(1) maximum(9007199254740991)
 // @Param request body organization.CreateInvitationRequest true "Invitation payload"
 // @Success 201 {object} map[string]any "data: organization.Invitation"
 // @Failure 400 {object} modelerrors.ErrorResponse
@@ -124,8 +124,8 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 // @ID org_invitations.cancel
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1) maximum(2147483647)
-// @Param inviteId path int true "Invitation id" minimum(1) maximum(2147483647)
+// @Param id path int true "Organization id" minimum(1) maximum(9007199254740991)
+// @Param inviteId path int true "Invitation id" minimum(1) maximum(9007199254740991)
 // @Success 200 {object} map[string]any "message: Invitation cancelled"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -161,8 +161,8 @@ func (h *Handler) CancelInvitation(w http.ResponseWriter, r *http.Request) {
 // @ID org_invitations.resend
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1) maximum(2147483647)
-// @Param inviteId path int true "Invitation id" minimum(1) maximum(2147483647)
+// @Param id path int true "Organization id" minimum(1) maximum(9007199254740991)
+// @Param inviteId path int true "Invitation id" minimum(1) maximum(9007199254740991)
 // @Success 200 {object} map[string]any "message: Invitation resent"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse

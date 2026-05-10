@@ -168,7 +168,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID           locations.update
 // @Accept       json
 // @Produce      json
-// @Param        location_id path  int                              true  "Location ID" minimum(1) maximum(2147483647)
+// @Param        location_id path  int                              true  "Location ID" minimum(1) maximum(9007199254740991)
 // @Param        request  body  location.UpdateLocationRequest   true  "Fields to update"
 // @Success      200  {object}  locations.UpdateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -315,7 +315,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @ID locations.delete
 // @Accept json
 // @Produce json
-// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647)
+// @Param location_id path int true "Location ID" minimum(1) maximum(9007199254740991)
 // @Success 204 "deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -553,7 +553,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Description Path-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted location is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.
 // @Tags locations,public
 // @ID locations.get
-// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647)
+// @Param location_id path int true "Location ID" minimum(1) maximum(9007199254740991)
 // @Success 200 {object} locations.GetLocationResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -604,7 +604,7 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 // @Summary List location ancestors
 // @Tags locations,public
 // @ID locations.ancestors
-// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647)
+// @Param location_id path  int    true  "Location ID" minimum(1) maximum(9007199254740991)
 // @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
 // @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListAncestorsResponse
@@ -663,7 +663,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Summary List location descendants
 // @Tags locations,public
 // @ID locations.descendants
-// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647)
+// @Param location_id path  int    true  "Location ID" minimum(1) maximum(9007199254740991)
 // @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
 // @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListDescendantsResponse
@@ -722,7 +722,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Summary List location children
 // @Tags locations,public
 // @ID locations.children
-// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647)
+// @Param location_id path  int    true  "Location ID" minimum(1) maximum(9007199254740991)
 // @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
 // @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListChildrenResponse
@@ -794,7 +794,7 @@ type AddTagResponse struct {
 // @Tags locations,public
 // @ID locations.tags.add
 // @Accept json
-// @Param location_id path int               true "Location ID" minimum(1) maximum(2147483647)
+// @Param location_id path int               true "Location ID" minimum(1) maximum(9007199254740991)
 // @Param request body shared.TagRequest true "Tag to attach"
 // @Success 201 {object} locations.AddTagResponse "tag attached"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
@@ -858,8 +858,8 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 // @Description Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
 // @Tags locations,public
 // @ID locations.tags.remove
-// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647)
-// @Param tag_id      path int true "Tag ID" minimum(1) maximum(2147483647)
+// @Param location_id path int true "Location ID" minimum(1) maximum(9007199254740991)
+// @Param tag_id      path int true "Tag ID" minimum(1) maximum(9007199254740991)
 // @Success 204 "deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
