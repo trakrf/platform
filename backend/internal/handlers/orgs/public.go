@@ -31,6 +31,7 @@ type GetOrgMeResponse struct {
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
 // @Failure 405 {object} modelerrors.ErrorResponse "Method not allowed"
 // @Header  405 {string} Allow "Allowed methods"
+// @Failure 422 {object} modelerrors.ErrorResponse "missing_org_context — the API key authenticated but its org no longer exists"
 // @Failure 429 {object} modelerrors.ErrorResponse "rate_limited"
 // @Header  429 {integer} Retry-After "Seconds to wait before retrying"
 // @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
@@ -55,8 +56,10 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if org == nil {
-		// Org was deleted between key issuance and this request — treat the key as unauthorized.
-		httputil.Respond401(w, r, "Organization no longer exists", reqID)
+		// Org was deleted between key issuance and this request — the key is
+		// authentic but has no org context. Matches the docs' 422
+		// missing_org_context contract (TRA-646 / BB22 S2).
+		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
 
