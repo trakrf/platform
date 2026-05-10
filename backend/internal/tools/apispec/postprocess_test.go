@@ -1285,6 +1285,38 @@ func TestInjectGlobalHeaderRefs_Idempotent(t *testing.T) {
 	assert.Len(t, headers, 4, "200 must declare exactly the 4 global headers (no Retry-After)")
 }
 
+// TestAppendSpecVariantsDescription covers TRA-657 BB25 A8: both spec
+// variants (YAML and JSON) must be advertised in info.description so the
+// /api Redoc page — whose download button only fetches YAML — has a
+// discoverable pointer to the JSON URL.
+func TestAppendSpecVariantsDescription(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "T", Version: "v1", Description: "Existing prose."},
+	}
+	appendSpecVariantsDescription(doc)
+
+	assert.Contains(t, doc.Info.Description, "Existing prose.", "existing description must be preserved")
+	assert.Contains(t, doc.Info.Description, "/api/openapi.yaml", "YAML variant URL must be advertised")
+	assert.Contains(t, doc.Info.Description, "/api/openapi.json", "JSON variant URL must be advertised")
+	assert.NotContains(t, doc.Info.Description, "docs.trakrf.id",
+		"link must be site-relative, not env-pinned to production docs (TRA-657 / BB25 B4)")
+
+	// Idempotency: a second call must not duplicate the section.
+	before := doc.Info.Description
+	appendSpecVariantsDescription(doc)
+	assert.Equal(t, before, doc.Info.Description, "second call must be a no-op")
+
+	// Empty seed: function must populate without a leading separator.
+	emptyDoc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "T", Version: "v1"},
+	}
+	appendSpecVariantsDescription(emptyDoc)
+	assert.True(t, strings.HasPrefix(emptyDoc.Info.Description, "Spec available as YAML"),
+		"empty seed must produce description without leading newlines")
+}
+
 // TestAppendMethodPolicyDescription covers TRA-633 B1/B4 + TRA-649 / BB23
 // S4: HEAD/OPTIONS behavior is documented once, but only as a one-line
 // link to the customer-facing docs page. Inlining the full policy prose
