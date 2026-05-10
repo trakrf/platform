@@ -8,53 +8,50 @@ import (
 	"time"
 )
 
-// FlexibleDate is a custom type that can unmarshal from multiple date formats
+// FlexibleDate is a JSON wrapper around time.Time that accepts only strict
+// RFC 3339 date-time strings. The historical name is preserved (the type
+// once accepted multiple loose formats — slashes, date-only, European
+// punctuation), but TRA-649 / BB23 F2 reduced the surface to RFC 3339 to
+// match both the OpenAPI declaration (`format: date-time`) and the strict
+// query-param validator on /api/v1/assets/{asset_id}/history. Empty string
+// and the Go zero time (`0001-01-01T00:00:00Z`) are rejected so that a
+// missing value cannot silently become a server-substituted default at the
+// handler seam.
 type FlexibleDate struct {
 	time.Time
 }
 
-// Supported date formats
-var dateFormats = []string{
-	time.RFC3339,          // "2006-01-02T15:04:05Z07:00"
-	time.RFC3339Nano,      // "2006-01-02T15:04:05.999999999Z07:00"
-	"2006-01-02",          // ISO 8601: "2025-12-14"
-	"2006-01-02 15:04:05", // ISO with time: "2025-12-14 10:30:00"
-	"01/02/2006",          // US format: "12/14/2025"
-	"02/01/2006",          // UK format: "14/12/2025"
-	"02.01.2006",          // European format: "14.12.2025"
-	"01.02.2006",          // Alternative: "12.14.2025"
-	"2006/01/02",          // ISO slashes: "2025/12/14"
-}
-
-// UnmarshalJSON implements custom JSON unmarshaling for flexible date parsing
+// UnmarshalJSON implements strict RFC 3339 JSON unmarshaling.
+//
+// Accepts: time.RFC3339 / time.RFC3339Nano, JSON null (treated as
+// "field omitted" — the surrounding pointer remains nil so handlers can
+// distinguish absence from an explicit value).
+//
+// Rejects: empty string, the Go zero time, and any other format. All
+// rejections surface as *json.UnmarshalTypeError with Type == time.Time so
+// httputil.RespondDecodeError can render them as a validation_error keyed
+// on the offending field path (TRA-641 / BB21 §2.1).
 func (fd *FlexibleDate) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), "\"")
 
-	if s == "null" || s == "" {
+	if s == "null" {
 		return nil
 	}
 
-	for _, format := range dateFormats {
-		t, err := time.Parse(format, s)
-		if err == nil {
+	if s != "" {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil && !t.IsZero() {
 			fd.Time = t
 			return nil
 		}
 	}
 
-	// Return *json.UnmarshalTypeError so encoding/json fills in the field
-	// path. RespondDecodeError detects time.Time targets and renders the
-	// failure as a validation_error with fields[] (TRA-641 / BB21 §2.1).
-	// Value is the literal byte content of the JSON token, including quotes
-	// for strings — matches what UnmarshalTypeError carries for built-in
-	// type-mismatch failures.
 	return &json.UnmarshalTypeError{
 		Value: string(b),
 		Type:  reflect.TypeOf(time.Time{}),
 	}
 }
 
-// MarshalJSON implements custom JSON marshaling (uses RFC3339 for output)
+// MarshalJSON emits RFC 3339 (zero time renders as JSON null).
 func (fd FlexibleDate) MarshalJSON() ([]byte, error) {
 	if fd.Time.IsZero() {
 		return []byte("null"), nil
@@ -67,8 +64,8 @@ func (fd FlexibleDate) ToTime() time.Time {
 	return fd.Time
 }
 
-// Value implements driver.Valuer interface for database storage.
-// Returns time.Time which pgx/pq drivers handle correctly for PostgreSQL.
+// Value implements driver.Valuer so pgx/pq encode the underlying time.Time.
+// A zero FlexibleDate is encoded as SQL NULL.
 func (fd FlexibleDate) Value() (driver.Value, error) {
 	if fd.Time.IsZero() {
 		return nil, nil

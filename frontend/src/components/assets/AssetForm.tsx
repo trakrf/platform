@@ -237,7 +237,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     }
 
     const toRFC3339 = (dateStr: string): string => {
-      if (!dateStr) return '';
       if (!dateStr.includes('T')) {
         return `${dateStr}T00:00:00Z`;
       }
@@ -251,12 +250,15 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     // auto-mints ASSET-NNNN only on absence; an explicit empty string is
     // rejected as 400 too_short (TRA-650 / BB23 F3).
     const trimmedExternalKey = formData.external_key.trim();
+    // TRA-649 / BB23 F2: the body date validator now rejects empty strings.
+    // Omit valid_from when blank so the backend applies its server default;
+    // send valid_to as null when blank to clear the column.
     const data: CreateAssetRequest | UpdateAssetRequest = {
       ...(trimmedExternalKey ? { external_key: formData.external_key } : {}),
       name: formData.name,
       description: formData.description,
       location_id: formData.location_id,
-      valid_from: toRFC3339(formData.valid_from),
+      ...(formData.valid_from ? { valid_from: toRFC3339(formData.valid_from) } : {}),
       valid_to: formData.valid_to ? toRFC3339(formData.valid_to) : null,
       is_active: formData.is_active,
       metadata: {},

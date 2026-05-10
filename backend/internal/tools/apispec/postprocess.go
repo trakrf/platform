@@ -537,32 +537,25 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 	}
 }
 
-// appendMethodPolicyDescription (TRA-633 B1, B4) documents the universal
-// HEAD and OPTIONS behavior once, in spec.info.description, instead of
-// declaring per-path operations. The platform router exposes both methods
-// uniformly via middleware:
-//
-//   - chimiddleware.GetHead transparently rewrites HEAD→GET when no HEAD
-//     handler is registered, so HEAD works on every GET endpoint with
-//     identical headers and an empty body.
-//   - The CORS middleware short-circuits OPTIONS with a 204 No Content +
-//     Access-Control-* preflight response on every path, gated by
-//     BACKEND_CORS_ORIGIN.
-//
-// Per-path declarations would more than double the operation count for no
-// codegen value (HEAD has the same response shape as GET; OPTIONS is a
-// browser-only preflight mechanism outside the resource API surface).
-// Documenting the policy at the spec level satisfies "decide once, apply
-// uniformly" without bloating every path.
+// appendMethodPolicyDescription (TRA-633 B1, B4 / TRA-649 BB23 S4) keeps
+// info.description at a one-line pointer to the customer-facing reference.
+// The platform router exposes HEAD and OPTIONS uniformly via middleware
+// (chimiddleware.GetHead rewrites HEAD→GET; CORS middleware short-circuits
+// OPTIONS to 204), so per-path declarations would double the operation
+// count for no codegen value. Earlier iterations inlined the policy prose
+// directly into info.description, but generated SDK class docstrings
+// (AssetsApi.ts, LocationsApi.ts, OrgsApi.ts) carried the entire HTTP-
+// method-coverage paragraph at the top of every file — TRA-649 / BB23 S4
+// trimmed that bloat. The full policy now lives at
+// docs.trakrf.id/api/http-method-coverage; the spec only carries the
+// link.
 func appendMethodPolicyDescription(doc *openapi3.T) {
-	const marker = "## HTTP method coverage"
+	const marker = "HTTP method coverage"
 	if strings.Contains(doc.Info.Description, marker) {
 		return
 	}
-	policy := marker + "\n\n" +
-		"**HEAD** — supported on every endpoint that declares `get`. The server transparently strips the response body and returns the same status and headers as the matching `GET`. HEAD operations are not enumerated per path; assume HEAD wherever GET is declared.\n\n" +
-		"**OPTIONS** — reserved for CORS preflight. Returns `204 No Content` with `Access-Control-*` headers when a browser origin is allowed; otherwise `204` with no CORS headers. OPTIONS is not part of the resource API surface and is not enumerated per path.\n\n" +
-		"To probe which methods a path supports, send any request and inspect the `Allow` header on the resulting `405 Method Not Allowed` response (RFC 7231 §6.5.5)."
+	policy := "HTTP method coverage (HEAD, OPTIONS, 405 / Allow): " +
+		"https://docs.trakrf.id/api/http-method-coverage"
 	if doc.Info.Description == "" {
 		doc.Info.Description = policy
 	} else {
@@ -812,7 +805,7 @@ var nullableFields = map[string][]string{
 	"apikey.APIKeyListItem":            {"created_by", "created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem":    {"duration_seconds", "location_id", "location_external_key"},
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "asset_deleted_at"},
-	"location.PublicLocationView":      {"parent_id", "parent_external_key", "description", "valid_to", "updated_at"},
+	"location.PublicLocationView":      {"parent_id", "parent_external_key", "description", "valid_to"},
 
 	// --- write schemas (request payloads) — TRA-614 / BB19 §S1 ---
 	// Mirror the read-view asymmetry: anything nullable above is nullable

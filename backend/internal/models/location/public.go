@@ -8,12 +8,18 @@ import (
 
 // PublicLocationView is the HTTP shape emitted by read endpoints.
 //
-// description, valid_to, and updated_at are always emitted (null when
-// unset) per TRA-610 / BB18 §1.8 — schema asymmetry between sibling
-// PublicXxxView types caused integrator-trip failures in stricter
-// generated clients (required-vs-omitted-vs-null is three states in
-// languages without TS-style optional). The pointer types let nil → JSON
-// null while non-nil emits the value.
+// description and valid_to are always emitted (null when unset) per
+// TRA-610 / BB18 §1.8 — schema asymmetry between sibling PublicXxxView
+// types caused integrator-trip failures in stricter generated clients
+// (required-vs-omitted-vs-null is three states in languages without
+// TS-style optional). The pointer types let nil → JSON null while
+// non-nil emits the value.
+//
+// updated_at is non-nullable (TRA-649 / BB23 S2): the locations table
+// declares the column NOT NULL with DEFAULT CURRENT_TIMESTAMP, so every
+// row — including freshly minted ones — carries a timestamp. The prior
+// `*time.Time` shape generated `Date | null` in typescript-fetch and
+// forced null-checks the asset side never required.
 type PublicLocationView struct {
 	ID                int          `json:"id"`
 	ExternalKey       string       `json:"external_key"`
@@ -27,7 +33,7 @@ type PublicLocationView struct {
 	ValidFrom         time.Time    `json:"valid_from"`
 	ValidTo           *time.Time   `json:"valid_to"`
 	CreatedAt         time.Time    `json:"created_at"`
-	UpdatedAt         *time.Time   `json:"updated_at"`
+	UpdatedAt         time.Time    `json:"updated_at"`
 	Tags              []shared.Tag `json:"tags"`
 }
 
@@ -36,6 +42,10 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 	if l.Description != "" {
 		s := l.Description
 		desc = &s
+	}
+	var updatedAt time.Time
+	if l.UpdatedAt != nil {
+		updatedAt = *l.UpdatedAt
 	}
 	return PublicLocationView{
 		ID:                l.ID,
@@ -50,7 +60,7 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 		ValidFrom:         l.ValidFrom,
 		ValidTo:           l.ValidTo,
 		CreatedAt:         l.CreatedAt,
-		UpdatedAt:         l.UpdatedAt,
+		UpdatedAt:         updatedAt,
 		Tags:              l.Tags,
 	}
 }

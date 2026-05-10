@@ -709,7 +709,6 @@
           },
           "updated_at": {
             "format": "date-time",
-            "nullable": true,
             "readOnly": true,
             "type": "string"
           },
@@ -1035,7 +1034,7 @@
       "email": "support@trakrf.id",
       "name": "TrakRF Support"
     },
-    "description": "TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.\n\n## HTTP method coverage\n\n**HEAD** — supported on every endpoint that declares `get`. The server transparently strips the response body and returns the same status and headers as the matching `GET`. HEAD operations are not enumerated per path; assume HEAD wherever GET is declared.\n\n**OPTIONS** — reserved for CORS preflight. Returns `204 No Content` with `Access-Control-*` headers when a browser origin is allowed; otherwise `204` with no CORS headers. OPTIONS is not part of the resource API surface and is not enumerated per path.\n\nTo probe which methods a path supports, send any request and inspect the `Allow` header on the resulting `405 Method Not Allowed` response (RFC 7231 §6.5.5).",
+    "description": "TrakRF public REST API. See docs.trakrf.id/api for the customer-facing reference.\n\nHTTP method coverage (HEAD, OPTIONS, 405 / Allow): https://docs.trakrf.id/api/http-method-coverage",
     "license": {
       "name": "Business Source License 1.1",
       "url": "https://github.com/trakrf/platform/blob/main/LICENSE"

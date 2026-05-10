@@ -1274,8 +1274,12 @@ func TestInjectGlobalHeaderRefs_Idempotent(t *testing.T) {
 	assert.Len(t, headers, 4, "200 must declare exactly the 4 global headers (no Retry-After)")
 }
 
-// TestAppendMethodPolicyDescription covers TRA-633 B1/B4: HEAD and OPTIONS
-// behavior is documented once at the spec level, not declared per path.
+// TestAppendMethodPolicyDescription covers TRA-633 B1/B4 + TRA-649 / BB23
+// S4: HEAD/OPTIONS behavior is documented once, but only as a one-line
+// link to the customer-facing docs page. Inlining the full policy prose
+// caused generated SDK class docstrings to balloon (the entire
+// HTTP-method-coverage paragraph appeared at the top of AssetsApi.ts,
+// LocationsApi.ts, OrgsApi.ts on every regen).
 func TestAppendMethodPolicyDescription(t *testing.T) {
 	doc := &openapi3.T{
 		OpenAPI: "3.0.0",
@@ -1284,11 +1288,11 @@ func TestAppendMethodPolicyDescription(t *testing.T) {
 	appendMethodPolicyDescription(doc)
 
 	assert.Contains(t, doc.Info.Description, "Existing prose.", "existing description must be preserved")
-	assert.Contains(t, doc.Info.Description, "## HTTP method coverage")
-	assert.Contains(t, doc.Info.Description, "HEAD", "HEAD policy must be documented")
-	assert.Contains(t, doc.Info.Description, "OPTIONS", "OPTIONS policy must be documented")
-	assert.Contains(t, doc.Info.Description, "Allow",
-		"description must point readers at the Allow header for method discovery")
+	assert.Contains(t, doc.Info.Description, "HTTP method coverage", "method-coverage pointer must be present")
+	assert.Contains(t, doc.Info.Description, "docs.trakrf.id/api/http-method-coverage",
+		"description must link out to the docs page for method-coverage details")
+	assert.NotContains(t, doc.Info.Description, "transparently strips the response body",
+		"prose body must live in docs, not the spec (TRA-649 S4)")
 
 	// Idempotency: a second call must not duplicate the section.
 	before := doc.Info.Description

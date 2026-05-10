@@ -129,7 +129,11 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		t := true
 		request.IsActive = &t
 	}
-	if request.ValidFrom == nil || request.ValidFrom.IsZero() {
+	// valid_from defaults to now when the field is *omitted*. After
+	// TRA-649 the parser rejects empty strings and zero-time literals as
+	// validation errors, so the handler no longer has to translate
+	// silently-substituted zero values into the default.
+	if request.ValidFrom == nil {
 		fd := shared.FlexibleDate{Time: time.Now().UTC()}
 		request.ValidFrom = &fd
 	}

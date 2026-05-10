@@ -509,3 +509,69 @@ func TestPutLocation_TagsRejected400(t *testing.T) {
 		})
 	}
 }
+
+// TRA-649 / BB23 F2 (locations parallel surface): POST /api/v1/locations
+// must reject loose date forms on valid_from / valid_to. assets and
+// locations share a single FlexibleDate parser; this test pins the
+// behavior at the locations seam so the audit residue can't regress
+// independently.
+func TestPostLocation_LooseDateForms_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	cases := []struct {
+		name      string
+		field     string
+		bodyValue string
+	}{
+		{"valid_from date-only", "valid_from", `"2026-05-10"`},
+		{"valid_from slashes", "valid_from", `"2026/05/10"`},
+		{"valid_from empty string", "valid_from", `""`},
+		{"valid_from Go zero-time", "valid_from", `"0001-01-01T00:00:00Z"`},
+		{"valid_to date-only", "valid_to", `"2027-05-10"`},
+		{"valid_to slashes", "valid_to", `"2027/05/10"`},
+		{"valid_to empty string", "valid_to", `""`},
+		{"valid_to Go zero-time", "valid_to", `"0001-01-01T00:00:00Z"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"external_key":"LOC-LOOSE-%s","name":"loose","%s":%s}`,
+				tc.name, tc.field, tc.bodyValue)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader([]byte(body)))
+			req.Header.Set("Content-Type", "application/json")
+			req = withLocationRoundTripOrgContext(req, orgID)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"%s body %q must be 400: %s", tc.field, tc.bodyValue, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.NotEmpty(t, resp.Error.Fields)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+		})
+	}
+
+	_ = pool
+}
