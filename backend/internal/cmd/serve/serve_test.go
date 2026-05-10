@@ -258,6 +258,33 @@ func TestRouter_RetiredLookupPath_Returns404(t *testing.T) {
 	}
 }
 
+// TestRouter_MovedLocationsCurrent_Returns404 — TRA-658 BB25. The
+// retired /api/v1/locations/current must return 404 for every method
+// against the full production router, not fall through to
+// /api/v1/locations/{location_id} and surface 401 (auth runs before the
+// sibling resolves to "current is not a valid id"). The 404 body must
+// point clients at /api/v1/reports/asset-locations.
+func TestRouter_MovedLocationsCurrent_Returns404(t *testing.T) {
+	r := setupTestRouter(t)
+
+	for _, method := range []string{
+		http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete,
+	} {
+		t.Run(method+" /api/v1/locations/current", func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/locations/current", nil))
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("%s /api/v1/locations/current = %d, want 404; body: %s",
+					method, rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "/api/v1/reports/asset-locations") {
+				t.Errorf("moved-path 404 must point clients at the replacement; body: %s",
+					rec.Body.String())
+			}
+		})
+	}
+}
+
 // TestRouter_AuditedStatic_405WithCorrectAllow — TRA-600 audit. The
 // audited static paths (orgs/me, users/me, reports/asset-locations,
 // assets/bulk, …) must emit 405 with an Allow header that reflects only
