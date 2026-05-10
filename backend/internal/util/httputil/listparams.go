@@ -19,9 +19,9 @@ const (
 // limit, offset, and sort are always allowed.
 //
 // BoolFilters is a subset of Filters; values for declared boolean filters are
-// validated against the literal strings "true" and "false" (case-sensitive).
-// Anything else produces a validation_error with the field set to the
-// offending parameter name.
+// validated case-insensitively against true/false and normalized to lowercase
+// before being stored in Filters. Anything else produces a validation_error
+// with the field set to the offending parameter name.
 type ListAllowlist struct {
 	Filters     []string
 	BoolFilters []string
@@ -136,15 +136,19 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 				}}}
 			}
 			if _, isBool := boolAllow[key]; isBool {
-				for _, v := range values {
-					if v != "true" && v != "false" {
+				normalized := make([]string, len(values))
+				for i, v := range values {
+					lower := strings.ToLower(v)
+					if lower != "true" && lower != "false" {
 						return out, &ListParamError{Fields: []apierrors.FieldError{{
 							Field:   key,
 							Code:    "invalid_value",
 							Message: fmt.Sprintf("%s must be 'true' or 'false'", key),
 						}}}
 					}
+					normalized[i] = lower
 				}
+				values = normalized
 			}
 			out.Filters[key] = values
 		}
