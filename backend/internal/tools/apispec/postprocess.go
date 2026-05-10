@@ -441,8 +441,9 @@ func injectTopLevelSecurity(doc *openapi3.T) {
 }
 
 // injectGlobalHeaderRefs (TRA-633 B3) consolidates the X-RateLimit-*,
-// Retry-After, and X-Request-Id headers under components.headers and
-// rewrites every operation response to reference them.
+// Retry-After, WWW-Authenticate, and X-Request-Id headers under
+// components.headers and rewrites every operation response to reference
+// them.
 //
 // Live behavior anchors the choice of which responses get which headers:
 //
@@ -453,6 +454,9 @@ func injectTopLevelSecurity(doc *openapi3.T) {
 //     errors.ErrorResponse echoes it as error.request_id, which is the
 //     durable correlation handle support tickets quote.
 //   - Retry-After is emitted only on 429 by the rate limiter.
+//   - WWW-Authenticate is emitted only on 401 by httputil.Respond401
+//     (RFC 7235 mandates it on 401). 403 carries no challenge — the
+//     caller is authenticated but unauthorized.
 //
 // The pass is idempotent: re-running on a doc whose responses already
 // hold the canonical $refs leaves them unchanged. Inline header
@@ -484,6 +488,7 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 		{"XRateLimitRemaining", "Requests remaining before throttling; bounded by X-RateLimit-Limit.", intSchema},
 		{"XRateLimitReset", "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit.", intSchema},
 		{"RetryAfter", "Seconds to wait before retrying.", intSchema},
+		{"WWWAuthenticate", "RFC 7235 authentication challenge. Always `Bearer realm=\"trakrf-api\"` on 401 responses.", strSchema},
 		{"XRequestId", "Server-assigned request correlation identifier; mirrored as error.request_id in error envelopes and echoed in server logs. Quote this when filing support tickets.", strSchema},
 	}
 	for _, d := range defs {
@@ -508,6 +513,7 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 	rateLimitRemaining := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitRemaining"}
 	rateLimitReset := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitReset"}
 	retryAfter := &openapi3.HeaderRef{Ref: "#/components/headers/RetryAfter"}
+	wwwAuthenticate := &openapi3.HeaderRef{Ref: "#/components/headers/WWWAuthenticate"}
 	requestID := &openapi3.HeaderRef{Ref: "#/components/headers/XRequestId"}
 
 	for _, item := range doc.Paths.Map() {
@@ -531,6 +537,9 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 				resp.Value.Headers["X-Request-Id"] = requestID
 				if code == "429" {
 					resp.Value.Headers["Retry-After"] = retryAfter
+				}
+				if code == "401" {
+					resp.Value.Headers["WWW-Authenticate"] = wwwAuthenticate
 				}
 			}
 		}

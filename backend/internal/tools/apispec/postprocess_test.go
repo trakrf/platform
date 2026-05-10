@@ -1195,6 +1195,7 @@ func TestInjectGlobalHeaderRefs(t *testing.T) {
 		Paths:   &openapi3.Paths{},
 	}
 	desc200 := "OK"
+	desc401 := "unauthorized"
 	desc429 := "rate_limited"
 	// 200 carries a stale inline X-RateLimit-Limit; the pass must replace
 	// it with a $ref to the components.headers entry.
@@ -1207,10 +1208,12 @@ func TestInjectGlobalHeaderRefs(t *testing.T) {
 			}}},
 		},
 	}}
+	resp401 := &openapi3.ResponseRef{Value: &openapi3.Response{Description: &desc401}}
 	resp429 := &openapi3.ResponseRef{Value: &openapi3.Response{Description: &desc429}}
 
 	responses := openapi3.NewResponses()
 	responses.Set("200", resp200)
+	responses.Set("401", resp401)
 	responses.Set("429", resp429)
 	doc.Paths.Set("/widgets", &openapi3.PathItem{
 		Get: &openapi3.Operation{Responses: responses},
@@ -1220,14 +1223,14 @@ func TestInjectGlobalHeaderRefs(t *testing.T) {
 
 	require.NotNil(t, doc.Components)
 	require.NotNil(t, doc.Components.Headers)
-	for _, name := range []string{"XRateLimitLimit", "XRateLimitRemaining", "XRateLimitReset", "RetryAfter", "XRequestId"} {
+	for _, name := range []string{"XRateLimitLimit", "XRateLimitRemaining", "XRateLimitReset", "RetryAfter", "WWWAuthenticate", "XRequestId"} {
 		ref := doc.Components.Headers[name]
 		require.NotNil(t, ref, "components.headers.%s must be defined", name)
 		require.NotNil(t, ref.Value)
 		require.NotNil(t, ref.Value.Schema)
 	}
 
-	for _, code := range []string{"200", "429"} {
+	for _, code := range []string{"200", "401", "429"} {
 		resp := doc.Paths.Find("/widgets").Get.Responses.Value(code)
 		require.NotNil(t, resp, "response %s must be present", code)
 		for _, name := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "X-Request-Id"} {
@@ -1243,6 +1246,14 @@ func TestInjectGlobalHeaderRefs(t *testing.T) {
 	assert.Equal(t, "#/components/headers/RetryAfter", retryAfter.Ref)
 	assert.Nil(t, doc.Paths.Find("/widgets").Get.Responses.Value("200").Value.Headers["Retry-After"],
 		"non-429 responses must not declare Retry-After")
+
+	wwwAuth := doc.Paths.Find("/widgets").Get.Responses.Value("401").Value.Headers["WWW-Authenticate"]
+	require.NotNil(t, wwwAuth, "401 must declare WWW-Authenticate (RFC 7235)")
+	assert.Equal(t, "#/components/headers/WWWAuthenticate", wwwAuth.Ref)
+	assert.Nil(t, doc.Paths.Find("/widgets").Get.Responses.Value("200").Value.Headers["WWW-Authenticate"],
+		"non-401 responses must not declare WWW-Authenticate")
+	assert.Nil(t, doc.Paths.Find("/widgets").Get.Responses.Value("429").Value.Headers["WWW-Authenticate"],
+		"non-401 responses must not declare WWW-Authenticate")
 }
 
 // canonicalizeHeaderName maps an HTTP header name to its components.headers
