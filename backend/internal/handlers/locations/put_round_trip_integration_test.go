@@ -3,6 +3,10 @@
 
 // TRA-608 / BB18 §1.7 + TRA-610 / BB18 §1.8: locations counterpart to the
 // assets PUT round-trip + always-emit tests.
+//
+// TRA-643 / BB22 F1: `tags` is managed via /locations/{id}/tags. The PUT
+// validator rejects a `tags` body field with 400 invalid_value rather than
+// silently dropping it.
 
 package locations
 
@@ -82,7 +86,11 @@ func TestPutLocation_GETBodyRoundTrip_Succeeds(t *testing.T) {
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
+	// Mutate name and PUT back. `tags` is managed via /locations/{id}/tags
+	// and must be stripped (TRA-643); other read-only fields stay on the
+	// body to exercise the round-trip-safe drop list.
 	getResp.Data["name"] = "Warehouse 1 (renamed)"
+	delete(getResp.Data, "tags")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -372,9 +380,9 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}{
 		{"only id", `{"id":999}`},
 		{"only created_at", `{"created_at":"2020-01-01T00:00:00Z"}`},
+		{"only updated_at", `{"updated_at":"2020-01-01T00:00:00Z"}`},
 		{"only tree_path", `{"tree_path":"x"}`},
 		{"only depth", `{"depth":42}`},
-		{"only tags", `{"tags":[]}`},
 		{"empty object", `{}`},
 	}
 	for _, tc := range cases {
@@ -394,6 +402,61 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
 			assert.Equal(t, "RoNoop", resp.Data["name"], "name unchanged")
 			assert.Equal(t, "LOC-RO-NOOP", resp.Data["external_key"], "external_key unchanged")
+		})
+	}
+}
+
+// TRA-643 / BB22 F1: `tags` is managed via the /locations/{id}/tags
+// subresource. A `tags` key in the PUT body must be rejected with 400
+// invalid_value (matching the unknown-field response shape) so a
+// read-modify-write integrator gets a clear signal instead of a silent
+// no-op.
+func TestPutLocation_TagsRejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-TAGS-REJ", "TagsRej")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"empty array", `{"tags":[]}`},
+		{"tags with values", `{"tags":[{"key":"foo","value":"bar"}]}`},
+		{"tags alongside name", `{"name":"x","tags":[]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(tc.body)))
+			putReq.Header.Set("Content-Type", "application/json")
+			putReq = withLocationRoundTripOrgContext(putReq, orgID)
+			putRec := httptest.NewRecorder()
+			router.ServeHTTP(putRec, putReq)
+
+			require.Equal(t, http.StatusBadRequest, putRec.Code,
+				"tags in PUT body must be 400 (got %d): %s", putRec.Code, putRec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
 		})
 	}
 }

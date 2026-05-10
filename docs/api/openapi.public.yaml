@@ -152,7 +152,6 @@ components:
                 tags:
                     items:
                         $ref: '#/components/schemas/shared.Tag'
-                    readOnly: true
                     type: array
                 updated_at:
                     format: date-time
@@ -486,7 +485,6 @@ components:
                 tags:
                     items:
                         $ref: '#/components/schemas/shared.Tag'
-                    readOnly: true
                     type: array
                 tree_path:
                     readOnly: true

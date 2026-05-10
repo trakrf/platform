@@ -216,7 +216,6 @@
             "items": {
               "$ref": "#/components/schemas/shared.Tag"
             },
-            "readOnly": true,
             "type": "array"
           },
           "updated_at": {
@@ -662,7 +661,6 @@
             "items": {
               "$ref": "#/components/schemas/shared.Tag"
             },
-            "readOnly": true,
             "type": "array"
           },
           "tree_path": {

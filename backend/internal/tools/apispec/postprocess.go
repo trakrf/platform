@@ -724,14 +724,18 @@ var internalOnlyRequiredFields = map[string][]string{
 // schema into read and write variants so SDK consumers can't accidentally send
 // these fields back on a verbatim read → write round-trip.
 //
-// Tags are read-only on these views because tag mutation goes through the
-// dedicated POST/DELETE /tags subresource endpoints, not the parent PUT.
+// `tags` is intentionally not marked readOnly. Tag mutation goes through the
+// dedicated POST/DELETE /tags subresource endpoints, and the PUT validator
+// rejects a `tags` body field with 400 invalid_value rather than silently
+// dropping it (TRA-643 / BB22 F1). Keeping `tags` out of the readOnly list
+// preserves that signal — codegen tools won't strip it from request shapes,
+// so an SDK that mistakenly sends it surfaces the failure.
 //
 // markReadOnlyFields errors if a configured schema or field is missing from
 // the spec — keeps this map honest as struct fields rename or move.
 var readOnlyFields = map[string][]string{
-	"asset.PublicAssetView":       {"id", "created_at", "updated_at", "tags"},
-	"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth", "tags"},
+	"asset.PublicAssetView":       {"id", "created_at", "updated_at"},
+	"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth"},
 }
 
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse
