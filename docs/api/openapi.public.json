@@ -276,6 +276,7 @@
             "type": "string"
           },
           "tags": {
+            "description": "Tags currently attached to this resource. Read-only on PATCH; mutate via POST /{resource}/{id}/tags and DELETE /{resource}/{id}/tags/{tag_id}.",
             "items": {
               "$ref": "#/components/schemas/Tag"
             },
@@ -790,6 +791,7 @@
             "type": "integer"
           },
           "tags": {
+            "description": "Tags currently attached to this resource. Read-only on PATCH; mutate via POST /{resource}/{id}/tags and DELETE /{resource}/{id}/tags/{tag_id}.",
             "items": {
               "$ref": "#/components/schemas/Tag"
             },
@@ -1932,9 +1934,9 @@
           "assets"
         ]
       },
-      "put": {
-        "description": "**Required scope:** `assets:write`\n\nUpdate mutable fields on an existing asset. Only fields included in the request body are changed.",
-        "operationId": "updateAsset",
+      "patch": {
+        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Tags are read-only via this endpoint; mutate via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
+        "operationId": "patchAsset",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -1950,13 +1952,13 @@
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "application/merge-patch+json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateAssetRequest"
               }
             }
           },
-          "description": "Fields to update",
+          "description": "Fields to merge-patch",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -3809,9 +3811,9 @@
           "locations"
         ]
       },
-      "put": {
-        "description": "**Required scope:** `locations:write`\n\nUpdate mutable fields on an existing location. Only fields included in the request body are changed.",
-        "operationId": "updateLocation",
+      "patch": {
+        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Tags are read-only via this endpoint; mutate via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
+        "operationId": "patchLocation",
         "parameters": [
           {
             "description": "Location ID",
@@ -3827,13 +3829,13 @@
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "application/merge-patch+json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateLocationRequest"
               }
             }
           },
-          "description": "Fields to update",
+          "description": "Fields to merge-patch",
           "required": true,
           "x-originalParamName": "request"
         },

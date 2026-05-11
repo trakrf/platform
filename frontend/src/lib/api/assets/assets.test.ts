@@ -14,6 +14,7 @@ vi.mock('../client', () => ({
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -201,7 +202,7 @@ describe('assetsApi', () => {
   });
 
   describe('update()', () => {
-    it('should call PUT /assets/:id with partial data', async () => {
+    it('should call PATCH /assets/:id with partial data and merge-patch content-type', async () => {
       const updateData = {
         name: 'Updated Name',
         is_active: false,
@@ -223,11 +224,13 @@ describe('assetsApi', () => {
         deleted_at: null,
       };
 
-      vi.mocked(apiClient.put).mockResolvedValue({ data: { data: mockAsset } });
+      vi.mocked(apiClient.patch).mockResolvedValue({ data: { data: mockAsset } });
 
       await assetsApi.update(1, updateData);
 
-      expect(apiClient.put).toHaveBeenCalledWith('/assets/by-id/1', updateData);
+      expect(apiClient.patch).toHaveBeenCalledWith('/assets/by-id/1', updateData, {
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+      });
     });
 
     it('should handle 409 duplicate identifier errors', async () => {
@@ -238,7 +241,7 @@ describe('assetsApi', () => {
         },
       };
 
-      vi.mocked(apiClient.put).mockRejectedValue(mockError);
+      vi.mocked(apiClient.patch).mockRejectedValue(mockError);
 
       await expect(
         assetsApi.update(1, { external_key: 'DUP-001' })

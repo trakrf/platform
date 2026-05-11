@@ -163,13 +163,13 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Update mutable fields on an existing location. Only fields included in the request body are changed.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Tags are read-only via this endpoint; mutate via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
 // @Produce      json
 // @Param        location_id path  int                              true  "Location ID" minimum(1) maximum(9007199254740991)
-// @Param        request  body  location.UpdateLocationRequest   true  "Fields to update"
+// @Param        request  body  location.UpdateLocationRequest   true  "Fields to merge-patch"
 // @Success      200  {object}  locations.UpdateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -180,7 +180,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     BearerAuth[locations:write]
-// @Router       /api/v1/locations/{location_id} [put]
+// @Router       /api/v1/locations/{location_id} [patch]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -209,7 +209,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	// valid_from / external_key / name are non-nullable on the read view; an
-	// explicit null in the PUT body is a validation error, not a clear-request.
+	// explicit null in the PATCH body is a validation error, not a clear-request.
 	for _, f := range []string{"valid_from", "external_key", "name", "is_active"} {
 		if _, ok := explicitNulls[f]; ok {
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
@@ -227,7 +227,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		request.ClearValidTo = true
 	}
 	// description, parent_id, parent_external_key are read-side-nullable per
-	// PublicLocationView. An explicit null on PUT clears the corresponding
+	// PublicLocationView. An explicit null on PATCH clears the corresponding
 	// column, per TRA-614 / BB19 §S1. parent_id and parent_external_key are
 	// alternate references to the same FK (parent_location_id); a null on
 	// either implies clearing that FK; conflicting forms are 400.

@@ -38,13 +38,13 @@ type CreateAssetRequest struct {
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicAssetView that are
-// server-owned and round-trip safe: the PUT handler strips them from the
-// request body before strict decoding so a verbatim GET → PUT round-trip
+// server-owned and round-trip safe: the PATCH handler strips them from the
+// request body before strict decoding so a verbatim GET → PATCH round-trip
 // succeeds (TRA-608 / BB18 §1.7). Fields not listed here (typos, write-only
 // fields off this resource) still produce a 400.
 //
 // `tags` is intentionally NOT on this list. Tags are managed via the
-// /assets/{id}/tags subresource, so a `tags` key in a PUT body is a
+// /assets/{id}/tags subresource, so a `tags` key in a PATCH body is a
 // caller-side mistake worth surfacing. Strict decode rejects it as an
 // unknown field with code=invalid_value, matching unknown-field behavior
 // (TRA-643 / BB22 F1).
@@ -53,10 +53,10 @@ type CreateAssetRequest struct {
 // internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"].
 var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_deleted_at"}
 
-// UpdateAssetRequest is the PUT body. The handler decodes it via
+// UpdateAssetRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
 // PublicAssetView's round-trip-safe read-only fields (id, created_at,
-// updated_at) are silently ignored on a verbatim GET → PUT round-trip
+// updated_at) are silently ignored on a verbatim GET → PATCH round-trip
 // while any other unknown field — including `tags`, which is managed via
 // the /assets/{id}/tags subresource — still produces a 400.
 //
@@ -73,7 +73,7 @@ type UpdateAssetRequest struct {
 	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
 	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
-	// Set by the PUT handler when the body had an explicit `null` for the
+	// Set by the PATCH handler when the body had an explicit `null` for the
 	// corresponding read-side-nullable field, to request a column-clear
 	// (TRA-614 / TRA-468). Not decoded from JSON directly.
 	ClearDescription bool  `json:"-" swaggerignore:"true"`

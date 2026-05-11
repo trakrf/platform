@@ -72,7 +72,7 @@ func CORS(next http.Handler) http.Handler {
 
 		if origin != "disabled" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "3600")
 		}
@@ -89,6 +89,7 @@ func CORS(next http.Handler) http.Handler {
 // ContentType enforces allowed Content-Type headers for write operations.
 // Allows:
 // - application/json (standard API requests)
+// - application/merge-patch+json (RFC 7396 — PATCH operations per TRA-663)
 // - multipart/form-data (file uploads)
 // - empty Content-Type (legacy compatibility)
 func ContentType(next http.Handler) http.Handler {
@@ -106,6 +107,8 @@ func ContentType(next http.Handler) http.Handler {
 			// Note: multipart/form-data includes boundary parameter
 			isAllowed := ct == "application/json" ||
 				ct == "application/json; charset=utf-8" ||
+				ct == "application/merge-patch+json" ||
+				ct == "application/merge-patch+json; charset=utf-8" ||
 				strings.HasPrefix(ct, "multipart/form-data")
 
 			if !isAllowed {

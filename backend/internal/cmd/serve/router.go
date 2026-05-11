@@ -178,14 +178,14 @@ func setupRouter(
 
 		// Assets
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
-		r.With(middleware.RequireScope("assets:write")).Put("/api/v1/assets/{asset_id}", assetsHandler.Update)
+		r.With(middleware.RequireScope("assets:write")).Patch("/api/v1/assets/{asset_id}", assetsHandler.Update)
 		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}", assetsHandler.Delete)
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{asset_id}/tags", assetsHandler.AddTag)
 		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}/tags/{tag_id}", assetsHandler.RemoveTag)
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
-		r.With(middleware.RequireScope("locations:write")).Put("/api/v1/locations/{location_id}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write")).Patch("/api/v1/locations/{location_id}", locationsHandler.Update)
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}", locationsHandler.Delete)
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{location_id}/tags", locationsHandler.AddTag)
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}/tags/{tag_id}", locationsHandler.RemoveTag)

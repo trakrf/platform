@@ -59,11 +59,13 @@ export const assetsApi = {
     apiClient.post<AssetResponse>('/assets', data),
 
   /**
-   * Update existing asset
-   * PUT /api/v1/assets/by-id/:id
+   * Update existing asset (RFC 7396 JSON Merge Patch — TRA-663)
+   * PATCH /api/v1/assets/by-id/:id
    */
   update: (id: number, data: UpdateAssetRequest) =>
-    apiClient.put<AssetResponse>(`/assets/by-id/${id}`, data),
+    apiClient.patch<AssetResponse>(`/assets/by-id/${id}`, data, {
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+    }),
 
   /**
    * Soft delete asset

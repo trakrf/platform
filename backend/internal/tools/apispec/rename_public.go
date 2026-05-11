@@ -87,7 +87,7 @@ var publicOperationIdRenames = map[string]string{
 	"assets.create":           "createAsset",
 	"assets.delete":           "deleteAsset",
 	"assets.get":              "getAsset",
-	"assets.update":           "updateAsset",
+	"assets.update":           "patchAsset",
 	"assets.history":          "getAssetHistory",
 	"assets.tags.add":         "addAssetTag",
 	"assets.tags.remove":      "removeAssetTag",
@@ -95,7 +95,7 @@ var publicOperationIdRenames = map[string]string{
 	"locations.create":        "createLocation",
 	"locations.delete":        "deleteLocation",
 	"locations.get":           "getLocation",
-	"locations.update":        "updateLocation",
+	"locations.update":        "patchLocation",
 	"locations.ancestors":     "listLocationAncestors",
 	"locations.children":      "listLocationChildren",
 	"locations.descendants":   "listLocationDescendants",
@@ -223,4 +223,3 @@ func addPublicTagDescriptions(doc *openapi3.T) {
 		doc.Tags = append(doc.Tags, t)
 	}
 }
-

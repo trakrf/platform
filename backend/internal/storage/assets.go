@@ -101,9 +101,9 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		argPos++
 	}
 
-	// Empty effective body (e.g. PUT body that decoded to no writable fields
+	// Empty effective body (e.g. PATCH body that decoded to no writable fields
 	// after the read-only drop in TRA-608, or a `{}` body) is a no-op success:
-	// return the unchanged record so a verbatim GET → PUT round-trip with only
+	// return the unchanged record so a verbatim GET → PATCH round-trip with only
 	// read-only fields succeeds. TRA-619.
 	if len(updates) == 0 {
 		return s.getAssetWithLocationByID(ctx, orgID, id)
@@ -387,14 +387,14 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 
 	// Note: OrgID is intentionally NOT writable via UpdateAssetRequest.
 	// The owning org is fixed at creation; ownership transfers must use
-	// dedicated tooling, never a public PUT body.
+	// dedicated tooling, never a public PATCH body.
 	if req.ExternalKey != nil {
 		fields["external_key"] = *req.ExternalKey
 	}
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
-	// description: explicit null on PUT clears to empty string. The DB column
+	// description: explicit null on PATCH clears to empty string. The DB column
 	// is nullable but ToPublicAssetView projects "" → null on read, so storing
 	// "" preserves the null-on-read contract without forcing every scan call
 	// to handle SQL NULL into a Go string. (TRA-614 / BB19 §S1.)
