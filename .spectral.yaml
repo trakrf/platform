@@ -107,3 +107,26 @@ rules:
             required:
               - format
               - maximum
+
+  trakrf-readonly-derived-fields:
+    description: >
+      Server-assigned and derived fields must declare `readOnly: true` so
+      codegen tools strip them from request bodies. Affected names: `id`,
+      `created_at`, `updated_at`, `tree_path`, `depth`, and any `*_deleted_at`.
+      Note: `external_key` is intentionally excluded because it is user-supplied
+      on Assets and server-minted only on Locations — generic targeting can't
+      distinguish the two surfaces. Origin: BB16 S8, BB27 F3/S2 — round-trip
+      GET → PATCH breaks when generated request types include these fields.
+    message: "Derived/server-assigned field must declare readOnly:true (BB16 S8, BB27 F3/S2)"
+    severity: error
+    given:
+      - "$.components.schemas[*].properties[?(@property.match(/^(id|created_at|updated_at|tree_path|depth|.+_deleted_at)$/))]"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            required: ["readOnly"]
+            properties:
+              readOnly:
+                const: true
