@@ -14,10 +14,17 @@ import (
 )
 
 // APIKeyPrincipal is the authenticated-call identity for the public API.
+//
+// Name is the human-readable label on the api_keys row; it lets downstream
+// middleware (currently RateLimit) honor name-based exemptions for the
+// test-handler-minted schemathesis key without re-fetching the row. The bypass
+// is APP_ENV-gated at router build time — Name itself is informational here.
+// TRA-677.
 type APIKeyPrincipal struct {
 	OrgID  int
 	Scopes []string
 	JTI    string
+	Name   string
 }
 
 const APIKeyPrincipalKey contextKey = "api_key_principal"
@@ -83,6 +90,7 @@ func APIKeyAuth(store *storage.Storage) func(http.Handler) http.Handler {
 				OrgID:  key.OrgID,
 				Scopes: key.Scopes,
 				JTI:    key.JTI,
+				Name:   key.Name,
 			}
 			ctx := context.WithValue(r.Context(), APIKeyPrincipalKey, principal)
 			logger.Get().Info().

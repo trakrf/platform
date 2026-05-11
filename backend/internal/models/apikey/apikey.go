@@ -70,6 +70,17 @@ type APIKeyListItem struct {
 // ActiveKeyCap is the per-org soft cap enforced by the POST handler.
 const ActiveKeyCap = 10
 
+// SchemathesisMintKeyName is the `name` stamped on the API key minted by the
+// test-only POST /test/apikeys handler. The rate-limit middleware honors a
+// bypass for principals whose key carries this name when the bypass is wired
+// in (router build-time gate: APP_ENV != "production"). Defined here rather
+// than in testhandler so the middleware can reference it without taking a
+// dependency on the test-handler package (which would create an import cycle
+// once auth populates principal.Name from the storage layer).
+//
+// TRA-677 / Schemathesis Class F.
+const SchemathesisMintKeyName = "schemathesis-mint"
+
 // Creator identifies who minted an API key. Exactly one field must be non-nil.
 // UserID populated when a session admin created the key; KeyID populated when a
 // parent API key with keys:admin scope created the key.

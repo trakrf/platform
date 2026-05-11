@@ -39,15 +39,32 @@ SELECT
     'admin', 'active'
 ON CONFLICT (org_id, user_id) DO NOTHING;
 
--- 4) Location (one row with external_key = LOC-0001)
+-- 4) Locations.
+--
+-- external_key values mirror the `example:` values in docs/api/openapi.public.yaml
+-- so Schemathesis-generated POST bodies that reference a parent/current location
+-- via *_external_key (which Schemathesis seeds from the spec example) succeed
+-- instead of 400'ing on "not found". TRA-677 / Schemathesis Class E.
+--
+--   WHS-01 — example for CreateAssetWithTagsRequest.location_external_key
+--   wh1    — example for CreateLocationWithTagsRequest.parent_external_key
+--
+-- LOC-0001 is retained as the asset's current_location for stability with the
+-- TRA-671 fixture; nothing in the spec references it, but renaming it would
+-- needlessly churn the seed.
 INSERT INTO locations (org_id, external_key, name)
 SELECT
     (SELECT id FROM organizations WHERE identifier = 'bb-test-org'),
-    'LOC-0001', 'BB Test Location'
+    v.external_key, v.name
+FROM (VALUES
+    ('LOC-0001', 'BB Test Location'),
+    ('WHS-01',   'BB Test Warehouse'),
+    ('wh1',      'BB Test Parent Warehouse')
+) AS v(external_key, name)
 WHERE NOT EXISTS (
-    SELECT 1 FROM locations
-    WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
-      AND external_key = 'LOC-0001'
+    SELECT 1 FROM locations l
+    WHERE l.org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
+      AND l.external_key = v.external_key
 );
 
 -- 5) Asset (one row with external_key = ASSET-0001, current_location = LOC-0001)

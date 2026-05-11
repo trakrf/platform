@@ -33,7 +33,7 @@ func TestRateLimit_MountedOnEitherAuthGroup(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.RateLimit(lim))
+		r.Use(middleware.RateLimit(lim, false))
 		r.Get("/ping", func(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
@@ -78,7 +78,7 @@ func TestRateLimit_DefaultHeadersSurviveAuthFailure(t *testing.T) {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.DefaultRateLimitHeaders(lim))
 		r.Use(auth401)
-		r.Use(middleware.RateLimit(lim)) // never runs because auth401 short-circuits
+		r.Use(middleware.RateLimit(lim, false)) // never runs because auth401 short-circuits
 		r.Post("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
 			t.Fatal("handler must not run on auth failure")
 		})

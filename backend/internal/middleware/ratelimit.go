@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/trakrf/platform/backend/internal/logger"
+	"github.com/trakrf/platform/backend/internal/models/apikey"
 	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/ratelimit"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -47,11 +48,28 @@ func DefaultRateLimitHeaders(lim *ratelimit.Limiter) func(http.Handler) http.Han
 // Emits X-RateLimit-Limit, X-RateLimit-Remaining, and X-RateLimit-Reset on
 // every rate-limited response. On denial, emits 429 with Retry-After and a
 // standard error envelope (type=rate_limited).
-func RateLimit(lim *ratelimit.Limiter) func(http.Handler) http.Handler {
+//
+// allowTestBypass controls whether the test-handler-minted Schemathesis key
+// (apikey.SchemathesisMintKeyName) is exempt from rate limiting. The router
+// passes true only when APP_ENV != "production"; that env gate is exactly the
+// same guard used for mounting the test handler itself, so the bypass cannot
+// activate in production even if a key with the magic name leaked into the
+// prod database. TRA-677 / Schemathesis Class F.
+func RateLimit(lim *ratelimit.Limiter, allowTestBypass bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p := GetAPIKeyPrincipal(r)
 			if p == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if allowTestBypass && p.Name == apikey.SchemathesisMintKeyName {
+				// Headers from DefaultRateLimitHeaders (full-quota anonymous
+				// defaults) remain on the response; we don't overwrite them
+				// with real bucket values because this principal isn't being
+				// metered. Schemathesis only branches on status, not header
+				// values, so leaving the defaults is the simplest answer.
 				next.ServeHTTP(w, r)
 				return
 			}

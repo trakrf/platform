@@ -15,7 +15,7 @@ import (
 const (
 	bbTestOrgIdentifier = "bb-test-org"
 	bbTestUserEmail     = "bb-test@trakrf.invalid"
-	mintedKeyName       = "schemathesis-mint"
+	mintedKeyName       = apikey.SchemathesisMintKeyName
 )
 
 // MintAPIKeyRequest is the body for POST /test/apikeys.
