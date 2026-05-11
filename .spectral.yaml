@@ -19,9 +19,29 @@ extends:
   - spectral:oas
   - "@baloise/spectral-rules/zalando.yml"
 
-# ─────────────────────────────────────────────────────────────
-# Inherited Zalando disables (intentional architectural choices)
-# ─────────────────────────────────────────────────────────────
-# Fill in during Task 3 once Spectral has reported which Zalando rules fire
-# against the current spec. Each disable gets a single-line rationale.
-rules: {}
+rules:
+  # ─────────────────────────────────────────────────────────────
+  # Inherited Zalando disables (intentional architectural choices)
+  # ─────────────────────────────────────────────────────────────
+  # Custom trakrf-* rules will be appended below in Tasks 4-8.
+
+  # URL-segment versioning (/api/v1/...) — Zalando recommends media-type
+  # versioning, but TrakRF ships URL versioning for discoverability and
+  # tooling compatibility. Settled architectural choice.
+  must-not-use-uri-versioning: off
+  should-not-use-api-as-base-path: off
+
+  # Problem+JSON (RFC 7807) error envelope — Zalando mandates it; TrakRF
+  # ships a custom ErrorResponse envelope ({code, message, request_id, details}).
+  # Settled architectural choice; documented in API design docs.
+  must-use-problem-json-for-errors: off
+
+  # Zalando-internal API metadata (x-api-id, x-audience) — Zalando's
+  # internal API registry conventions. TrakRF has no equivalent registry
+  # or audience taxonomy. Not OpenAPI-standard.
+  must-have-info-x-api-id: off
+  must-provide-api-audience: off
+
+  # Zalando-proprietary x-extensible-enum extension — not OpenAPI-standard;
+  # TrakRF uses plain enums and accepts the forward-compatibility tradeoff.
+  should-use-x-extensible-enum: off
