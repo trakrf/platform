@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/trakrf/platform/backend/internal/models/apikey"
 	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/ratelimit"
 )
@@ -42,7 +43,7 @@ func TestRateLimit_SessionAuthBypassesRateLimiting(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
 	rec := httptest.NewRecorder()
 
-	RateLimit(lim)(next).ServeHTTP(rec, req)
+	RateLimit(lim, false)(next).ServeHTTP(rec, req)
 
 	require.True(t, handlerCalled, "session auth request must pass through")
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -58,6 +59,81 @@ func requestWithAPIKey(jti string, orgID int) *http.Request {
 	return req.WithContext(ctx)
 }
 
+func requestWithNamedAPIKey(jti, name string, orgID int) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets", nil)
+	p := &APIKeyPrincipal{OrgID: orgID, JTI: jti, Name: name, Scopes: []string{"assets:read"}}
+	ctx := context.WithValue(req.Context(), APIKeyPrincipalKey, p)
+	return req.WithContext(ctx)
+}
+
+// TRA-677: when the router wires allowTestBypass=true (APP_ENV != production)
+// and the principal's key carries the schemathesis-mint name, RateLimit lets
+// the request through without consuming a token. Many calls in a row stay 200.
+func TestRateLimit_SchemathesisMintBypass(t *testing.T) {
+	lim, _ := newTestRateLimiter(t)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Burst is 120; run well past it to prove no metering is happening.
+	for i := 0; i < 300; i++ {
+		rec := httptest.NewRecorder()
+		RateLimit(lim, true)(next).ServeHTTP(
+			rec, requestWithNamedAPIKey("mint-jti", apikey.SchemathesisMintKeyName, 7),
+		)
+		require.Equalf(t, http.StatusOK, rec.Code, "bypassed key request %d should be 200", i+1)
+	}
+}
+
+// TRA-677: bypass requires the env gate. Even with the mint name, allowTestBypass=false
+// (production) must drain to 429 like any other key.
+func TestRateLimit_SchemathesisMintNoBypassWhenDisabled(t *testing.T) {
+	lim, _ := newTestRateLimiter(t)
+
+	drain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	for i := 0; i < 120; i++ {
+		rec := httptest.NewRecorder()
+		RateLimit(lim, false)(drain).ServeHTTP(
+			rec, requestWithNamedAPIKey("mint-jti", apikey.SchemathesisMintKeyName, 7),
+		)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	rec := httptest.NewRecorder()
+	RateLimit(lim, false)(drain).ServeHTTP(
+		rec, requestWithNamedAPIKey("mint-jti", apikey.SchemathesisMintKeyName, 7),
+	)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code,
+		"bypass must NOT activate when allowTestBypass=false (prod posture)")
+}
+
+// TRA-677: with allowTestBypass=true, a non-mint key is still metered. Bypass
+// is name-scoped, not env-scoped.
+func TestRateLimit_BypassDoesNotLeakToOtherKeys(t *testing.T) {
+	lim, _ := newTestRateLimiter(t)
+
+	drain := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	for i := 0; i < 120; i++ {
+		rec := httptest.NewRecorder()
+		RateLimit(lim, true)(drain).ServeHTTP(
+			rec, requestWithNamedAPIKey("other-jti", "customer-key", 7),
+		)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	rec := httptest.NewRecorder()
+	RateLimit(lim, true)(drain).ServeHTTP(
+		rec, requestWithNamedAPIKey("other-jti", "customer-key", 7),
+	)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code,
+		"bypass must NOT apply to keys not named schemathesis-mint")
+}
+
 func TestRateLimit_AllowedRequestSetsHeaders(t *testing.T) {
 	lim, _ := newTestRateLimiter(t)
 
@@ -66,7 +142,7 @@ func TestRateLimit_AllowedRequestSetsHeaders(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	RateLimit(lim)(next).ServeHTTP(rec, requestWithAPIKey("jti-alpha", 42))
+	RateLimit(lim, false)(next).ServeHTTP(rec, requestWithAPIKey("jti-alpha", 42))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
@@ -89,13 +165,13 @@ func TestRateLimit_DeniedRequestReturns429WithEnvelope(t *testing.T) {
 	})
 	for i := 0; i < 120; i++ {
 		rec := httptest.NewRecorder()
-		RateLimit(lim)(drain).ServeHTTP(rec, requestWithAPIKey("jti-alpha", 42))
+		RateLimit(lim, false)(drain).ServeHTTP(rec, requestWithAPIKey("jti-alpha", 42))
 		require.Equal(t, http.StatusOK, rec.Code, "request %d should succeed", i+1)
 	}
 
 	// 121st request — denied.
 	rec := httptest.NewRecorder()
-	RateLimit(lim)(next).ServeHTTP(rec, requestWithAPIKey("jti-alpha", 42))
+	RateLimit(lim, false)(next).ServeHTTP(rec, requestWithAPIKey("jti-alpha", 42))
 
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Equal(t, "1", rec.Header().Get("Retry-After"))
@@ -131,7 +207,7 @@ func TestRateLimit_HeaderInvariantsAcrossManyRequests(t *testing.T) {
 	// RateLimit header contract requires remaining ≤ limit on every response.
 	for i := 0; i < 130; i++ {
 		rec := httptest.NewRecorder()
-		RateLimit(lim)(next).ServeHTTP(rec, requestWithAPIKey("invariant-key", 1))
+		RateLimit(lim, false)(next).ServeHTTP(rec, requestWithAPIKey("invariant-key", 1))
 
 		limit, err := strconv.Atoi(rec.Header().Get("X-RateLimit-Limit"))
 		require.NoErrorf(t, err, "request %d: X-RateLimit-Limit must be integer", i+1)
@@ -199,17 +275,17 @@ func TestRateLimit_TwoPrincipalsIndependent(t *testing.T) {
 	// Drain key-a.
 	for i := 0; i < 120; i++ {
 		rec := httptest.NewRecorder()
-		RateLimit(lim)(drain).ServeHTTP(rec, requestWithAPIKey("key-a", 1))
+		RateLimit(lim, false)(drain).ServeHTTP(rec, requestWithAPIKey("key-a", 1))
 	}
 
 	// key-a denied.
 	recA := httptest.NewRecorder()
-	RateLimit(lim)(drain).ServeHTTP(recA, requestWithAPIKey("key-a", 1))
+	RateLimit(lim, false)(drain).ServeHTTP(recA, requestWithAPIKey("key-a", 1))
 	require.Equal(t, http.StatusTooManyRequests, recA.Code)
 
 	// key-b still healthy.
 	recB := httptest.NewRecorder()
-	RateLimit(lim)(drain).ServeHTTP(recB, requestWithAPIKey("key-b", 2))
+	RateLimit(lim, false)(drain).ServeHTTP(recB, requestWithAPIKey("key-b", 2))
 	require.Equal(t, http.StatusOK, recB.Code)
 	require.Equal(t, "60", recB.Header().Get("X-RateLimit-Remaining"))
 }

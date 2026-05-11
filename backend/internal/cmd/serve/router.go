@@ -124,11 +124,17 @@ func setupRouter(
 	// overwrites the static defaults with real bucket values for API-key calls.
 	rl := ratelimit.NewLimiter(ratelimit.DefaultConfig())
 
+	// TRA-677: the test-handler-minted schemathesis key bypasses rate limiting
+	// when APP_ENV != "production". Same gate used to mount the test handler
+	// itself (below), so production cannot route a schemathesis-mint key into
+	// a bypass even if a key with that name leaked into the prod DB.
+	allowTestRateLimitBypass := os.Getenv("APP_ENV") != "production"
+
 	// Public API — API-key auth (TRA-393 canary)
 	r.With(
 		middleware.DefaultRateLimitHeaders(rl),
 		middleware.APIKeyAuth(store),
-		middleware.RateLimit(rl),
+		middleware.RateLimit(rl, allowTestRateLimitBypass),
 	).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
 
 	// TRA-466 API-key management — accepts session admin OR api-key with keys:admin scope.
@@ -136,7 +142,7 @@ func setupRouter(
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.EitherAuth(store))
-		r.Use(middleware.RateLimit(rl))
+		r.Use(middleware.RateLimit(rl, allowTestRateLimitBypass))
 		r.Use(middleware.SentryContext)
 		orgsHandler.RegisterAPIKeyRoutes(r, store)
 	})
@@ -145,7 +151,7 @@ func setupRouter(
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.EitherAuth(store))
-		r.Use(middleware.RateLimit(rl))
+		r.Use(middleware.RateLimit(rl, allowTestRateLimitBypass))
 		r.Use(middleware.SentryContext)
 
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
@@ -173,7 +179,7 @@ func setupRouter(
 		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.WriteAudit)
-		r.Use(middleware.RateLimit(rl))
+		r.Use(middleware.RateLimit(rl, allowTestRateLimitBypass))
 		r.Use(middleware.SentryContext)
 
 		// Assets
