@@ -50,9 +50,12 @@ export interface CreateAssetRequest {
 
 /**
  * Update request - matches backend UpdateAssetRequest (all fields optional).
+ *
+ * external_key is intentionally omitted: it is immutable on PATCH (TRA-664 /
+ * BB26 D7). Use the dedicated rename operation
+ * (POST /api/v1/assets/{asset_id}/rename) when the natural key must change.
  */
 export interface UpdateAssetRequest {
-  external_key?: string;
   name?: string;
   description?: string;
   location_id?: number | null;

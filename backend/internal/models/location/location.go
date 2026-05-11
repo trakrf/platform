@@ -73,9 +73,16 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path
 // §S1). Each null surfaces here as a Clear* sentinel set by the handler;
 // the underlying pointer remains nil because Go's json decoder treats
 // `null` and "omitted" the same on pointer fields.
+//
+// external_key is intentionally NOT on this struct (TRA-664 / BB26 D7). It
+// is the natural / join key downstream systems rely on and is the
+// canonical source for tree_path; mutating it via a generic PATCH would
+// silently disconnect joins and cascade tree_path changes without notice.
+// The handler rejects any external_key in the PATCH body with
+// code=immutable_field and a pointer to
+// POST /api/v1/locations/{location_id}/rename.
 type UpdateLocationRequest struct {
 	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
-	ExternalKey       *string              `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	Description       *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
@@ -88,6 +95,23 @@ type UpdateLocationRequest struct {
 	ClearParentID    bool  `json:"-" swaggerignore:"true"`
 	ClearValidTo     bool  `json:"-" swaggerignore:"true"`
 	IsActive         *bool `json:"is_active,omitempty" example:"true"`
+}
+
+// PublicImmutablePatchFields maps the JSON keys that PATCH /api/v1/locations/{id}
+// must reject to the dedicated operation that can mutate them. Source of
+// truth for the handler's RejectImmutableFields call; mirrors the
+// UpdateLocationRequest schema's deliberate omission of these keys. TRA-664.
+var PublicImmutablePatchFields = map[string]string{
+	"external_key": "POST /api/v1/locations/{location_id}/rename",
+}
+
+// RenameLocationRequest is the body of POST /api/v1/locations/{location_id}/rename
+// (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation
+// explicit and consolidates the tree_path cascade (this row + all
+// descendants) in one place so the response can carry the
+// descendant_count_affected signal.
+type RenameLocationRequest struct {
+	ExternalKey string `json:"external_key" validate:"required,min=1,max=255,external_key_pattern" example:"wh1"`
 }
 
 type LocationListResponse struct {

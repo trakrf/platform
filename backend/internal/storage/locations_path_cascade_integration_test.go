@@ -74,9 +74,10 @@ func TestUpdateLocation_Reparent_CascadesDescendants(t *testing.T) {
 	assert.True(t, ids[c.ID], "GetDescendants(D) must include C after cascade")
 }
 
-// TestUpdateLocation_ChangeExternalKey_CascadesDescendants verifies the
-// cascade also fires on external_key rename, not just re-parent.
-func TestUpdateLocation_ChangeExternalKey_CascadesDescendants(t *testing.T) {
+// TestRenameLocation_CascadesDescendants verifies the cascade fires on
+// external_key rename via the dedicated RenameLocation path
+// (TRA-664 / BB26 D7 — external_key is no longer mutable via UpdateLocation).
+func TestRenameLocation_CascadesDescendants(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -87,13 +88,11 @@ func TestUpdateLocation_ChangeExternalKey_CascadesDescendants(t *testing.T) {
 	b := mkLoc(t, ctx, store, orgID, "b", &a.ID)
 	c := mkLoc(t, ctx, store, orgID, "c", &b.ID)
 
-	newKey := "b2"
-	updated, err := store.UpdateLocation(ctx, orgID, b.ID, location.UpdateLocationRequest{
-		ExternalKey: &newKey,
-	})
+	updated, descendants, err := store.RenameLocation(ctx, orgID, b.ID, "b2")
 	require.NoError(t, err)
 	require.NotNil(t, updated)
 	assert.Equal(t, "a.b2", updated.TreePath)
+	assert.Equal(t, 1, descendants, "rename of b reports c as the one affected descendant")
 
 	cAfter, err := store.GetLocationByID(ctx, orgID, c.ID)
 	require.NoError(t, err)

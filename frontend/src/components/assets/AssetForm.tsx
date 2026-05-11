@@ -249,12 +249,18 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     // Omit external_key entirely when blank on create — the backend
     // auto-mints ASSET-NNNN only on absence; an explicit empty string is
     // rejected as 400 too_short (TRA-650 / BB23 F3).
+    //
+    // On edit, external_key is immutable on PATCH (TRA-664 / BB26 D7) — the
+    // backend returns 400 immutable_field if it appears in the body. Omit
+    // it from the update payload; the rename operation is the dedicated
+    // path for mutating the natural key.
     const trimmedExternalKey = formData.external_key.trim();
+    const includeExternalKey = mode === 'create' && trimmedExternalKey !== '';
     // TRA-649 / BB23 F2: the body date validator now rejects empty strings.
     // Omit valid_from when blank so the backend applies its server default;
     // send valid_to as null when blank to clear the column.
     const data: CreateAssetRequest | UpdateAssetRequest = {
-      ...(trimmedExternalKey ? { external_key: formData.external_key } : {}),
+      ...(includeExternalKey ? { external_key: formData.external_key } : {}),
       name: formData.name,
       description: formData.description,
       location_id: formData.location_id,
@@ -293,7 +299,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
             id="external_key"
             value={formData.external_key}
             onChange={(e) => handleChange('external_key', e.target.value)}
-            disabled={loading}
+            disabled={loading || mode === 'edit'}
             className={`block w-full px-3 py-2 border rounded-lg ${
               fieldErrors.external_key
                 ? 'border-red-500 focus:ring-red-500'

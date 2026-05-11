@@ -279,10 +279,15 @@ export function LocationForm({
     // with 400 validation_error. Omit valid_from when blank so the backend
     // applies its server-side default (now); send valid_to as null when
     // blank to clear (PUT) or leave NULL (POST).
-    const { valid_from: _vf, valid_to: _vt, ...rest } = formData;
+    //
+    // TRA-664 / BB26 D7: external_key is immutable on PATCH. Strip it from
+    // the edit-mode body; the dedicated rename operation is the only path
+    // for mutating the natural key.
+    const { valid_from: _vf, valid_to: _vt, external_key: _ek, ...rest } = formData;
     const submitData = {
       ...rest,
       tags: validTags,
+      ...(mode === 'create' ? { external_key: _ek } : {}),
       ...(formData.valid_from
         ? { valid_from: formatDateToRFC3339(formData.valid_from) }
         : {}),

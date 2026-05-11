@@ -98,10 +98,13 @@ func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	}
 
 	// Mutate name and PUT back. `tags` is managed via subresource and must
-	// be stripped (TRA-643 / BB22 F1); other read-only fields stay on the
-	// body to exercise the round-trip-safe drop list.
+	// be stripped (TRA-643 / BB22 F1); `external_key` is immutable and must
+	// be stripped (TRA-664 / BB26 D7 — POST /assets/{id}/rename is the
+	// dedicated path). Other read-only fields stay on the body to exercise
+	// the round-trip-safe drop list (id, created_at, updated_at).
 	getResp.Data["name"] = "Forklift 7 (renamed)"
 	delete(getResp.Data, "tags")
+	delete(getResp.Data, "external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -298,9 +301,10 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	assert.Nil(t, getResp.Data["valid_to"])
 
 	// PUT-back of the GET body — the connector flow from §S2. `tags` is
-	// the only subresource-managed field on PublicAssetView and must be
-	// stripped (TRA-643); the rest is round-trip safe.
+	// managed via a subresource (TRA-643) and `external_key` is immutable
+	// (TRA-664); both must be stripped. The rest is round-trip safe.
 	delete(getResp.Data, "tags")
+	delete(getResp.Data, "external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 

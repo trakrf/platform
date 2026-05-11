@@ -40,6 +40,8 @@ var publicSchemaRenames = map[string]string{
 	"asset.GetAssetResponse":           "GetAssetResponse",
 	"asset.ListAssetsResponse":         "ListAssetsResponse",
 	"asset.PublicAssetView":            "AssetView",
+	"asset.RenameAssetRequest":         "RenameAssetRequest",
+	"asset.RenameAssetResponse":        "RenameAssetResponse",
 	"asset.UpdateAssetRequest":         "UpdateAssetRequest",
 	"asset.UpdateAssetResponse":        "UpdateAssetResponse",
 
@@ -53,6 +55,8 @@ var publicSchemaRenames = map[string]string{
 	"location.ListDescendantsResponse":       "ListLocationDescendantsResponse",
 	"location.ListLocationsResponse":         "ListLocationsResponse",
 	"location.PublicLocationView":            "LocationView",
+	"location.RenameLocationRequest":         "RenameLocationRequest",
+	"location.RenameLocationResponse":        "RenameLocationResponse",
 	"location.UpdateLocationRequest":         "UpdateLocationRequest",
 	"location.UpdateLocationResponse":        "UpdateLocationResponse",
 
@@ -88,6 +92,7 @@ var publicOperationIdRenames = map[string]string{
 	"assets.delete":           "deleteAsset",
 	"assets.get":              "getAsset",
 	"assets.update":           "patchAsset",
+	"assets.rename":           "renameAsset",
 	"assets.history":          "getAssetHistory",
 	"assets.tags.add":         "addAssetTag",
 	"assets.tags.remove":      "removeAssetTag",
@@ -96,6 +101,7 @@ var publicOperationIdRenames = map[string]string{
 	"locations.delete":        "deleteLocation",
 	"locations.get":           "getLocation",
 	"locations.update":        "patchLocation",
+	"locations.rename":        "renameLocation",
 	"locations.ancestors":     "listLocationAncestors",
 	"locations.children":      "listLocationChildren",
 	"locations.descendants":   "listLocationDescendants",

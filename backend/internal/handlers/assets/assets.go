@@ -234,6 +234,15 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
+	// TRA-664 / BB26 D7: external_key is immutable via PATCH. Reject any body
+	// that mentions it (value or null) with code=immutable_field and a
+	// pointer to the rename operation. Run before strict decode so the
+	// dedicated error code wins over the "unknown field" code that strict
+	// decode would otherwise emit.
+	if httputil.RejectImmutableFields(w, req, reqID, asset.PublicImmutablePatchFields) {
+		return
+	}
+
 	var request asset.UpdateAssetRequest
 	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, asset.PublicReadOnlyFields)
 	if err != nil {
@@ -241,9 +250,11 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	// valid_from / external_key / name are non-nullable on the read view; an
-	// explicit null in the PATCH body is a validation error, not a clear-request.
-	for _, f := range []string{"valid_from", "external_key", "name", "is_active", "metadata"} {
+	// valid_from / name are non-nullable on the read view; an explicit null
+	// in the PATCH body is a validation error, not a clear-request.
+	// (external_key is rejected earlier as an immutable field; absent from
+	// this list because it cannot reach here.)
+	for _, f := range []string{"valid_from", "name", "is_active", "metadata"} {
 		if _, ok := explicitNulls[f]; ok {
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 				"validation failed", reqID,
@@ -433,6 +444,77 @@ type CreateAssetResponse struct {
 // UpdateAssetResponse is the typed envelope returned by PATCH /api/v1/assets/{asset_id}.
 type UpdateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
+}
+
+// RenameAssetResponse is the typed envelope returned by POST /api/v1/assets/{asset_id}/rename.
+// TRA-664.
+type RenameAssetResponse struct {
+	Data asset.PublicAssetView `json:"data"`
+}
+
+// @Summary      Rename an asset (mutate external_key)
+// @Description  **Required scope:** `assets:write`
+// @Description
+// @Description  Mutate the asset's `external_key` (natural / join key). This operation is **destructive to downstream joins**: any external system that has cached or indexed records on the old `external_key` will silently disconnect. Prefer a coordinated cutover with downstream consumers.
+// @Description
+// @Description  `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).
+// @Tags         assets,public
+// @ID           assets.rename
+// @Accept       json
+// @Produce      json
+// @Param        asset_id path  int                      true  "Asset id (canonical)" minimum(1) maximum(9007199254740991)
+// @Param        request  body  asset.RenameAssetRequest true  "New external_key"
+// @Success      200  {object}  assets.RenameAssetResponse
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     BearerAuth[assets:write]
+// @Router       /api/v1/assets/{asset_id}/rename [post]
+func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.RespondMissingOrgContext(w, req, reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyAssetID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	var request asset.RenameAssetRequest
+	if err := httputil.DecodeJSONStrict(req, &request); err != nil {
+		httputil.RespondDecodeError(w, req, err, reqID)
+		return
+	}
+	if err := validate.Struct(request); err != nil {
+		httputil.RespondValidationError(w, req, err, reqID)
+		return
+	}
+
+	result, err := handler.storage.RenameAsset(req.Context(), orgID, id, request.ExternalKey)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exist") {
+			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
+				err.Error(), reqID)
+			return
+		}
+		httputil.RespondStorageError(w, req, err, reqID)
+		return
+	}
+	if result == nil {
+		httputil.Respond404(w, req, apierrors.AssetNotFound, reqID)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": asset.ToPublicAssetView(*result)})
 }
 
 // @Summary List assets

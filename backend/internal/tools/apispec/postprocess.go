@@ -19,12 +19,14 @@ const externalKeyPattern = "^[A-Za-z0-9-]+$"
 // external_key_pattern constraint in the spec. Mirrors the
 // `validate:"...,external_key_pattern"` tags on the matching Go structs.
 var externalKeyPatternFields = map[string][]string{
-	"asset.UpdateAssetRequest":               {"external_key", "location_external_key"},
+	"asset.UpdateAssetRequest":               {"location_external_key"},
 	"asset.CreateAssetRequest":               {"external_key", "location_external_key"},
 	"asset.CreateAssetWithTagsRequest":       {"external_key", "location_external_key"},
-	"location.UpdateLocationRequest":         {"external_key", "parent_external_key"},
+	"asset.RenameAssetRequest":               {"external_key"},
+	"location.UpdateLocationRequest":         {"parent_external_key"},
 	"location.CreateLocationRequest":         {"external_key", "parent_external_key"},
 	"location.CreateLocationWithTagsRequest": {"external_key", "parent_external_key"},
+	"location.RenameLocationRequest":         {"external_key"},
 }
 
 // markExternalKeyPattern walks doc.Components.Schemas and sets the
@@ -776,6 +778,7 @@ var publicResponseSchemas = []string{
 	"asset.CreateAssetResponse",
 	"asset.GetAssetResponse",
 	"asset.ListAssetsResponse",
+	"asset.RenameAssetResponse",
 	"asset.UpdateAssetResponse",
 
 	// location envelopes
@@ -786,6 +789,7 @@ var publicResponseSchemas = []string{
 	"location.ListChildrenResponse",
 	"location.ListDescendantsResponse",
 	"location.ListLocationsResponse",
+	"location.RenameLocationResponse",
 	"location.UpdateLocationResponse",
 
 	// org envelope
@@ -901,6 +905,7 @@ var requiredFields = map[string][]string{
 	"asset.CreateAssetResponse": {"data"},
 	"asset.GetAssetResponse":    {"data"},
 	"asset.ListAssetsResponse":  {"data", "limit", "offset", "total_count"},
+	"asset.RenameAssetResponse": {"data"},
 	"asset.UpdateAssetResponse": {"data"},
 
 	// location envelopes (post namespace consolidation — TRA-602)
@@ -911,6 +916,7 @@ var requiredFields = map[string][]string{
 	"location.ListChildrenResponse":    {"data", "limit", "offset", "total_count"},
 	"location.ListDescendantsResponse": {"data", "limit", "offset", "total_count"},
 	"location.ListLocationsResponse":   {"data", "limit", "offset", "total_count"},
+	"location.RenameLocationResponse":  {"data", "descendant_count_affected"},
 	"location.UpdateLocationResponse":  {"data"},
 
 	// org envelope (post namespace consolidation — TRA-602)
