@@ -225,12 +225,17 @@ func (s *Service) processCSVAsync(
 		// concrete ValidFrom / IsActive values; wrap them as pointers.
 		validFrom := shared.FlexibleDate{Time: pr.asset.ValidFrom}
 		isActive := pr.asset.IsActive
+		var descPtr *string
+		if pr.asset.Description != "" {
+			d := pr.asset.Description
+			descPtr = &d
+		}
 		request := asset.CreateAssetWithTagsRequest{
 			CreateAssetRequest: asset.CreateAssetRequest{
 				OrgID:       pr.asset.OrgID,
 				ExternalKey: pr.asset.ExternalKey,
 				Name:        pr.asset.Name,
-				Description: pr.asset.Description,
+				Description: descPtr,
 				ValidFrom:   &validFrom,
 				IsActive:    &isActive,
 			},

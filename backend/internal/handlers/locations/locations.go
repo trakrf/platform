@@ -136,7 +136,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys)
+		httputil.RespondValidationError(w, r, err, requestID)
 		return
 	}
 
@@ -234,7 +234,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	var request location.UpdateLocationRequest
-	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, location.PublicReadOnlyFields)
+	explicitNulls, _, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, location.PublicReadOnlyFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
@@ -303,7 +303,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys)
+		httputil.RespondValidationError(w, req, err, reqID)
 		return
 	}
 

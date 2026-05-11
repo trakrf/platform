@@ -614,3 +614,206 @@ func TestPostLocation_LooseDateForms_Rejected400(t *testing.T) {
 
 	_ = pool
 }
+
+// TRA-675 / BB27 F4: PATCH `{"description":""}` must be rejected with
+// 400 too_short / min_length=1 instead of silently coercing to null in
+// the response. Matches asset behavior.
+func TestPutLocation_EmptyDescription_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-DESC-EMPTY", "DescEmpty")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	body := []byte(`{"description":""}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, patchReq)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "empty description must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field  string         `json:"field"`
+				Code   string         `json:"code"`
+				Params map[string]any `json:"params"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "description", resp.Error.Fields[0].Field)
+	assert.Equal(t, "too_short", resp.Error.Fields[0].Code)
+	assert.EqualValues(t, 1, resp.Error.Fields[0].Params["min_length"])
+}
+
+// TRA-675 / BB27 F4: POST mirrors PATCH for description empty-string.
+func TestPostLocation_EmptyDescription_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	body := []byte(`{"external_key":"LOC-DESC-POST-EMPTY","name":"n","description":""}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "empty description must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Fields []struct {
+				Field  string         `json:"field"`
+				Code   string         `json:"code"`
+				Params map[string]any `json:"params"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "description", resp.Error.Fields[0].Field)
+	assert.Equal(t, "too_short", resp.Error.Fields[0].Code)
+	assert.EqualValues(t, 1, resp.Error.Fields[0].Params["min_length"])
+
+	_ = pool
+}
+
+// TRA-675 / BB27 F5: POST with empty body must report missing `name` as
+// code=too_short with min_length, not code=required (errors.mdx contract).
+func TestPostLocation_MissingNameEmitsTooShort(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	body := []byte(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "missing name must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Fields []struct {
+				Field  string         `json:"field"`
+				Code   string         `json:"code"`
+				Params map[string]any `json:"params"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "name", resp.Error.Fields[0].Field)
+	assert.Equal(t, "too_short", resp.Error.Fields[0].Code,
+		"length-bearing required field missing from body must be too_short, not required")
+	assert.EqualValues(t, 1, resp.Error.Fields[0].Params["min_length"])
+
+	_ = pool
+}
+
+// TRA-675 / Schemathesis Class D: POST with explicit `valid_from: null`
+// is accepted as "use server default" — Create schemas mark valid_from
+// nullable:true to match handler behavior. PATCH still rejects null on
+// valid_from (no "use default" semantic on update).
+func TestPostLocation_NullValidFrom_AcceptedAsNow(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	body := []byte(`{"external_key":"LOC-NULL-VF","name":"n","valid_from":null}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code, "valid_from null must be accepted as now: %s", rec.Body.String())
+
+	var resp struct {
+		Data struct {
+			ValidFrom time.Time `json:"valid_from"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.False(t, resp.Data.ValidFrom.IsZero(), "valid_from must be populated")
+	assert.WithinDuration(t, time.Now().UTC(), resp.Data.ValidFrom, 5*time.Minute)
+
+	_ = pool
+}
+
+// TRA-675: PATCH keeps rejecting valid_from null on locations, mirroring
+// assets. Update path has no "use server default" semantic.
+func TestPutLocation_NullValidFrom_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-NULL-VF-PUT", "NullVfPut")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	body := []byte(`{"valid_from":null}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, patchReq)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "PATCH valid_from null must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "valid_from", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+}

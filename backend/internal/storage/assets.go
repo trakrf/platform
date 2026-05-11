@@ -494,12 +494,17 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 	var assetID int
 	var tagIDs []int
 
+	description := ""
+	if request.Description != nil {
+		description = *request.Description
+	}
+
 	err = s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			request.OrgID,
 			request.ExternalKey,
 			request.Name,
-			request.Description,
+			description,
 			request.LocationID,
 			validFrom,
 			validTo,

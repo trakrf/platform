@@ -239,6 +239,7 @@ components:
             properties:
                 description:
                     maxLength: 1024
+                    minLength: 1
                     nullable: true
                     type: string
                 external_key:
@@ -274,6 +275,7 @@ components:
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
                     format: date-time
+                    nullable: true
                     type: string
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
@@ -296,6 +298,7 @@ components:
                 description:
                     example: Main warehouse location
                     maxLength: 1024
+                    minLength: 1
                     nullable: true
                     type: string
                 external_key:
@@ -336,6 +339,7 @@ components:
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
                     format: date-time
+                    nullable: true
                     type: string
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
@@ -729,6 +733,7 @@ components:
             properties:
                 description:
                     maxLength: 1024
+                    minLength: 1
                     nullable: true
                     type: string
                 is_active:
@@ -774,6 +779,7 @@ components:
                 description:
                     example: Updated description
                     maxLength: 1024
+                    minLength: 1
                     nullable: true
                     type: string
                 is_active:

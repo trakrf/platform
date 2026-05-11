@@ -743,12 +743,17 @@ func (s *Storage) CreateLocationWithTags(ctx context.Context, orgID int, request
 	var locationID int
 	var tagIDs []int
 
+	description := ""
+	if request.Description != nil {
+		description = *request.Description
+	}
+
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			orgID,
 			request.ExternalKey,
 			request.Name,
-			request.Description,
+			description,
 			request.ParentID,
 			validFrom,
 			validTo,

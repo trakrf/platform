@@ -331,6 +331,7 @@
         "properties": {
           "description": {
             "maxLength": 1024,
+            "minLength": 1,
             "nullable": true,
             "type": "string"
           },
@@ -375,6 +376,7 @@
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           },
           "valid_to": {
@@ -406,6 +408,7 @@
           "description": {
             "example": "Main warehouse location",
             "maxLength": 1024,
+            "minLength": 1,
             "nullable": true,
             "type": "string"
           },
@@ -450,6 +453,7 @@
           "valid_from": {
             "example": "2025-12-14T00:00:00Z",
             "format": "date-time",
+            "nullable": true,
             "type": "string"
           },
           "valid_to": {
@@ -978,6 +982,7 @@
         "properties": {
           "description": {
             "maxLength": 1024,
+            "minLength": 1,
             "nullable": true,
             "type": "string"
           },
@@ -1037,6 +1042,7 @@
           "description": {
             "example": "Updated description",
             "maxLength": 1024,
+            "minLength": 1,
             "nullable": true,
             "type": "string"
           },
