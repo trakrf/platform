@@ -93,6 +93,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	appendMethodPolicyDescription(doc)
 	rewriteMergePatchContentType(doc)
 	annotateReadOnlyTags(doc)
+	annotateTagPolymorphism(doc)
 	if err := renamePublicSpec(doc); err != nil {
 		return fmt.Errorf("rename public spec: %w", err)
 	}
@@ -1397,5 +1398,45 @@ func annotateReadOnlyTags(doc *openapi3.T) {
 			continue
 		}
 		prop.Value.Description = readOnlyTagsDescription
+	}
+}
+
+// tagSchemaDescription names the polymorphism explicitly so an AI ingestor
+// (or human) reading the spec without domain context sees from the noun
+// alone that Tag covers multiple identifier kinds. TRA-666 BB26 C1: the
+// resource and discriminator names stay ("tag" is the canonical TrakRF
+// noun for RFID/BLE/barcode identifiers; tag_type earns its prefix on
+// flat surfaces like DB columns, query params, and logs), so the fix
+// lives in the description where generated client class docstrings carry
+// it forward.
+const tagSchemaDescription = "Polymorphic identifier attached to an asset or location. " +
+	"The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), " +
+	"`ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). " +
+	"The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; " +
+	"`tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds)."
+
+const tagTypeFieldDescription = "Discriminator for the polymorphic Tag resource. " +
+	"`rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, " +
+	"and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — " +
+	"the same `value` may exist under different `tag_type`s without conflict."
+
+// annotateTagPolymorphism sets the schema-level description on shared.Tag /
+// shared.TagRequest and the field-level description on their tag_type
+// discriminator. Pre-rename names — runs before renamePublicSpec
+// consolidates them to Tag / TagRequest. Silently skipped for any missing
+// schema, matching the pattern in annotateReadOnlyTags.
+func annotateTagPolymorphism(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+	for _, schemaName := range []string{"shared.Tag", "shared.TagRequest"} {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		ref.Value.Description = tagSchemaDescription
+		if prop, ok := ref.Value.Properties["tag_type"]; ok && prop != nil && prop.Value != nil {
+			prop.Value.Description = tagTypeFieldDescription
+		}
 	}
 }
