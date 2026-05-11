@@ -23,17 +23,19 @@ rules:
   # ─────────────────────────────────────────────────────────────
   # Inherited Zalando disables (intentional architectural choices)
   # ─────────────────────────────────────────────────────────────
-  # Custom trakrf-* rules will be appended below in Tasks 4-8.
+  # Custom trakrf-* rules follow below.
 
-  # URL-segment versioning (/api/v1/...) — Zalando recommends media-type
-  # versioning, but TrakRF ships URL versioning for discoverability and
-  # tooling compatibility. Settled architectural choice.
+  # URL versioning + /api base path — Zalando recommends media-type
+  # versioning and discourages `/api` as a base-path prefix. TrakRF ships
+  # `/api/v1/...` for both reasons: URL versioning is discoverable and
+  # broadly tool-compatible, and the `/api` prefix scopes the surface
+  # away from non-API routes. Settled architectural choice.
   must-not-use-uri-versioning: off
   should-not-use-api-as-base-path: off
 
   # Problem+JSON (RFC 7807) error envelope — Zalando mandates it; TrakRF
-  # ships a custom ErrorResponse envelope ({code, message, request_id, details}).
-  # Settled architectural choice; documented in API design docs.
+  # ships a custom ErrorResponse envelope ({code, message, request_id,
+  # details}). Settled architectural choice.
   must-use-problem-json-for-errors: off
 
   # Zalando-internal API metadata (x-api-id, x-audience) — Zalando's
