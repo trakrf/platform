@@ -130,3 +130,39 @@ rules:
             properties:
               readOnly:
                 const: true
+
+  trakrf-sibling-required-assetview-updated-at:
+    description: >
+      `AssetView.required` must include `updated_at`. Sibling parity check
+      against LocationView. Origin: BB18 §2.5 — `updated_at` was required on
+      one sibling but not the other; codegen surfaced as inconsistent
+      optionality between Asset and Location response types. Cleaned up
+      since; this rule guards against regression.
+    message: "AssetView.required must include 'updated_at' (sibling parity with LocationView) — BB18 §2.5"
+    severity: error
+    given:
+      - "$.components.schemas.AssetView.required"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: array
+            contains:
+              const: updated_at
+
+  trakrf-sibling-required-locationview-updated-at:
+    description: >
+      `LocationView.required` must include `updated_at`. Mirror of
+      `trakrf-sibling-required-assetview-updated-at`. See that rule for
+      origin and rationale.
+    message: "LocationView.required must include 'updated_at' (sibling parity with AssetView) — BB18 §2.5"
+    severity: error
+    given:
+      - "$.components.schemas.LocationView.required"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: array
+            contains:
+              const: updated_at
