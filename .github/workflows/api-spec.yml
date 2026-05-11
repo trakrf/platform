@@ -70,6 +70,21 @@ jobs:
       - name: Redocly lint
         run: pnpm --package=@redocly/cli dlx redocly lint docs/api/openapi.public.yaml --extends=recommended
 
+      - name: Install workspace deps (Spectral + ruleset resolution)
+        # Spectral resolves `extends` strings against node_modules adjacent to
+        # the ruleset file. `pnpm dlx` won't surface @baloise/spectral-rules to
+        # the workspace root, so the package must be installed locally.
+        run: pnpm install --frozen-lockfile
+
+      - name: Spectral lint (Zalando + TrakRF custom rules)
+        # Non-blocking initially per TRA-670: the spec is known-red against the
+        # rules added in this PR. Phase-3 (TRA-669) will green the findings,
+        # at which point the `continue-on-error` flag should be removed in the
+        # same PR that lands the fixes. See .spectral.yaml for rule traceability
+        # to historical BB findings (BB13/BB16/BB18/BB27).
+        continue-on-error: true
+        run: pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty
+
       - name: openapi-generator-cli validate — structural contract check for codegen consumers
         # Redocly catches style/semantic issues; openapi-generator-cli catches the
         # specific constraints SDK generators enforce (referenced schemas resolve,
