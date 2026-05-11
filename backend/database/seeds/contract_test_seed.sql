@@ -23,8 +23,12 @@ SELECT 'BB Test Org', 'bb-test-org'
 WHERE NOT EXISTS (SELECT 1 FROM organizations WHERE identifier = 'bb-test-org');
 
 -- 2) User
-INSERT INTO users (email, name)
-SELECT 'bb-test@trakrf.invalid', 'BB Test User'
+-- password_hash is non-null in the read path (storage.GetUserByEmail scans it
+-- into a non-pointer string). Supplying a sentinel "!disabled" rather than a
+-- real bcrypt avoids any possibility of password-auth working with this
+-- account — schemathesis only ever authenticates via the minted JWT.
+INSERT INTO users (email, name, password_hash)
+SELECT 'bb-test@trakrf.invalid', 'BB Test User', '!disabled'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'bb-test@trakrf.invalid');
 
 -- 3) Org membership (admin so it can create keys via the public endpoint if needed)

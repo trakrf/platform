@@ -49,6 +49,10 @@ validate: lint test build
 # Alias for CSW integration
 check: validate
 
+# TRA-671: Run Schemathesis contract tests (see backend/justfile for details)
+test-contract:
+    just backend test-contract
+
 # ============================================================================
 # Full Stack Development
 # ============================================================================
