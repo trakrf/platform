@@ -80,19 +80,23 @@ test-contract:
     }
     trap cleanup EXIT
 
-    # 1. Ensure timescaledb is up
+    # 1. Ensure timescaledb is up. Probe over the published TCP port from the
+    # host — pg_isready inside the container can flip green a moment before
+    # the docker port mapping starts accepting connections (CI cold-start race),
+    # which would crash the first host-side psql call with "server closed the
+    # connection unexpectedly".
     echo "🐳 Ensuring timescaledb is up..."
     docker compose -p platform -f "$REPO_ROOT/docker-compose.yaml" up -d timescaledb
     DB_READY=0
-    for _ in {1..30}; do
-        if docker compose -p platform -f "$REPO_ROOT/docker-compose.yaml" exec -T timescaledb pg_isready -U postgres >/dev/null 2>&1; then
+    for _ in {1..60}; do
+        if PGPASSWORD="$PG_PASSWORD" psql -h localhost -p 5432 -U postgres -d postgres -c 'SELECT 1' >/dev/null 2>&1; then
             DB_READY=1
             break
         fi
         sleep 1
     done
     if [ "$DB_READY" -ne 1 ]; then
-        echo "❌ timescaledb did not become ready within 30s" >&2
+        echo "❌ timescaledb did not become ready within 60s" >&2
         exit 1
     fi
 
