@@ -327,11 +327,10 @@ func TestPostLocation_BadExternalKeyPattern_Rejected400(t *testing.T) {
 	_ = pool
 }
 
-// TRA-650 / BB23 F3 (audit): POST /api/v1/locations must reject an explicit
-// empty external_key with 400 too_short. Locations have always declared
-// `required,min=1,max=255,external_key_pattern` on the field, so this test
-// pins the symmetric behavior alongside the assets fix and guards against
-// regressions if the validator chain is ever reordered.
+// TRA-665 / BB26 D3: POST /api/v1/locations must reject an explicit empty
+// external_key with 400 too_short. Location external_key is now optional by
+// *omission* (auto-mints LOC-NNNN), so the explicit-empty case is enforced
+// by the handler's presentKeys-gated validator (mirrors POST /assets).
 func TestPostLocation_EmptyExternalKey_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -372,6 +371,43 @@ func TestPostLocation_EmptyExternalKey_Rejected400(t *testing.T) {
 	require.NotEmpty(t, resp.Error.Fields)
 	assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
 	assert.Equal(t, "too_short", resp.Error.Fields[0].Code)
+
+	_ = pool
+}
+
+// TRA-665 / BB26 D3: when external_key is omitted from the body, the server
+// auto-mints a LOC-NNNN value — the legitimate "omit means auto-mint" path
+// (parallels POST /assets ASSET-NNNN behavior).
+func TestPostLocation_OmittedExternalKey_AutoMints(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	body, err := json.Marshal(map[string]any{"name": "auto-mint-me"})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code, "omitted external_key must auto-mint: %s", rec.Body.String())
+
+	var resp struct {
+		Data struct {
+			ExternalKey string `json:"external_key"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Regexp(t, `^LOC-\d+$`, resp.Data.ExternalKey)
 
 	_ = pool
 }

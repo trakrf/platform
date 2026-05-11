@@ -299,6 +299,11 @@ components:
                     nullable: true
                     type: string
                 external_key:
+                    description: |-
+                        external_key is optional. Omit to receive a server-assigned key in the
+                        format LOC-NNNN (per-organization sequence), parallel to assets'
+                        ASSET-NNNN behavior. When supplied, must satisfy the external_key_pattern.
+                        TRA-665 / BB26 D3.
                     example: wh1
                     maxLength: 255
                     minLength: 1
@@ -338,7 +343,6 @@ components:
                     nullable: true
                     type: string
             required:
-                - external_key
                 - name
             type: object
         ErrorResponse:
@@ -2398,6 +2402,11 @@ paths:
 
                 Create a new location in the hierarchy, optionally with one or more tags.
                 Set parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.
+
+                The `external_key` field is optional. Provide a value from your system of record
+                (ERP, WMS, layout/plan) for natural-key joins, or omit it to receive a
+                server-assigned external_key in the format `LOC-NNNN` (per-organization sequence).
+                A caller-supplied external_key that collides with an existing location returns 409.
             operationId: createLocation
             requestBody:
                 content:

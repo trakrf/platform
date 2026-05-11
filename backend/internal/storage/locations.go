@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	stderrors "errors"
 	"fmt"
 	"strings"
@@ -41,6 +42,38 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 	}
 
 	return &loc, nil
+}
+
+// GetNextLocationSequence derives the next sequence number for auto-generated
+// location external_keys. Queries the max sequence from existing LOC-NNNN
+// external_keys for the org. Returns 1 if no LOC-NNNN external_keys exist.
+// Parallels GetNextAssetSequence. TRA-665 / BB26 D3.
+func (s *Storage) GetNextLocationSequence(ctx context.Context, orgID int) (int, error) {
+	var maxSeq sql.NullInt64
+	query := `
+		SELECT MAX(CAST(SUBSTRING(external_key FROM 'LOC-([0-9]+)') AS INT))
+		FROM trakrf.locations
+		WHERE org_id = $1
+		  AND external_key ~ '^LOC-[0-9]+$'
+		  AND deleted_at IS NULL
+	`
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID).Scan(&maxSeq)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max sequence: %w", err)
+	}
+	if !maxSeq.Valid {
+		return 1, nil
+	}
+	return int(maxSeq.Int64) + 1, nil
+}
+
+// GenerateLocationExternalKey creates an external_key in format LOC-NNNN.
+// Zero-pads to 4 digits minimum, grows naturally beyond 9999. Parallels
+// GenerateAssetExternalKey.
+func GenerateLocationExternalKey(seq int) string {
+	return fmt.Sprintf("LOC-%04d", seq)
 }
 
 func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.LocationWithParent, error) {
@@ -673,6 +706,16 @@ func (s *Storage) scanHierarchyRows(
 
 // CreateLocationWithTags creates a location with tags in a single transaction
 func (s *Storage) CreateLocationWithTags(ctx context.Context, orgID int, request location.CreateLocationWithTagsRequest) (*location.LocationWithParent, error) {
+	// Auto-generate external_key if empty (TRA-665 / BB26 D3). Mirrors
+	// CreateAssetWithTags's ASSET-NNNN behavior.
+	if strings.TrimSpace(request.ExternalKey) == "" {
+		seq, err := s.GetNextLocationSequence(ctx, orgID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate external_key: %w", err)
+		}
+		request.ExternalKey = GenerateLocationExternalKey(seq)
+	}
+
 	tagsJSON, err := tagsToJSON(request.Tags)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize tags: %w", err)
