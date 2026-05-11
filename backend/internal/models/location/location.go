@@ -46,12 +46,12 @@ type CreateLocationRequest struct {
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicLocationView that are
-// server-owned and round-trip safe: the PUT handler strips them from the
-// request body before strict decoding so a verbatim GET → PUT round-trip
+// server-owned and round-trip safe: the PATCH handler strips them from the
+// request body before strict decoding so a verbatim GET → PATCH round-trip
 // succeeds (TRA-608 / BB18 §1.7).
 //
 // `tags` is intentionally NOT on this list. Tags are managed via the
-// /locations/{id}/tags subresource, so a `tags` key in a PUT body is a
+// /locations/{id}/tags subresource, so a `tags` key in a PATCH body is a
 // caller-side mistake worth surfacing. Strict decode rejects it as an
 // unknown field with code=invalid_value, matching unknown-field behavior
 // (TRA-643 / BB22 F1).
@@ -60,7 +60,7 @@ type CreateLocationRequest struct {
 // internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"].
 var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at"}
 
-// UpdateLocationRequest is the PUT body. The handler decodes it via
+// UpdateLocationRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
 // PublicLocationView's round-trip-safe read-only fields (id, created_at,
 // updated_at, tree_path, depth) are silently ignored on a verbatim GET →
@@ -81,7 +81,7 @@ type UpdateLocationRequest struct {
 	Description       *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
-	// Set by the PUT handler when the body had an explicit `null` for the
+	// Set by the PATCH handler when the body had an explicit `null` for the
 	// corresponding read-side-nullable field, to request a column-clear
 	// (TRA-614 / TRA-468). Not decoded from JSON directly.
 	ClearDescription bool  `json:"-" swaggerignore:"true"`

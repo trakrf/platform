@@ -71,15 +71,17 @@ export const locationsApi = {
     apiClient.post<LocationResponse>('/locations', data),
 
   /**
-   * Update an existing location by ID
-   * PUT /api/v1/locations/by-id/:id
+   * Update an existing location by ID (RFC 7396 JSON Merge Patch — TRA-663)
+   * PATCH /api/v1/locations/by-id/:id
    *
    * @param id - Location ID to update
-   * @param data - Partial location update payload
+   * @param data - Partial location merge-patch payload
    * @returns Promise<LocationResponse> with updated location
    */
   update: (id: number, data: UpdateLocationRequest) =>
-    apiClient.put<LocationResponse>(`/locations/by-id/${id}`, data),
+    apiClient.patch<LocationResponse>(`/locations/by-id/${id}`, data, {
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+    }),
 
   /**
    * Soft delete a location by ID

@@ -89,6 +89,8 @@ func postprocessPublic(doc *openapi3.T) error {
 	stripSessionAuthScheme(doc)
 	appendSpecVariantsDescription(doc)
 	appendMethodPolicyDescription(doc)
+	rewriteMergePatchContentType(doc)
+	annotateReadOnlyTags(doc)
 	if err := renamePublicSpec(doc); err != nil {
 		return fmt.Errorf("rename public spec: %w", err)
 	}
@@ -1319,4 +1321,75 @@ func injectScopeMarker(description string, scopes []string) string {
 		return marker
 	}
 	return marker + "\n\n" + description
+}
+
+// mergePatchPaths is the set of operations that accept RFC 7396 JSON Merge
+// Patch (TRA-663 / BB26). Their request bodies are rewritten from
+// `application/json` (what swag emits from `@Accept json`) to
+// `application/merge-patch+json` so generated SDKs signal merge semantics
+// to integrators and the spec verb matches the runtime semantics.
+var mergePatchPaths = []string{
+	"/api/v1/assets/{asset_id}",
+	"/api/v1/locations/{location_id}",
+}
+
+// rewriteMergePatchContentType changes the request-body Content-Type from
+// `application/json` to `application/merge-patch+json` on the PATCH
+// operations in mergePatchPaths. Empty body and 200/400/etc. responses are
+// untouched — only the request body media type changes.
+func rewriteMergePatchContentType(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	for _, p := range mergePatchPaths {
+		item := doc.Paths.Find(p)
+		if item == nil || item.Patch == nil || item.Patch.RequestBody == nil {
+			continue
+		}
+		body := item.Patch.RequestBody.Value
+		if body == nil || body.Content == nil {
+			continue
+		}
+		mt, ok := body.Content["application/json"]
+		if !ok {
+			continue
+		}
+		body.Content = openapi3.Content{"application/merge-patch+json": mt}
+	}
+}
+
+// readOnlyTagsDescription documents the read/write split between the tag
+// arrays embedded in resource views (read-only) and the /tags subresource
+// (write). Without this note, the natural round-trip (GET → modify tags
+// → PATCH) silently drops tag edits — see TRA-663 BB26 §S3.
+const readOnlyTagsDescription = "Tags currently attached to this resource. Read-only on PATCH; mutate via POST /{resource}/{id}/tags and DELETE /{resource}/{id}/tags/{tag_id}."
+
+// readOnlyTagsSchemas names the schemas whose `tags` property carries the
+// read/write split description. Pre-rename names — runs before
+// renamePublicSpec consolidates them to AssetView / LocationView.
+var readOnlyTagsSchemas = []string{
+	"asset.PublicAssetView",
+	"location.PublicLocationView",
+}
+
+// annotateReadOnlyTags sets the description on the `tags` array property of
+// the resource views in readOnlyTagsSchemas. Silently skipped for any
+// missing schema — runs late, so consolidateSchemaNamespaces should already
+// have folded the dotted names; if a name is absent the postprocess
+// pipeline has changed in a way that warrants a separate look.
+func annotateReadOnlyTags(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+	for _, schemaName := range readOnlyTagsSchemas {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		prop, ok := ref.Value.Properties["tags"]
+		if !ok || prop == nil || prop.Value == nil {
+			continue
+		}
+		prop.Value.Description = readOnlyTagsDescription
+	}
 }

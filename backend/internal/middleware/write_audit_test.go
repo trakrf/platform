@@ -60,7 +60,7 @@ func TestWriteAudit_LogsSessionPrincipal(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/locations/7", strings.NewReader(`{}`))
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/locations/7", strings.NewReader(`{}`))
 	orgID := 17
 	req = req.WithContext(middleware.WithUserClaimsForTest(req.Context(), &jwt.Claims{
 		UserID:       99,

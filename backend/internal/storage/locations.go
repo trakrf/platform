@@ -60,9 +60,9 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		argPos++
 	}
 
-	// Empty effective body (e.g. PUT body that decoded to no writable fields
+	// Empty effective body (e.g. PATCH body that decoded to no writable fields
 	// after the read-only drop in TRA-608, or a `{}` body) is a no-op success:
-	// return the unchanged record so a verbatim GET → PUT round-trip with only
+	// return the unchanged record so a verbatim GET → PATCH round-trip with only
 	// read-only fields succeeds. TRA-619.
 	if len(updates) == 0 {
 		return s.getLocationWithParentByID(ctx, orgID, id)
@@ -1020,7 +1020,7 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	} else if req.ParentID != nil {
 		fields["parent_location_id"] = *req.ParentID
 	}
-	// description: explicit null on PUT clears to empty string. Same rationale
+	// description: explicit null on PATCH clears to empty string. Same rationale
 	// as assets — preserves the null-on-read contract without changing every
 	// existing scan to handle SQL NULL into a Go string. (TRA-614 / BB19 §S1.)
 	if req.ClearDescription {

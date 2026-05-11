@@ -41,7 +41,7 @@ func setupRoundTripRouter(handler *Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Get("/api/v1/assets/{asset_id}", handler.GetAsset)
-	r.Put("/api/v1/assets/{asset_id}", handler.Update)
+	r.Patch("/api/v1/assets/{asset_id}", handler.Update)
 	return r
 }
 
@@ -105,11 +105,11 @@ func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
-	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
-	putReq.Header.Set("Content-Type", "application/json")
-	putReq = withRoundTripOrgContext(putReq, orgID)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
-	router.ServeHTTP(putRec, putReq)
+	router.ServeHTTP(putRec, patchReq)
 
 	require.Equal(t, http.StatusOK, putRec.Code, "PUT round-trip must succeed: %s", putRec.Body.String())
 
@@ -136,11 +136,11 @@ func TestPutAsset_TypoFieldStillRejected(t *testing.T) {
 	router := setupRoundTripRouter(handler)
 
 	body := []byte(`{"name":"x","nme":"oops"}`)
-	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
-	putReq.Header.Set("Content-Type", "application/json")
-	putReq = withRoundTripOrgContext(putReq, orgID)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
-	router.ServeHTTP(putRec, putReq)
+	router.ServeHTTP(putRec, patchReq)
 
 	require.Equal(t, http.StatusBadRequest, putRec.Code, "typo'd field must still be rejected")
 
@@ -235,11 +235,11 @@ func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 		"location_external_key": null,
 		"valid_to": null
 	}`)
-	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", assetID), bytes.NewReader(body))
-	putReq.Header.Set("Content-Type", "application/json")
-	putReq = withRoundTripOrgContext(putReq, orgID)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", assetID), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
-	router.ServeHTTP(putRec, putReq)
+	router.ServeHTTP(putRec, patchReq)
 
 	require.Equal(t, http.StatusOK, putRec.Code, "PUT null on nullable fields must succeed: %s", putRec.Body.String())
 
@@ -304,11 +304,11 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
-	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
-	putReq.Header.Set("Content-Type", "application/json")
-	putReq = withRoundTripOrgContext(putReq, orgID)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
-	router.ServeHTTP(putRec, putReq)
+	router.ServeHTTP(putRec, patchReq)
 
 	require.Equal(t, http.StatusOK, putRec.Code, "GET → PUT round-trip with explicit nulls must succeed: %s", putRec.Body.String())
 }
@@ -329,11 +329,11 @@ func TestPutAsset_LocationNullVsValueIsConflict(t *testing.T) {
 	router := setupRoundTripRouter(handler)
 
 	body := []byte(`{"location_id": null, "location_external_key": "WHS-99"}`)
-	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
-	putReq.Header.Set("Content-Type", "application/json")
-	putReq = withRoundTripOrgContext(putReq, orgID)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
-	router.ServeHTTP(putRec, putReq)
+	router.ServeHTTP(putRec, patchReq)
 
 	require.Equal(t, http.StatusBadRequest, putRec.Code, "null/value conflict on location pair must be 400: %s", putRec.Body.String())
 }
@@ -518,11 +518,11 @@ func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
-			putReq.Header.Set("Content-Type", "application/json")
-			putReq = withRoundTripOrgContext(putReq, orgID)
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+			patchReq.Header.Set("Content-Type", "application/json")
+			patchReq = withRoundTripOrgContext(patchReq, orgID)
 			putRec := httptest.NewRecorder()
-			router.ServeHTTP(putRec, putReq)
+			router.ServeHTTP(putRec, patchReq)
 
 			require.Equal(t, http.StatusOK, putRec.Code,
 				"empty effective body must be no-op 200 (got %d): %s", putRec.Code, putRec.Body.String())
@@ -564,11 +564,11 @@ func TestPutAsset_TagsRejected400(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
-			putReq.Header.Set("Content-Type", "application/json")
-			putReq = withRoundTripOrgContext(putReq, orgID)
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+			patchReq.Header.Set("Content-Type", "application/json")
+			patchReq = withRoundTripOrgContext(patchReq, orgID)
 			putRec := httptest.NewRecorder()
-			router.ServeHTTP(putRec, putReq)
+			router.ServeHTTP(putRec, patchReq)
 
 			require.Equal(t, http.StatusBadRequest, putRec.Code,
 				"tags in PUT body must be 400 (got %d): %s", putRec.Code, putRec.Body.String())
@@ -619,11 +619,11 @@ func TestPutAsset_MetadataNonObject_Returns400(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
-			putReq.Header.Set("Content-Type", "application/json")
-			putReq = withRoundTripOrgContext(putReq, orgID)
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+			patchReq.Header.Set("Content-Type", "application/json")
+			patchReq = withRoundTripOrgContext(patchReq, orgID)
 			putRec := httptest.NewRecorder()
-			router.ServeHTTP(putRec, putReq)
+			router.ServeHTTP(putRec, patchReq)
 
 			require.Equal(t, http.StatusBadRequest, putRec.Code,
 				"non-object metadata must be 400 (got %d): %s", putRec.Code, putRec.Body.String())
@@ -749,7 +749,7 @@ func TestPutAsset_LooseDateForms_Rejected400(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			body := fmt.Sprintf(`{"%s":%s}`, tc.field, tc.bodyValue)
-			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(body)))
+			req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(body)))
 			req.Header.Set("Content-Type", "application/json")
 			req = withRoundTripOrgContext(req, orgID)
 			rec := httptest.NewRecorder()
@@ -830,11 +830,11 @@ func TestPutAsset_MetadataObject_Accepted(t *testing.T) {
 	router := setupRoundTripRouter(handler)
 
 	body := []byte(`{"metadata":{"foo":"bar","n":1}}`)
-	putReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
-	putReq.Header.Set("Content-Type", "application/json")
-	putReq = withRoundTripOrgContext(putReq, orgID)
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
-	router.ServeHTTP(putRec, putReq)
+	router.ServeHTTP(putRec, patchReq)
 
 	require.Equal(t, http.StatusOK, putRec.Code,
 		"object metadata must be accepted: %s", putRec.Body.String())

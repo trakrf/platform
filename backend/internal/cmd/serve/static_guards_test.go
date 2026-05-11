@@ -42,7 +42,7 @@ func reproRouter(useGuards bool) *chi.Mux {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	r.Put("/api/v1/assets/{asset_id}", func(w http.ResponseWriter, req *http.Request) {
+	r.Patch("/api/v1/assets/{asset_id}", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	r.Delete("/api/v1/assets/{asset_id}", func(w http.ResponseWriter, req *http.Request) {
@@ -111,28 +111,28 @@ func TestStaticGuards_RetiredPath_ReturnsConsistent404(t *testing.T) {
 
 // TestStaticGuards_RetiredPath_BugReproductionWithoutGuards — the same
 // requests against the unguarded router exhibit the routing-precedence bug:
-// PUT/DELETE return 400 (matched the sibling /{id} handler) and POST/PATCH
-// return 405 with a misleading Allow header that names PUT and DELETE.
+// PATCH/DELETE return 400 (matched the sibling /{id} handler) and POST/PUT
+// return 405 with a misleading Allow header that names PATCH and DELETE.
 // This test pins the bug so a future refactor cannot silently re-introduce
 // it.
 func TestStaticGuards_RetiredPath_BugReproductionWithoutGuards(t *testing.T) {
 	mux := reproRouter(false)
 
-	t.Run("PUT falls through to {id}", func(t *testing.T) {
-		rec := runReq(t, mux, http.MethodPut, "/api/v1/assets/lookup")
-		// Without guards PUT matches /{asset_id} and runs the put handler
+	t.Run("PATCH falls through to {id}", func(t *testing.T) {
+		rec := runReq(t, mux, http.MethodPatch, "/api/v1/assets/lookup")
+		// Without guards PATCH matches /{asset_id} and runs the patch handler
 		// (which returns 200 in this stand-in). The bug isn't 200 per se —
 		// it's that "lookup" was never an id. With register404Static the
 		// guard wins.
 		assert.Equal(t, http.StatusOK, rec.Code,
-			"baseline: PUT /lookup matches the {asset_id} handler, not the static path")
+			"baseline: PATCH /lookup matches the {asset_id} handler, not the static path")
 	})
 
 	t.Run("POST returns 405 with misleading Allow", func(t *testing.T) {
 		rec := runReq(t, mux, http.MethodPost, "/api/v1/assets/lookup")
 		require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 		allow := rec.Header().Get("Allow")
-		assert.Contains(t, allow, "PUT",
+		assert.Contains(t, allow, "PATCH",
 			"baseline: 405 lies about supported methods because computeAllowedMethods probes /{asset_id}")
 		assert.Contains(t, allow, "DELETE")
 	})

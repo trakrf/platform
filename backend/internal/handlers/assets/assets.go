@@ -141,7 +141,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// TRA-514 / TRA-650 (BB23 F3): external_key is optional only by *omission*
 	// — an absent key triggers the server auto-mint of ASSET-NNNN. When the
 	// caller sends `external_key` explicitly, it must validate (min=1 +
-	// pattern) to match the PUT validator on UpdateAssetRequest.external_key.
+	// pattern) to match the PATCH validator on UpdateAssetRequest.external_key.
 	// An explicit empty string returns 400 too_short; whitespace-only fails
 	// the pattern check with 400 invalid_value. The struct field is non-pointer
 	// so encoding/json cannot distinguish absent from explicit-empty on its own
@@ -196,13 +196,13 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Update mutable fields on an existing asset. Only fields included in the request body are changed.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Tags are read-only via this endpoint; mutate via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
 // @Produce      json
 // @Param        asset_id path  int                       true  "Asset id (canonical)" minimum(1) maximum(9007199254740991)
-// @Param        request  body  asset.UpdateAssetRequest  true  "Fields to update"
+// @Param        request  body  asset.UpdateAssetRequest  true  "Fields to merge-patch"
 // @Success      200  {object}  assets.UpdateAssetResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
@@ -213,7 +213,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
 // @Security     BearerAuth[assets:write]
-// @Router       /api/v1/assets/{asset_id} [put]
+// @Router       /api/v1/assets/{asset_id} [patch]
 func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 	reqID := middleware.GetRequestID(req.Context())
 
@@ -242,7 +242,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	// valid_from / external_key / name are non-nullable on the read view; an
-	// explicit null in the PUT body is a validation error, not a clear-request.
+	// explicit null in the PATCH body is a validation error, not a clear-request.
 	for _, f := range []string{"valid_from", "external_key", "name", "is_active", "metadata"} {
 		if _, ok := explicitNulls[f]; ok {
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
@@ -260,7 +260,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		request.ClearValidTo = true
 	}
 	// description, location_id, location_external_key are read-side-nullable
-	// per PublicAssetView. An explicit null on PUT clears the corresponding
+	// per PublicAssetView. An explicit null on PATCH clears the corresponding
 	// column, per TRA-614 / BB19 §S1. location_id and location_external_key
 	// are alternate references to the same FK (current_location_id), so a
 	// null on either implies clearing that FK; conflicting forms (one null,
@@ -430,7 +430,7 @@ type CreateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
 
-// UpdateAssetResponse is the typed envelope returned by PUT /api/v1/assets/{asset_id}.
+// UpdateAssetResponse is the typed envelope returned by PATCH /api/v1/assets/{asset_id}.
 type UpdateAssetResponse struct {
 	Data asset.PublicAssetView `json:"data"`
 }
