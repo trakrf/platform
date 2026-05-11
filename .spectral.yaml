@@ -59,8 +59,11 @@ rules:
       spec previously declared int64 bounds on int4-backed columns, which
       triggered 500s with the raw pgx driver error in the response body.
       Spec numeric bounds must match int4 storage.
-    message: "{{property}}: *_id path params must declare format:int32 AND maximum:2147483647 (BB27 F1/S1)"
+    message: "*_id path params must declare format:int32 AND maximum:2147483647 — int4 storage overflow (BB27 F1/S1)"
     severity: error
+    # NOTE for future rule authors: Spectral uses the nimma JSONPath engine for
+    # `given` evaluation. nimma does NOT support `=~` (jsonpath-plus regex
+    # operator). Use `.match(/<pattern>/)` method syntax instead, as below.
     given:
       # Operation-level path params (all current params are at this level)
       - "$.paths.*.*.parameters[?(@.in == 'path' && (@.name == 'id' || @.name.match(/_id$/)))].schema"
