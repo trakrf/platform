@@ -172,9 +172,16 @@ test-contract:
     fi
 
     # 8. Run Schemathesis (docker, v4 CLI)
+    #
+    # The image runs as a non-root user; with a host bind mount the container
+    # can't write report files unless we either chmod the host dir 0777 or
+    # pin the container UID to the invoker. Pin --user to match: local devs
+    # get reports owned by themselves, CI gets reports owned by the runner.
     echo "🧪 Running schemathesis..."
     mkdir -p "$REPO_ROOT/backend/contract-tests"
+    chmod 0777 "$REPO_ROOT/backend/contract-tests"
     docker run --rm --network host \
+        --user "$(id -u):$(id -g)" \
         -v "$REPO_ROOT/docs/api/openapi.public.yaml:/spec.yaml:ro" \
         -v "$REPO_ROOT/backend/contract-tests:/out" \
         schemathesis/schemathesis:4.18.2 \
