@@ -23,6 +23,14 @@ func sanitizeDetail(detail string) string {
 	return modulePathPattern.ReplaceAllString(detail, "[internal]")
 }
 
+// genericServerErrorDetail is the only detail string a 5xx response is
+// allowed to expose to the client. TRA-673 / BB27 F1: pgx and other DB
+// driver errors carry implementation details (column types, OIDs, binary
+// encoding diagnostics) that fingerprint the stack and fail security
+// review. The raw cause is still slog'd server-side with the request_id
+// for correlation.
+const genericServerErrorDetail = "An unexpected error occurred"
+
 type ErrorResponse struct {
 	Error struct {
 		Type      string              `json:"type"`
@@ -45,14 +53,19 @@ type ErrorResponse struct {
 //     the type alone fully describes the condition.
 //
 // Module paths in detail are scrubbed before the response is written so that
-// internal package structure cannot leak through wrapped errors.
+// internal package structure cannot leak through wrapped errors. 5xx
+// responses additionally replace detail with a fixed generic message
+// (TRA-673) so DB driver internals — pgx int4-encoding diagnostics, OIDs,
+// SQLSTATE chatter — never reach the client. The original detail is
+// retained in the server-side slog record for debugging.
 func WriteJSONError(w http.ResponseWriter, r *http.Request, status int, errType errors.ErrorType, detail, requestID string) {
+	rawDetail := detail
 	detail = sanitizeDetail(detail)
+
 	resp := ErrorResponse{}
 	resp.Error.Type = string(errType)
 	resp.Error.Title = errors.TitleForType(errType)
 	resp.Error.Status = status
-	resp.Error.Detail = detail
 	resp.Error.Instance = r.URL.Path
 	resp.Error.RequestID = requestID
 
@@ -60,10 +73,12 @@ func WriteJSONError(w http.ResponseWriter, r *http.Request, status int, errType 
 		slog.Error("Error response",
 			"status", status,
 			"type", errType,
-			"detail", detail,
+			"detail", rawDetail,
 			"request_id", requestID,
 			"path", r.URL.Path)
+		resp.Error.Detail = genericServerErrorDetail
 	} else {
+		resp.Error.Detail = detail
 		slog.Info("Client error",
 			"status", status,
 			"type", errType,

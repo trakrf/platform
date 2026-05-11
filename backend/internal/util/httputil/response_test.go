@@ -13,10 +13,10 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
-// AC6: github.com/... module paths must not appear in the error.detail surface.
-// Sanitize at the WriteJSONError boundary so every error response is scrubbed
-// regardless of how the underlying error was wrapped.
-func TestWriteJSONError_StripsTrakrfModulePathFromDetail(t *testing.T) {
+// TRA-673 / BB27 F1: 5xx responses must collapse to a fixed generic detail.
+// pgx and other DB-driver internals previously leaked via raw err.Error()
+// pass-through. The full cause stays in server-side logs for debugging.
+func TestWriteJSONError_5xxReplacesDetailWithGenericMessage(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
 
@@ -26,38 +26,47 @@ func TestWriteJSONError_StripsTrakrfModulePathFromDetail(t *testing.T) {
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	assert.NotContains(t, resp.Error.Detail, "github.com/", "module path must be scrubbed from detail")
-	assert.NotContains(t, resp.Error.Detail, "trakrf/platform", "internal package structure must not leak")
-	assert.Contains(t, resp.Error.Detail, "connection refused", "underlying cause must remain visible")
+	assert.Equal(t, "An unexpected error occurred", resp.Error.Detail)
+	assert.NotContains(t, resp.Error.Detail, "connection refused", "underlying cause must not reach client on 5xx")
+	assert.NotContains(t, resp.Error.Detail, "github.com/", "internal package structure must not leak")
 }
 
-func TestWriteJSONError_StripsThirdPartyModulePathFromDetail(t *testing.T) {
+func TestWriteJSONError_5xxScrubsPgxDriverString(t *testing.T) {
+	// TRA-668 reproducer: pgx int4-encoding failure string must not reach
+	// the client. OID and column-type fingerprinting are information
+	// disclosure that fails security review.
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
+	r := httptest.NewRequest("GET", "/api/v1/assets/2147483648", nil)
 
-	detail := "scan failed: github.com/jackc/pgx/v5.errBadConn"
-	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, detail, "req-1")
+	detail := "failed to encode args[0]: unable to encode 2147483648 into binary format for int4 (OID 23): 2147483648 is greater than maximum value for int4"
+	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, detail, "req-pgx")
 
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	assert.NotContains(t, resp.Error.Detail, "github.com/", "third-party module paths also scrubbed")
+	assert.Equal(t, "An unexpected error occurred", resp.Error.Detail)
+	assert.NotContains(t, resp.Error.Detail, "int4")
+	assert.NotContains(t, resp.Error.Detail, "OID")
+	assert.NotContains(t, resp.Error.Detail, "encode")
+	assert.Equal(t, "req-pgx", resp.Error.RequestID, "request_id stays for log correlation")
 }
 
-func TestWriteJSONError_StripsNonGithubModulePathFromDetail(t *testing.T) {
+func TestWriteJSONError_5xxKeepsEnvelopeShape(t *testing.T) {
+	// Replacing detail must not strip the rest of the RFC 7807 envelope —
+	// type/title/status/instance/request_id must all still render.
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/assets", nil)
 
-	// Sanitizer matches host/path shape, not a literal hostname, so vanity
-	// imports and other forges are scrubbed too.
-	detail := "scan failed: golang.org/x/sync/singleflight.Group: deadlock"
-	httputil.WriteJSONError(w, r, 500, apierrors.ErrInternal, detail, "req-1")
+	httputil.WriteJSONError(w, r, 503, apierrors.ErrInternal, "upstream timeout", "req-503")
 
 	var resp httputil.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	assert.NotContains(t, resp.Error.Detail, "golang.org/", "vanity-host module path scrubbed")
-	assert.Contains(t, resp.Error.Detail, "deadlock", "underlying cause remains visible")
+	assert.Equal(t, string(apierrors.ErrInternal), resp.Error.Type)
+	assert.Equal(t, 503, resp.Error.Status)
+	assert.Equal(t, "/api/v1/assets", resp.Error.Instance)
+	assert.Equal(t, "req-503", resp.Error.RequestID)
+	assert.Equal(t, "An unexpected error occurred", resp.Error.Detail)
 }
 
 func TestWriteJSONError_LeavesPlainDetailUntouched(t *testing.T) {

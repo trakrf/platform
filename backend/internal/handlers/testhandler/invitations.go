@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -33,7 +32,7 @@ func NewHandler(storage *storage.Storage) *Handler {
 // GET /test/invitations/{id}/token
 // Returns: {"token": "abc123..."}
 func (h *Handler) GetInvitationToken(w http.ResponseWriter, r *http.Request) {
-	inviteID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	inviteID, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "Invalid invitation ID", http.StatusBadRequest)
 		return
