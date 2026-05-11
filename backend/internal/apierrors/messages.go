@@ -85,16 +85,6 @@ const (
 	LocationCountFailed      = "Failed to count locations"
 )
 
-// Identifier (tag) error messages
-const (
-	IdentifierDuplicateValue = "Identifier with this type and value already exists"
-	IdentifierInvalidType    = "Identifier type must be rfid, ble, or barcode"
-	IdentifierCreateFailed   = "Failed to create identifier"
-	IdentifierNotFound       = "Identifier not found"
-	IdentifierDeleteFailed   = "Failed to delete identifier"
-	IdentifierInvalidID      = "Invalid identifier ID: %s"
-)
-
 // Lookup error messages
 const (
 	LookupFailed   = "Failed to lookup tag"

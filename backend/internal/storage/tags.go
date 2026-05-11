@@ -224,14 +224,14 @@ func parseTagError(err error, tagType, value string) error {
 	if pgErr, ok := err.(*pgconn.PgError); ok {
 		switch pgErr.ConstraintName {
 		case "tags_org_id_type_value_unique":
-			return fmt.Errorf("identifier %s:%s already exists", tagType, value)
+			return fmt.Errorf("tag %s:%s already exists", tagType, value)
 		case "tag_target":
 			return fmt.Errorf("tag must be linked to exactly one asset or location")
 		}
 	}
 
 	if strings.Contains(err.Error(), "duplicate key") {
-		return fmt.Errorf("identifier %s:%s already exists", tagType, value)
+		return fmt.Errorf("tag %s:%s already exists", tagType, value)
 	}
 
 	return fmt.Errorf("failed to create tag: %w", err)

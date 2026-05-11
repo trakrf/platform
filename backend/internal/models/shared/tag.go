@@ -1,6 +1,6 @@
 package shared
 
-const DefaultIdentifierType = "rfid"
+const DefaultTagType = "rfid"
 
 type Tag struct {
 	ID       int    `json:"id"`
@@ -16,7 +16,7 @@ type TagRequest struct {
 
 func (t TagRequest) GetType() string {
 	if t.TagType == "" {
-		return DefaultIdentifierType
+		return DefaultTagType
 	}
 	return t.TagType
 }
