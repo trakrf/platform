@@ -84,12 +84,11 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
+		// external_key is immutable via UpdateLocation (TRA-664); the only
+		// uniqueness collision reachable here would be a future-added
+		// unique column. Keep the generic conflict error.
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			externalKey := "unknown"
-			if request.ExternalKey != nil {
-				externalKey = *request.ExternalKey
-			}
-			return nil, fmt.Errorf("location with external_key %s already exists", externalKey)
+			return nil, fmt.Errorf("location update conflicts with an existing unique constraint")
 		}
 		if strings.Contains(err.Error(), "parent_location_id_fkey") {
 			return nil, fmt.Errorf("invalid parent_location_id: parent location does not exist")
@@ -98,6 +97,77 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 	}
 
 	return s.getLocationWithParentByID(ctx, orgID, updatedID)
+}
+
+// RenameLocation mutates the location's external_key. The DB trigger
+// cascade_location_path_change (migration 000038) rewrites tree_path on
+// this row and every descendant inside the same statement, so the whole
+// cascade is atomic with the rename. Returns the updated row plus the
+// count of descendant rows whose tree_path changed (does not include this
+// row itself; same-value rename returns 0). TRA-664 / BB26 D7.
+func (s *Storage) RenameLocation(ctx context.Context, orgID, id int, newExternalKey string) (*location.LocationWithParent, int, error) {
+	var updatedID int
+	var descendantCount int
+
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		var currentKey string
+		err := tx.QueryRow(ctx, `
+			SELECT external_key FROM trakrf.locations
+			WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+		`, id, orgID).Scan(&currentKey)
+		if err != nil {
+			return err
+		}
+
+		// Same-value rename: nothing changes, no cascade fires.
+		// descendant_count_affected stays 0 because no tree_path changed.
+		if currentKey == newExternalKey {
+			updatedID = id
+			return nil
+		}
+
+		// Count live descendants BEFORE the update. Soft-deleted rows are
+		// excluded because their tree_path is no longer observable through
+		// the public API; integrators don't need to re-fetch a subtree
+		// they can't see.
+		err = tx.QueryRow(ctx, `
+			SELECT count(*)
+			FROM trakrf.locations
+			WHERE org_id = $1
+			  AND deleted_at IS NULL
+			  AND id != $2
+			  AND path <@ (
+			      SELECT path FROM trakrf.locations
+			      WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
+			  )
+		`, orgID, id).Scan(&descendantCount)
+		if err != nil {
+			return err
+		}
+
+		return tx.QueryRow(ctx, `
+			UPDATE trakrf.locations
+			SET external_key = $3, updated_at = NOW()
+			WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+			RETURNING id
+		`, id, orgID, newExternalKey).Scan(&updatedID)
+	})
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, 0, nil
+		}
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			return nil, 0, fmt.Errorf("location with external_key %s already exists", newExternalKey)
+		}
+		return nil, 0, fmt.Errorf("failed to rename location: %w", err)
+	}
+
+	loc, err := s.getLocationWithParentByID(ctx, orgID, updatedID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return loc, descendantCount, nil
 }
 
 func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location.Location, error) {
@@ -1011,9 +1081,8 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
-	if req.ExternalKey != nil {
-		fields["external_key"] = *req.ExternalKey
-	}
+	// external_key is intentionally not writable via UpdateLocationRequest
+	// (TRA-664 / BB26 D7); see RenameLocation for that path.
 	// parent_location_id is nullable in the DB; SQL NULL on clear.
 	if req.ClearParentID {
 		fields["parent_location_id"] = nil

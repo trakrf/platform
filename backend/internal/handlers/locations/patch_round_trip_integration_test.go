@@ -87,10 +87,13 @@ func TestPutLocation_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	}
 
 	// Mutate name and PUT back. `tags` is managed via /locations/{id}/tags
-	// and must be stripped (TRA-643); other read-only fields stay on the
-	// body to exercise the round-trip-safe drop list.
+	// and must be stripped (TRA-643); `external_key` is immutable and must
+	// be stripped (TRA-664 / BB26 D7 — POST /locations/{id}/rename is the
+	// dedicated path). Other read-only fields stay on the body to exercise
+	// the round-trip-safe drop list (id, created_at, updated_at, tree_path, depth).
 	getResp.Data["name"] = "Warehouse 1 (renamed)"
 	delete(getResp.Data, "tags")
+	delete(getResp.Data, "external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 

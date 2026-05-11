@@ -125,17 +125,48 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
+		// external_key is immutable via UpdateAsset (TRA-664); the only
+		// uniqueness collision reachable here would be a future-added
+		// unique column. Keep the generic conflict error.
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			externalKey := "unknown"
-			if request.ExternalKey != nil {
-				externalKey = *request.ExternalKey
-			}
-			return nil, fmt.Errorf("asset with external_key %s already exists", externalKey)
+			return nil, fmt.Errorf("asset update conflicts with an existing unique constraint")
 		}
 		if strings.Contains(err.Error(), "current_location_id_fkey") {
 			return nil, fmt.Errorf("invalid location_id: location does not exist")
 		}
 		return nil, fmt.Errorf("failed to update asset: %w", err)
+	}
+
+	return s.getAssetWithLocationByID(ctx, orgID, updatedID)
+}
+
+// RenameAsset mutates the asset's external_key (natural / join key). TRA-664
+// / BB26 D7: this is the only path for changing external_key — PATCH
+// rejects the field as immutable. Uniqueness is enforced by the assets
+// table's UNIQUE (org_id, external_key) constraint; collisions surface as
+// "already exists" so the handler can map them to 409 conflict, matching
+// CreateAsset's behavior.
+func (s *Storage) RenameAsset(ctx context.Context, orgID, id int, newExternalKey string) (*asset.AssetWithLocation, error) {
+	query := `
+		UPDATE trakrf.assets
+		SET external_key = $3, updated_at = NOW()
+		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+		RETURNING id
+	`
+
+	var updatedID int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id, orgID, newExternalKey).Scan(&updatedID)
+	})
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			return nil, fmt.Errorf("asset with external_key %s already exists", newExternalKey)
+		}
+		return nil, fmt.Errorf("failed to rename asset: %w", err)
 	}
 
 	return s.getAssetWithLocationByID(ctx, orgID, updatedID)
@@ -387,10 +418,8 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 
 	// Note: OrgID is intentionally NOT writable via UpdateAssetRequest.
 	// The owning org is fixed at creation; ownership transfers must use
-	// dedicated tooling, never a public PATCH body.
-	if req.ExternalKey != nil {
-		fields["external_key"] = *req.ExternalKey
-	}
+	// dedicated tooling, never a public PATCH body. external_key is also
+	// not writable here (TRA-664 / BB26 D7); see RenameAsset for that path.
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}

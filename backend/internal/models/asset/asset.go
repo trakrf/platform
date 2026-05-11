@@ -65,8 +65,13 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_del
 // §S1). Each null surfaces here as a Clear* sentinel set by the handler;
 // the underlying pointer remains nil because Go's json decoder treats
 // `null` and "omitted" the same on pointer fields.
+//
+// external_key is intentionally NOT on this struct (TRA-664 / BB26 D7). It
+// is the natural / join key downstream systems rely on; mutating it via a
+// generic PATCH would silently disconnect those joins. The handler rejects
+// any external_key in the PATCH body with code=immutable_field and a
+// pointer to POST /api/v1/assets/{asset_id}/rename.
 type UpdateAssetRequest struct {
-	ExternalKey         *string              `json:"external_key" validate:"omitempty,min=1,max=255,external_key_pattern"`
 	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`
 	Description         *string              `json:"description" validate:"omitempty,max=1024"`
 	LocationID          *int                 `json:"location_id" example:"42"`
@@ -81,6 +86,22 @@ type UpdateAssetRequest struct {
 	ClearValidTo     bool  `json:"-" swaggerignore:"true"`
 	Metadata         *any  `json:"metadata"`
 	IsActive         *bool `json:"is_active"`
+}
+
+// PublicImmutablePatchFields maps the JSON keys that PATCH /api/v1/assets/{id}
+// must reject to the dedicated operation that can mutate them. Source of
+// truth for the handler's RejectImmutableFields call; mirrors the
+// UpdateAssetRequest schema's deliberate omission of these keys. TRA-664.
+var PublicImmutablePatchFields = map[string]string{
+	"external_key": "POST /api/v1/assets/{asset_id}/rename",
+}
+
+// RenameAssetRequest is the body of POST /api/v1/assets/{asset_id}/rename
+// (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation
+// explicit and discoverable in URL surfaces, audit logs, and generated
+// client method names.
+type RenameAssetRequest struct {
+	ExternalKey string `json:"external_key" validate:"required,min=1,max=255,external_key_pattern" example:"ASSET-0042"`
 }
 
 type AssetListResponse struct {

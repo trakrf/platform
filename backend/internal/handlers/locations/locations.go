@@ -201,6 +201,15 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
+	// TRA-664 / BB26 D7: external_key is immutable via PATCH. Reject any body
+	// that mentions it (value or null) with code=immutable_field and a
+	// pointer to the rename operation. Run before strict decode so the
+	// dedicated error code wins over the "unknown field" code that strict
+	// decode would otherwise emit.
+	if httputil.RejectImmutableFields(w, req, reqID, location.PublicImmutablePatchFields) {
+		return
+	}
+
 	var request location.UpdateLocationRequest
 	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, location.PublicReadOnlyFields)
 	if err != nil {
@@ -208,9 +217,11 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	// valid_from / external_key / name are non-nullable on the read view; an
-	// explicit null in the PATCH body is a validation error, not a clear-request.
-	for _, f := range []string{"valid_from", "external_key", "name", "is_active"} {
+	// valid_from / name are non-nullable on the read view; an explicit null
+	// in the PATCH body is a validation error, not a clear-request.
+	// (external_key is rejected earlier as an immutable field; absent from
+	// this list because it cannot reach here.)
+	for _, f := range []string{"valid_from", "name", "is_active"} {
 		if _, ok := explicitNulls[f]; ok {
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 				"validation failed", reqID,
@@ -406,6 +417,85 @@ type CreateLocationResponse struct {
 
 type UpdateLocationResponse struct {
 	Data location.PublicLocationView `json:"data"`
+}
+
+// RenameLocationResponse is the typed envelope returned by
+// POST /api/v1/locations/{location_id}/rename. `descendant_count_affected`
+// reports the number of descendant rows whose tree_path was rewritten by
+// the rename cascade so integrators can decide whether to re-fetch the
+// subtree. Does not include the renamed row itself; same-value rename
+// returns 0. TRA-664.
+type RenameLocationResponse struct {
+	Data                    location.PublicLocationView `json:"data"`
+	DescendantCountAffected int                         `json:"descendant_count_affected" example:"7"`
+}
+
+// @Summary      Rename a location (mutate external_key + cascade tree_path)
+// @Description  **Required scope:** `locations:write`
+// @Description
+// @Description  Mutate the location's `external_key`. This operation is **destructive to downstream joins** and regenerates `tree_path` for this row and every descendant in a single transaction.
+// @Description
+// @Description  The response includes `descendant_count_affected` so an integrator can decide whether to re-fetch the subtree. `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).
+// @Tags         locations,public
+// @ID           locations.rename
+// @Accept       json
+// @Produce      json
+// @Param        location_id path  int                              true  "Location ID" minimum(1) maximum(9007199254740991)
+// @Param        request     body  location.RenameLocationRequest   true  "New external_key"
+// @Success      200  {object}  locations.RenameLocationResponse
+// @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
+// @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
+// @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
+// @Failure      404  {object}  modelerrors.ErrorResponse     "not_found"
+// @Failure      409  {object}  modelerrors.ErrorResponse     "conflict"
+// @Failure      415  {object}  modelerrors.ErrorResponse     "unsupported_media_type"
+// @Failure      429  {object}  modelerrors.ErrorResponse     "rate_limited"
+// @Failure      500  {object}  modelerrors.ErrorResponse     "internal_error"
+// @Security     BearerAuth[locations:write]
+// @Router       /api/v1/locations/{location_id}/rename [post]
+func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
+	reqID := middleware.GetRequestID(req.Context())
+
+	orgID, err := middleware.GetRequestOrgID(req)
+	if err != nil {
+		httputil.RespondMissingOrgContext(w, req, reqID)
+		return
+	}
+
+	id, ok := handler.parseAndVerifyLocationID(w, req, orgID, reqID)
+	if !ok {
+		return
+	}
+
+	var request location.RenameLocationRequest
+	if err := httputil.DecodeJSONStrict(req, &request); err != nil {
+		httputil.RespondDecodeError(w, req, err, reqID)
+		return
+	}
+	if err := validate.Struct(request); err != nil {
+		httputil.RespondValidationError(w, req, err, reqID)
+		return
+	}
+
+	result, descendantCount, err := handler.storage.RenameLocation(req.Context(), orgID, id, request.ExternalKey)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exist") {
+			httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict,
+				err.Error(), reqID)
+			return
+		}
+		httputil.RespondStorageError(w, req, err, reqID)
+		return
+	}
+	if result == nil {
+		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"data":                      location.ToPublicLocationView(*result),
+		"descendant_count_affected": descendantCount,
+	})
 }
 
 type ListAncestorsResponse struct {

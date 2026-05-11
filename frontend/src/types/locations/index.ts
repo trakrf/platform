@@ -51,9 +51,14 @@ export interface CreateLocationRequest {
   metadata?: Record<string, any>;
 }
 
+/**
+ * external_key is intentionally omitted: it is immutable on PATCH
+ * (TRA-664 / BB26 D7). Use the dedicated rename operation
+ * (POST /api/v1/locations/{location_id}/rename) when the natural key must
+ * change.
+ */
 export interface UpdateLocationRequest {
   name?: string;
-  external_key?: string;
   parent_id?: number | null;
   parent_external_key?: string | null;
   description?: string;

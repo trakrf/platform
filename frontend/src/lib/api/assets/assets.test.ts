@@ -233,18 +233,22 @@ describe('assetsApi', () => {
       });
     });
 
-    it('should handle 409 duplicate identifier errors', async () => {
+    it('should propagate 409 conflict errors from PATCH', async () => {
+      // 409 on PATCH is residual surface (e.g. future uniqueness columns);
+      // external_key collisions specifically surface via the rename
+      // operation now (TRA-664). Test pins that conflict errors still
+      // propagate cleanly to callers.
       const mockError = {
         response: {
           status: 409,
-          data: { error: { detail: 'Duplicate identifier' } },
+          data: { error: { detail: 'Conflict' } },
         },
       };
 
       vi.mocked(apiClient.patch).mockRejectedValue(mockError);
 
       await expect(
-        assetsApi.update(1, { external_key: 'DUP-001' })
+        assetsApi.update(1, { name: 'New Name' })
       ).rejects.toMatchObject(mockError);
     });
   });

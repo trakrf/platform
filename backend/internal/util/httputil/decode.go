@@ -118,6 +118,59 @@ func DecodeJSONStrictWithNullsTolerantAndPresence(r *http.Request, dst any, drop
 	return decodeStrictWithNullsTolerant(r, dst, drop)
 }
 
+// RejectImmutableFields peeks at the request body for any of the named
+// top-level keys and, if any are present, writes a 400 validation_error with
+// code=immutable_field for each match. Returns true if the response was
+// written and the caller should return; false if the body is clean (and
+// r.Body has been replaced with a fresh reader that the downstream decoder
+// can still consume).
+//
+// `fields` maps the JSON key being rejected to the operation pointer that
+// should appear in the error message (e.g. "POST /api/v1/assets/{asset_id}/rename").
+// A non-object body is left to the downstream decoder.
+//
+// TRA-664 / BB26 D7: enforces external_key immutability on PATCH without
+// silently dropping the field on the server side — silent drops would let
+// integrators mutate keys they think changed.
+func RejectImmutableFields(w http.ResponseWriter, r *http.Request, requestID string, fields map[string]string) bool {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
+			"Request body could not be read", requestID)
+		return true
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(body, &raw) != nil {
+		// Not an object body — downstream decoder will surface the parse error.
+		return false
+	}
+
+	var violations []apierrors.FieldError
+	for field, renameOp := range fields {
+		if _, present := raw[field]; !present {
+			continue
+		}
+		violations = append(violations, apierrors.FieldError{
+			Field:   field,
+			Code:    "immutable_field",
+			Message: fmt.Sprintf("%s is immutable; use %s to change it", field, renameOp),
+		})
+	}
+	if len(violations) == 0 {
+		return false
+	}
+
+	// Detail: take the first violation. Most callers only ever list one
+	// immutable field per resource, and even when several appear, branching
+	// happens on fields[].code, not the detail string.
+	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
+		fmt.Sprintf("%s cannot be mutated via PATCH; use %s instead", violations[0].Field, fields[violations[0].Field]),
+		requestID, violations)
+	return true
+}
+
 func decodeStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map[string]struct{}, map[string]struct{}, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

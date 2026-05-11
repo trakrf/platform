@@ -26,6 +26,8 @@ const (
 //   - invalid_value (from oneof tag): allowed_values []any (string elements)
 //   - too_short / too_long (min/max on string/slice): min_length / max_length float64
 //   - too_small / too_large (min/max/gte/lte on numeric): min / max float64
+//   - immutable_field (TRA-664 / BB26 D7): no params; the message carries a
+//     pointer to the dedicated operation that can mutate the field.
 //
 // Numeric values are float64 so that both integer constraints ("8") and
 // fractional constraints ("1.5") parse without loss. JSON numbers decode to
@@ -35,7 +37,7 @@ const (
 // Params is omitted entirely when no structured data is available.
 type FieldError struct {
 	Field   string         `json:"field"`
-	Code    string         `json:"code" example:"required" enums:"required,invalid_value,too_short,too_long,too_small,too_large" extensions:"x-extensible-enum=true"`
+	Code    string         `json:"code" example:"required" enums:"required,invalid_value,too_short,too_long,too_small,too_large,immutable_field" extensions:"x-extensible-enum=true"`
 	Message string         `json:"message"`
 	Params  map[string]any `json:"params,omitempty"`
 }
