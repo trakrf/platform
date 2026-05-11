@@ -52,8 +52,10 @@ type ListCurrentLocationsResponse struct {
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
 // @Failure 403 {object} modelerrors.ErrorResponse
+// @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
+// @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth[history:read]
 // @Router /api/v1/reports/asset-locations [get]
 func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {

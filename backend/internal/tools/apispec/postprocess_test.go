@@ -168,35 +168,40 @@ func TestPostprocess_InjectsDeprecationComponents(t *testing.T) {
 	assert.Equal(t, "#/components/schemas/errors.ErrorResponse", media.Schema.Ref)
 }
 
-// TestPostprocess_MarksResponseSchemasAdditive covers TRA-646 BB22 S4:
-// the Versioning page commits to additive-stable evolution; every public
-// response model must declare additionalProperties:true so codegens whose
-// default is strict accept unknown fields.
-func TestPostprocess_MarksResponseSchemasAdditive(t *testing.T) {
+// TestPostprocess_StripsResponseSchemasAdditive covers TRA-668 BB27 S8 /
+// TRA-672: the explicit `additionalProperties: true` swag emits on every
+// response object caused some generators to emit wrapper classes instead
+// of clean Record<string,unknown> types. The strip pass removes the
+// literal `:true` so the schema falls back to OpenAPI 3.0's permissive
+// default, preserving additive evolution without the codegen drag.
+func TestPostprocess_StripsResponseSchemasAdditive(t *testing.T) {
+	tr := true
 	doc := docWithSchemas(openapi3.Schemas{
 		"asset.PublicAssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
-			Type: &openapi3.Types{openapi3.TypeObject},
+			Type:                 &openapi3.Types{openapi3.TypeObject},
+			AdditionalProperties: openapi3.AdditionalProperties{Has: &tr},
 		}},
 		"location.PublicLocationView": &openapi3.SchemaRef{Value: &openapi3.Schema{
-			Type: &openapi3.Types{openapi3.TypeObject},
+			Type:                 &openapi3.Types{openapi3.TypeObject},
+			AdditionalProperties: openapi3.AdditionalProperties{Has: &tr},
 		}},
 	})
 
-	err := markResponseSchemasAdditive(doc, []string{"asset.PublicAssetView", "location.PublicLocationView"})
+	err := stripResponseSchemasAdditive(doc, []string{"asset.PublicAssetView", "location.PublicLocationView"})
 	require.NoError(t, err)
 
 	for _, name := range []string{"asset.PublicAssetView", "location.PublicLocationView"} {
 		ref := doc.Components.Schemas[name]
-		require.NotNil(t, ref.Value.AdditionalProperties.Has, "%s must set additionalProperties bool", name)
-		assert.True(t, *ref.Value.AdditionalProperties.Has, "%s must be additive", name)
+		assert.Nil(t, ref.Value.AdditionalProperties.Has, "%s must have additionalProperties:true stripped", name)
+		assert.Nil(t, ref.Value.AdditionalProperties.Schema, "%s structured form must remain unset", name)
 	}
 }
 
-// TestPostprocess_MarksResponseSchemasAdditive_PreservesStructured verifies
-// the pass does not clobber a schema that already declares a structured
+// TestPostprocess_StripsResponseSchemasAdditive_PreservesStructured verifies
+// the strip pass does not clobber a schema that already declares a structured
 // additionalProperties (e.g. errors.FieldError.params, which carries
 // `additionalProperties: {}` from swag).
-func TestPostprocess_MarksResponseSchemasAdditive_PreservesStructured(t *testing.T) {
+func TestPostprocess_StripsResponseSchemasAdditive_PreservesStructured(t *testing.T) {
 	preset := &openapi3.SchemaRef{Value: &openapi3.Schema{
 		Type: &openapi3.Types{openapi3.TypeObject},
 	}}
@@ -208,17 +213,17 @@ func TestPostprocess_MarksResponseSchemasAdditive_PreservesStructured(t *testing
 		Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema()},
 	}
 
-	require.NoError(t, markResponseSchemasAdditive(doc, []string{"asset.PublicAssetView"}))
+	require.NoError(t, stripResponseSchemasAdditive(doc, []string{"asset.PublicAssetView"}))
 	assert.NotNil(t, preset.Value.AdditionalProperties.Schema, "structured additionalProperties must survive")
 	assert.Nil(t, preset.Value.AdditionalProperties.Has, "Has must remain unset when Schema is preserved")
 }
 
-// TestPostprocess_MarksResponseSchemasAdditive_MissingSchemaErrors locks in
+// TestPostprocess_StripsResponseSchemasAdditive_MissingSchemaErrors locks in
 // the safety guard: a stale entry in publicResponseSchemas breaks the
 // build instead of going silently unenforced.
-func TestPostprocess_MarksResponseSchemasAdditive_MissingSchemaErrors(t *testing.T) {
+func TestPostprocess_StripsResponseSchemasAdditive_MissingSchemaErrors(t *testing.T) {
 	doc := docWithSchemas(openapi3.Schemas{})
-	err := markResponseSchemasAdditive(doc, []string{"asset.GhostView"})
+	err := stripResponseSchemasAdditive(doc, []string{"asset.GhostView"})
 	require.Error(t, err, "missing schema must surface as an error")
 	assert.Contains(t, err.Error(), "asset.GhostView")
 }
@@ -277,7 +282,11 @@ func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
 	postprocessPublic(doc)
 
 	assert.Equal(t, "TrakRF API", doc.Info.Title)
-	assert.Equal(t, "v1", doc.Info.Version)
+	assert.Equal(t, "1.0.0", doc.Info.Version,
+		"info.version must be semver per Zalando must-use-semantic-versioning (TRA-672)")
+	require.NotNil(t, doc.Info.Contact, "info.contact must be present per Zalando must-have-info-contact-url (TRA-672)")
+	assert.Equal(t, "https://app.trakrf.id/api", doc.Info.Contact.URL)
+	assert.Equal(t, "support@trakrf.id", doc.Info.Contact.Email)
 	require.Len(t, doc.Servers, 2)
 
 	assert.Equal(t, "https://app.preview.trakrf.id", doc.Servers[0].URL,

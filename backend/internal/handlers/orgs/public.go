@@ -28,7 +28,9 @@ type GetOrgMeResponse struct {
 // @Accept json
 // @Produce json
 // @Success 200 {object} orgs.GetOrgMeResponse
+// @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
+// @Failure 404 {object} modelerrors.ErrorResponse "not_found"
 // @Failure 405 {object} modelerrors.ErrorResponse "Method not allowed"
 // @Header  405 {string} Allow "Allowed methods"
 // @Failure 422 {object} modelerrors.ErrorResponse "missing_org_context — the API key authenticated but its org no longer exists"

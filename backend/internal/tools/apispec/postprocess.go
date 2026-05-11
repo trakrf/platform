@@ -83,9 +83,12 @@ func postprocessPublic(doc *openapi3.T) error {
 	injectMethodNotAllowedResponse(doc)
 	attachMethodNotAllowedToOperations(doc)
 	injectDeprecationComponents(doc)
-	if err := markResponseSchemasAdditive(doc, publicResponseSchemas); err != nil {
+	if err := stripResponseSchemasAdditive(doc, publicResponseSchemas); err != nil {
 		return err
 	}
+	markIntegerFormats(doc)
+	markDateTimeExamples(doc)
+	injectDefaultErrorResponse(doc)
 	injectGlobalHeaderRefs(doc)
 	stripBearerScopeArrays(doc)
 	stripSessionAuthScheme(doc)
@@ -98,7 +101,23 @@ func postprocessPublic(doc *openapi3.T) error {
 		return fmt.Errorf("rename public spec: %w", err)
 	}
 	doc.Info.Title = "TrakRF API"
-	doc.Info.Version = "v1"
+	// info.version is the spec version (semver per Zalando / TRA-672); the
+	// API surface version lives in the URL path (/api/v1/...). They evolve
+	// independently — info.version bumps on every breaking change to this
+	// document, /api/v1 is a long-lived URL contract.
+	doc.Info.Version = "1.0.0"
+	if doc.Info.Contact == nil {
+		doc.Info.Contact = &openapi3.Contact{}
+	}
+	if doc.Info.Contact.Name == "" {
+		doc.Info.Contact.Name = "TrakRF Support"
+	}
+	if doc.Info.Contact.Email == "" {
+		doc.Info.Contact.Email = "support@trakrf.id"
+	}
+	if doc.Info.Contact.URL == "" {
+		doc.Info.Contact.URL = "https://app.trakrf.id/api"
+	}
 	doc.Servers = openapi3.Servers{
 		{
 			URL:         "https://app.preview.trakrf.id",
@@ -757,11 +776,15 @@ func injectDeprecationComponents(doc *openapi3.T) {
 }
 
 // publicResponseSchemas names the public response models that the
-// Versioning page commits to additive-stable evolution. Setting
-// additionalProperties:true explicitly tells codegens whose default is
-// strict (some Java/TypeScript generators) to accept unknown fields,
-// matching OpenAPI 3.0's permissive default for those that honor it
-// (TRA-646 / BB22 S4).
+// Versioning page commits to additive-stable evolution. The list is
+// retained as a hygiene roster: stripResponseSchemasAdditive walks it to
+// remove the literal `additionalProperties: true` that swag's
+// `--parseDependency` emits on every object (TRA-668 BB27 S8 / TRA-672 —
+// the explicit `:true` caused some generators to emit wrapper classes
+// instead of clean Record<string,unknown> shapes). OpenAPI 3.0's default
+// is already permissive, so dropping the flag preserves additive evolution
+// without the codegen drag. Supersedes the prior TRA-646 / BB22 S4
+// behavior, which set the flag explicitly for the opposite reason.
 //
 // Includes view models, response envelopes, error envelopes, and
 // shared.Tag (carried in tag responses). Internal-only schemas are
@@ -808,30 +831,200 @@ var publicResponseSchemas = []string{
 	"errors.FieldError",
 }
 
-// markResponseSchemasAdditive sets additionalProperties:true on each
-// public response model, making the additive-stable contract explicit
-// for codegens whose default is strict (TRA-646 / BB22 S4). Errors if
-// a configured schema is missing — keeps the list honest as schemas
-// rename or move.
-func markResponseSchemasAdditive(doc *openapi3.T, schemas []string) error {
+// stripResponseSchemasAdditive removes `additionalProperties: true` from
+// each public response model (TRA-668 BB27 S8 / TRA-672). The literal
+// `:true` came from swag's `--parseDependency` emission on every object;
+// some generators emit wrapper classes around `:true` schemas instead of
+// clean Record<string,unknown> types. OpenAPI 3.0's default is already
+// permissive, so dropping the flag keeps additive evolution without the
+// codegen drag.
+//
+// Only the literal `true` is stripped. Structured `additionalProperties`
+// schemas (e.g., errors.FieldError.params) are preserved untouched.
+//
+// Errors if a configured schema is missing — keeps the roster honest as
+// schemas rename or move.
+func stripResponseSchemasAdditive(doc *openapi3.T, schemas []string) error {
 	if doc.Components == nil || doc.Components.Schemas == nil {
 		if len(schemas) == 0 {
 			return nil
 		}
 		return fmt.Errorf("apispec: components.schemas is empty but publicResponseSchemas has %d entries", len(schemas))
 	}
-	t := true
 	for _, name := range schemas {
 		ref := doc.Components.Schemas[name]
 		if ref == nil || ref.Value == nil {
 			return fmt.Errorf("apispec: publicResponseSchemas references unknown schema %q", name)
 		}
-		if ref.Value.AdditionalProperties.Has != nil || ref.Value.AdditionalProperties.Schema != nil {
+		ap := &ref.Value.AdditionalProperties
+		if ap.Schema != nil {
 			continue
 		}
-		ref.Value.AdditionalProperties = openapi3.AdditionalProperties{Has: &t}
+		if ap.Has != nil && *ap.Has {
+			ap.Has = nil
+		}
 	}
 	return nil
+}
+
+// markIntegerFormats walks every schema in the document and sets
+// `format: int32` on any integer property that lacks an explicit format.
+// Zalando's `must-define-a-format-for-integer-types` rule requires this;
+// codegen libraries (typescript-fetch, openapi-typescript, openapi-go) use
+// the format to pick the right wire encoding. Every TrakRF integer column
+// is Postgres `integer` (int4) — IDs, pagination counts, depth, duration
+// seconds — and the HTTP status code in ErrorResponse.error.status is also
+// int32. int64 fields don't exist in the public surface, so this pass
+// safely defaults all unspecified integers to int32 (TRA-672 audit).
+//
+// Properties that already declare a format (e.g., a future int64 addition
+// would carry `format: int64` from its struct tag or annotation) are left
+// untouched.
+func markIntegerFormats(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+	for _, ref := range doc.Components.Schemas {
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		setIntegerFormatRecursive(ref.Value)
+	}
+}
+
+func setIntegerFormatRecursive(s *openapi3.Schema) {
+	if s == nil {
+		return
+	}
+	if s.Type != nil && s.Type.Is(openapi3.TypeInteger) && s.Format == "" {
+		s.Format = "int32"
+	}
+	for _, prop := range s.Properties {
+		if prop != nil && prop.Value != nil {
+			setIntegerFormatRecursive(prop.Value)
+		}
+	}
+	if s.Items != nil && s.Items.Value != nil {
+		setIntegerFormatRecursive(s.Items.Value)
+	}
+	if s.AdditionalProperties.Schema != nil && s.AdditionalProperties.Schema.Value != nil {
+		setIntegerFormatRecursive(s.AdditionalProperties.Schema.Value)
+	}
+}
+
+// dateTimeExample / dateExample are the RFC 3339 stand-in values inserted
+// onto schema properties whose `format` is `date-time` / `date` and which
+// lack an `example`. Zalando's
+// `must-use-standard-formats-for-date-and-time-properties-example` rule
+// requires the example so codegen-generated docs and tests round-trip a
+// recognizable payload (TRA-672).
+const (
+	dateTimeExample = "2025-04-29T12:34:56Z"
+	dateExample     = "2025-04-29"
+)
+
+// markDateTimeExamples walks every schema and seeds an `example:` on date
+// and date-time string properties that don't already declare one. Covers
+// both component schemas and inline path-parameter schemas (the
+// /assets/{asset_id}/history `from`/`to` query params live on operations,
+// not in components). Existing examples are preserved.
+func markDateTimeExamples(doc *openapi3.T) {
+	if doc.Components != nil && doc.Components.Schemas != nil {
+		for _, ref := range doc.Components.Schemas {
+			if ref == nil || ref.Value == nil {
+				continue
+			}
+			setDateTimeExampleRecursive(ref.Value)
+		}
+	}
+	if doc.Paths != nil {
+		for _, item := range doc.Paths.Map() {
+			if item == nil {
+				continue
+			}
+			for _, p := range item.Parameters {
+				if p != nil && p.Value != nil && p.Value.Schema != nil && p.Value.Schema.Value != nil {
+					setDateTimeExampleRecursive(p.Value.Schema.Value)
+				}
+			}
+			for _, op := range item.Operations() {
+				if op == nil {
+					continue
+				}
+				for _, p := range op.Parameters {
+					if p != nil && p.Value != nil && p.Value.Schema != nil && p.Value.Schema.Value != nil {
+						setDateTimeExampleRecursive(p.Value.Schema.Value)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setDateTimeExampleRecursive(s *openapi3.Schema) {
+	if s == nil {
+		return
+	}
+	if s.Type != nil && s.Type.Is(openapi3.TypeString) && s.Example == nil {
+		switch s.Format {
+		case "date-time":
+			s.Example = dateTimeExample
+		case "date":
+			s.Example = dateExample
+		}
+	}
+	for _, prop := range s.Properties {
+		if prop != nil && prop.Value != nil {
+			setDateTimeExampleRecursive(prop.Value)
+		}
+	}
+	if s.Items != nil && s.Items.Value != nil {
+		setDateTimeExampleRecursive(s.Items.Value)
+	}
+	if s.AdditionalProperties.Schema != nil && s.AdditionalProperties.Schema.Value != nil {
+		setDateTimeExampleRecursive(s.AdditionalProperties.Schema.Value)
+	}
+}
+
+// injectDefaultErrorResponse adds a `default` response entry to every
+// operation that lacks one, pointing at the ErrorResponse envelope.
+// Zalando's `must-specify-default-response` rule requires it so codegen
+// libraries (typescript-fetch, axios-codegen) have a catch-all response
+// type for unmodeled status codes — without it, the generator can't
+// type-narrow on success vs error in a single Promise chain (TRA-672).
+func injectDefaultErrorResponse(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	desc := "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse."
+	build := func() *openapi3.ResponseRef {
+		return &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: &desc,
+				Content: openapi3.Content{
+					"application/json": &openapi3.MediaType{
+						Schema: &openapi3.SchemaRef{
+							Ref: "#/components/schemas/errors.ErrorResponse",
+						},
+					},
+				},
+			},
+		}
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil || op.Responses == nil {
+				continue
+			}
+			if op.Responses.Default() != nil {
+				continue
+			}
+			op.Responses.Set("default", build())
+		}
+	}
 }
 
 // nullableFields names schema/field pairs whose response payload may be
@@ -955,8 +1148,11 @@ var internalOnlyRequiredFields = map[string][]string{
 // markReadOnlyFields errors if a configured schema or field is missing from
 // the spec — keeps this map honest as struct fields rename or move.
 var readOnlyFields = map[string][]string{
-	"asset.PublicAssetView":       {"id", "created_at", "updated_at"},
-	"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth"},
+	"asset.PublicAssetView":            {"id", "created_at", "updated_at", "asset_deleted_at"},
+	"location.PublicLocationView":      {"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at"},
+	"org.OrgMeView":                    {"id"},
+	"shared.Tag":                       {"id"},
+	"report.PublicCurrentLocationItem": {"asset_deleted_at"},
 }
 
 // annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse
