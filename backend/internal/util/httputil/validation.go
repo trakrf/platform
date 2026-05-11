@@ -219,26 +219,11 @@ func paramsForField(fe validator.FieldError) map[string]any {
 }
 
 // RespondValidationError translates validator.ValidationErrors into the
-// documented validation envelope and writes it. Use
-// RespondValidationErrorWithPresence when the caller has the set of keys
-// that appeared in the request body — required-tag violations on absent
-// keys then surface as code=required instead of the default too_short
-// relabel for length-bearing kinds.
+// documented validation envelope and writes it. Length-bearing required
+// fields (string, slice, array, map with `required`) surface as code=too_short
+// with params.min_length whether the field was sent empty or omitted entirely
+// — see errors.mdx and the codeForTag comment for the rationale. TRA-675.
 func RespondValidationError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
-	RespondValidationErrorWithPresence(w, r, err, requestID, nil)
-}
-
-// RespondValidationErrorWithPresence is RespondValidationError with explicit
-// presence info. presentKeys is the set of top-level JSON keys that
-// appeared in the request body (after read-only drop). When nil, behaves
-// identically to RespondValidationError — required-tag violations on
-// length-bearing kinds keep the historical too_short relabel.
-//
-// When presentKeys is non-nil, a required-tag violation on a length kind
-// whose JSON name is NOT in presentKeys is reported as code=required
-// (TRA-641 / BB21 §2.2). Empty-but-present values stay as code=too_short
-// (TRA-637 contract).
-func RespondValidationErrorWithPresence(w http.ResponseWriter, r *http.Request, err error, requestID string, presentKeys map[string]struct{}) {
 	var ves validator.ValidationErrors
 	if !errors.As(err, &ves) {
 		WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
@@ -247,21 +232,11 @@ func RespondValidationErrorWithPresence(w http.ResponseWriter, r *http.Request, 
 	}
 	fields := make([]apierrors.FieldError, 0, len(ves))
 	for _, fe := range ves {
-		code := codeForTag(fe)
-		message := messageForField(fe)
-		params := paramsForField(fe)
-		if presentKeys != nil && fe.Tag() == "required" && code == "too_short" {
-			if _, present := presentKeys[fe.Field()]; !present {
-				code = "required"
-				message = fmt.Sprintf("%s is required", fe.Field())
-				params = nil
-			}
-		}
 		fields = append(fields, apierrors.FieldError{
 			Field:   fe.Field(),
-			Code:    code,
-			Message: message,
-			Params:  params,
+			Code:    codeForTag(fe),
+			Message: messageForField(fe),
+			Params:  paramsForField(fe),
 		})
 	}
 	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,

@@ -28,7 +28,7 @@ type CreateAssetRequest struct {
 	OrgID               int                  `json:"-" swaggerignore:"true"`
 	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern"`
 	Name                string               `json:"name" validate:"required,min=1,max=255"`
-	Description         string               `json:"description,omitempty" validate:"omitempty,max=1024"`
+	Description         *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024"`
 	LocationID          *int                 `json:"location_id,omitempty" example:"42"`
 	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
 	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
@@ -79,7 +79,7 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_del
 // TRA-674 / BB27 F3 — see PublicReadOnlyFields.
 type UpdateAssetRequest struct {
 	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`
-	Description         *string              `json:"description" validate:"omitempty,max=1024"`
+	Description         *string              `json:"description" validate:"omitempty,min=1,max=1024"`
 	LocationID          *int                 `json:"location_id" example:"42"`
 	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
 	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`

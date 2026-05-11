@@ -43,7 +43,7 @@ type CreateLocationRequest struct {
 	ExternalKey       string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
-	Description       string               `json:"description,omitempty" validate:"omitempty,max=1024" example:"Main warehouse location"`
+	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024" example:"Main warehouse location"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
@@ -91,7 +91,7 @@ type UpdateLocationRequest struct {
 	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
-	Description       *string              `json:"description,omitempty" validate:"omitempty,max=1024" example:"Updated description"`
+	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024" example:"Updated description"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	// Set by the PATCH handler when the body had an explicit `null` for the

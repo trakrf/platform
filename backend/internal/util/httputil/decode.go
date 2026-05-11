@@ -50,10 +50,12 @@ func DecodeJSONStrict(r *http.Request, dst any) error {
 }
 
 // DecodeJSONStrictWithPresence is DecodeJSONStrict that additionally returns
-// the set of top-level keys that appeared in the request body. Pair with
-// RespondValidationErrorWithPresence so missing required fields are reported
-// as code=required while present-but-empty values stay as code=too_short
-// (TRA-641 / BB21 §2.2).
+// the set of top-level keys that appeared in the request body. Callers use
+// the presence map for per-field branching that encoding/json cannot signal
+// on its own — e.g. distinguishing an absent optional natural-key field
+// from an explicitly empty one on Create. The validation envelope itself no
+// longer needs presence: length-bearing required fields report too_short
+// (with min_length=1) whether the field was empty or omitted (TRA-675).
 //
 // A non-object body produces an empty key set and the usual strict-decode
 // failure.
@@ -101,8 +103,8 @@ func DecodeJSONStrictWithNulls(r *http.Request, dst any) (map[string]struct{}, e
 //
 // Returns the set of explicit-null keys (after the drop set is applied).
 // Use DecodeJSONStrictWithNullsTolerantAndPresence when you also need the
-// full set of keys present in the body (e.g. for TRA-641 required vs
-// too_short discrimination on PUT bodies).
+// full set of keys present in the body for non-validator per-field
+// branching.
 func DecodeJSONStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map[string]struct{}, error) {
 	nulls, _, err := decodeStrictWithNullsTolerant(r, dst, drop)
 	return nulls, err
@@ -110,10 +112,10 @@ func DecodeJSONStrictWithNullsTolerant(r *http.Request, dst any, drop []string) 
 
 // DecodeJSONStrictWithNullsTolerantAndPresence is DecodeJSONStrictWithNullsTolerant
 // that additionally returns the full set of top-level keys present in the
-// request body (after the drop set is applied). Pair with
-// RespondValidationErrorWithPresence so missing required fields surface as
-// code=required while present-but-empty values keep code=too_short
-// (TRA-641 / BB21 §2.2).
+// request body (after the drop set is applied). Use the presence map for
+// per-field branching where the validator's tag-driven path cannot
+// distinguish absent from explicit-zero (e.g. optional alternate-natural-key
+// fields).
 func DecodeJSONStrictWithNullsTolerantAndPresence(r *http.Request, dst any, drop []string) (nulls, present map[string]struct{}, err error) {
 	return decodeStrictWithNullsTolerant(r, dst, drop)
 }

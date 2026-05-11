@@ -73,10 +73,15 @@ func (f *AssetFactory) Build() asset.Asset {
 // DisallowUnknownFields decoder on the public write path rejects.
 func (f *AssetFactory) BuildCreateRequest() asset.CreateAssetRequest {
 	validFrom := shared.FlexibleDate{Time: f.ValidFrom}
+	var descPtr *string
+	if f.Description != "" {
+		d := f.Description
+		descPtr = &d
+	}
 	req := asset.CreateAssetRequest{
 		ExternalKey: f.ExternalKey,
 		Name:        f.Name,
-		Description: f.Description,
+		Description: descPtr,
 		ValidFrom:   &validFrom,
 		IsActive:    &f.IsActive,
 	}

@@ -1050,12 +1050,20 @@ var nullableFields = map[string][]string{
 	// Mirror the read-view asymmetry: anything nullable above is nullable
 	// here too where writable. valid_to was already correct via the
 	// ClearValidTo sentinel; the rest are added by TRA-614.
+	//
+	// valid_from is nullable on Create only: a caller passing `null` is
+	// asking the server to substitute the current timestamp ("null-as-now"
+	// — the documented contract integrators reach for from ETL/migration
+	// code that emits `null` rather than omitting JSON keys). PATCH keeps
+	// valid_from non-nullable: there is no "use server default" semantic on
+	// update — `null` there would be a request to reset the row's temporal
+	// start, which the handler rejects with invalid_value (TRA-675).
 	"asset.UpdateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
-	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
-	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_to"},
+	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_from", "valid_to"},
+	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_from", "valid_to"},
 	"location.UpdateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
-	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
-	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_to"},
+	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_from", "valid_to"},
+	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_from", "valid_to"},
 }
 
 // requiredFields names the response fields that are guaranteed present in
