@@ -83,12 +83,18 @@ test-contract:
     # 1. Ensure timescaledb is up
     echo "🐳 Ensuring timescaledb is up..."
     docker compose -p platform -f "$REPO_ROOT/docker-compose.yaml" up -d timescaledb
-    for i in {1..30}; do
+    DB_READY=0
+    for _ in {1..30}; do
         if docker compose -p platform -f "$REPO_ROOT/docker-compose.yaml" exec -T timescaledb pg_isready -U postgres >/dev/null 2>&1; then
+            DB_READY=1
             break
         fi
         sleep 1
     done
+    if [ "$DB_READY" -ne 1 ]; then
+        echo "❌ timescaledb did not become ready within 30s" >&2
+        exit 1
+    fi
 
     # 2. (Re)create the contract-test DB. Terminate any lingering sessions
     # first (e.g. an interrupted prior run) so DROP DATABASE doesn't error.
@@ -167,7 +173,7 @@ test-contract:
     docker run --rm --network host \
         -v "$REPO_ROOT/docs/api/openapi.public.yaml:/spec.yaml:ro" \
         -v "$REPO_ROOT/backend/contract-tests:/out" \
-        schemathesis/schemathesis:stable \
+        schemathesis/schemathesis:4.18.2 \
         run \
         --checks=all \
         --generation-deterministic \
