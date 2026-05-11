@@ -3,6 +3,7 @@ package httputil
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -59,22 +60,19 @@ func ParsePathInt(field, raw string, min, max int64) (int, error) {
 }
 
 // SurrogateIDMax is the upper bound declared on every numeric public path
-// param. Set to 2^53-1 (Number.MAX_SAFE_INTEGER) — the largest integer that
-// round-trips losslessly through every JSON parser, including JavaScript.
-// Surrogate columns themselves are int4; any value above 2^31-1 simply will
-// not match a row and surfaces as 404 not_found from the handler. The wider
-// bound is intentional to keep generated SDKs that don't enforce path-param
-// maximum from receiving 400 validation_error when their framework sends an
-// out-of-int32 value upstream — that was the launch-blocker B3 finding
-// folded into TRA-657 / BB25.
+// param. Set to 2^31-1 (math.MaxInt32) to match the underlying Postgres
+// int4 surrogate column. Values above this cannot encode into int4 and
+// previously surfaced as 500 with a pgx driver string in error.detail
+// (TRA-668 / BB27 F1, Schemathesis Class A in TRA-671). Rejecting at the
+// parser converts the bug class to 400 validation_error / too_large with
+// params.max = 2147483647, matching the spec-side bounds set in TRA-672.
 //
-// Why not int64 max (2^63-1)? swag stores @Param maximum as a float64
-// before kin-openapi serializes it; 2^63-1 is not representable exactly in
-// float64 and round-trips to 9223372036854776000 (just above int64 max),
-// which trips strict integer validators. 2^53-1 is the canonical "safe"
-// integer upper bound and is still ~4 million× larger than the int4 column
-// range we are actually trying to relax around.
-const SurrogateIDMax = int64(1)<<53 - 1
+// History: TRA-657 / BB25 B3 widened this to 2^53-1 so generated SDKs
+// that pass through out-of-int32 values would land on 404 not_found
+// instead of 400. TRA-673 reverses that decision — the wider bound was
+// the proximate cause of the pgx int4-encoding 500, so the correct
+// behavior is to fail the request at the parser with a clean envelope.
+const SurrogateIDMax = int64(math.MaxInt32)
 
 // ParseSurrogateID parses a path param into an int suitable for a Postgres
 // surrogate-id column lookup (e.g. /api/v1/assets/{asset_id}). Bounds are
