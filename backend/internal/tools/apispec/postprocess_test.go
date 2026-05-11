@@ -415,6 +415,64 @@ func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
 	)
 }
 
+// TestPostprocess_AnnotatesTagPolymorphism locks in TRA-666 BB26 C1:
+// the Tag and TagRequest schemas must carry a schema-level description
+// that names the polymorphism and the tag_type discriminator. The
+// description propagates into generated client class docstrings, which
+// is where an AI ingestor reads the schema. Names are pre-rename
+// (shared.Tag / shared.TagRequest) because the annotation runs before
+// renamePublicSpec.
+func TestPostprocess_AnnotatesTagPolymorphism(t *testing.T) {
+	withEmptyRequiredFields(t)
+	tagTypeProp := func() *openapi3.SchemaRef {
+		return &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeString},
+			Enum: []any{"rfid", "ble", "barcode"},
+		}}
+	}
+	doc := docWithSchemas(openapi3.Schemas{
+		"shared.Tag": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"id":        &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"tag_type":  tagTypeProp(),
+				"value":     stringProp(""),
+				"is_active": &openapi3.SchemaRef{Value: openapi3.NewBoolSchema()},
+			},
+		}},
+		"shared.TagRequest": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"tag_type": tagTypeProp(),
+				"value":    stringProp(""),
+			},
+		}},
+	})
+
+	require.NoError(t, postprocessPublic(doc))
+
+	// withEmptyRequiredFields disables the public-spec rename pass, so the
+	// schemas stay under their dotted pre-rename keys here. The rename is
+	// covered separately in rename_public_test.go.
+	for _, name := range []string{"shared.Tag", "shared.TagRequest"} {
+		ref := doc.Components.Schemas[name]
+		require.NotNil(t, ref, "%s schema must survive postprocess", name)
+		require.NotNil(t, ref.Value, "%s schema value must not be nil", name)
+		assert.NotEmpty(t, ref.Value.Description, "%s must carry a schema-level description", name)
+		assert.Contains(t, ref.Value.Description, "olymorphic", "%s description must name the polymorphism", name)
+		assert.Contains(t, ref.Value.Description, "tag_type", "%s description must name the discriminator", name)
+		assert.Contains(t, ref.Value.Description, "rfid", "%s description must list rfid", name)
+		assert.Contains(t, ref.Value.Description, "ble", "%s description must list ble", name)
+		assert.Contains(t, ref.Value.Description, "barcode", "%s description must list barcode", name)
+
+		tt := ref.Value.Properties["tag_type"]
+		require.NotNil(t, tt, "%s.tag_type must survive postprocess", name)
+		require.NotNil(t, tt.Value, "%s.tag_type value must not be nil", name)
+		assert.NotEmpty(t, tt.Value.Description, "%s.tag_type must carry a field-level description", name)
+		assert.Contains(t, tt.Value.Description, "iscriminator", "%s.tag_type description must call out its discriminator role", name)
+	}
+}
+
 // TestPostprocess_MarksNullableFields locks in TRA-517 AC2/AC9/AC11. Go
 // pointer types (*string, *time.Time, *int) marshal to null but swaggo
 // doesn't carry that into the OpenAPI 3.0 schema. This is the post-process

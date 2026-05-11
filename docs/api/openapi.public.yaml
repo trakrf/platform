@@ -680,12 +680,14 @@ components:
             type: object
         Tag:
             additionalProperties: true
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
             properties:
                 id:
                     type: integer
                 is_active:
                     type: boolean
                 tag_type:
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
                     enum:
                         - rfid
                         - ble
@@ -704,9 +706,11 @@ components:
                 - is_active
             type: object
         TagRequest:
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
             properties:
                 tag_type:
                     default: rfid
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
                     enum:
                         - rfid
                         - ble
