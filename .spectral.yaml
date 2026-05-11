@@ -52,6 +52,30 @@ rules:
   # Custom TrakRF rules (trakrf-*)
   # ─────────────────────────────────────────────────────────────
 
+  trakrf-response-required-array:
+    description: >
+      Response schemas (matching `Public.+View` or `.+Response`) must declare
+      a non-empty `required` array so codegen produces non-optional TypeScript
+      types. Origin: BB13 C1 — 29 response schemas previously omitted `required`,
+      making every field `T | undefined` in generated clients.
+    message: "Response schema must declare a non-empty required array — generated TS will use T|undefined otherwise (BB13 C1)"
+    severity: error
+    # The given matches every schema whose key matches the response-schema name
+    # pattern. We then assert via JSON Schema that `required` exists and has at
+    # least one entry.
+    given:
+      - "$.components.schemas[?(@property.match(/^Public.+View$|^.+Response$/))]"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            required: ["required"]
+            properties:
+              required:
+                type: array
+                minItems: 1
+
   trakrf-int4-bounded-id-path-params:
     description: >
       Path parameters named like `*_id` (or bare `id`) must declare
