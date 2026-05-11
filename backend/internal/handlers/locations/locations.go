@@ -80,6 +80,11 @@ func (handler *Handler) resolveParent(
 // @Summary      Create a location
 // @Description  Create a new location in the hierarchy, optionally with one or more tags.
 // @Description  Set parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.
+// @Description
+// @Description  The `external_key` field is optional. Provide a value from your system of record
+// @Description  (ERP, WMS, layout/plan) for natural-key joins, or omit it to receive a
+// @Description  server-assigned external_key in the format `LOC-NNNN` (per-organization sequence).
+// @Description  A caller-supplied external_key that collides with an existing location returns 409.
 // @Tags         locations,public
 // @ID           locations.create
 // @Accept       json
@@ -110,6 +115,24 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
+	}
+
+	// TRA-665 / BB26 D3: external_key is optional only by *omission* — an
+	// absent key triggers the server auto-mint of LOC-NNNN. When the caller
+	// sends `external_key` explicitly, it must validate (min=1 + pattern)
+	// to match the PATCH validator on RenameLocationRequest.external_key.
+	// An explicit empty string returns 400 too_short; whitespace-only fails
+	// the pattern check with 400 invalid_value. The struct field is non-pointer
+	// so encoding/json cannot distinguish absent from explicit-empty on its own
+	// — presentKeys carries that signal.
+	if _, present := presentKeys["external_key"]; present {
+		type extKeyCheck struct {
+			ExternalKey string `json:"external_key" validate:"min=1,max=255,external_key_pattern"`
+		}
+		if err := validate.Struct(extKeyCheck{ExternalKey: request.ExternalKey}); err != nil {
+			httputil.RespondValidationError(w, r, err, requestID)
+			return
+		}
 	}
 
 	if err := validate.Struct(request); err != nil {
