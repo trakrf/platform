@@ -56,8 +56,9 @@ rules:
     description: >
       Response schemas (matching `Public.+View` or `.+Response`) must declare
       a non-empty `required` array so codegen produces non-optional TypeScript
-      types. Origin: BB13 C1 — 29 response schemas previously omitted `required`,
-      making every field `T | undefined` in generated clients.
+      types. Origin: BB13 C1 — 29 response schemas had previously omitted
+      `required`, making every field `T | undefined` in generated clients;
+      that class has since been cleaned up. This rule guards against regression.
     message: "Response schema must declare a non-empty required array — generated TS will use T|undefined otherwise (BB13 C1)"
     severity: error
     # The given matches every schema whose key matches the response-schema name
