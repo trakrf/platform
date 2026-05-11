@@ -1,0 +1,266 @@
+# TrakRF OpenAPI lint config — Spectral
+#
+# Scope:
+#   Lints docs/api/openapi.public.yaml (generated from Go swag annotations).
+#   Runs in CI via .github/workflows/api-spec.yml after Redocly lint.
+#
+# Baseline:
+#   - spectral:oas                              — structural OpenAPI 3.x rules from Stoplight
+#   - @baloise/spectral-rules/zalando.yml       — Zalando RESTful API Guidelines port
+#     (the bare package main is the baloise flavor; we want pure Zalando)
+#
+# Disabled inherited rules are listed below with a one-line rationale,
+# mirroring the convention in redocly.yaml.
+#
+# Custom rules (trakrf-*) trace to specific BB findings. See TRA-670 for the
+# origin of each rule.
+
+extends:
+  - spectral:oas
+  - "@baloise/spectral-rules/zalando.yml"
+
+rules:
+  # ─────────────────────────────────────────────────────────────
+  # Inherited Zalando disables (intentional architectural choices)
+  # ─────────────────────────────────────────────────────────────
+  # Custom trakrf-* rules follow below.
+
+  # URL versioning + /api base path — Zalando recommends media-type
+  # versioning and discourages `/api` as a base-path prefix. TrakRF ships
+  # `/api/v1/...` for both reasons: URL versioning is discoverable and
+  # broadly tool-compatible, and the `/api` prefix scopes the surface
+  # away from non-API routes. Settled architectural choice.
+  must-not-use-uri-versioning: off
+  should-not-use-api-as-base-path: off
+
+  # Problem+JSON (RFC 7807) error envelope — Zalando mandates it; TrakRF
+  # ships a custom ErrorResponse envelope ({code, message, request_id,
+  # details}). Settled architectural choice.
+  must-use-problem-json-for-errors: off
+
+  # Zalando-internal API metadata (x-api-id, x-audience) — Zalando's
+  # internal API registry conventions. TrakRF has no equivalent registry
+  # or audience taxonomy. Not OpenAPI-standard.
+  must-have-info-x-api-id: off
+  must-provide-api-audience: off
+
+  # Zalando-proprietary x-extensible-enum extension — not OpenAPI-standard;
+  # TrakRF uses plain enums and accepts the forward-compatibility tradeoff.
+  should-use-x-extensible-enum: off
+
+  # ─────────────────────────────────────────────────────────────
+  # Custom TrakRF rules (trakrf-*)
+  # ─────────────────────────────────────────────────────────────
+
+  trakrf-response-required-array:
+    description: >
+      Response schemas (matching `Public.+View` or `.+Response`) must declare
+      a non-empty `required` array so codegen produces non-optional TypeScript
+      types. Origin: BB13 C1 — 29 response schemas had previously omitted
+      `required`, making every field `T | undefined` in generated clients;
+      that class has since been cleaned up. This rule guards against regression.
+    message: "Response schema must declare a non-empty required array — generated TS will use T|undefined otherwise (BB13 C1)"
+    severity: error
+    # The given matches every schema whose key matches the response-schema name
+    # pattern. We then assert via JSON Schema that `required` exists and has at
+    # least one entry.
+    given:
+      - "$.components.schemas[?(@property.match(/^Public.+View$|^.+Response$/))]"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            required: ["required"]
+            properties:
+              required:
+                type: array
+                minItems: 1
+
+  trakrf-int4-bounded-id-path-params:
+    description: >
+      Path parameters named like `*_id` (or bare `id`) must declare
+      `format: int32` and `maximum: 2147483647`. Origin: BB27 F1/S1 — the
+      spec previously declared int64 bounds on int4-backed columns, which
+      triggered 500s with the raw pgx driver error in the response body.
+      Spec numeric bounds must match int4 storage.
+    message: "*_id path params must declare format:int32 AND maximum:2147483647 — int4 storage overflow (BB27 F1/S1)"
+    severity: error
+    # NOTE for future rule authors: Spectral uses the nimma JSONPath engine for
+    # `given` evaluation. nimma does NOT support `=~` (jsonpath-plus regex
+    # operator). Use `.match(/<pattern>/)` method syntax instead, as below.
+    given:
+      # Operation-level path params (all current params are at this level)
+      - "$.paths.*.*.parameters[?(@.in == 'path' && (@.name == 'id' || @.name.match(/_id$/)))].schema"
+      # Path-item-level path params (defensive coverage in case any are added here)
+      - "$.paths.*.parameters[?(@.in == 'path' && (@.name == 'id' || @.name.match(/_id$/)))].schema"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            properties:
+              format:
+                const: int32
+              maximum:
+                const: 2147483647
+            required:
+              - format
+              - maximum
+
+  trakrf-readonly-derived-fields:
+    description: >
+      Server-assigned and derived fields must declare `readOnly: true` so
+      codegen tools strip them from request bodies. Affected names: `id`,
+      `created_at`, `updated_at`, `tree_path`, `depth`, and any `*_deleted_at`.
+      Note: `external_key` is intentionally excluded because it is user-supplied
+      on Assets and server-minted only on Locations — generic targeting can't
+      distinguish the two surfaces. Origin: BB16 S8, BB27 F3/S2 — round-trip
+      GET → PATCH breaks when generated request types include these fields.
+    message: "Derived/server-assigned field must declare readOnly:true (BB16 S8, BB27 F3/S2)"
+    severity: error
+    given:
+      - "$.components.schemas[*].properties[?(@property.match(/^(id|created_at|updated_at|tree_path|depth|.+_deleted_at)$/))]"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            required: ["readOnly"]
+            properties:
+              readOnly:
+                const: true
+
+  trakrf-sibling-required-assetview-updated-at:
+    description: >
+      `AssetView.required` must include `updated_at`. Sibling parity check
+      against LocationView. Origin: BB18 §2.5 — `updated_at` was required on
+      one sibling but not the other; codegen surfaced as inconsistent
+      optionality between Asset and Location response types. Cleaned up
+      since; this rule guards against regression.
+    message: "AssetView.required must include 'updated_at' (sibling parity with LocationView) — BB18 §2.5"
+    severity: error
+    given:
+      - "$.components.schemas.AssetView.required"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: array
+            contains:
+              const: updated_at
+
+  trakrf-sibling-required-locationview-updated-at:
+    description: >
+      `LocationView.required` must include `updated_at`. Mirror of
+      `trakrf-sibling-required-assetview-updated-at`. See that rule for
+      origin and rationale.
+    message: "LocationView.required must include 'updated_at' (sibling parity with AssetView) — BB18 §2.5"
+    severity: error
+    given:
+      - "$.components.schemas.LocationView.required"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: array
+            contains:
+              const: updated_at
+
+  trakrf-path-param-name-consistency:
+    description: >
+      Same-resource operations must use the resource-specific path parameter
+      name (e.g., `asset_id`, `location_id`), not the bare `id`. Mixing
+      conventions across operations on the same resource confuses generators
+      and integrators. Origin: BB16 S7.
+    message: "Path param named 'id'; use the resource-specific name (e.g., asset_id) — BB16 S7"
+    severity: error
+    given:
+      - "$.paths.*.*.parameters[?(@.in == 'path' && @.name == 'id')]"
+    then:
+      - field: name
+        function: schema
+        functionOptions:
+          schema:
+            not:
+              const: id
+
+  trakrf-no-additional-properties-on-responses:
+    description: >
+      Response schemas (matching `Public.+View` or `.+Response`) must not
+      declare `additionalProperties: true`. The OAS default already permits
+      additional properties; the explicit `: true` causes codegen tools to
+      emit wrapper classes instead of clean `Record<string, unknown>` types.
+      Origin: BB27 S8.
+    message: "Response schema declares additionalProperties:true; remove to allow clean codegen (BB27 S8)"
+    severity: error
+    given:
+      - "$.components.schemas[?(@property.match(/^Public.+View$|^.+Response$/))]"
+    then:
+      - field: additionalProperties
+        function: schema
+        functionOptions:
+          schema:
+            not:
+              const: true
+
+  trakrf-4xx-coverage-all-methods:
+    description: >
+      Every operation must declare 400, 401, 404, and 429 response codes.
+      Origin: BB18 §2.1/2.2 — undeclared status codes (409 on tag POSTs,
+      400 on by-id GETs) confused integrators.
+    message: "Operation missing one or more of: 400, 401, 404, 429 (BB18 §2.1/2.2)"
+    severity: error
+    given:
+      - "$.paths.*[?(@property == 'get' || @property == 'post' || @property == 'put' || @property == 'patch' || @property == 'delete')].responses"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            required:
+              - "400"
+              - "401"
+              - "404"
+              - "429"
+
+  trakrf-4xx-coverage-write-methods-415:
+    description: >
+      Write methods (POST, PUT, PATCH, DELETE) must also declare a 415
+      response (Unsupported Media Type). Origin: BB18 §2.1/2.2.
+    message: "Write method missing 415 response (Unsupported Media Type) — BB18 §2.1/2.2"
+    severity: error
+    given:
+      - "$.paths.*[?(@property == 'post' || @property == 'put' || @property == 'patch' || @property == 'delete')].responses"
+    then:
+      - field: "415"
+        function: truthy
+
+  trakrf-allow-header-on-405:
+    description: >
+      Every 405 response must declare an `Allow` response header (RFC 7231
+      §6.5.5) listing the supported HTTP methods on the resource. Service
+      already emits the header; spec must declare it for consumers. Origin:
+      BB16 W6, BB27 S4 — declared on only 1 of 22 operations.
+    message: "405 response missing Allow header — RFC 7231 §6.5.5 (BB16 W6, BB27 S4)"
+    severity: error
+    given:
+      - "$.paths.*.*.responses['405']"
+    then:
+      - field: headers.Allow
+        function: truthy
+
+  trakrf-location-header-on-201-top-level-create:
+    description: >
+      Top-level POST operations (e.g., `POST /api/v1/assets`) must declare a
+      `Location` response header on 201. Sub-resource POSTs (e.g., `/tags`)
+      are exempt because the parent resource's URL is already known. Origin:
+      BB27 S3.
+    message: "Top-level POST 201 missing Location header — BB27 S3"
+    severity: error
+    given:
+      # Match POSTs whose path matches /api/v1/<one-segment> exactly
+      - "$.paths[?(@property.match(/^\\/api\\/v1\\/[^\\/]+$/))].post.responses['201']"
+    then:
+      - field: headers.Location
+        function: truthy
