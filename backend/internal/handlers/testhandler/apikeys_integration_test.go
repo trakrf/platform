@@ -111,6 +111,7 @@ func TestMintAPIKey_RejectsInvalidScope(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "not-a-real-scope")
 }
 
 func TestMintAPIKey_RejectsEmptyScopes(t *testing.T) {
