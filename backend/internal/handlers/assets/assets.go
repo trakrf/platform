@@ -43,6 +43,12 @@ func NewHandler(storage *storage.Storage) *Handler {
 // Both nil → nil (no location). external_key alone → resolved via lookup.
 // Both set → must agree; mismatch returns a validation FieldError.
 // Wire field names dropped the `current_` prefix in TRA-580 C-3.
+//
+// TRA-674 / BB27 F2: a nonexistent surrogate `location_id` returns the same
+// validation_error envelope shape as a nonexistent natural-key
+// `location_external_key` — both surface as 400 invalid_value keyed on the
+// offending field. Previously the surrogate path reached the storage layer
+// and tripped the FK constraint, surfacing as 500 internal_error.
 func (handler *Handler) resolveLocation(
 	r *http.Request, orgID int, locID *int, locExternalKey *string,
 ) (*int, *modelerrors.FieldError) {
@@ -53,6 +59,24 @@ func (handler *Handler) resolveLocation(
 		return nil, nil
 	}
 	if !hasExt {
+		// id-only path: confirm the referenced location exists and is live
+		// inside the caller's org so missing-reference returns 400 instead
+		// of the storage-layer FK 500.
+		loc, err := handler.storage.GetLocationByID(r.Context(), orgID, *locID)
+		if err != nil {
+			return nil, &modelerrors.FieldError{
+				Field:   "location_id",
+				Code:    "internal_error",
+				Message: err.Error(),
+			}
+		}
+		if loc == nil {
+			return nil, &modelerrors.FieldError{
+				Field:   "location_id",
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("location_id %d not found", *locID),
+			}
+		}
 		return locID, nil
 	}
 
@@ -197,7 +221,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Tags are read-only via this endpoint; mutate via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `asset_deleted_at`, `external_key`, `tags`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
@@ -235,11 +259,13 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
-	// TRA-664 / BB26 D7: external_key is immutable via PATCH. Reject any body
-	// that mentions it (value or null) with code=immutable_field and a
-	// pointer to the rename operation. Run before strict decode so the
-	// dedicated error code wins over the "unknown field" code that strict
-	// decode would otherwise emit.
+	// TRA-674 / BB27 F3: external_key and tags moved onto PublicReadOnlyFields
+	// and are silently stripped by the decoder along with id, created_at,
+	// updated_at, asset_deleted_at — see asset.PublicReadOnlyFields. Rename
+	// still goes through POST /assets/{id}/rename; tag mutations through
+	// POST/DELETE /assets/{id}/tags. RejectImmutableFields is left in place
+	// for any future field that genuinely needs a hard rejection rather than
+	// the strip-and-ignore default.
 	if httputil.RejectImmutableFields(w, req, reqID, asset.PublicImmutablePatchFields) {
 		return
 	}
@@ -253,8 +279,6 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	// valid_from / name are non-nullable on the read view; an explicit null
 	// in the PATCH body is a validation error, not a clear-request.
-	// (external_key is rejected earlier as an immutable field; absent from
-	// this list because it cannot reach here.)
 	for _, f := range []string{"valid_from", "name", "is_active", "metadata"} {
 		if _, ok := explicitNulls[f]; ok {
 			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,

@@ -1,12 +1,15 @@
 //go:build integration
 // +build integration
 
-// TRA-664 / BB26 D7: external_key is immutable on PATCH; the dedicated
-// POST /api/v1/assets/{asset_id}/rename operation is the only path that
-// can mutate it. The PATCH rejection surfaces as 400 validation_error
-// with code=immutable_field and a detail pointing at the rename operation,
-// so an integrator hitting the wrong path gets an actionable error
-// instead of a silent drop or generic "unknown field" 400.
+// TRA-664 / BB26 D7: POST /api/v1/assets/{asset_id}/rename is the dedicated
+// path for mutating an asset's external_key (single audit-log surface for
+// the natural / join key).
+//
+// TRA-674 / BB27 F3: PATCH no longer rejects an `external_key` body field
+// with 400 immutable_field; the strip-on-PATCH rule now silently drops it
+// so a verbatim GET → PATCH round-trip succeeds without integrator
+// stripping. Callers that genuinely want to rename still go through
+// POST /rename — PATCH is a no-op on that field.
 
 package assets
 
@@ -36,11 +39,11 @@ func setupRenameAssetRouter(handler *Handler) *chi.Mux {
 	return r
 }
 
-// PATCH must reject any body that contains `external_key`, value or null,
-// with 400 validation_error + code=immutable_field. The detail string
-// names the rename operation so an SDK consumer can branch on
-// fields[].code and surface a useful message.
-func TestPatchAsset_ExternalKeyImmutable_Rejected400(t *testing.T) {
+// TRA-674 / BB27 F3: PATCH with an `external_key` body field returns 200
+// and silently strips the field — the persisted external_key is unchanged.
+// Mutations to external_key still require POST /rename; PATCH just tolerates
+// the read-only field so a verbatim GET → PATCH round-trip succeeds.
+func TestPatchAsset_ExternalKey_Stripped200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -48,7 +51,8 @@ func TestPatchAsset_ExternalKeyImmutable_Rejected400(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedRoundTripAsset(t, pool, orgID, "AST-IMMUT", "ImmutableAsset")
+	const startKey = "AST-IMMUT"
+	id := seedRoundTripAsset(t, pool, orgID, startKey, "ImmutableAsset")
 
 	handler := NewHandler(store)
 	r := setupRenameAssetRouter(handler)
@@ -70,29 +74,20 @@ func TestPatchAsset_ExternalKeyImmutable_Rejected400(t *testing.T) {
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 
-			require.Equal(t, http.StatusBadRequest, rec.Code,
-				"PATCH with external_key must be 400 (got %d): %s", rec.Code, rec.Body.String())
+			require.Equal(t, http.StatusOK, rec.Code,
+				"PATCH with external_key must be 200 silent-strip (got %d): %s", rec.Code, rec.Body.String())
 
 			var resp struct {
-				Error struct {
-					Type   string `json:"type"`
-					Detail string `json:"detail"`
-					Fields []struct {
-						Field   string `json:"field"`
-						Code    string `json:"code"`
-						Message string `json:"message"`
-					} `json:"fields"`
-				} `json:"error"`
+				Data map[string]any `json:"data"`
 			}
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Equal(t, "validation_error", resp.Error.Type)
-			require.Len(t, resp.Error.Fields, 1)
-			assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
-			assert.Equal(t, "immutable_field", resp.Error.Fields[0].Code)
-			assert.Contains(t, resp.Error.Detail, "rename",
-				"detail must point at the rename operation: %q", resp.Error.Detail)
-			assert.Contains(t, resp.Error.Fields[0].Message, "rename",
-				"field message must point at the rename operation: %q", resp.Error.Fields[0].Message)
+			assert.Equal(t, startKey, resp.Data["external_key"],
+				"PATCH must not mutate external_key — POST /rename is the dedicated path")
+
+			var dbExtKey string
+			require.NoError(t, pool.QueryRow(context.Background(),
+				`SELECT external_key FROM trakrf.assets WHERE id = $1`, id).Scan(&dbExtKey))
+			assert.Equal(t, startKey, dbExtKey, "persisted external_key must be unchanged")
 		})
 	}
 }

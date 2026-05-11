@@ -4,9 +4,11 @@
 // TRA-608 / BB18 §1.7 + TRA-610 / BB18 §1.8: locations counterpart to the
 // assets PUT round-trip + always-emit tests.
 //
-// TRA-643 / BB22 F1: `tags` is managed via /locations/{id}/tags. The PUT
-// validator rejects a `tags` body field with 400 invalid_value rather than
-// silently dropping it.
+// TRA-674 / BB27 F3: `tags` and `external_key` are now silently stripped on
+// PATCH along with id / created_at / updated_at / tree_path / depth /
+// location_deleted_at so a verbatim GET → PATCH round-trip succeeds. Tag
+// mutation still goes through /locations/{id}/tags and rename still goes
+// through /locations/{id}/rename.
 
 package locations
 
@@ -86,14 +88,11 @@ func TestPutLocation_GETBodyRoundTrip_Succeeds(t *testing.T) {
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
-	// Mutate name and PUT back. `tags` is managed via /locations/{id}/tags
-	// and must be stripped (TRA-643); `external_key` is immutable and must
-	// be stripped (TRA-664 / BB26 D7 — POST /locations/{id}/rename is the
-	// dedicated path). Other read-only fields stay on the body to exercise
-	// the round-trip-safe drop list (id, created_at, updated_at, tree_path, depth).
+	// Mutate name and PATCH the full body back. All read-only fields
+	// (id, created_at, updated_at, tree_path, depth, location_deleted_at,
+	// external_key, tags) are silently stripped server-side per TRA-674 /
+	// BB27 F3 — the integrator does not need to scrub the body first.
 	getResp.Data["name"] = "Warehouse 1 (renamed)"
-	delete(getResp.Data, "tags")
-	delete(getResp.Data, "external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -494,12 +493,13 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}
 }
 
-// TRA-643 / BB22 F1: `tags` is managed via the /locations/{id}/tags
-// subresource. A `tags` key in the PUT body must be rejected with 400
-// invalid_value (matching the unknown-field response shape) so a
-// read-modify-write integrator gets a clear signal instead of a silent
-// no-op.
-func TestPutLocation_TagsRejected400(t *testing.T) {
+// TRA-674 / BB27 F3: `tags` in a PATCH body is silently stripped. Tag
+// mutation still goes through POST/DELETE /locations/{id}/tags; the PATCH
+// body just tolerates the read-only field so a verbatim GET → PATCH
+// round-trip succeeds. Previously (TRA-643 / BB22 F1) a `tags` key
+// surfaced as 400 invalid_value, but the strip-vs-reject rule was reversed
+// pre-launch — see PublicReadOnlyFields.
+func TestPutLocation_TagsStripped200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -507,7 +507,7 @@ func TestPutLocation_TagsRejected400(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedLocationRoundTrip(t, pool, orgID, "LOC-TAGS-REJ", "TagsRej")
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-TAGS-STRIP", "TagsStrip")
 
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
@@ -518,7 +518,7 @@ func TestPutLocation_TagsRejected400(t *testing.T) {
 	}{
 		{"empty array", `{"tags":[]}`},
 		{"tags with values", `{"tags":[{"key":"foo","value":"bar"}]}`},
-		{"tags alongside name", `{"name":"x","tags":[]}`},
+		{"tags alongside name", `{"name":"TagsStrip renamed","tags":[]}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -528,23 +528,13 @@ func TestPutLocation_TagsRejected400(t *testing.T) {
 			putRec := httptest.NewRecorder()
 			router.ServeHTTP(putRec, patchReq)
 
-			require.Equal(t, http.StatusBadRequest, putRec.Code,
-				"tags in PUT body must be 400 (got %d): %s", putRec.Code, putRec.Body.String())
+			require.Equal(t, http.StatusOK, putRec.Code,
+				"tags in PATCH body must be 200 silent-strip (got %d): %s", putRec.Code, putRec.Body.String())
 
-			var resp struct {
-				Error struct {
-					Type   string `json:"type"`
-					Fields []struct {
-						Field string `json:"field"`
-						Code  string `json:"code"`
-					} `json:"fields"`
-				} `json:"error"`
-			}
-			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
-			assert.Equal(t, "validation_error", resp.Error.Type)
-			require.Len(t, resp.Error.Fields, 1)
-			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+			var tagCount int
+			require.NoError(t, pool.QueryRow(context.Background(),
+				`SELECT count(*) FROM trakrf.tags WHERE location_id = $1 AND deleted_at IS NULL`, id).Scan(&tagCount))
+			assert.Equal(t, 0, tagCount, "PATCH must not mutate tag subresource")
 		})
 	}
 }
