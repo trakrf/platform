@@ -83,7 +83,6 @@
     },
     "schemas": {
       "AddAssetTagResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Tag"
@@ -95,7 +94,6 @@
         "type": "object"
       },
       "AddLocationTagResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Tag"
@@ -107,9 +105,9 @@
         "type": "object"
       },
       "AssetHistoryItem": {
-        "additionalProperties": true,
         "properties": {
           "duration_seconds": {
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
@@ -118,10 +116,12 @@
             "type": "string"
           },
           "location_id": {
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
           "timestamp": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "type": "string"
           }
@@ -135,7 +135,6 @@
         "type": "object"
       },
       "AssetHistoryResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -145,14 +144,17 @@
           },
           "limit": {
             "example": 50,
+            "format": "int32",
             "type": "integer"
           },
           "offset": {
             "example": 0,
+            "format": "int32",
             "type": "integer"
           },
           "total_count": {
             "example": 100,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -165,11 +167,12 @@
         "type": "object"
       },
       "AssetLocationItem": {
-        "additionalProperties": true,
         "properties": {
           "asset_deleted_at": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "readOnly": true,
             "type": "string"
           },
           "asset_external_key": {
@@ -177,10 +180,12 @@
             "type": "string"
           },
           "asset_id": {
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
           "last_seen": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "type": "string"
           },
@@ -189,6 +194,7 @@
             "type": "string"
           },
           "location_id": {
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           }
@@ -204,7 +210,6 @@
         "type": "object"
       },
       "AssetLocationsResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -214,14 +219,17 @@
           },
           "limit": {
             "example": 50,
+            "format": "int32",
             "type": "integer"
           },
           "offset": {
             "example": 0,
+            "format": "int32",
             "type": "integer"
           },
           "total_count": {
             "example": 100,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -234,14 +242,16 @@
         "type": "object"
       },
       "AssetView": {
-        "additionalProperties": true,
         "properties": {
           "asset_deleted_at": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "readOnly": true,
             "type": "string"
           },
           "created_at": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
@@ -254,6 +264,7 @@
             "type": "string"
           },
           "id": {
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -265,6 +276,7 @@
             "type": "string"
           },
           "location_id": {
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
@@ -283,15 +295,18 @@
             "type": "array"
           },
           "updated_at": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "type": "string"
           },
           "valid_to": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -316,7 +331,6 @@
         "type": "object"
       },
       "CreateAssetResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/AssetView"
@@ -354,6 +368,7 @@
           },
           "location_id": {
             "example": 42,
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
@@ -390,7 +405,6 @@
         "type": "object"
       },
       "CreateLocationResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/LocationView"
@@ -437,6 +451,7 @@
           },
           "parent_id": {
             "example": 42,
+            "format": "int32",
             "minimum": 1,
             "nullable": true,
             "type": "integer"
@@ -465,7 +480,6 @@
         "type": "object"
       },
       "ErrorResponse": {
-        "additionalProperties": true,
         "description": "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
         "properties": {
           "error": {
@@ -487,6 +501,7 @@
                 "type": "string"
               },
               "status": {
+                "format": "int32",
                 "type": "integer"
               },
               "title": {
@@ -529,7 +544,6 @@
         "type": "object"
       },
       "FieldError": {
-        "additionalProperties": true,
         "properties": {
           "code": {
             "enum": [
@@ -564,7 +578,6 @@
         "type": "object"
       },
       "GetAssetResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/AssetView"
@@ -576,7 +589,6 @@
         "type": "object"
       },
       "GetCurrentOrgResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/OrgView"
@@ -588,7 +600,6 @@
         "type": "object"
       },
       "GetLocationResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/LocationView"
@@ -600,7 +611,6 @@
         "type": "object"
       },
       "ListAssetsResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -610,14 +620,17 @@
           },
           "limit": {
             "example": 50,
+            "format": "int32",
             "type": "integer"
           },
           "offset": {
             "example": 0,
+            "format": "int32",
             "type": "integer"
           },
           "total_count": {
             "example": 100,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -630,7 +643,6 @@
         "type": "object"
       },
       "ListLocationAncestorsResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -640,14 +652,17 @@
           },
           "limit": {
             "example": 50,
+            "format": "int32",
             "type": "integer"
           },
           "offset": {
             "example": 0,
+            "format": "int32",
             "type": "integer"
           },
           "total_count": {
             "example": 100,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -660,7 +675,6 @@
         "type": "object"
       },
       "ListLocationChildrenResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -670,14 +684,17 @@
           },
           "limit": {
             "example": 50,
+            "format": "int32",
             "type": "integer"
           },
           "offset": {
             "example": 0,
+            "format": "int32",
             "type": "integer"
           },
           "total_count": {
             "example": 100,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -690,7 +707,6 @@
         "type": "object"
       },
       "ListLocationDescendantsResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -700,14 +716,17 @@
           },
           "limit": {
             "example": 50,
+            "format": "int32",
             "type": "integer"
           },
           "offset": {
             "example": 0,
+            "format": "int32",
             "type": "integer"
           },
           "total_count": {
             "example": 100,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -720,7 +739,6 @@
         "type": "object"
       },
       "ListLocationsResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "items": {
@@ -730,14 +748,17 @@
           },
           "limit": {
             "example": 50,
+            "format": "int32",
             "type": "integer"
           },
           "offset": {
             "example": 0,
+            "format": "int32",
             "type": "integer"
           },
           "total_count": {
             "example": 100,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -750,14 +771,15 @@
         "type": "object"
       },
       "LocationView": {
-        "additionalProperties": true,
         "properties": {
           "created_at": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
           },
           "depth": {
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -769,6 +791,7 @@
             "type": "string"
           },
           "id": {
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -776,8 +799,10 @@
             "type": "boolean"
           },
           "location_deleted_at": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "readOnly": true,
             "type": "string"
           },
           "name": {
@@ -788,6 +813,7 @@
             "type": "string"
           },
           "parent_id": {
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
@@ -803,15 +829,18 @@
             "type": "string"
           },
           "updated_at": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "type": "string"
           },
           "valid_to": {
+            "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -837,10 +866,11 @@
         "type": "object"
       },
       "OrgView": {
-        "additionalProperties": true,
         "properties": {
           "id": {
             "example": 42,
+            "format": "int32",
+            "readOnly": true,
             "type": "integer"
           },
           "name": {
@@ -870,7 +900,6 @@
         "type": "object"
       },
       "RenameAssetResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/AssetView"
@@ -897,13 +926,13 @@
         "type": "object"
       },
       "RenameLocationResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/LocationView"
           },
           "descendant_count_affected": {
             "example": 7,
+            "format": "int32",
             "type": "integer"
           }
         },
@@ -914,10 +943,11 @@
         "type": "object"
       },
       "Tag": {
-        "additionalProperties": true,
         "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
         "properties": {
           "id": {
+            "format": "int32",
+            "readOnly": true,
             "type": "integer"
           },
           "is_active": {
@@ -994,6 +1024,7 @@
           },
           "location_id": {
             "example": 42,
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
@@ -1021,7 +1052,6 @@
         "type": "object"
       },
       "UpdateAssetResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/AssetView"
@@ -1060,6 +1090,7 @@
           },
           "parent_id": {
             "example": 42,
+            "format": "int32",
             "minimum": 1,
             "nullable": true,
             "type": "integer"
@@ -1079,7 +1110,6 @@
         "type": "object"
       },
       "UpdateLocationResponse": {
-        "additionalProperties": true,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/LocationView"
@@ -1103,7 +1133,8 @@
   "info": {
     "contact": {
       "email": "support@trakrf.id",
-      "name": "TrakRF Support"
+      "name": "TrakRF Support",
+      "url": "https://app.trakrf.id/api"
     },
     "description": "TrakRF public REST API. See /api for the customer-facing reference.\n\nSpec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).\n\nHTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage",
     "license": {
@@ -1111,7 +1142,7 @@
       "url": "https://github.com/trakrf/platform/blob/main/LICENSE"
     },
     "title": "TrakRF API",
-    "version": "v1"
+    "version": "1.0.0"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -1329,6 +1360,30 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
@@ -1368,6 +1423,30 @@
               }
             },
             "description": "Internal Server Error",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
             "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
@@ -1515,6 +1594,30 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
@@ -1616,6 +1719,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -1640,7 +1767,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -1649,6 +1777,30 @@
         "responses": {
           "204": {
             "description": "deleted",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "bad_request",
             "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
@@ -1742,6 +1894,30 @@
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1792,6 +1968,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -1814,7 +2014,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -1973,6 +2174,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -1995,7 +2220,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -2238,6 +2464,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -2262,7 +2512,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -2293,6 +2544,7 @@
             "in": "query",
             "name": "from",
             "schema": {
+              "example": "2025-04-29T12:34:56Z",
               "format": "date-time",
               "type": "string"
             }
@@ -2302,6 +2554,7 @@
             "in": "query",
             "name": "to",
             "schema": {
+              "example": "2025-04-29T12:34:56Z",
               "format": "date-time",
               "type": "string"
             }
@@ -2501,6 +2754,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -2525,7 +2802,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -2768,6 +3046,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -2792,7 +3094,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3035,6 +3338,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -3059,7 +3386,8 @@
             "name": "asset_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3070,7 +3398,8 @@
             "name": "tag_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3169,8 +3498,56 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           },
           "429": {
             "content": {
@@ -3208,6 +3585,30 @@
               }
             },
             "description": "internal_error",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
             "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
@@ -3449,6 +3850,30 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
@@ -3465,6 +3890,54 @@
               "Retry-After": {
                 "$ref": "#/components/headers/RetryAfter"
               },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "internal_error",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -3611,6 +4084,30 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
@@ -3712,6 +4209,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -3736,7 +4257,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3886,6 +4408,30 @@
               }
             }
           },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3936,6 +4482,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -3958,7 +4528,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -4117,6 +4688,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -4139,7 +4734,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -4382,6 +4978,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -4406,7 +5026,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -4610,6 +5231,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -4634,7 +5279,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -4838,6 +5484,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -4862,7 +5532,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5066,6 +5737,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -5090,7 +5785,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5333,6 +6029,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -5357,7 +6077,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5600,6 +6321,30 @@
                 "$ref": "#/components/headers/XRequestId"
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           }
         },
         "security": [
@@ -5624,7 +6369,8 @@
             "name": "location_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5635,7 +6381,8 @@
             "name": "tag_id",
             "required": true,
             "schema": {
-              "maximum": 9007199254740991,
+              "format": "int32",
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5734,8 +6481,56 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "unsupported_media_type",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
           },
           "429": {
             "content": {
@@ -5773,6 +6568,30 @@
               }
             },
             "description": "internal_error",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
             "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
@@ -5829,6 +6648,30 @@
               }
             }
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "bad_request",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "401": {
             "content": {
               "application/json": {
@@ -5842,6 +6685,30 @@
               "WWW-Authenticate": {
                 "$ref": "#/components/headers/WWWAuthenticate"
               },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "not_found",
+            "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -5946,6 +6813,30 @@
               }
             },
             "description": "Internal server error",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
             "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
@@ -6164,6 +7055,30 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
@@ -6180,6 +7095,54 @@
               "Retry-After": {
                 "$ref": "#/components/headers/RetryAfter"
               },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/XRateLimitLimit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/XRateLimitRemaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/XRateLimitReset"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.",
+            "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },

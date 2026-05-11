@@ -35,8 +35,13 @@ rules:
 
   # Problem+JSON (RFC 7807) error envelope — Zalando mandates it; TrakRF
   # ships a custom ErrorResponse envelope ({code, message, request_id,
-  # details}). Settled architectural choice.
+  # details}). Settled architectural choice. The `-as-default-response`
+  # sibling rule is also off because the apispec postprocess injects a
+  # `default` response pointing at the same ErrorResponse envelope (so
+  # Zalando's `must-specify-default-response` is green), and that envelope
+  # is application/json rather than application/problem+json by design.
   must-use-problem-json-for-errors: off
+  must-use-problem-json-as-default-response: off
 
   # Zalando-internal API metadata (x-api-id, x-audience) — Zalando's
   # internal API registry conventions. TrakRF has no equivalent registry
@@ -47,6 +52,25 @@ rules:
   # Zalando-proprietary x-extensible-enum extension — not OpenAPI-standard;
   # TrakRF uses plain enums and accepts the forward-compatibility tradeoff.
   should-use-x-extensible-enum: off
+
+  # Enum casing — Zalando requires UPPER_SNAKE_CASE. TrakRF uses lowercase
+  # enum values consistently across the API surface (tag_type: rfid/ble/
+  # barcode, error type/title codes like validation_error, sort field names
+  # like external_key/-external_key). Converting in v1 is a breaking
+  # change for every integrator; the trade-off favors the established
+  # convention. Settled architectural choice (TRA-672).
+  should-declare-enum-values-using-upper-snake-case-format: off
+
+  # 422 Unprocessable Entity — Zalando's "standard" / "well-understood"
+  # status code rules flag 422 on GET /api/v1/orgs/me. The code is
+  # intentional and documented (TRA-646 / BB22 S2 "missing_org_context"):
+  # the API key authenticated successfully but the org behind it has been
+  # deleted, so the request is semantically valid yet unprocessable. 422
+  # is RFC 4918 / RFC 9110 standard and broadly recognized; the Zalando
+  # rules' allow-lists are narrower than the IANA registry. Disabling
+  # rather than rewriting the code preserves the existing client contract.
+  must-use-standard-http-status-codes: off
+  should-use-well-understood-http-status-codes: off
 
   # ─────────────────────────────────────────────────────────────
   # Custom TrakRF rules (trakrf-*)
@@ -191,14 +215,18 @@ rules:
       declare `additionalProperties: true`. The OAS default already permits
       additional properties; the explicit `: true` causes codegen tools to
       emit wrapper classes instead of clean `Record<string, unknown>` types.
-      Origin: BB27 S8.
+      Origin: BB27 S8 / TRA-672 — apispec postprocess strips the literal
+      `:true` that swag's `--parseDependency` emits on every object.
     message: "Response schema declares additionalProperties:true; remove to allow clean codegen (BB27 S8)"
     severity: error
+    # Target the additionalProperties node directly. Using `given` at the
+    # schema root with `field: additionalProperties` in `then` fires on
+    # schemas where the field is absent — Spectral treats undefined as a
+    # `not: const: true` mismatch rather than skipping the assertion.
     given:
-      - "$.components.schemas[?(@property.match(/^Public.+View$|^.+Response$/))]"
+      - "$.components.schemas[?(@property.match(/^Public.+View$|^.+Response$/))].additionalProperties"
     then:
-      - field: additionalProperties
-        function: schema
+      - function: schema
         functionOptions:
           schema:
             not:

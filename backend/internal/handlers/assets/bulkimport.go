@@ -18,7 +18,7 @@ import (
 // @Tags bulk-import,internal
 // @Accept json
 // @Produce json
-// @Param jobId path int true "Job ID" minimum(1) maximum(9007199254740991)
+// @Param jobId path int true "Job ID" minimum(1) maximum(2147483647) format(int32)
 // @Success 200 {object} bulkimport.JobStatusResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "Invalid job ID"
 // @Failure 404 {object} modelerrors.ErrorResponse "Job not found or access denied"
