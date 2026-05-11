@@ -23,11 +23,14 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 		request.ExternalKey = GenerateAssetExternalKey(seq)
 	}
 
+	// TRA-674: COALESCE(description, '') defends against legacy rows where the
+	// nullable text column holds SQL NULL — pgx cannot scan NULL into the
+	// non-pointer asset.Asset.Description (`string`) and surfaces a 500.
 	query := `
 	insert into trakrf.assets
 	(name, external_key, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
 	values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	returning id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
+	returning id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
 	          metadata, is_active, created_at, updated_at, deleted_at
 	`
 	var asset asset.Asset
@@ -173,8 +176,9 @@ func (s *Storage) RenameAsset(ctx context.Context, orgID, id int, newExternalKey
 }
 
 func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.Asset, error) {
+	// TRA-674: COALESCE(description, '') — see CreateAsset comment.
 	query := `
-	select id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
+	select id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	from trakrf.assets
 	where id = $1 and org_id = $2 and deleted_at is null
@@ -205,8 +209,9 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 		return []*asset.Asset{}, nil
 	}
 
+	// TRA-674: COALESCE(description, '') — see CreateAsset comment.
 	query := `
-	SELECT id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
+	SELECT id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.assets
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
@@ -240,8 +245,9 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 }
 
 func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offset int) ([]asset.Asset, error) {
+	// TRA-674: COALESCE(description, '') — see CreateAsset comment.
 	query := `
-		select id, org_id, external_key, name, description, current_location_id, valid_from, valid_to,
+		select id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
 		       metadata, is_active, created_at, updated_at, deleted_at
 		from trakrf.assets
 		where org_id = $1 and deleted_at is null
@@ -555,7 +561,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 			LIMIT 1
 		)
 		SELECT
-			a.id, a.org_id, a.external_key, a.name, a.description,
+			a.id, a.org_id, a.external_key, a.name, COALESCE(a.description, ''),
 			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
@@ -659,7 +665,7 @@ func (s *Storage) GetAssetByExternalKey(
 			LIMIT 1
 		)
 		SELECT
-			a.id, a.org_id, a.external_key, a.name, a.description,
+			a.id, a.org_id, a.external_key, a.name, COALESCE(a.description, ''),
 			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,
@@ -775,7 +781,7 @@ func (s *Storage) ListAssetsFiltered(
 			ORDER BY s.asset_id, s.timestamp DESC
 		)
 		SELECT
-			a.id, a.org_id, a.external_key, a.name, a.description,
+			a.id, a.org_id, a.external_key, a.name, COALESCE(a.description, ''),
 			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
 			a.is_active, a.created_at, a.updated_at, a.deleted_at,

@@ -14,12 +14,15 @@ import (
 )
 
 func (s *Storage) CreateLocation(ctx context.Context, request location.Location) (*location.Location, error) {
+	// TRA-674: COALESCE(description, '') defends against legacy rows where the
+	// nullable text column holds SQL NULL — pgx cannot scan NULL into the
+	// non-pointer location.Location.Description (`string`) and surfaces a 500.
 	query := `
 	INSERT INTO trakrf.locations
 	(name, external_key, parent_location_id, description, valid_from, valid_to, is_active, org_id)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	RETURNING id, org_id, name, external_key, parent_location_id, path, depth,
-	          description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
+	          COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	`
 	var loc location.Location
 	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
@@ -206,7 +209,7 @@ func (s *Storage) RenameLocation(ctx context.Context, orgID, id int, newExternal
 func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location.Location, error) {
 	query := `
 	SELECT id, org_id, name, external_key, parent_location_id, path, depth,
-	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
+	       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.locations
 	WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	`
@@ -237,7 +240,7 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 
 	query := `
 	SELECT id, org_id, name, external_key, parent_location_id, path, depth,
-	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
+	       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.locations
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
 	`
@@ -273,13 +276,13 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 	query := `
 	WITH target AS (
 		SELECT id, org_id, name, external_key, parent_location_id, path, depth,
-		       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
+		       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
 		       'target' as relation_type
 		FROM trakrf.locations
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
 	)
 	SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-	       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+	       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 	       CASE
 	           WHEN l.id = $1 THEN 'target'
 	           WHEN l.path @> (SELECT path FROM target) AND l.id != $1 THEN 'ancestor'
@@ -354,7 +357,7 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, offset int) ([]location.Location, error) {
 	query := `
 		SELECT id, org_id, name, external_key, parent_location_id, path, depth,
-		       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at
+		       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 		FROM trakrf.locations
 		WHERE org_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -473,7 +476,7 @@ func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, erro
 func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
@@ -493,7 +496,7 @@ func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.L
 func (s *Storage) ListAncestorsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
@@ -535,7 +538,7 @@ func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error
 func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
@@ -555,7 +558,7 @@ func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location
 func (s *Storage) ListDescendantsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
@@ -596,7 +599,7 @@ func (s *Storage) CountDescendants(ctx context.Context, orgID, id int) (int, err
 func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
@@ -615,7 +618,7 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 func (s *Storage) ListChildrenPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
 	query := `
 		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-		       l.description, l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
@@ -795,7 +798,7 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 	query := `
 		SELECT
 			l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
-			l.path, l.depth, l.description, l.valid_from, l.valid_to,
+			l.path, l.depth, COALESCE(l.description, ''), l.valid_from, l.valid_to,
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
 			p.external_key
 		FROM trakrf.locations l
@@ -901,7 +904,7 @@ func (s *Storage) GetLocationByExternalKey(
 	query := `
 		SELECT
 			l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
-			l.path, l.depth, l.description, l.valid_from, l.valid_to,
+			l.path, l.depth, COALESCE(l.description, ''), l.valid_from, l.valid_to,
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
 			p.external_key
 		FROM trakrf.locations l
@@ -953,7 +956,7 @@ func (s *Storage) ListLocationsFiltered(
 	query := fmt.Sprintf(`
 		SELECT
 			l.id, l.org_id, l.name, l.external_key,
-			l.parent_location_id, l.path, l.depth, l.description,
+			l.parent_location_id, l.path, l.depth, COALESCE(l.description, ''),
 			l.valid_from, l.valid_to, l.is_active,
 			l.created_at, l.updated_at, l.deleted_at,
 			p.external_key

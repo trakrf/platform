@@ -37,21 +37,26 @@ type CreateAssetRequest struct {
 	IsActive            *bool                `json:"is_active,omitempty" example:"true"`
 }
 
-// PublicReadOnlyFields names the JSON keys on PublicAssetView that are
-// server-owned and round-trip safe: the PATCH handler strips them from the
-// request body before strict decoding so a verbatim GET → PATCH round-trip
-// succeeds (TRA-608 / BB18 §1.7). Fields not listed here (typos, write-only
-// fields off this resource) still produce a 400.
+// PublicReadOnlyFields names the JSON keys on PublicAssetView that the PATCH
+// handler strips from the request body before strict decoding so a verbatim
+// GET → PATCH round-trip succeeds (TRA-608 / BB18 §1.7). Fields not listed
+// here (typos, write-only fields off this resource) still produce a 400.
 //
-// `tags` is intentionally NOT on this list. Tags are managed via the
-// /assets/{id}/tags subresource, so a `tags` key in a PATCH body is a
-// caller-side mistake worth surfacing. Strict decode rejects it as an
-// unknown field with code=invalid_value, matching unknown-field behavior
-// (TRA-643 / BB22 F1).
+// TRA-674 / BB27 F3: `external_key` and `tags` were moved onto the strip list
+// to make full-object PATCH the supported integrator idiom — mirrors what
+// Stripe does. Mutating either still has a dedicated path
+// (POST /assets/{asset_id}/rename, POST/DELETE /assets/{asset_id}/tags); the
+// PATCH body just silently ignores them, the same way it silently ignores
+// `id` / `created_at` / `updated_at` / `asset_deleted_at`. The previous
+// rejection-based behavior (TRA-643 for `tags`, TRA-664 for `external_key`)
+// forced every code-generated client to write a strip-on-PATCH helper, so
+// the rule is reversed pre-launch in favor of the more generator-friendly
+// shape.
 //
 // Source of truth for the corresponding spec annotations:
-// internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"].
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_deleted_at"}
+// internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"]
+// (the spec-side readOnly markers are coordinated under TRA-672).
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_deleted_at", "external_key", "tags"}
 
 // UpdateAssetRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
@@ -66,11 +71,12 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_del
 // the underlying pointer remains nil because Go's json decoder treats
 // `null` and "omitted" the same on pointer fields.
 //
-// external_key is intentionally NOT on this struct (TRA-664 / BB26 D7). It
-// is the natural / join key downstream systems rely on; mutating it via a
-// generic PATCH would silently disconnect those joins. The handler rejects
-// any external_key in the PATCH body with code=immutable_field and a
-// pointer to POST /api/v1/assets/{asset_id}/rename.
+// external_key is intentionally NOT on this struct. It is the natural /
+// join key downstream systems rely on; mutating it via a generic PATCH
+// would silently disconnect those joins. POST /api/v1/assets/{asset_id}/rename
+// is the dedicated path (TRA-664 / BB26 D7). On PATCH, an external_key
+// field is silently stripped along with other read-only fields per
+// TRA-674 / BB27 F3 — see PublicReadOnlyFields.
 type UpdateAssetRequest struct {
 	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`
 	Description         *string              `json:"description" validate:"omitempty,max=1024"`
@@ -89,12 +95,15 @@ type UpdateAssetRequest struct {
 }
 
 // PublicImmutablePatchFields maps the JSON keys that PATCH /api/v1/assets/{id}
-// must reject to the dedicated operation that can mutate them. Source of
-// truth for the handler's RejectImmutableFields call; mirrors the
-// UpdateAssetRequest schema's deliberate omission of these keys. TRA-664.
-var PublicImmutablePatchFields = map[string]string{
-	"external_key": "POST /api/v1/assets/{asset_id}/rename",
-}
+// must reject to the dedicated operation that can mutate them.
+//
+// TRA-674 / BB27 F3: previously contained `external_key`, but the strip-on-
+// PATCH rule now applies (see PublicReadOnlyFields). Kept as the registration
+// point for any future field that genuinely needs a hard rejection (a field
+// where silent strip would be confusing or unsafe) rather than the
+// strip-and-ignore default. Empty map means RejectImmutableFields is a no-op
+// for assets.
+var PublicImmutablePatchFields = map[string]string{}
 
 // RenameAssetRequest is the body of POST /api/v1/assets/{asset_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation

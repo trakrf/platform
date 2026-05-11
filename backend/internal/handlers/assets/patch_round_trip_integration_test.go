@@ -62,11 +62,11 @@ func seedRoundTripAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, nam
 	return id
 }
 
-// TRA-608 / TRA-643 acceptance: GET /api/v1/assets/{id} → strip the
-// subresource-managed `tags` field → PUT /api/v1/assets/{id} succeeds with
-// 200. id, created_at, updated_at remain round-trip safe and may be sent
-// back verbatim; `tags` must be hand-stripped because it is rejected with
-// 400 invalid_value (managed via /assets/{id}/tags).
+// TRA-608 / TRA-643 / TRA-674 acceptance: GET /api/v1/assets/{id} →
+// mutate one field → PATCH the full body back succeeds with 200. The
+// server silently strips every read-only field (id, created_at, updated_at,
+// asset_deleted_at, external_key, tags) so the naive read-mutate-write
+// integrator flow works without per-field client-side scrubbing.
 func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -97,14 +97,11 @@ func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
-	// Mutate name and PUT back. `tags` is managed via subresource and must
-	// be stripped (TRA-643 / BB22 F1); `external_key` is immutable and must
-	// be stripped (TRA-664 / BB26 D7 — POST /assets/{id}/rename is the
-	// dedicated path). Other read-only fields stay on the body to exercise
-	// the round-trip-safe drop list (id, created_at, updated_at).
+	// Mutate name and PATCH the full body back. Every read-only field
+	// (id, created_at, updated_at, asset_deleted_at, external_key, tags)
+	// is silently stripped server-side (TRA-674 / BB27 F3); the client
+	// does not need to scrub them out first.
 	getResp.Data["name"] = "Forklift 7 (renamed)"
-	delete(getResp.Data, "tags")
-	delete(getResp.Data, "external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -300,11 +297,9 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	assert.Nil(t, getResp.Data["location_external_key"])
 	assert.Nil(t, getResp.Data["valid_to"])
 
-	// PUT-back of the GET body — the connector flow from §S2. `tags` is
-	// managed via a subresource (TRA-643) and `external_key` is immutable
-	// (TRA-664); both must be stripped. The rest is round-trip safe.
-	delete(getResp.Data, "tags")
-	delete(getResp.Data, "external_key")
+	// PATCH-back of the verbatim GET body — the connector flow from §S2.
+	// TRA-674 / BB27 F3: tags and external_key are now silently stripped
+	// server-side along with id/created_at/updated_at/asset_deleted_at.
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -495,9 +490,8 @@ func TestPostAsset_OmittedExternalKey_AutoMints(t *testing.T) {
 // Expected behavior: 200 with the unchanged record (no-op write), matching
 // the GET → PUT round-trip ergonomic.
 //
-// TRA-643: only round-trip-safe read-only fields are silently dropped. The
-// subresource-managed `tags` field has its own assertion below
-// (TestPutAsset_TagsRejected400).
+// TRA-674: tags and external_key are now in the strip set too — see
+// TestPutAsset_TagsStripped200 and TestPatchAsset_ExternalKey_Stripped200.
 func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -541,11 +535,14 @@ func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}
 }
 
-// TRA-643 / BB22 F1: `tags` is managed via the /assets/{id}/tags subresource.
-// A `tags` key in the PUT body must be rejected with 400 invalid_value
-// (matching the unknown-field response shape) so a read-modify-write
-// integrator gets a clear signal instead of a silent no-op.
-func TestPutAsset_TagsRejected400(t *testing.T) {
+// TRA-674 / BB27 F3: `tags` in a PATCH body is silently stripped, mirroring
+// id / created_at / updated_at / external_key. Tag mutation still goes
+// through POST/DELETE /assets/{id}/tags; the PATCH body just tolerates the
+// read-only field so a verbatim GET → PATCH round-trip succeeds. Previously
+// (TRA-643 / BB22 F1) a `tags` key surfaced as 400 invalid_value, but the
+// strip-vs-reject rule was reversed pre-launch in favor of the more
+// generator-friendly shape — see PublicReadOnlyFields.
+func TestPutAsset_TagsStripped200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -553,7 +550,7 @@ func TestPutAsset_TagsRejected400(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedRoundTripAsset(t, pool, orgID, "ASSET-TAGS-REJ", "TagsRej")
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-TAGS-STRIP", "TagsStrip")
 
 	handler := NewHandler(store)
 	router := setupRoundTripRouter(handler)
@@ -564,7 +561,7 @@ func TestPutAsset_TagsRejected400(t *testing.T) {
 	}{
 		{"empty array", `{"tags":[]}`},
 		{"tags with values", `{"tags":[{"key":"foo","value":"bar"}]}`},
-		{"tags alongside name", `{"name":"x","tags":[]}`},
+		{"tags alongside name", `{"name":"TagsStrip renamed","tags":[]}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -574,23 +571,15 @@ func TestPutAsset_TagsRejected400(t *testing.T) {
 			putRec := httptest.NewRecorder()
 			router.ServeHTTP(putRec, patchReq)
 
-			require.Equal(t, http.StatusBadRequest, putRec.Code,
-				"tags in PUT body must be 400 (got %d): %s", putRec.Code, putRec.Body.String())
+			require.Equal(t, http.StatusOK, putRec.Code,
+				"tags in PATCH body must be 200 silent-strip (got %d): %s", putRec.Code, putRec.Body.String())
 
-			var resp struct {
-				Error struct {
-					Type   string `json:"type"`
-					Fields []struct {
-						Field string `json:"field"`
-						Code  string `json:"code"`
-					} `json:"fields"`
-				} `json:"error"`
-			}
-			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
-			assert.Equal(t, "validation_error", resp.Error.Type)
-			require.Len(t, resp.Error.Fields, 1)
-			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+			// Tag set on the persisted row never changed — the seed inserts
+			// none, and the PATCH did not touch the tag subresource.
+			var tagCount int
+			require.NoError(t, pool.QueryRow(context.Background(),
+				`SELECT count(*) FROM trakrf.tags WHERE asset_id = $1 AND deleted_at IS NULL`, id).Scan(&tagCount))
+			assert.Equal(t, 0, tagCount, "PATCH must not mutate tag subresource")
 		})
 	}
 }

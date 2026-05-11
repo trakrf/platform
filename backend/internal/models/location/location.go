@@ -49,20 +49,20 @@ type CreateLocationRequest struct {
 	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
 }
 
-// PublicReadOnlyFields names the JSON keys on PublicLocationView that are
-// server-owned and round-trip safe: the PATCH handler strips them from the
-// request body before strict decoding so a verbatim GET → PATCH round-trip
-// succeeds (TRA-608 / BB18 §1.7).
+// PublicReadOnlyFields names the JSON keys on PublicLocationView that the
+// PATCH handler strips from the request body before strict decoding so a
+// verbatim GET → PATCH round-trip succeeds (TRA-608 / BB18 §1.7).
 //
-// `tags` is intentionally NOT on this list. Tags are managed via the
-// /locations/{id}/tags subresource, so a `tags` key in a PATCH body is a
-// caller-side mistake worth surfacing. Strict decode rejects it as an
-// unknown field with code=invalid_value, matching unknown-field behavior
-// (TRA-643 / BB22 F1).
+// TRA-674 / BB27 F3: `external_key` and `tags` were moved onto the strip
+// list to make full-object PATCH the supported integrator idiom. See
+// asset.PublicReadOnlyFields for the full rationale. Mutating either still
+// has a dedicated path (POST /locations/{location_id}/rename,
+// POST/DELETE /locations/{location_id}/tags).
 //
 // Source of truth for the corresponding spec annotations:
-// internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"].
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at"}
+// internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"]
+// (the spec-side readOnly markers are coordinated under TRA-672).
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at", "external_key", "tags"}
 
 // UpdateLocationRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
@@ -78,13 +78,15 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path
 // the underlying pointer remains nil because Go's json decoder treats
 // `null` and "omitted" the same on pointer fields.
 //
-// external_key is intentionally NOT on this struct (TRA-664 / BB26 D7). It
-// is the natural / join key downstream systems rely on and is the
-// canonical source for tree_path; mutating it via a generic PATCH would
-// silently disconnect joins and cascade tree_path changes without notice.
-// The handler rejects any external_key in the PATCH body with
-// code=immutable_field and a pointer to
-// POST /api/v1/locations/{location_id}/rename.
+// external_key is intentionally NOT on this struct. It is the natural /
+// join key downstream systems rely on and is the canonical source for
+// tree_path; mutating it via a generic PATCH would silently disconnect
+// joins and cascade tree_path changes without notice.
+// POST /api/v1/locations/{location_id}/rename is the dedicated path
+// (TRA-664 / BB26 D7) and is also the only operation that cascades
+// tree_path across descendants. On PATCH, an external_key field is
+// silently stripped along with other read-only fields per
+// TRA-674 / BB27 F3 — see PublicReadOnlyFields.
 type UpdateLocationRequest struct {
 	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
@@ -102,12 +104,14 @@ type UpdateLocationRequest struct {
 }
 
 // PublicImmutablePatchFields maps the JSON keys that PATCH /api/v1/locations/{id}
-// must reject to the dedicated operation that can mutate them. Source of
-// truth for the handler's RejectImmutableFields call; mirrors the
-// UpdateLocationRequest schema's deliberate omission of these keys. TRA-664.
-var PublicImmutablePatchFields = map[string]string{
-	"external_key": "POST /api/v1/locations/{location_id}/rename",
-}
+// must reject to the dedicated operation that can mutate them.
+//
+// TRA-674 / BB27 F3: previously contained `external_key`, but the strip-on-
+// PATCH rule now applies (see PublicReadOnlyFields). Kept as the
+// registration point for any future field that genuinely needs a hard
+// rejection rather than the strip-and-ignore default. Empty map means
+// RejectImmutableFields is a no-op for locations.
+var PublicImmutablePatchFields = map[string]string{}
 
 // RenameLocationRequest is the body of POST /api/v1/locations/{location_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation

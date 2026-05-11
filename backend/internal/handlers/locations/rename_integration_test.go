@@ -1,11 +1,16 @@
 //go:build integration
 // +build integration
 
-// TRA-664 / BB26 D7: locations counterpart to the asset rename tests.
-// external_key is immutable on PATCH; the dedicated POST /rename operation
+// TRA-664 / BB26 D7: locations counterpart to the asset rename tests. The
+// dedicated POST /api/v1/locations/{location_id}/rename operation
 // regenerates tree_path for the row and every descendant, and returns
 // descendant_count_affected so an integrator can decide whether to
 // re-fetch the subtree.
+//
+// TRA-674 / BB27 F3: PATCH no longer rejects an `external_key` body field
+// with 400 immutable_field; the strip-on-PATCH rule now silently drops it
+// so a verbatim GET → PATCH round-trip succeeds. Callers that need to
+// rename still go through POST /rename.
 
 package locations
 
@@ -49,9 +54,11 @@ func seedLocationRoundTripWithParent(t *testing.T, pool *pgxpool.Pool, orgID int
 	return id
 }
 
-// PATCH must reject any body containing external_key with code=immutable_field
-// and a detail pointing at the rename operation.
-func TestPatchLocation_ExternalKeyImmutable_Rejected400(t *testing.T) {
+// TRA-674 / BB27 F3: PATCH with an `external_key` body field returns 200
+// and silently strips the field — the persisted external_key is unchanged.
+// Mutations still require POST /rename, which is also the only path that
+// cascades tree_path across descendants.
+func TestPatchLocation_ExternalKey_Stripped200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -59,7 +66,8 @@ func TestPatchLocation_ExternalKeyImmutable_Rejected400(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedLocationRoundTrip(t, pool, orgID, "LOC-IMMUT", "ImmutLoc")
+	const startKey = "LOC-IMMUT"
+	id := seedLocationRoundTrip(t, pool, orgID, startKey, "ImmutLoc")
 
 	handler := NewHandler(store)
 	r := setupRenameLocationRouter(handler)
@@ -81,27 +89,20 @@ func TestPatchLocation_ExternalKeyImmutable_Rejected400(t *testing.T) {
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 
-			require.Equal(t, http.StatusBadRequest, rec.Code,
-				"PATCH with external_key must be 400 (got %d): %s", rec.Code, rec.Body.String())
+			require.Equal(t, http.StatusOK, rec.Code,
+				"PATCH with external_key must be 200 silent-strip (got %d): %s", rec.Code, rec.Body.String())
 
 			var resp struct {
-				Error struct {
-					Type   string `json:"type"`
-					Detail string `json:"detail"`
-					Fields []struct {
-						Field   string `json:"field"`
-						Code    string `json:"code"`
-						Message string `json:"message"`
-					} `json:"fields"`
-				} `json:"error"`
+				Data map[string]any `json:"data"`
 			}
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Equal(t, "validation_error", resp.Error.Type)
-			require.Len(t, resp.Error.Fields, 1)
-			assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
-			assert.Equal(t, "immutable_field", resp.Error.Fields[0].Code)
-			assert.Contains(t, resp.Error.Detail, "rename")
-			assert.Contains(t, resp.Error.Fields[0].Message, "rename")
+			assert.Equal(t, startKey, resp.Data["external_key"],
+				"PATCH must not mutate external_key — POST /rename is the dedicated path")
+
+			var dbExtKey string
+			require.NoError(t, pool.QueryRow(context.Background(),
+				`SELECT external_key FROM trakrf.locations WHERE id = $1`, id).Scan(&dbExtKey))
+			assert.Equal(t, startKey, dbExtKey, "persisted external_key must be unchanged")
 		})
 	}
 }
