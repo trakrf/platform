@@ -166,3 +166,101 @@ rules:
             type: array
             contains:
               const: updated_at
+
+  trakrf-path-param-name-consistency:
+    description: >
+      Same-resource operations must use the resource-specific path parameter
+      name (e.g., `asset_id`, `location_id`), not the bare `id`. Mixing
+      conventions across operations on the same resource confuses generators
+      and integrators. Origin: BB16 S7.
+    message: "Path param named 'id'; use the resource-specific name (e.g., asset_id) — BB16 S7"
+    severity: error
+    given:
+      - "$.paths.*.*.parameters[?(@.in == 'path' && @.name == 'id')]"
+    then:
+      - field: name
+        function: schema
+        functionOptions:
+          schema:
+            not:
+              const: id
+
+  trakrf-no-additional-properties-on-responses:
+    description: >
+      Response schemas (matching `Public.+View` or `.+Response`) must not
+      declare `additionalProperties: true`. The OAS default already permits
+      additional properties; the explicit `: true` causes codegen tools to
+      emit wrapper classes instead of clean `Record<string, unknown>` types.
+      Origin: BB27 S8.
+    message: "Response schema declares additionalProperties:true; remove to allow clean codegen (BB27 S8)"
+    severity: error
+    given:
+      - "$.components.schemas[?(@property.match(/^Public.+View$|^.+Response$/))]"
+    then:
+      - field: additionalProperties
+        function: schema
+        functionOptions:
+          schema:
+            not:
+              const: true
+
+  trakrf-4xx-coverage-all-methods:
+    description: >
+      Every operation must declare 400, 401, 404, and 429 response codes.
+      Origin: BB18 §2.1/2.2 — undeclared status codes (409 on tag POSTs,
+      400 on by-id GETs) confused integrators.
+    message: "Operation missing one or more of: 400, 401, 404, 429 (BB18 §2.1/2.2)"
+    severity: error
+    given:
+      - "$.paths.*[?(@property == 'get' || @property == 'post' || @property == 'put' || @property == 'patch' || @property == 'delete')].responses"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            required:
+              - "400"
+              - "401"
+              - "404"
+              - "429"
+
+  trakrf-4xx-coverage-write-methods-415:
+    description: >
+      Write methods (POST, PUT, PATCH, DELETE) must also declare a 415
+      response (Unsupported Media Type). Origin: BB18 §2.1/2.2.
+    message: "Write method missing 415 response (Unsupported Media Type) — BB18 §2.1/2.2"
+    severity: error
+    given:
+      - "$.paths.*[?(@property == 'post' || @property == 'put' || @property == 'patch' || @property == 'delete')].responses"
+    then:
+      - field: "415"
+        function: truthy
+
+  trakrf-allow-header-on-405:
+    description: >
+      Every 405 response must declare an `Allow` response header (RFC 7231
+      §6.5.5) listing the supported HTTP methods on the resource. Service
+      already emits the header; spec must declare it for consumers. Origin:
+      BB16 W6, BB27 S4 — declared on only 1 of 22 operations.
+    message: "405 response missing Allow header — RFC 7231 §6.5.5 (BB16 W6, BB27 S4)"
+    severity: error
+    given:
+      - "$.paths.*.*.responses['405']"
+    then:
+      - field: headers.Allow
+        function: truthy
+
+  trakrf-location-header-on-201-top-level-create:
+    description: >
+      Top-level POST operations (e.g., `POST /api/v1/assets`) must declare a
+      `Location` response header on 201. Sub-resource POSTs (e.g., `/tags`)
+      are exempt because the parent resource's URL is already known. Origin:
+      BB27 S3.
+    message: "Top-level POST 201 missing Location header — BB27 S3"
+    severity: error
+    given:
+      # Match POSTs whose path matches /api/v1/<one-segment> exactly
+      - "$.paths[?(@property.match(/^\\/api\\/v1\\/[^\\/]+$/))].post.responses['201']"
+    then:
+      - field: headers.Location
+        function: truthy
