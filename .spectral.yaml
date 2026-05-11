@@ -1,0 +1,27 @@
+# TrakRF OpenAPI lint config — Spectral
+#
+# Scope:
+#   Lints docs/api/openapi.public.yaml (generated from Go swag annotations).
+#   Runs in CI via .github/workflows/api-spec.yml after Redocly lint.
+#
+# Baseline:
+#   - spectral:oas                              — structural OpenAPI 3.x rules from Stoplight
+#   - @baloise/spectral-rules/zalando.yml       — Zalando RESTful API Guidelines port
+#     (the bare package main is the baloise flavor; we want pure Zalando)
+#
+# Disabled inherited rules are listed below with a one-line rationale,
+# mirroring the convention in redocly.yaml.
+#
+# Custom rules (trakrf-*) trace to specific BB findings. See TRA-670 for the
+# origin of each rule.
+
+extends:
+  - spectral:oas
+  - "@baloise/spectral-rules/zalando.yml"
+
+# ─────────────────────────────────────────────────────────────
+# Inherited Zalando disables (intentional architectural choices)
+# ─────────────────────────────────────────────────────────────
+# Fill in during Task 3 once Spectral has reported which Zalando rules fire
+# against the current spec. Each disable gets a single-line rationale.
+rules: {}
