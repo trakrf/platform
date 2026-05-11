@@ -4,9 +4,9 @@
 
 **Goal:** Introduce Spectral OpenAPI lint as a per-PR CI gate in trakrf/platform with a Zalando baseline plus 9 custom BB-traceable rules, and produce a Linear-comment findings inventory against the current `docs/api/openapi.public.yaml`.
 
-**Architecture:** A single `.spectral.yaml` at repo root extends `@baloise/spectral-rules` (Zalando port) and `spectral:oas`, then declares 9 custom rules drawn directly from BB13/BB16/BB18/BB27 findings. CI invokes Spectral via `pnpm dlx @stoplight/spectral-cli` in the existing `api-spec.yml` workflow, slotted between Redocly lint and openapi-generator-cli validate. No spec edits in this ticket — the spec stays exactly as it is and Spectral output drives the Phase-3 fix wave separately. After CI is green-or-red, run Spectral locally to capture the full findings inventory and post it as a Linear comment on TRA-670.
+**Architecture:** A single `.spectral.yaml` at repo root extends `@baloise/spectral-rules/zalando.yml` (the Zalando flavor — the bare package main is the baloise flavor) and `spectral:oas`, then declares 9 custom rules drawn directly from BB13/BB16/BB18/BB27 findings. Spectral CLI and the baloise ruleset are added as workspace-root devDependencies in `package.json` (pnpm dlx is insufficient — Spectral's `extends` resolution can't find packages in dlx caches per Task 1 findings). CI invokes Spectral via `pnpm exec spectral lint` in the existing `api-spec.yml` workflow, slotted between Redocly lint and openapi-generator-cli validate. No spec edits in this ticket — the spec stays exactly as it is and Spectral output drives the Phase-3 fix wave separately. After CI is green-or-red, run Spectral locally to capture the full findings inventory and post it as a Linear comment on TRA-670.
 
-**Tech Stack:** Spectral CLI (`@stoplight/spectral-cli`), `@baloise/spectral-rules` (Zalando), pnpm dlx for both, GitHub Actions, YAML for ruleset config.
+**Tech Stack:** Spectral CLI (`@stoplight/spectral-cli` ≥6.15) and `@baloise/spectral-rules` (Zalando port), both as root devDependencies; GitHub Actions; YAML for ruleset config.
 
 ---
 
@@ -74,14 +74,37 @@ If the `extends:` entry differs from `@baloise/spectral-rules` (some Spectral pa
 
 ---
 
-## Task 2: Write `.spectral.yaml` skeleton (Zalando baseline + spectral:oas only, no custom rules yet)
+## Task 2: Install Spectral as devDependency and write `.spectral.yaml` skeleton
 
 **Files:**
+- Modify: `package.json` (root) — add `@stoplight/spectral-cli` and `@baloise/spectral-rules` to devDependencies
+- Modify: `pnpm-lock.yaml` (committed lockfile update)
 - Create: `.spectral.yaml`
 
-- [ ] **Step 1: Author the skeleton**
+**Why devDependency (not dlx):** Task 1 discovered Spectral resolves `extends:` strings using `path.dirname(rulesetFile)` as the Node module search root. Packages fetched into pnpm's dlx cache are NOT reachable from the project root, so `extends: ["@baloise/spectral-rules/zalando.yml"]` fails to resolve under `pnpm dlx`. Install at the workspace root so `node_modules/@baloise/...` exists adjacent to `.spectral.yaml`.
 
-Create `/home/mike/platform/.spectral.yaml`:
+**Why `/zalando.yml` sub-path (not bare):** The bare `@baloise/spectral-rules` extends string resolves to `.spectral.yml → baloise.yml`, which is the *baloise* flavor (a superset of Zalando with Baloise-specific additions). We want the pure Zalando port, which lives at `@baloise/spectral-rules/zalando.yml`. Verified in Task 1.
+
+- [ ] **Step 1: Add Spectral packages as workspace-root devDependencies**
+
+Run from the worktree root:
+```bash
+pnpm add -D -w @stoplight/spectral-cli @baloise/spectral-rules
+```
+
+Expected: Updates root `package.json` `devDependencies` and `pnpm-lock.yaml`. The `-w` flag installs at the workspace root (this is a pnpm workspace per `pnpm-workspace.yaml`).
+
+Verify:
+```bash
+pnpm exec spectral --version
+ls node_modules/@baloise/spectral-rules/zalando.yml
+```
+
+Expected: Spectral prints version ≥6.15. The `zalando.yml` file exists in node_modules.
+
+- [ ] **Step 2: Author the `.spectral.yaml` skeleton**
+
+Create `.spectral.yaml` at the worktree root:
 
 ```yaml
 # TrakRF OpenAPI lint config — Spectral
@@ -91,8 +114,9 @@ Create `/home/mike/platform/.spectral.yaml`:
 #   Runs in CI via .github/workflows/api-spec.yml after Redocly lint.
 #
 # Baseline:
-#   - spectral:oas         — structural OpenAPI 3.x rules from Stoplight
-#   - @baloise/spectral-rules — Zalando RESTful API Guidelines port
+#   - spectral:oas                              — structural OpenAPI 3.x rules from Stoplight
+#   - @baloise/spectral-rules/zalando.yml       — Zalando RESTful API Guidelines port
+#     (the bare package main is the baloise flavor; we want pure Zalando)
 #
 # Disabled inherited rules are listed below with a one-line rationale,
 # mirroring the convention in redocly.yaml.
@@ -102,7 +126,7 @@ Create `/home/mike/platform/.spectral.yaml`:
 
 extends:
   - spectral:oas
-  - "@baloise/spectral-rules"
+  - "@baloise/spectral-rules/zalando.yml"
 
 rules:
   # ─────────────────────────────────────────────────────────────
@@ -112,35 +136,27 @@ rules:
   # against the current spec. Each disable gets a single-line rationale.
 ```
 
-- [ ] **Step 2: Run Spectral locally against the skeleton**
+- [ ] **Step 3: Run Spectral locally against the skeleton**
 
-Run:
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format pretty 2>&1 | tee /tmp/spectral-skeleton.txt
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty 2>&1 | tee /tmp/spectral-skeleton.txt
 ```
 
-Expected: Spectral runs and outputs a list of findings (likely many — Zalando rules will fire on URL versioning, X- prefix headers, ErrorResponse envelope, snake_case JSON validation, etc.). The command may exit non-zero — that's expected.
+Expected: Spectral runs and outputs Zalando + spectral:oas findings (likely many — URL versioning, X- headers, etc.). The command exits non-zero — expected.
 
-- [ ] **Step 3: Capture the inherited-rule firings for Task 3**
-
-Save the unique rule codes to drive the disables in Task 3:
+- [ ] **Step 4: Capture the unique inherited-rule firings for Task 3**
 
 ```bash
-grep -oE '[a-z0-9-]+$' /tmp/spectral-skeleton.txt | sort -u > /tmp/spectral-skeleton-codes.txt
-# Or, more robustly, parse the pretty output:
-awk '/^[[:space:]]+[0-9]+:[0-9]+/ {print $NF}' /tmp/spectral-skeleton.txt | sort -u > /tmp/spectral-skeleton-codes.txt
-cat /tmp/spectral-skeleton-codes.txt
+awk '/^[[:space:]]+[0-9]+:[0-9]+/ {print $NF}' /tmp/spectral-skeleton.txt | sort -u | tee /tmp/spectral-skeleton-codes.txt
 ```
 
-Expected: A list of unique rule codes (e.g., `oas3-schema`, `must-use-snake-case`, `must-use-problem-json`, etc.).
+Expected: A list of unique rule codes (e.g., `oas3-schema-check`, `must-use-snake-case`, `must-use-problem-json`, etc.). Task 3 will classify each as keep-firing / disable / defer.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add .spectral.yaml
-git commit -m "chore(api): add Spectral skeleton with Zalando + spectral:oas baseline (TRA-670)"
+git add package.json pnpm-lock.yaml .spectral.yaml
+git commit -m "chore(api): add Spectral + Zalando ruleset and skeleton .spectral.yaml (TRA-670)"
 ```
 
 ---
@@ -183,9 +199,7 @@ Append to the `rules:` block:
 - [ ] **Step 2: Re-run Spectral to verify the disables took effect**
 
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format pretty 2>&1 | tee /tmp/spectral-after-disables.txt
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty 2>&1 | tee /tmp/spectral-after-disables.txt
 diff /tmp/spectral-skeleton.txt /tmp/spectral-after-disables.txt | head -50
 ```
 
@@ -246,9 +260,7 @@ Add under the `rules:` block:
 - [ ] **Step 2: Run Spectral and confirm the rule fires on known offenders**
 
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format pretty 2>&1 | tee /tmp/spectral-r1.txt
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty 2>&1 | tee /tmp/spectral-r1.txt
 grep trakrf-int4-bounded-id-path-params /tmp/spectral-r1.txt | head -20
 ```
 
@@ -296,9 +308,7 @@ Add to `.spectral.yaml`:
 - [ ] **Step 2: Run Spectral and verify the rule fires**
 
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format pretty 2>&1 | tee /tmp/spectral-r2.txt
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty 2>&1 | tee /tmp/spectral-r2.txt
 grep trakrf-response-required-array /tmp/spectral-r2.txt | head -20
 ```
 
@@ -344,9 +354,7 @@ Origin: BB16 S8, BB27 F3/S2. Fields the client never sets must be `readOnly: tru
 - [ ] **Step 2: Verify the rule fires**
 
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format pretty 2>&1 | tee /tmp/spectral-r3.txt
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty 2>&1 | tee /tmp/spectral-r3.txt
 grep trakrf-readonly-derived-fields /tmp/spectral-r3.txt | head -20
 ```
 
@@ -424,9 +432,7 @@ grep -nE "^\s+(PublicAssetView|PublicLocationView|Asset(View|Public)|Location(Vi
 - [ ] **Step 3: Verify**
 
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format pretty 2>&1 | tee /tmp/spectral-r4.txt
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty 2>&1 | tee /tmp/spectral-r4.txt
 grep sibling-schema /tmp/spectral-r4.txt
 ```
 
@@ -524,9 +530,7 @@ These five rules are bundled in one task because each is a relatively small JSON
 - [ ] **Step 2: Verify each rule fires (or doesn't, with clean reason)**
 
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format pretty 2>&1 | tee /tmp/spectral-r5.txt
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty 2>&1 | tee /tmp/spectral-r5.txt
 
 for rule in trakrf-path-param-name-consistency \
             trakrf-no-additional-properties-on-responses \
@@ -577,17 +581,27 @@ Insert the following step IMMEDIATELY AFTER it (and before `openapi-generator-cl
         # BB27); see .spectral.yaml for rule traceability. Failures here mean
         # the generated spec violates a custom rule or a Zalando hygiene rule
         # — fix in source Go annotations, not the generated YAML.
-        run: pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty
+        run: pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty
 ```
 
-*Why two `--package` flags:* pnpm dlx needs both the CLI and the ruleset on the dlx-resolution path so `extends: ["@baloise/spectral-rules"]` in `.spectral.yaml` can resolve. Verified in Task 1 Step 2.
+*Why `pnpm exec`:* Spectral's `extends` resolution can't find packages in pnpm's dlx cache. The packages are workspace-root devDependencies (Task 2), so `pnpm exec spectral` resolves them from `node_modules/`.
+
+**Prerequisite:** The CI workflow needs `pnpm install --frozen-lockfile` to have run before this step. Check the existing api-spec.yml — the current workflow does NOT run `pnpm install`; the Redocly step uses `pnpm dlx`. Add a `pnpm install` step (or extend the existing pnpm setup) before the Spectral step.
+
+Look for the pnpm/Node setup section near the top of api-spec.yml. After the `Set up Node` step, add:
+
+```yaml
+      - name: Install workspace deps (needed for pnpm exec spectral)
+        run: pnpm install --frozen-lockfile
+```
+
+If this step already exists (added by another PR after the plan was written), don't duplicate it.
 
 - [ ] **Step 2: Validate the workflow YAML locally**
 
 ```bash
-pnpm --package=@redhat-developer/yaml-language-server dlx -c '' true 2>/dev/null || true
 # Lightweight check: yq parses it cleanly
-command -v yq >/dev/null && yq eval '.jobs."api-spec".steps[] | .name' /home/mike/platform/.github/workflows/api-spec.yml
+command -v yq >/dev/null && yq eval '.jobs."api-spec".steps[] | .name' .github/workflows/api-spec.yml
 ```
 
 Expected: yq prints the step names in order; the new "Spectral lint" step appears between "Redocly lint" and "openapi-generator-cli validate".
@@ -658,7 +672,7 @@ Edit `.github/workflows/api-spec.yml` and add `continue-on-error: true` to the S
         # at which point this `continue-on-error` flag should be removed in the
         # same PR that lands the fixes.
         continue-on-error: true
-        run: pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty
+        run: pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty
 ```
 
 Commit:
@@ -686,9 +700,7 @@ Update PR description to note the `continue-on-error` is intentional and will be
 - [ ] **Step 1: Re-run Spectral with JSON output for structured parsing**
 
 ```bash
-pnpm --package=@stoplight/spectral-cli --package=@baloise/spectral-rules \
-  dlx spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml \
-  --format json 2>/dev/null > /tmp/spectral-findings.json
+pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format json 2>/dev/null > /tmp/spectral-findings.json
 ```
 
 Expected: A JSON array of findings, each with `code`, `message`, `path`, `range` (line:col).
