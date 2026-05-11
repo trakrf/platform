@@ -47,3 +47,35 @@ rules:
   # Zalando-proprietary x-extensible-enum extension — not OpenAPI-standard;
   # TrakRF uses plain enums and accepts the forward-compatibility tradeoff.
   should-use-x-extensible-enum: off
+
+  # ─────────────────────────────────────────────────────────────
+  # Custom TrakRF rules (trakrf-*)
+  # ─────────────────────────────────────────────────────────────
+
+  trakrf-int4-bounded-id-path-params:
+    description: >
+      Path parameters named like `*_id` (or bare `id`) must declare
+      `format: int32` and `maximum: 2147483647`. Origin: BB27 F1/S1 — the
+      spec previously declared int64 bounds on int4-backed columns, which
+      triggered 500s with the raw pgx driver error in the response body.
+      Spec numeric bounds must match int4 storage.
+    message: "{{property}}: *_id path params must declare format:int32 AND maximum:2147483647 (BB27 F1/S1)"
+    severity: error
+    given:
+      # Operation-level path params (all current params are at this level)
+      - "$.paths.*.*.parameters[?(@.in == 'path' && (@.name == 'id' || @.name.match(/_id$/)))].schema"
+      # Path-item-level path params (defensive coverage in case any are added here)
+      - "$.paths.*.parameters[?(@.in == 'path' && (@.name == 'id' || @.name.match(/_id$/)))].schema"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            properties:
+              format:
+                const: int32
+              maximum:
+                const: 2147483647
+            required:
+              - format
+              - maximum
