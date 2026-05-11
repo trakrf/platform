@@ -60,6 +60,30 @@ func (s *Storage) GetOrganizationByID(ctx context.Context, id int) (*organizatio
 	return &org, nil
 }
 
+// GetOrganizationByIdentifier retrieves a single organization by its identifier
+// (the URL-safe natural key, e.g. "bb-test-org"). Returns (nil, nil) when no
+// active row matches, matching the no-rows convention of GetOrganizationByID.
+func (s *Storage) GetOrganizationByIdentifier(ctx context.Context, identifier string) (*organization.Organization, error) {
+	query := `
+		SELECT id, name, identifier, metadata,
+		       valid_from, valid_to, is_active, created_at, updated_at
+		FROM trakrf.organizations
+		WHERE identifier = $1 AND deleted_at IS NULL
+	`
+	var org organization.Organization
+	err := s.pool.QueryRow(ctx, query, identifier).Scan(
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
+		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get organization by identifier: %w", err)
+	}
+	return &org, nil
+}
+
 // CreateOrganization creates a new organization.
 // Returns the created org. Caller must separately add user to org_users.
 func (s *Storage) CreateOrganization(ctx context.Context, name, identifier string) (*organization.Organization, error) {

@@ -48,6 +48,152 @@ test *args:
 test-integration *args:
     go test -tags=integration -p 1 -v {{args}}
 
+# TRA-671: Run Schemathesis contract tests against an ephemeral schemathesis DB.
+# Stands up TimescaleDB if not running, migrates trakrf_schemathesis, loads the
+# contract-test seed, starts the backend with APP_ENV=test, mints an API key via
+# /test/apikeys, runs schemathesis, and tears down. Idempotent — safe to re-run.
+#
+# Notes:
+#   - Backend listens on 8081 to avoid clobbering a developer's running dev backend.
+#   - APP_ENV=test (any value != "production") mounts the test handler.
+#   - With set -euo pipefail, a non-zero schemathesis exit (findings) will fail
+#     the recipe. That's correct gate behavior — the report is still written to
+#     backend/contract-tests/.
+test-contract:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    SCHEMA_DB="trakrf_schemathesis"
+    PG_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
+    # URL-encode the password so chars like '#' don't get parsed as URL fragments
+    PG_PASSWORD_ENC="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PG_PASSWORD")"
+    PG_URL_ROOT="postgres://postgres:${PG_PASSWORD_ENC}@localhost:5432/postgres?sslmode=disable"
+    export PG_URL_LOCAL="postgres://postgres:${PG_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
+
+    cleanup() {
+        if [ -n "${BACKEND_PID:-}" ]; then
+            # go run spawns the compiled binary as a child — kill the child
+            # (the actual listener) first, then the parent.
+            pkill -P "$BACKEND_PID" 2>/dev/null || true
+            kill "$BACKEND_PID" 2>/dev/null || true
+        fi
+    }
+    trap cleanup EXIT
+
+    # 1. Ensure timescaledb is up. Probe over the published TCP port from the
+    # host — pg_isready inside the container can flip green a moment before
+    # the docker port mapping starts accepting connections (CI cold-start race),
+    # which would crash the first host-side psql call with "server closed the
+    # connection unexpectedly".
+    echo "🐳 Ensuring timescaledb is up..."
+    docker compose -p platform -f "$REPO_ROOT/docker-compose.yaml" up -d timescaledb
+    DB_READY=0
+    for _ in {1..60}; do
+        if PGPASSWORD="$PG_PASSWORD" psql -h localhost -p 5432 -U postgres -d postgres -c 'SELECT 1' >/dev/null 2>&1; then
+            DB_READY=1
+            break
+        fi
+        sleep 1
+    done
+    if [ "$DB_READY" -ne 1 ]; then
+        echo "❌ timescaledb did not become ready within 60s" >&2
+        exit 1
+    fi
+
+    # 2. (Re)create the contract-test DB. Terminate any lingering sessions
+    # first (e.g. an interrupted prior run) so DROP DATABASE doesn't error.
+    #
+    # Pin search_path=trakrf,public at the database level (not on the connection
+    # URL) so every connection — migrate, backend, psql for seeding — sees the
+    # same path. Putting it on the URL via options=-c would break golang-migrate:
+    # CURRENT_SCHEMA() returns 'public' on the first run (trakrf doesn't exist
+    # yet) and 'trakrf' afterwards, putting schema_migrations in different
+    # schemas across runs.
+    echo "🗄  Recreating ${SCHEMA_DB}..."
+    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${SCHEMA_DB}';" >/dev/null
+    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${SCHEMA_DB};"
+    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${SCHEMA_DB};"
+    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
+        "ALTER DATABASE ${SCHEMA_DB} SET search_path = trakrf, public;"
+    # Pre-create the trakrf schema so CURRENT_SCHEMA() on the first migrate
+    # connection resolves to 'trakrf'. Without this the migration library would
+    # put schema_migrations in 'public' on the first run, then look for it in
+    # 'trakrf' on the second (backend startup re-runs migrations) — and apply
+    # migration 1 again, which fails on "organization_seq already exists".
+    psql "$PG_URL_LOCAL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA trakrf;"
+
+    # 3. Migrate (PG_URL_LOCAL exported above, re-evaluated by just migrate)
+    echo "🔄 Migrating ${SCHEMA_DB}..."
+    just migrate
+
+    # 4. Seed
+    echo "🌱 Loading contract-test seed..."
+    psql "$PG_URL_LOCAL" -v ON_ERROR_STOP=1 -f "$REPO_ROOT/backend/database/seeds/contract_test_seed.sql"
+
+    # 5. Start backend in background on port 8081
+    if ss -lnt 'sport = :8081' 2>/dev/null | grep -q ":8081"; then
+        echo "❌ Port 8081 already in use — stop the other listener and retry" >&2
+        exit 1
+    fi
+    echo "🚀 Starting backend on :8081 with APP_ENV=test..."
+    PG_URL="$PG_URL_LOCAL" \
+    APP_ENV=test \
+    JWT_SECRET="${JWT_SECRET:-dev-secret-change-in-production}" \
+    BACKEND_PORT=8081 \
+        go run . >/tmp/trakrf-contract-backend.log 2>&1 &
+    BACKEND_PID=$!
+
+    # 6. Wait for /healthz
+    echo "⏳ Waiting for /healthz..."
+    READY=0
+    for i in {1..60}; do
+        if curl -sf http://localhost:8081/healthz > /dev/null 2>&1; then
+            READY=1
+            break
+        fi
+        sleep 1
+    done
+    if [ "$READY" -ne 1 ]; then
+        echo "❌ Backend never became ready; tail of /tmp/trakrf-contract-backend.log:" >&2
+        tail -50 /tmp/trakrf-contract-backend.log >&2 || true
+        exit 1
+    fi
+
+    # 7. Mint API key
+    echo "🔑 Minting contract-test API key..."
+    KEY="$(curl -sf -X POST http://localhost:8081/test/apikeys \
+        -H 'Content-Type: application/json' \
+        -d '{"scopes":["assets:read","assets:write","locations:read","locations:write","history:read"]}' \
+        | jq -r .token)"
+    if [ -z "$KEY" ] || [ "$KEY" = "null" ]; then
+        echo "❌ Failed to mint API key" >&2
+        exit 1
+    fi
+
+    # 8. Run Schemathesis (docker, v4 CLI)
+    #
+    # The image runs as a non-root user; with a host bind mount the container
+    # can't write report files unless we either chmod the host dir 0777 or
+    # pin the container UID to the invoker. Pin --user to match: local devs
+    # get reports owned by themselves, CI gets reports owned by the runner.
+    echo "🧪 Running schemathesis..."
+    mkdir -p "$REPO_ROOT/backend/contract-tests"
+    chmod 0777 "$REPO_ROOT/backend/contract-tests"
+    docker run --rm --network host \
+        --user "$(id -u):$(id -g)" \
+        -v "$REPO_ROOT/docs/api/openapi.public.yaml:/spec.yaml:ro" \
+        -v "$REPO_ROOT/backend/contract-tests:/out" \
+        schemathesis/schemathesis:4.18.2 \
+        run \
+        --checks=all \
+        --generation-deterministic \
+        --url http://localhost:8081 \
+        --header "Authorization: Bearer ${KEY}" \
+        --report=junit,har,ndjson \
+        --report-dir=/out \
+        /spec.yaml
+
 # Run tests with race detection
 test-race:
     go test -race ./...

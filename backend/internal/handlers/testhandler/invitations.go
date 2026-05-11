@@ -103,5 +103,6 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/invitations/{id}/token", h.GetInvitationToken)
 		r.Get("/sentry", h.SentryTest)
 		r.Get("/sentry-capture", h.SentryCapture)
+		r.Post("/apikeys", h.MintAPIKey) // TRA-671
 	})
 }
