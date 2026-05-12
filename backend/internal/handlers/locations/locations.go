@@ -227,7 +227,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `tree_path`, `depth`, `deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `"parent_id": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename (also cascades `tree_path` across descendants); mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `"parent_id": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -267,14 +267,13 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	// TRA-674 / BB27 F3: external_key and tags are on PublicReadOnlyFields
 	// and silently stripped along with id, created_at, updated_at,
-	// tree_path, depth, deleted_at. TRA-681 extends the same strip
-	// to parent_external_key — the derived natural-key form is read-only on
-	// PATCH and PATCH bodies use the surrogate parent_id form exclusively.
-	// Rename still goes through POST /locations/{id}/rename (which cascades
-	// tree_path across descendants); tag mutations through POST/DELETE
-	// /locations/{id}/tags. RejectImmutableFields is left in place for any
-	// future field that genuinely needs a hard rejection rather than the
-	// strip-and-ignore default.
+	// deleted_at. TRA-681 extends the same strip to parent_external_key —
+	// the derived natural-key form is read-only on PATCH and PATCH bodies
+	// use the surrogate parent_id form exclusively. Rename still goes
+	// through POST /locations/{id}/rename; tag mutations through
+	// POST/DELETE /locations/{id}/tags. RejectImmutableFields is left in
+	// place for any future field that genuinely needs a hard rejection
+	// rather than the strip-and-ignore default.
 	if httputil.RejectImmutableFields(w, req, reqID, location.PublicImmutablePatchFields) {
 		return
 	}
@@ -461,21 +460,22 @@ type UpdateLocationResponse struct {
 
 // RenameLocationResponse is the typed envelope returned by
 // POST /api/v1/locations/{location_id}/rename. `descendant_count_affected`
-// reports the number of descendant rows whose tree_path was rewritten by
-// the rename cascade so integrators can decide whether to re-fetch the
-// subtree. Does not include the renamed row itself; same-value rename
-// returns 0. TRA-664.
+// reports the number of live descendant rows reachable through
+// parent_location_id so integrators can decide whether to re-fetch the
+// subtree (their downstream natural-key joins may need refreshing even
+// though no descendant row was modified on the server). Does not include
+// the renamed row itself; same-value rename returns 0. TRA-664 / TRA-684.
 type RenameLocationResponse struct {
 	Data                    location.PublicLocationView `json:"data"`
 	DescendantCountAffected int                         `json:"descendant_count_affected" example:"7"`
 }
 
-// @Summary      Rename a location (mutate external_key + cascade tree_path)
+// @Summary      Rename a location (mutate external_key)
 // @Description  **Required scope:** `locations:write`
 // @Description
-// @Description  Mutate the location's `external_key`. This operation is **destructive to downstream joins** and regenerates `tree_path` for this row and every descendant in a single transaction.
+// @Description  Mutate the location's `external_key`. This operation is **destructive to downstream joins** because consumers of the natural key must re-resolve it. Only this row's `external_key` changes on the server; descendants are not modified.
 // @Description
-// @Description  The response includes `descendant_count_affected` so an integrator can decide whether to re-fetch the subtree. `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).
+// @Description  The response includes `descendant_count_affected` (the live descendant count reachable through `parent_id`) so an integrator can decide whether to refresh derived natural-key joins for the subtree. `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).
 // @Tags         locations,public
 // @ID           locations.rename
 // @Accept       json
@@ -573,7 +573,7 @@ type ListDescendantsResponse struct {
 // @Param is_active           query bool   false "filter by active flag"
 // @Param include_deleted     query bool   false "when true, include soft-deleted rows in the response. deleted_at is populated for those rows. Orthogonal to is_active." default(false)
 // @Param q                   query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
-// @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(tree_path, -tree_path, external_key, -external_key, name, -name, created_at, -created_at)
+// @Param sort                query []string false "comma-separated, prefix '-' for DESC" collectionFormat(csv) Enums(external_key, -external_key, name, -name, created_at, -created_at)
 // @Success 200 {object} locations.ListLocationsResponse
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -595,7 +595,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
 		Filters:     []string{"parent_id", "parent_external_key", "external_key", "is_active", "include_deleted", "q"},
 		BoolFilters: []string{"is_active", "include_deleted"},
-		Sorts:       []string{"tree_path", "external_key", "name", "created_at"},
+		Sorts:       []string{"external_key", "name", "created_at"},
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, req, err, reqID)
@@ -741,7 +741,7 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary List location ancestors
-// @Description Sort order is fixed: ancestors are returned ordered by `depth` ascending (root first), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list.
+// @Description Sort order is fixed: ancestors are returned root first (walking up the `parent_id` chain), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list.
 // @Tags locations,public
 // @ID locations.ancestors
 // @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)
@@ -801,7 +801,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary List location descendants
-// @Description Sort order is fixed: descendants are returned in depth-first tree order (ordered by ltree `path` ascending), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list.
+// @Description Sort order is fixed: descendants are returned in depth-first tree order (each level sorted by lowercased `external_key`), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list.
 // @Tags locations,public
 // @ID locations.descendants
 // @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)

@@ -25,12 +25,11 @@ func JSONTagNameFunc(f reflect.StructField) string {
 }
 
 // ExternalKeyPattern is the canonical character set for caller-supplied
-// external_keys on the public API: ASCII alphanumerics plus hyphen. Underscore
-// is reserved as the segment-internal separator after tree_path normalization,
-// and period is the segment separator itself; both must not appear in a
-// caller-supplied key. Whitespace, slash, and colon previously triggered 500s
-// at the storage layer (TRA-615 / BB19 §S5) — the validator now rejects them
-// with 400 invalid_value before they reach storage.
+// external_keys on the public API: ASCII alphanumerics plus hyphen.
+// Whitespace, slash, colon, period, and underscore are rejected at the
+// validator boundary so they never reach storage (TRA-615 / BB19 §S5).
+// (The underscore/period restriction predates TRA-684's removal of
+// tree_path but is kept for URL-safety and predictability.)
 var ExternalKeyPattern = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
 
 // RegisterCustomValidations registers the cross-handler custom tags used by

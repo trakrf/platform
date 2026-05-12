@@ -5,10 +5,9 @@
 // assets PUT round-trip + always-emit tests.
 //
 // TRA-674 / BB27 F3: `tags` and `external_key` are now silently stripped on
-// PATCH along with id / created_at / updated_at / tree_path / depth /
-// deleted_at so a verbatim GET → PATCH round-trip succeeds. Tag
-// mutation still goes through /locations/{id}/tags and rename still goes
-// through /locations/{id}/rename.
+// PATCH along with id / created_at / updated_at / deleted_at so a verbatim
+// GET → PATCH round-trip succeeds. Tag mutation still goes through
+// /locations/{id}/tags and rename still goes through /locations/{id}/rename.
 
 package locations
 
@@ -83,15 +82,15 @@ func TestPutLocation_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &getResp))
 
-	for _, field := range []string{"id", "created_at", "updated_at", "tags", "tree_path", "depth", "description", "valid_to"} {
+	for _, field := range []string{"id", "created_at", "updated_at", "tags", "description", "valid_to"} {
 		_, present := getResp.Data[field]
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
 	// Mutate name and PATCH the full body back. All read-only fields
-	// (id, created_at, updated_at, tree_path, depth, deleted_at,
-	// external_key, tags) are silently stripped server-side per TRA-674 /
-	// BB27 F3 — the integrator does not need to scrub the body first.
+	// (id, created_at, updated_at, deleted_at, external_key, tags) are
+	// silently stripped server-side per TRA-674 / BB27 F3 — the integrator
+	// does not need to scrub the body first.
 	getResp.Data["name"] = "Warehouse 1 (renamed)"
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
@@ -485,8 +484,6 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 		{"only id", `{"id":999}`},
 		{"only created_at", `{"created_at":"2020-01-01T00:00:00Z"}`},
 		{"only updated_at", `{"updated_at":"2020-01-01T00:00:00Z"}`},
-		{"only tree_path", `{"tree_path":"x"}`},
-		{"only depth", `{"depth":42}`},
 		{"empty object", `{}`},
 	}
 	for _, tc := range cases {

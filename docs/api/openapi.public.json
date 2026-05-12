@@ -831,11 +831,6 @@
             "readOnly": true,
             "type": "string"
           },
-          "depth": {
-            "format": "int32",
-            "readOnly": true,
-            "type": "integer"
-          },
           "description": {
             "nullable": true,
             "type": "string"
@@ -870,10 +865,6 @@
             },
             "type": "array"
           },
-          "tree_path": {
-            "readOnly": true,
-            "type": "string"
-          },
           "updated_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
@@ -902,8 +893,6 @@
           "description",
           "parent_id",
           "parent_external_key",
-          "tree_path",
-          "depth",
           "is_active",
           "valid_from",
           "valid_to",
@@ -3792,7 +3781,7 @@
             "name": "sort",
             "schema": {
               "default": "",
-              "pattern": "^(|(?:tree_path|-tree_path|external_key|-external_key|name|-name|created_at|-created_at)(?:,(?:tree_path|-tree_path|external_key|-external_key|name|-name|created_at|-created_at))*)$",
+              "pattern": "^(|(?:external_key|-external_key|name|-name|created_at|-created_at)(?:,(?:external_key|-external_key|name|-name|created_at|-created_at))*)$",
               "type": "string"
             },
             "style": "form"
@@ -4773,7 +4762,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `tree_path`, `depth`, `deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `\"parent_id\": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename (also cascades `tree_path` across descendants); mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `\"parent_id\": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
         "operationId": "updateLocation",
         "parameters": [
           {
@@ -5065,7 +5054,7 @@
     },
     "/api/v1/locations/{location_id}/ancestors": {
       "get": {
-        "description": "**Required scope:** `locations:read`\n\nSort order is fixed: ancestors are returned ordered by `depth` ascending (root first), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list.",
+        "description": "**Required scope:** `locations:read`\n\nSort order is fixed: ancestors are returned root first (walking up the `parent_id` chain), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list.",
         "operationId": "listLocationAncestors",
         "parameters": [
           {
@@ -5573,7 +5562,7 @@
     },
     "/api/v1/locations/{location_id}/descendants": {
       "get": {
-        "description": "**Required scope:** `locations:read`\n\nSort order is fixed: descendants are returned in depth-first tree order (ordered by ltree `path` ascending), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list.",
+        "description": "**Required scope:** `locations:read`\n\nSort order is fixed: descendants are returned in depth-first tree order (each level sorted by lowercased `external_key`), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list.",
         "operationId": "listLocationDescendants",
         "parameters": [
           {
@@ -5827,7 +5816,7 @@
     },
     "/api/v1/locations/{location_id}/rename": {
       "post": {
-        "description": "**Required scope:** `locations:write`\n\nMutate the location's `external_key`. This operation is **destructive to downstream joins** and regenerates `tree_path` for this row and every descendant in a single transaction.\n\nThe response includes `descendant_count_affected` so an integrator can decide whether to re-fetch the subtree. `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).",
+        "description": "**Required scope:** `locations:write`\n\nMutate the location's `external_key`. This operation is **destructive to downstream joins** because consumers of the natural key must re-resolve it. Only this row's `external_key` changes on the server; descendants are not modified.\n\nThe response includes `descendant_count_affected` (the live descendant count reachable through `parent_id`) so an integrator can decide whether to refresh derived natural-key joins for the subtree. `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).",
         "operationId": "renameLocation",
         "parameters": [
           {
@@ -6111,7 +6100,7 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Rename a location (mutate external_key + cascade tree_path)",
+        "summary": "Rename a location (mutate external_key)",
         "tags": [
           "locations"
         ]

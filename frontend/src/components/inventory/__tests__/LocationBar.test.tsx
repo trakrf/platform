@@ -6,12 +6,11 @@ import type { Location } from '@/types/locations';
 
 afterEach(cleanup);
 
-function makeLocation(overrides: Partial<Location> & { id: number; name: string; tree_path: string; depth: number }): Location {
+function makeLocation(overrides: Partial<Location> & { id: number; name: string; external_key: string }): Location {
   return {
-    org_id: 1,
-    external_key: `loc-${overrides.id}`,
     description: '',
     parent_id: null,
+    parent_external_key: null,
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     is_active: true,
@@ -23,9 +22,9 @@ function makeLocation(overrides: Partial<Location> & { id: number; name: string;
 }
 
 const locations: Location[] = [
-  makeLocation({ id: 1, name: 'Warehouse A', tree_path: 'warehouse-a', depth: 0 }),
-  makeLocation({ id: 2, name: 'Shelf B', tree_path: 'warehouse-a/shelf-b', depth: 1 }),
-  makeLocation({ id: 3, name: 'Office C', tree_path: 'office-c', depth: 0 }),
+  makeLocation({ id: 1, name: 'Warehouse A', external_key: 'warehouse-a' }),
+  makeLocation({ id: 2, name: 'Shelf B', external_key: 'shelf-b', parent_id: 1 }),
+  makeLocation({ id: 3, name: 'Office C', external_key: 'office-c' }),
 ];
 
 const defaultProps = {
@@ -126,12 +125,14 @@ describe('LocationBar', () => {
     expect(await screen.findByText(/Use detected: Warehouse A/)).toBeInTheDocument();
   });
 
-  it('sorts locations by path in dropdown', async () => {
-    // Provide locations in non-sorted order to verify sorting
+  it('sorts locations by parent_id-derived tree order in dropdown', async () => {
+    // TRA-684: tree_path is gone; depth-first order is derived client-side
+    // from the parent_id chain. Provide locations in non-sorted order to
+    // verify the walk + sort.
     const unsortedLocations: Location[] = [
-      makeLocation({ id: 3, name: 'Office C', tree_path: 'office-c', depth: 0 }),
-      makeLocation({ id: 1, name: 'Warehouse A', tree_path: 'warehouse-a', depth: 0 }),
-      makeLocation({ id: 2, name: 'Shelf B', tree_path: 'warehouse-a/shelf-b', depth: 1 }),
+      makeLocation({ id: 3, name: 'Office C', external_key: 'office-c' }),
+      makeLocation({ id: 1, name: 'Warehouse A', external_key: 'warehouse-a' }),
+      makeLocation({ id: 2, name: 'Shelf B', external_key: 'shelf-b', parent_id: 1 }),
     ];
 
     render(
@@ -148,7 +149,8 @@ describe('LocationBar', () => {
     // Wait for menu items to appear
     const menuItems = await screen.findAllByRole('menuitem');
 
-    // Sorted by tree_path: office-c, warehouse-a, warehouse-a/shelf-b
+    // Depth-first by external_key: office-c (root), warehouse-a (root),
+    // then warehouse-a → shelf-b (child).
     expect(menuItems[0]).toHaveTextContent('Office C');
     expect(menuItems[1]).toHaveTextContent('Warehouse A');
     expect(menuItems[2]).toHaveTextContent('Shelf B');

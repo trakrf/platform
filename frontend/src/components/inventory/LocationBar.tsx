@@ -23,8 +23,29 @@ export function LocationBar({
   locations,
   isAuthenticated,
 }: LocationBarProps) {
-  // Sort locations by tree_path for proper hierarchy ordering
-  const sortedLocations = [...locations].sort((a, b) => a.tree_path.localeCompare(b.tree_path));
+  // TRA-684 dropped tree_path from the API. Derive each row's depth and
+  // depth-first sort key from the parent_id chain. byId lookups are O(1)
+  // and chain length is small (3–5 levels in TrakRF segments), so the
+  // per-row walk is cheap.
+  const byId = new Map(locations.map((l) => [l.id, l]));
+  const treeKeyOf = (loc: Location): string[] => {
+    const segments: string[] = [];
+    let cur: Location | undefined = loc;
+    const seen = new Set<number>();
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      segments.unshift((cur.external_key ?? cur.name ?? String(cur.id)).toLowerCase());
+      cur = cur.parent_id != null ? byId.get(cur.parent_id) : undefined;
+    }
+    return segments;
+  };
+  const decorated = locations.map((l) => {
+    const key = treeKeyOf(l);
+    return { loc: l, sortKey: key.join(''), depth: key.length - 1 };
+  });
+  decorated.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const sortedLocations = decorated.map((d) => d.loc);
+  const depthById = new Map(decorated.map((d) => [d.loc.id, d.depth]));
 
   const resolvedLocation = selectedLocationId
     ? locations.find((l) => l.id === selectedLocationId)
@@ -114,7 +135,7 @@ export function LocationBar({
                             } ${
                               isSelected ? 'bg-green-50 dark:bg-green-900/20' : ''
                             } group flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors`}
-                            style={{ paddingLeft: `${location.depth * 1 + 0.75}rem` }}
+                            style={{ paddingLeft: `${(depthById.get(location.id) ?? 0) * 1 + 0.75}rem` }}
                           >
                             <MapPin className="mr-2 h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
                             <span className="flex-1 text-left text-gray-900 dark:text-gray-100 truncate">

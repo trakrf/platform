@@ -21,7 +21,7 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 	INSERT INTO trakrf.locations
 	(name, external_key, parent_location_id, description, valid_from, valid_to, is_active, org_id)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	RETURNING id, org_id, name, external_key, parent_location_id, path, depth,
+	RETURNING id, org_id, name, external_key, parent_location_id,
 	          COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	`
 	var loc location.Location
@@ -29,7 +29,7 @@ func (s *Storage) CreateLocation(ctx context.Context, request location.Location)
 		return tx.QueryRow(ctx, query, request.Name, request.ExternalKey, request.ParentID,
 			request.Description, request.ValidFrom, request.ValidTo, request.IsActive, request.OrgID,
 		).Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
-			&loc.TreePath, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 		)
 	})
@@ -135,12 +135,13 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 	return s.getLocationWithParentByID(ctx, orgID, updatedID)
 }
 
-// RenameLocation mutates the location's external_key. The DB trigger
-// cascade_location_path_change (migration 000038) rewrites tree_path on
-// this row and every descendant inside the same statement, so the whole
-// cascade is atomic with the rename. Returns the updated row plus the
-// count of descendant rows whose tree_path changed (does not include this
-// row itself; same-value rename returns 0). TRA-664 / BB26 D7.
+// RenameLocation mutates the location's external_key. TRA-684 removed the
+// materialized tree_path column, so the rename no longer triggers a cascade
+// UPDATE across descendants — only this row's external_key changes. The
+// returned descendant count is still surfaced through the response so
+// integrators with derived natural-key joins can decide whether to re-fetch
+// the subtree even though no descendant row was rewritten on the server.
+// TRA-664 / BB26 D7.
 func (s *Storage) RenameLocation(ctx context.Context, orgID, id int, newExternalKey string) (*location.LocationWithParent, int, error) {
 	var updatedID int
 	var descendantCount int
@@ -155,27 +156,26 @@ func (s *Storage) RenameLocation(ctx context.Context, orgID, id int, newExternal
 			return err
 		}
 
-		// Same-value rename: nothing changes, no cascade fires.
-		// descendant_count_affected stays 0 because no tree_path changed.
+		// Same-value rename: nothing changes. descendant_count stays 0.
 		if currentKey == newExternalKey {
 			updatedID = id
 			return nil
 		}
 
-		// Count live descendants BEFORE the update. Soft-deleted rows are
-		// excluded because their tree_path is no longer observable through
-		// the public API; integrators don't need to re-fetch a subtree
-		// they can't see.
+		// Count live descendants reachable through parent_location_id.
+		// Soft-deleted rows are excluded because they're no longer
+		// observable through the public API; integrators don't need to
+		// re-fetch a subtree they can't see.
 		err = tx.QueryRow(ctx, `
-			SELECT count(*)
-			FROM trakrf.locations
-			WHERE org_id = $1
-			  AND deleted_at IS NULL
-			  AND id != $2
-			  AND path <@ (
-			      SELECT path FROM trakrf.locations
-			      WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
-			  )
+			WITH RECURSIVE subtree AS (
+				SELECT id FROM trakrf.locations
+				WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
+				UNION ALL
+				SELECT c.id FROM trakrf.locations c
+				JOIN subtree s ON c.parent_location_id = s.id
+				WHERE c.org_id = $1 AND c.deleted_at IS NULL
+			)
+			SELECT count(*) FROM subtree WHERE id != $2
 		`, orgID, id).Scan(&descendantCount)
 		if err != nil {
 			return err
@@ -208,7 +208,7 @@ func (s *Storage) RenameLocation(ctx context.Context, orgID, id int, newExternal
 
 func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location.Location, error) {
 	query := `
-	SELECT id, org_id, name, external_key, parent_location_id, path, depth,
+	SELECT id, org_id, name, external_key, parent_location_id,
 	       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.locations
 	WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
@@ -216,7 +216,7 @@ func (s *Storage) GetLocationByID(ctx context.Context, orgID, id int) (*location
 	var loc location.Location
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(&loc.ID, &loc.OrgID, &loc.Name,
-			&loc.ExternalKey, &loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
+			&loc.ExternalKey, &loc.ParentID, &loc.Description,
 			&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 		)
 	})
@@ -239,7 +239,7 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 	}
 
 	query := `
-	SELECT id, org_id, name, external_key, parent_location_id, path, depth,
+	SELECT id, org_id, name, external_key, parent_location_id,
 	       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.locations
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
@@ -256,7 +256,7 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 		for rows.Next() {
 			var loc location.Location
 			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name,
-				&loc.ExternalKey, &loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
+				&loc.ExternalKey, &loc.ParentID, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan location: %w", err)
@@ -273,36 +273,36 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 }
 
 func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (*location.Location, error) {
+	// TRA-684: replaces the prior ltree path queries with a parent_id walk.
+	// ancestors() recurses up; the children join is unchanged.
 	query := `
-	WITH target AS (
-		SELECT id, org_id, name, external_key, parent_location_id, path, depth,
-		       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
-		       'target' as relation_type
+	WITH RECURSIVE ancestors AS (
+		SELECT id, org_id, name, external_key, parent_location_id,
+		       COALESCE(description, '') AS description,
+		       valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
+		       0 AS rdepth
 		FROM trakrf.locations
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+		UNION ALL
+		SELECT p.id, p.org_id, p.name, p.external_key, p.parent_location_id,
+		       COALESCE(p.description, ''),
+		       p.valid_from, p.valid_to, p.is_active, p.created_at, p.updated_at, p.deleted_at,
+		       a.rdepth - 1
+		FROM trakrf.locations p
+		JOIN ancestors a ON p.id = a.parent_location_id
+		WHERE p.org_id = $2 AND p.deleted_at IS NULL
 	)
-	SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
-	       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
-	       CASE
-	           WHEN l.id = $1 THEN 'target'
-	           WHEN l.path @> (SELECT path FROM target) AND l.id != $1 THEN 'ancestor'
-	           WHEN l.parent_location_id = $1 THEN 'child'
-	           ELSE 'other'
-	       END as relation_type
-	FROM trakrf.locations l, target t
-	WHERE l.org_id = $2 AND l.deleted_at IS NULL
-	  AND (
-	      l.id = $1
-	      OR l.path @> t.path
-	      OR l.parent_location_id = $1
-	  )
-	ORDER BY
-	    CASE
-	        WHEN l.id = $1 THEN 0
-	        WHEN l.path @> t.path THEN 1
-	        ELSE 2
-	    END,
-	    l.depth
+	SELECT id, org_id, name, external_key, parent_location_id,
+	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
+	       CASE WHEN id = $1 THEN 'target' ELSE 'ancestor' END AS relation_type
+	FROM ancestors
+	UNION ALL
+	SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
+	       COALESCE(l.description, ''),
+	       l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
+	       'child' AS relation_type
+	FROM trakrf.locations l
+	WHERE l.parent_location_id = $1 AND l.org_id = $2 AND l.deleted_at IS NULL
 	`
 
 	var target *location.Location
@@ -321,7 +321,7 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 			var relationType string
 
 			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
 				&loc.UpdatedAt, &loc.DeletedAt, &relationType,
 			); err != nil {
@@ -356,7 +356,7 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 
 func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, offset int) ([]location.Location, error) {
 	query := `
-		SELECT id, org_id, name, external_key, parent_location_id, path, depth,
+		SELECT id, org_id, name, external_key, parent_location_id,
 		       COALESCE(description, ''), valid_from, valid_to, is_active, created_at, updated_at, deleted_at
 		FROM trakrf.locations
 		WHERE org_id = $1 AND deleted_at IS NULL
@@ -374,7 +374,7 @@ func (s *Storage) ListAllLocations(ctx context.Context, orgID int, limit int, of
 		for rows.Next() {
 			var loc location.Location
 			if err := rows.Scan(&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive, &loc.CreatedAt,
 				&loc.UpdatedAt, &loc.DeletedAt,
 			); err != nil {
@@ -467,45 +467,58 @@ func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, erro
 	return rowsAffected > 0, nil
 }
 
-// GetAncestors returns all ancestor locations of a given location (from root to parent),
-// projected through LocationWithParent so every non-root carries its parent's natural
-// key and its tags — same shape as GET /locations/{identifier}.
-// Uses ltree @> operator: ancestor_path @> child_path.
-// Both the outer query and the path subselect are scoped to orgID so cross-tenant paths
-// that happen to share an identifier (e.g. two orgs both using "whs-01") stay isolated.
+// ancestorsCTE walks parent_location_id from $2 (the target) upward through
+// live, same-org rows. rdepth starts at 0 for the target and decreases toward
+// the root, so ORDER BY rdepth ASC yields root-first order without storing
+// an absolute depth column.
+const ancestorsCTE = `
+		WITH RECURSIVE ancestors AS (
+			SELECT id, parent_location_id, 0 AS rdepth
+			FROM trakrf.locations
+			WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
+			UNION ALL
+			SELECT p.id, p.parent_location_id, a.rdepth - 1
+			FROM trakrf.locations p
+			JOIN ancestors a ON p.id = a.parent_location_id
+			WHERE p.org_id = $1 AND p.deleted_at IS NULL
+		)
+`
+
+// GetAncestors returns all ancestor locations of a given location (from root
+// to parent), projected through LocationWithParent so every non-root carries
+// its parent's natural key and its tags — same shape as GET
+// /locations/{identifier}. Walks parent_location_id; both joins are scoped
+// to orgID for defence in depth.
 func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
-	query := `
-		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
+	query := ancestorsCTE + `
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
-		FROM trakrf.locations l
+		FROM ancestors a
+		JOIN trakrf.locations l ON l.id = a.id
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
-		WHERE l.org_id = $1
-		  AND l.path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
-		  AND l.id != $2
-		  AND l.deleted_at IS NULL
-		ORDER BY l.depth
+		WHERE l.id != $2
+		ORDER BY a.rdepth ASC
 	`
 	return s.scanHierarchyRows(ctx, query, "ancestor", orgID, orgID, id)
 }
 
-// ListAncestorsPaginated returns the ancestors of a location ordered by depth
-// (root first), with LIMIT/OFFSET applied. The id ASC tiebreaker ensures
-// fully-deterministic paging across requests with the same offset.
+// ListAncestorsPaginated returns the ancestors of a location ordered root
+// first (depth-from-target ascending toward zero), with LIMIT/OFFSET applied.
+// The id ASC tiebreaker ensures fully-deterministic paging across requests
+// with the same offset.
 func (s *Storage) ListAncestorsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
-	query := `
-		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
+	query := ancestorsCTE + `
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
-		FROM trakrf.locations l
+		FROM ancestors a
+		JOIN trakrf.locations l ON l.id = a.id
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
-		WHERE l.org_id = $1
-		  AND l.path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
-		  AND l.id != $2
-		  AND l.deleted_at IS NULL
-		ORDER BY l.depth ASC, l.id ASC
+		WHERE l.id != $2
+		ORDER BY a.rdepth ASC, l.id ASC
 		LIMIT $3 OFFSET $4
 	`
 	return s.scanHierarchyRows(ctx, query, "ancestor", orgID, orgID, id, limit, offset)
@@ -514,12 +527,8 @@ func (s *Storage) ListAncestorsPaginated(ctx context.Context, orgID, id, limit, 
 // CountAncestors returns the total number of ancestors of the given location,
 // matching the WHERE clause used by ListAncestorsPaginated.
 func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error) {
-	query := `
-		SELECT COUNT(*) FROM trakrf.locations
-		WHERE org_id = $1
-		  AND path @> (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
-		  AND id != $2
-		  AND deleted_at IS NULL
+	query := ancestorsCTE + `
+		SELECT count(*) FROM ancestors WHERE id != $2
 	`
 	var n int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
@@ -528,60 +537,71 @@ func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error
 	return n, err
 }
 
-// GetDescendants returns all descendant locations of a given location (children at all levels),
-// projected through LocationWithParent so every entry carries its parent's natural key
-// and its tags — same shape as GET /locations/{identifier}.
-// Uses ltree <@ operator: child_path <@ parent_path.
-// Both the outer query and the path subselect are scoped to orgID: ltree paths are derived
-// from identifier segments alone (see migration 000018), so without this fence two tenants
-// with identical identifier hierarchies would see each other's subtrees.
+// descendantsCTE walks parent_location_id down from $2 (the target) through
+// live, same-org rows. sort_path is the row's chain of (lower(external_key))
+// segments and reproduces the depth-first tree order the prior ltree query
+// emitted via `ORDER BY l.path`.
+const descendantsCTE = `
+		WITH RECURSIVE subtree AS (
+			SELECT id, parent_location_id, external_key,
+			       ARRAY[lower(external_key)]::text[] AS sort_path
+			FROM trakrf.locations
+			WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
+			UNION ALL
+			SELECT c.id, c.parent_location_id, c.external_key,
+			       s.sort_path || lower(c.external_key)
+			FROM trakrf.locations c
+			JOIN subtree s ON c.parent_location_id = s.id
+			WHERE c.org_id = $1 AND c.deleted_at IS NULL
+		)
+`
+
+// GetDescendants returns all descendant locations of a given location
+// (children at all levels), projected through LocationWithParent so every
+// entry carries its parent's natural key and its tags — same shape as GET
+// /locations/{identifier}. Tree-order via sort_path ASC. Both the recursion
+// and the projection join are scoped to orgID; parent_location_id alone
+// cannot leak across tenants but the explicit fence keeps the invariant
+// visible.
 func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
-	query := `
-		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
+	query := descendantsCTE + `
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
-		FROM trakrf.locations l
+		FROM subtree s
+		JOIN trakrf.locations l ON l.id = s.id
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
-		WHERE l.org_id = $1
-		  AND l.path <@ (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
-		  AND l.id != $2
-		  AND l.deleted_at IS NULL
-		ORDER BY l.path
+		WHERE l.id != $2
+		ORDER BY s.sort_path ASC
 	`
 	return s.scanHierarchyRows(ctx, query, "descendant", orgID, orgID, id)
 }
 
-// ListDescendantsPaginated returns all descendants of a location ordered
-// depth-first by ltree path, with LIMIT/OFFSET applied. The id ASC tiebreaker
-// keeps paging deterministic across calls.
+// ListDescendantsPaginated returns all descendants of a location in
+// depth-first tree order (lowercased external_key chain), with LIMIT/OFFSET
+// applied. The id ASC tiebreaker keeps paging deterministic across calls.
 func (s *Storage) ListDescendantsPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
-	query := `
-		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
+	query := descendantsCTE + `
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
-		FROM trakrf.locations l
+		FROM subtree s
+		JOIN trakrf.locations l ON l.id = s.id
 		LEFT JOIN trakrf.locations p
 			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
-		WHERE l.org_id = $1
-		  AND l.path <@ (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
-		  AND l.id != $2
-		  AND l.deleted_at IS NULL
-		ORDER BY l.path ASC, l.id ASC
+		WHERE l.id != $2
+		ORDER BY s.sort_path ASC, l.id ASC
 		LIMIT $3 OFFSET $4
 	`
 	return s.scanHierarchyRows(ctx, query, "descendant", orgID, orgID, id, limit, offset)
 }
 
 // CountDescendants returns the total number of descendants of the given
-// location, matching the WHERE clause used by ListDescendantsPaginated.
+// location, matching the recursion used by ListDescendantsPaginated.
 func (s *Storage) CountDescendants(ctx context.Context, orgID, id int) (int, error) {
-	query := `
-		SELECT COUNT(*) FROM trakrf.locations
-		WHERE org_id = $1
-		  AND path <@ (SELECT path FROM trakrf.locations WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL)
-		  AND id != $2
-		  AND deleted_at IS NULL
+	query := descendantsCTE + `
+		SELECT count(*) FROM subtree WHERE id != $2
 	`
 	var n int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
@@ -590,15 +610,15 @@ func (s *Storage) CountDescendants(ctx context.Context, orgID, id int) (int, err
 	return n, err
 }
 
-// GetChildren returns immediate children of a given location (depth = parent_depth + 1),
-// projected through LocationWithParent for parent-identifier and tag parity
-// with GET /locations/{identifier}.
-// parent_location_id references a globally unique PK so the query alone is not cross-tenant
-// reachable, but the orgID filter keeps the invariant explicit (defense in depth) and in
-// line with GetAncestors/GetDescendants.
+// GetChildren returns immediate children of a given location, projected
+// through LocationWithParent for parent-identifier and tag parity with GET
+// /locations/{identifier}. parent_location_id references a globally unique
+// PK so the query alone is not cross-tenant reachable, but the orgID filter
+// keeps the invariant explicit (defense in depth) and in line with
+// GetAncestors/GetDescendants.
 func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
@@ -612,12 +632,12 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 	return s.scanHierarchyRows(ctx, query, "child", orgID, orgID, id)
 }
 
-// ListChildrenPaginated returns immediate children (depth = parent_depth + 1)
-// of a location ordered alphabetically by name, with LIMIT/OFFSET applied.
-// The id ASC tiebreaker keeps paging deterministic when sibling names collide.
+// ListChildrenPaginated returns immediate children of a location ordered
+// alphabetically by name, with LIMIT/OFFSET applied. The id ASC tiebreaker
+// keeps paging deterministic when sibling names collide.
 func (s *Storage) ListChildrenPaginated(ctx context.Context, orgID, id, limit, offset int) ([]location.LocationWithParent, error) {
 	query := `
-		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id, l.path, l.depth,
+		SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 		       COALESCE(l.description, ''), l.valid_from, l.valid_to, l.is_active, l.created_at, l.updated_at, l.deleted_at,
 		       p.external_key
 		FROM trakrf.locations l
@@ -669,7 +689,7 @@ func (s *Storage) scanHierarchyRows(
 			)
 			if err := rows.Scan(
 				&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
 				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 				&parExtKey,
@@ -803,7 +823,7 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 	query := `
 		SELECT
 			l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
-			l.path, l.depth, COALESCE(l.description, ''), l.valid_from, l.valid_to,
+			COALESCE(l.description, ''), l.valid_from, l.valid_to,
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
 			p.external_key
 		FROM trakrf.locations l
@@ -818,7 +838,7 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(
 			&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
-			&loc.TreePath, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 			&parExtKey,
 		)
@@ -909,7 +929,7 @@ func (s *Storage) GetLocationByExternalKey(
 	query := `
 		SELECT
 			l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
-			l.path, l.depth, COALESCE(l.description, ''), l.valid_from, l.valid_to,
+			COALESCE(l.description, ''), l.valid_from, l.valid_to,
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
 			p.external_key
 		FROM trakrf.locations l
@@ -924,7 +944,7 @@ func (s *Storage) GetLocationByExternalKey(
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, identifier).Scan(
 			&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey, &loc.ParentID,
-			&loc.TreePath, &loc.Depth, &loc.Description, &loc.ValidFrom, &loc.ValidTo,
+			&loc.Description, &loc.ValidFrom, &loc.ValidTo,
 			&loc.IsActive, &loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 			&parExtKey,
 		)
@@ -961,7 +981,7 @@ func (s *Storage) ListLocationsFiltered(
 	query := fmt.Sprintf(`
 		SELECT
 			l.id, l.org_id, l.name, l.external_key,
-			l.parent_location_id, l.path, l.depth, COALESCE(l.description, ''),
+			l.parent_location_id, COALESCE(l.description, ''),
 			l.valid_from, l.valid_to, l.is_active,
 			l.created_at, l.updated_at, l.deleted_at,
 			p.external_key
@@ -990,7 +1010,7 @@ func (s *Storage) ListLocationsFiltered(
 			)
 			if err := rows.Scan(
 				&loc.ID, &loc.OrgID, &loc.Name, &loc.ExternalKey,
-				&loc.ParentID, &loc.TreePath, &loc.Depth, &loc.Description,
+				&loc.ParentID, &loc.Description,
 				&loc.ValidFrom, &loc.ValidTo, &loc.IsActive,
 				&loc.CreatedAt, &loc.UpdatedAt, &loc.DeletedAt,
 				&parExtKey,
@@ -1097,8 +1117,11 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 }
 
 func buildLocationsOrderBy(sorts []location.ListSort) string {
+	// TRA-684: tree_path is gone. Default to external_key ASC (stable natural-
+	// key order) when callers don't specify a sort, with id ASC as a
+	// deterministic tiebreaker.
 	if len(sorts) == 0 {
-		return "l.path ASC"
+		return "l.external_key ASC, l.id ASC"
 	}
 	out := make([]string, 0, len(sorts))
 	for _, s := range sorts {
@@ -1106,12 +1129,7 @@ func buildLocationsOrderBy(sorts []location.ListSort) string {
 		if s.Desc {
 			dir = "DESC"
 		}
-		col := s.Field
-		if col == "tree_path" {
-			// Wire field is tree_path (TRA-580 C-1); SQL column stays `path`.
-			col = "path"
-		}
-		out = append(out, "l."+col+" "+dir)
+		out = append(out, "l."+s.Field+" "+dir)
 	}
 	return strings.Join(out, ", ")
 }

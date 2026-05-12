@@ -1448,7 +1448,7 @@ var requiredFields = map[string][]string{
 	"asset.PublicAssetView": {"id", "external_key", "name", "description", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},
 
 	// location
-	"location.PublicLocationView": {"id", "external_key", "name", "description", "parent_id", "parent_external_key", "tree_path", "depth", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},
+	"location.PublicLocationView": {"id", "external_key", "name", "description", "parent_id", "parent_external_key", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},
 
 	// report
 	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen", "asset_deleted_at"},
@@ -1512,7 +1512,7 @@ var internalOnlyRequiredFields = map[string][]string{
 // the spec — keeps this map honest as struct fields rename or move.
 var readOnlyFields = map[string][]string{
 	"asset.PublicAssetView":            {"id", "created_at", "updated_at", "deleted_at"},
-	"location.PublicLocationView":      {"id", "created_at", "updated_at", "tree_path", "depth", "deleted_at"},
+	"location.PublicLocationView":      {"id", "created_at", "updated_at", "deleted_at"},
 	"org.OrgMeView":                    {"id"},
 	"shared.Tag":                       {"id"},
 	"report.PublicCurrentLocationItem": {"asset_deleted_at"},

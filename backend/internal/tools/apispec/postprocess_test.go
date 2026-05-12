@@ -701,8 +701,6 @@ func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 				"id":         &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
 				"created_at": stringProp("date-time"),
 				"updated_at": stringProp("date-time"),
-				"tree_path":  stringProp(""),
-				"depth":      &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
 				"tags": &openapi3.SchemaRef{Value: &openapi3.Schema{
 					Type:  &openapi3.Types{openapi3.TypeArray},
 					Items: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeObject}}},
@@ -714,7 +712,7 @@ func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 
 	readOnly := map[string][]string{
 		"asset.PublicAssetView":       {"id", "created_at", "updated_at"},
-		"location.PublicLocationView": {"id", "created_at", "updated_at", "tree_path", "depth"},
+		"location.PublicLocationView": {"id", "created_at", "updated_at"},
 	}
 	if err := markReadOnlyFields(doc, readOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)

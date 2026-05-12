@@ -34,8 +34,6 @@ type PublicLocationView struct {
 	Description       *string      `json:"description"`
 	ParentID          *int         `json:"parent_id"`
 	ParentExternalKey *string      `json:"parent_external_key"`
-	TreePath          string       `json:"tree_path"`
-	Depth             int          `json:"depth"`
 	IsActive          bool         `json:"is_active"`
 	ValidFrom         time.Time    `json:"valid_from"`
 	ValidTo           *time.Time   `json:"valid_to"`
@@ -62,8 +60,6 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 		Description:       desc,
 		ParentID:          l.ParentID,
 		ParentExternalKey: l.ParentExternalKey,
-		TreePath:          l.TreePath,
-		Depth:             l.Depth,
 		IsActive:          l.IsActive,
 		ValidFrom:         l.ValidFrom,
 		ValidTo:           l.ValidTo,

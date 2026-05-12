@@ -23,15 +23,15 @@ func TestGetLocationByExternalKey_Found(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", TreePath: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	_, err = store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "wh-1.bay-3", Name: "Bay 3",
-		ParentID: &parent.ID,
-		TreePath: "wh-1.bay-3", ValidFrom: time.Now(), IsActive: true,
+		ParentID:  &parent.ID,
+		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
@@ -63,16 +63,16 @@ func TestListLocationsFiltered_Parent(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	root, _ := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "root", Name: "R", TreePath: "root",
+		OrgID: orgID, ExternalKey: "root", Name: "R",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	_, _ = store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "root.a", Name: "A", ParentID: &root.ID,
-		TreePath: "root.a", ValidFrom: time.Now(), IsActive: true,
+		ValidFrom: time.Now(), IsActive: true,
 	})
 	_, _ = store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "root.b", Name: "B", ParentID: &root.ID,
-		TreePath: "root.b", ValidFrom: time.Now(), IsActive: true,
+		ValidFrom: time.Now(), IsActive: true,
 	})
 
 	items, err := store.ListLocationsFiltered(context.Background(), orgID, location.ListFilter{
@@ -97,13 +97,13 @@ func TestListLocationsFiltered_Integration_ExternalKeysNeverNil(t *testing.T) {
 
 	// One location with no tags, one with a tag.
 	_, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "loc-empty", Name: "Empty", TreePath: "loc-empty",
+		OrgID: orgID, ExternalKey: "loc-empty", Name: "Empty",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	withTag, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "loc-tagged", Name: "Tagged", TreePath: "loc-tagged",
+		OrgID: orgID, ExternalKey: "loc-tagged", Name: "Tagged",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 
 	// Create parent location inline
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", TreePath: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -166,8 +166,8 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 	// Create child with parent
 	child, err := store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "wh-1.bay-3", Name: "Bay 3",
-		ParentID: &parent.ID,
-		TreePath: "wh-1.bay-3", ValidFrom: time.Now(), IsActive: true,
+		ParentID:  &parent.ID,
+		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
@@ -181,7 +181,7 @@ func TestGetLocationWithParentByID_ResolvesParent(t *testing.T) {
 
 	// Create a root-level location (no parent)
 	root, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "wh-2", Name: "Warehouse 2", TreePath: "wh-2",
+		OrgID: orgID, ExternalKey: "wh-2", Name: "Warehouse 2",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil(t *testing.T) {
 
 	loc, err := store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "tra429-loc-doomed", Name: "Doomed",
-		TreePath: "tra429-loc-doomed", ValidFrom: time.Now(), IsActive: true,
+		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
@@ -232,14 +232,14 @@ func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testi
 
 	parent, err := store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "tra429-parent-tombstone", Name: "ParentTombstone",
-		TreePath: "tra429-parent-tombstone", ValidFrom: time.Now(), IsActive: true,
+		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	child, err := store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "tra429-stale-child", Name: "StaleChild",
-		ParentID: &parent.ID,
-		TreePath: "tra429-stale-child", ValidFrom: time.Now(), IsActive: true,
+		ParentID:  &parent.ID,
+		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
@@ -277,14 +277,14 @@ func TestUpdateLocation_PopulatesParentIdentifier(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1", TreePath: "wh-1",
+		OrgID: orgID, ExternalKey: "wh-1", Name: "Warehouse 1",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	child, err := store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "wh-1.bay-3", Name: "Bay 3",
-		TreePath: "wh-1.bay-3", ParentID: &parent.ID,
+		ParentID:  &parent.ID,
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
@@ -309,19 +309,19 @@ func TestListLocationsFiltered_Q(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	activeLoc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "loc-active", Name: "Warehouse Active", TreePath: "loc-active",
+		OrgID: orgID, ExternalKey: "loc-active", Name: "Warehouse Active",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	inactiveIDLoc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "loc-inactive-id", Name: "InactiveID", TreePath: "loc-inactive-id",
+		OrgID: orgID, ExternalKey: "loc-inactive-id", Name: "InactiveID",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	deletedIDLoc, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "loc-deleted-id", Name: "DeletedID", TreePath: "loc-deleted-id",
+		OrgID: orgID, ExternalKey: "loc-deleted-id", Name: "DeletedID",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
