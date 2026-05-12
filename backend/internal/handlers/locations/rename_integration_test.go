@@ -2,10 +2,12 @@
 // +build integration
 
 // TRA-664 / BB26 D7: locations counterpart to the asset rename tests. The
-// dedicated POST /api/v1/locations/{location_id}/rename operation
-// regenerates tree_path for the row and every descendant, and returns
-// descendant_count_affected so an integrator can decide whether to
-// re-fetch the subtree.
+// dedicated POST /api/v1/locations/{location_id}/rename operation mutates
+// only this row's external_key (TRA-684 removed the tree_path materialised
+// column and its descendant cascade), but the response still carries
+// descendant_count_affected (the live descendant count reachable through
+// parent_id) so integrators can decide whether to refresh derived
+// natural-key joins.
 //
 // TRA-674 / BB27 F3: PATCH no longer rejects an `external_key` body field
 // with 400 immutable_field; the strip-on-PATCH rule now silently drops it
@@ -56,8 +58,7 @@ func seedLocationRoundTripWithParent(t *testing.T, pool *pgxpool.Pool, orgID int
 
 // TRA-674 / BB27 F3: PATCH with an `external_key` body field returns 200
 // and silently strips the field — the persisted external_key is unchanged.
-// Mutations still require POST /rename, which is also the only path that
-// cascades tree_path across descendants.
+// Mutations still require POST /rename.
 func TestPatchLocation_ExternalKey_Stripped200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -108,8 +109,7 @@ func TestPatchLocation_ExternalKey_Stripped200(t *testing.T) {
 }
 
 // POST /rename returns 200 with the updated LocationView and a 0 descendant
-// count for a leaf rename. tree_path on the renamed row reflects the new
-// canonical form.
+// count for a leaf rename.
 func TestRenameLocation_Leaf_Success(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -141,15 +141,17 @@ func TestRenameLocation_Leaf_Success(t *testing.T) {
 	assert.Equal(t, "LOC-LEAF-NEW", resp.Data["external_key"])
 	assert.Equal(t, 0, resp.DescendantCountAffected, "leaf rename has zero descendants")
 
-	// tree_path on the row reflects the canonical lowercase + underscore form.
-	var dbPath string
+	var dbKey string
 	require.NoError(t, pool.QueryRow(context.Background(),
-		`SELECT path::text FROM trakrf.locations WHERE id = $1`, id).Scan(&dbPath))
-	assert.Equal(t, "loc_leaf_new", dbPath)
+		`SELECT external_key FROM trakrf.locations WHERE id = $1`, id).Scan(&dbKey))
+	assert.Equal(t, "LOC-LEAF-NEW", dbKey)
 }
 
-// POST /rename on a parent regenerates tree_path for every descendant in
-// one transaction and returns the count. With root R + 2 children + 1
+// POST /rename on a parent returns descendant_count_affected = the live
+// descendant count reachable through parent_id (TRA-684: the materialised
+// tree_path cascade is gone; only the renamed row is written, but
+// integrators still need a signal that downstream natural-key joins for
+// the subtree may need refreshing). With root R + 2 children + 1
 // grandchild, renaming R must surface descendant_count_affected = 3.
 func TestRenameLocation_Cascade_CountsDescendants(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
@@ -186,22 +188,28 @@ func TestRenameLocation_Cascade_CountsDescendants(t *testing.T) {
 	assert.Equal(t, 3, resp.DescendantCountAffected,
 		"root has 3 descendants (2 children + 1 grandchild)")
 
-	// Every descendant's tree_path now starts with the new canonical root segment.
+	// Descendants' external_keys are untouched — only the renamed row
+	// itself changes after TRA-684 dropped the tree_path cascade.
 	rows, err := pool.Query(context.Background(),
-		`SELECT external_key, path::text FROM trakrf.locations WHERE org_id = $1 ORDER BY external_key`, orgID)
+		`SELECT external_key, parent_location_id FROM trakrf.locations WHERE org_id = $1 ORDER BY external_key`, orgID)
 	require.NoError(t, err)
 	defer rows.Close()
-	paths := map[string]string{}
+	parents := map[string]*int{}
 	for rows.Next() {
-		var k, p string
+		var k string
+		var p *int
 		require.NoError(t, rows.Scan(&k, &p))
-		paths[k] = p
+		parents[k] = p
 	}
 	require.NoError(t, rows.Err())
-	assert.Equal(t, "root_new", paths["ROOT-NEW"])
-	assert.Equal(t, "root_new.child1", paths["CHILD1"])
-	assert.Equal(t, "root_new.child2", paths["CHILD2"])
-	assert.Equal(t, "root_new.child1.gchild1", paths["GCHILD1"])
+	require.Contains(t, parents, "ROOT-NEW")
+	require.Contains(t, parents, "CHILD1")
+	require.Contains(t, parents, "CHILD2")
+	require.Contains(t, parents, "GCHILD1")
+	assert.Nil(t, parents["ROOT-NEW"])
+	assert.Equal(t, root, *parents["CHILD1"])
+	assert.Equal(t, root, *parents["CHILD2"])
+	assert.Equal(t, child1, *parents["GCHILD1"])
 }
 
 // Duplicate external_key within the org → 409 conflict.

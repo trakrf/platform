@@ -23,8 +23,6 @@ export interface Location {
   description: string;
   parent_id: number | null;
   parent_external_key: string | null;
-  tree_path: string;
-  depth: number;
   valid_from: string;
   valid_to: string | null;
   is_active: boolean;

@@ -28,9 +28,9 @@ func TestUpdateLocation_CrossOrgReturnsNil(t *testing.T) {
 		OrgID:       orgA,
 		ExternalKey: "wh-a",
 		Name:        "Owned by A",
-		TreePath:    "wh-a",
-		ValidFrom:   time.Now(),
-		IsActive:    true,
+
+		ValidFrom: time.Now(),
+		IsActive:  true,
 	})
 	require.NoError(t, err)
 
@@ -59,9 +59,9 @@ func TestDeleteLocation_CrossOrgReturnsFalse(t *testing.T) {
 		OrgID:       orgA,
 		ExternalKey: "wh-a-del",
 		Name:        "Owned by A",
-		TreePath:    "wh-a-del",
-		ValidFrom:   time.Now(),
-		IsActive:    true,
+
+		ValidFrom: time.Now(),
+		IsActive:  true,
 	})
 	require.NoError(t, err)
 

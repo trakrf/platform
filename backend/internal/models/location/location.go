@@ -13,8 +13,6 @@ type Location struct {
 	OrgID       int        `json:"org_id"`
 	Org         *org.Org   `json:"org,omitempty"`
 	ExternalKey string     `json:"external_key" validate:"required,min=1,max=255"`
-	TreePath    string     `json:"tree_path"`
-	Depth       int        `json:"depth"`
 	ParentID    *int       `json:"parent_id"`
 	Parent      *Location  `json:"parent,omitempty"`
 	Children    []Location `json:"children,omitempty"`
@@ -68,15 +66,14 @@ type CreateLocationRequest struct {
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"]
 // (the spec-side readOnly markers are coordinated under TRA-672).
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "deleted_at", "external_key", "tags", "parent_external_key"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at", "external_key", "tags", "parent_external_key"}
 
 // UpdateLocationRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
 // PublicLocationView's round-trip-safe read-only fields (id, created_at,
-// updated_at, tree_path, depth) are silently ignored on a verbatim GET →
-// PUT round-trip while any other unknown field — including `tags`, which
-// is managed via the /locations/{id}/tags subresource — still produces a
-// 400.
+// updated_at) are silently ignored on a verbatim GET → PATCH round-trip
+// while any other unknown field — including `tags`, which is managed via
+// the /locations/{id}/tags subresource — still produces a 400.
 //
 // description, parent_id, and valid_to all accept JSON null on the wire
 // and clear the field server-side (TRA-614 / BB19 §S1). Each null surfaces
@@ -85,13 +82,10 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path
 // same on pointer fields.
 //
 // external_key is intentionally NOT on this struct. It is the natural /
-// join key downstream systems rely on and is the canonical source for
-// tree_path; mutating it via a generic PATCH would silently disconnect
-// joins and cascade tree_path changes without notice.
-// POST /api/v1/locations/{location_id}/rename is the dedicated path
-// (TRA-664 / BB26 D7) and is also the only operation that cascades
-// tree_path across descendants. On PATCH, an external_key field is
-// silently stripped along with other read-only fields per
+// join key downstream systems rely on; mutating it via a generic PATCH
+// would silently disconnect joins. POST /api/v1/locations/{location_id}/rename
+// is the dedicated path (TRA-664 / BB26 D7). On PATCH, an external_key
+// field is silently stripped along with other read-only fields per
 // TRA-674 / BB27 F3 — see PublicReadOnlyFields.
 //
 // parent_external_key is intentionally NOT on this struct (TRA-681). The
@@ -126,9 +120,10 @@ var PublicImmutablePatchFields = map[string]string{}
 
 // RenameLocationRequest is the body of POST /api/v1/locations/{location_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation
-// explicit and consolidates the tree_path cascade (this row + all
-// descendants) in one place so the response can carry the
-// descendant_count_affected signal.
+// explicit and is distinct from a generic PATCH in audit logs (different
+// URL surface). The response includes `descendant_count_affected` so
+// integrators can decide whether to re-fetch the subtree even though the
+// rename only mutates this row's own natural key.
 type RenameLocationRequest struct {
 	ExternalKey string `json:"external_key" validate:"required,min=1,max=255,external_key_pattern" example:"wh1"`
 }
