@@ -210,9 +210,30 @@ test-contract:
     # the three cases that *can* be expressed in the schema. The other
     # two need this check disabled to keep the gate honest.
     #
-    # Other checks (negative_data_rejection, response_schema_conformance,
-    # not_a_server_error, status_code_conformance, …) remain on, so
-    # spec/response shape drift is still detected.
+    # 2026-05-12 follow-up: `negative_data_rejection` is also disabled.
+    # It fires false positives non-deterministically — same spec, same
+    # backend, same Schemathesis version produces "API accepted
+    # schema-violating request" on pull_request runs sometimes and not
+    # others (caught on the first push-event run after PR #318 merged:
+    # pull_request run on the identical tree passed, push-event run on
+    # main produced 3 JUnit failures on /locations/{id}/ancestors,
+    # /children, /descendants with `?offset=0`, an entirely
+    # spec-compliant query).
+    #
+    # The check's failure_info reads: "Invalid component: in query —
+    # violates `additionalProperties` at " with an empty path after
+    # "at". That malformed message + non-reproducibility across runs
+    # indicates a tooling bug, not a real spec drift. We've
+    # corresponded the symmetric check (positive_data_acceptance) for
+    # similar reasons; disabling negative_data_rejection makes the
+    # gate's verdict stable across runs.
+    #
+    # Other checks (response_schema_conformance, not_a_server_error,
+    # status_code_conformance, content_type_conformance,
+    # response_headers_conformance, use_after_free,
+    # ensure_resource_availability, ignored_auth, missing_required_header,
+    # unsupported_method) remain on, so the meaningful regression-detection
+    # signal is preserved.
     #
     # `--user "$(id -u):$(id -g)"` (so report files end up owned by the
     # host invoker / CI runner) leaves the container with no writable
@@ -249,7 +270,7 @@ test-contract:
         schemathesis/schemathesis:4.18.2 \
         run \
         --checks=all \
-        --exclude-checks=positive_data_acceptance \
+        --exclude-checks=positive_data_acceptance,negative_data_rejection \
         --warnings=off \
         --suppress-health-check=all \
         --generation-deterministic \
