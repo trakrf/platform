@@ -747,7 +747,7 @@ type AddTagResponse struct {
 // @ID           assets.tags.add
 // @Accept       json
 // @Produce      json
-// @Param        asset_id path  int                true  "Asset id (canonical)" minimum(1) maximum(2147483647) format(int32)
+// @Param        asset_id path  int                true  "Asset id (canonical)" minimum(1) format(int32)
 // @Param        request  body  shared.TagRequest  true  "Tag to attach"
 // @Success      201  {object}  assets.AddTagResponse         "tag attached"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
