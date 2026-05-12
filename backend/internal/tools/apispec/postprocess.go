@@ -912,7 +912,15 @@ func markMutuallyExclusiveFieldPairs(doc *openapi3.T, pairs []struct{ Schema, Fi
 // Without this annotation Schemathesis treats the "API rejected schema-
 // compliant request" 400 (validator firing on control chars) as a contract
 // gap.
-const printableStringRegex = "^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$"
+//
+// TRA-687: use a raw string so the value carries literal `\xNN` escape
+// sequences rather than actual control bytes. The bytes survive YAML/JSON
+// serialization unmolested, so `openapi-generator-cli generate -g python`
+// can emit them into a Python source file without tripping Python's
+// "source code string cannot contain null bytes" SyntaxError. Python `re`,
+// JavaScript, and Go's RE2 all interpret `\xNN` at match time, so runtime
+// behavior is preserved.
+const printableStringRegex = `^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$`
 
 // printableStringFields names (schema, field) pairs that the no_control_chars
 // validator gates server-side. Mirror in the spec so generated fuzz payloads
