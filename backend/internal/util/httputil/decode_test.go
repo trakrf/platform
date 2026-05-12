@@ -89,8 +89,8 @@ func TestRespondDecodeError_UnknownField_EmitsValidationError(t *testing.T) {
 	if resp.Error.Fields[0].Field != "parent_path" {
 		t.Fatalf("fields[0].field = %q, want %q", resp.Error.Fields[0].Field, "parent_path")
 	}
-	if resp.Error.Fields[0].Code != "invalid_value" {
-		t.Fatalf("fields[0].code = %q, want %q", resp.Error.Fields[0].Code, "invalid_value")
+	if resp.Error.Fields[0].Code != "unknown_field" {
+		t.Fatalf("fields[0].code = %q, want %q", resp.Error.Fields[0].Code, "unknown_field")
 	}
 }
 

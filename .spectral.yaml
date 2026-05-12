@@ -278,6 +278,40 @@ rules:
       - field: headers.Allow
         function: truthy
 
+  trakrf-patch-merge-patch-ct-only:
+    description: >
+      PATCH operations must declare `application/merge-patch+json` as the
+      sole entry under `requestBody.content`. The server tightened in BB28
+      W2/S4 to reject `application/json` on PATCH (RFC 7396 strict merge-
+      patch semantics); the spec is the canonical contract and must not
+      drift back to declaring `application/json` alongside merge-patch.
+    message: "PATCH requestBody.content must contain only application/merge-patch+json — BB28 W2/S4"
+    severity: error
+    given:
+      - "$.paths.*.patch.requestBody.content"
+    then:
+      - function: schema
+        functionOptions:
+          schema:
+            type: object
+            required: ["application/merge-patch+json"]
+            maxProperties: 1
+
+  trakrf-no-internal-references-in-descriptions:
+    description: >
+      Operation and schema descriptions must not contain internal ticket or
+      cycle references (e.g., `TRA-682`, `BB28`). Origin: BB28 S1 — four
+      such references leaked into generated SDK docstrings. Maintenance
+      context belongs in Go code comments, not in swag-emitted descriptions.
+    message: "Description contains internal reference (TRA-### or BB##); strip it — BB28 S1"
+    severity: error
+    given:
+      - "$..description"
+    then:
+      - function: pattern
+        functionOptions:
+          notMatch: "\\b(TRA-\\d+|BB\\d+)\\b"
+
   trakrf-location-header-on-201-top-level-create:
     description: >
       Policy (authoritative): top-level creates only declare a `Location`

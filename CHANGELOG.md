@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Migrating handheld React app as frontend component
+- TRA-682 BB28 fix wave (consolidated; pre-launch breaking changes):
+  - **Scope rename:** `history:read` → `tracking:read`. The scope gates both `/assets/{asset_id}/history` (time-series) and `/reports/asset-locations` (current-state snapshot); the new name better describes "where things are and have been" and pairs with `assets:read` / `locations:read`. Regenerate keys with the new scope name; existing preview keys are migrated by `000041_rename_history_read_to_tracking_read`. SPA scope picker label updated from "History" to "Tracking".
+  - **Breaking change for generated clients:** PATCH operation IDs renamed from `patchAsset` / `patchLocation` to `updateAsset` / `updateLocation`. Regenerate clients from the updated spec.
+  - **PATCH content-type tightened (RFC 7396 strict):** the two PATCH endpoints (`/api/v1/assets/{asset_id}`, `/api/v1/locations/{location_id}`) now reject `application/json` with 415 `unsupported_media_type`. Only `application/merge-patch+json` is accepted on PATCH; POST and PUT keep `application/json`. The 415 detail string is method-aware and names the correct content type per method. Enforcement is per-route so PATCH probes against POST-only paths (`/tags`, `/rename`) keep returning 405 from chi.
+  - **FieldError enum cleanup:** `immutable_field` removed (retired in TRA-674 read-only-strip work); `unknown_field` added so integrators can branch on a wrong-field-name vs wrong-field-value without parsing detail strings.
+  - **Internal references stripped from spec descriptions:** four leaks of `TRA-###` / `BB##` references from swag annotations into generated SDK docstrings cleaned up. New Spectral rule `trakrf-no-internal-references-in-descriptions` guards regression.
+  - **New Spectral rule** `trakrf-patch-merge-patch-ct-only` asserts every PATCH `requestBody.content` declares only `application/merge-patch+json` so the spec cannot drift back to also declaring `application/json`.
 - TRA-660 BB25 C1 public-spec schema namespace restructure (breaking for SDK consumers; no published SDK yet):
   - Schema components no longer carry Go-package prefixes. `asset.PublicAssetView` → `AssetView`, `location.UpdateLocationRequest` → `UpdateLocationRequest`, `errors.ErrorResponse` → `ErrorResponse`, `shared.Tag` → `Tag`, etc. Codegen tools that flatten `.` to a legal identifier (most do) no longer emit doubled-prefix model classes (`AssetPublicAssetView`).
   - The redundant `Public` qualifier is dropped — the spec is the public surface; the Go-side distinction is invisible to SDK consumers.

@@ -32,13 +32,18 @@ func Respond405(w http.ResponseWriter, r *http.Request, allowed []string, reques
 // ContentType middleware when a write request arrives with a content-type the
 // public API spec does not declare.
 //
-// detail is fixed: the public OpenAPI spec only declares application/json on
-// every endpoint, so the message names exactly that. The middleware still
-// accepts multipart/form-data internally for the session-only bulk CSV
-// endpoint, but that detail is not surfaced in the public-facing error.
+// Detail is method-aware: PATCH operations declare only
+// application/merge-patch+json per RFC 7396; POST and PUT declare
+// application/json. The middleware still accepts multipart/form-data
+// internally for the session-only bulk CSV endpoint, but that detail is
+// not surfaced in the public-facing error.
 func Respond415(w http.ResponseWriter, r *http.Request, requestID string) {
+	detail := "Content-Type must be application/json"
+	if r.Method == http.MethodPatch {
+		detail = "Content-Type must be application/merge-patch+json on PATCH operations"
+	}
 	WriteJSONError(w, r, http.StatusUnsupportedMediaType, apierrors.ErrUnsupportedMedia,
-		"Content-Type must be application/json", requestID)
+		detail, requestID)
 }
 
 // RespondMissingOrgContext writes the canonical 422 envelope used when

@@ -163,11 +163,12 @@ func setupRouter(
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/children", locationsHandler.GetChildren)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/descendants", locationsHandler.GetDescendants)
 
-		// Scan-class endpoints (logical scan events, current-locations snapshot, asset movement history)
-		// require history:read per TRA-578 — these endpoints expose scan-derived
-		// history data; the scope name aligns with the /history endpoint vocabulary.
-		r.With(middleware.RequireScope("history:read")).Get("/api/v1/reports/asset-locations", reportsHandler.ListCurrentLocations)
-		r.With(middleware.RequireScope("history:read")).Get("/api/v1/assets/{asset_id}/history", reportsHandler.GetAssetHistory)
+		// tracking:read gates both the asset movement history (time-series)
+		// and the current-locations snapshot. The shared scope models the
+		// "where things are and have been" surface: an integrator scoping a
+		// key for live tracking gets both forms of locate-the-asset read.
+		r.With(middleware.RequireScope("tracking:read")).Get("/api/v1/reports/asset-locations", reportsHandler.ListCurrentLocations)
+		r.With(middleware.RequireScope("tracking:read")).Get("/api/v1/assets/{asset_id}/history", reportsHandler.GetAssetHistory)
 	})
 
 	// TRA-397 public write surface — accepts API-key OR session auth via EitherAuth.
@@ -184,7 +185,7 @@ func setupRouter(
 
 		// Assets
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
-		r.With(middleware.RequireScope("assets:write")).Patch("/api/v1/assets/{asset_id}", assetsHandler.Update)
+		r.With(middleware.RequireScope("assets:write"), middleware.RequireMergePatchCT).Patch("/api/v1/assets/{asset_id}", assetsHandler.Update)
 		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}", assetsHandler.Delete)
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{asset_id}/rename", assetsHandler.Rename)
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{asset_id}/tags", assetsHandler.AddTag)
@@ -192,7 +193,7 @@ func setupRouter(
 
 		// Locations
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
-		r.With(middleware.RequireScope("locations:write")).Patch("/api/v1/locations/{location_id}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write"), middleware.RequireMergePatchCT).Patch("/api/v1/locations/{location_id}", locationsHandler.Update)
 		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}", locationsHandler.Delete)
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{location_id}/rename", locationsHandler.Rename)
 		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{location_id}/tags", locationsHandler.AddTag)
@@ -227,7 +228,7 @@ func setupRouter(
 		register404Static(r, "/api/v1/locations/lookup",
 			"This endpoint has been removed. Use GET /api/v1/locations?external_key= to find a location by external_key.")
 		// TRA-658 BB25: path moved out of /locations/ — schema is in
-		// report.* and scope is history:read, so /reports/ is the
+		// report.* and scope is tracking:read, so /reports/ is the
 		// correct namespace. Without this guard chi falls through to
 		// /api/v1/locations/{location_id} and surfaces 401 (auth runs
 		// before the sibling resolves to "current is not a valid id").

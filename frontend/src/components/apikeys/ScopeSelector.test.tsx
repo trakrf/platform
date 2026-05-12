@@ -32,9 +32,9 @@ describe('ScopeSelector', () => {
     expect(screen.getByLabelText(/assets/i)).toHaveValue('readwrite');
   });
 
-  it('does not offer "Read + Write" on History (TRA-571 + TRA-578 — scans:write is internal-only)', () => {
+  it('does not offer "Read + Write" on Tracking (scans:write is internal-only)', () => {
     render(<ScopeSelector value={[]} onChange={() => {}} />);
-    const select = screen.getByLabelText(/history/i);
+    const select = screen.getByLabelText(/tracking/i);
     expect(within(select).getByRole('option', { name: /^none$/i })).toBeInTheDocument();
     expect(within(select).getByRole('option', { name: /^read$/i })).toBeInTheDocument();
     expect(within(select).queryByRole('option', { name: /read \+ write/i })).not.toBeInTheDocument();
@@ -48,11 +48,11 @@ describe('ScopeSelector', () => {
     expect(within(locations).getByRole('option', { name: /read \+ write/i })).toBeInTheDocument();
   });
 
-  it('emits history:read for "Read" on History', () => {
+  it('emits tracking:read for "Read" on Tracking', () => {
     const onChange = vi.fn();
     render(<ScopeSelector value={[]} onChange={onChange} />);
-    fireEvent.change(screen.getByLabelText(/history/i), { target: { value: 'read' } });
-    expect(onChange).toHaveBeenCalledWith(['history:read']);
+    fireEvent.change(screen.getByLabelText(/tracking/i), { target: { value: 'read' } });
+    expect(onChange).toHaveBeenCalledWith(['tracking:read']);
   });
 
   it('does not render a Key management row (TRA-621 — keys:admin is internal-only in v1)', () => {

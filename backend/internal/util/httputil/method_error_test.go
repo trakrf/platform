@@ -69,6 +69,21 @@ func TestRespond415_DropsMultipartWording(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/api/v1/assets", nil)
 	httputil.Respond415(w, r, "req-4")
+	assertRespond415Envelope(t, w, "Content-Type must be application/json", "req-4")
+}
+
+// On PATCH, the public spec declares application/merge-patch+json only
+// (RFC 7396); the 415 detail must name that exact content type so
+// integrators can repair the request without re-reading the spec.
+func TestRespond415_PatchNamesMergePatch(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("PATCH", "/api/v1/assets/1", nil)
+	httputil.Respond415(w, r, "req-4p")
+	assertRespond415Envelope(t, w, "Content-Type must be application/merge-patch+json on PATCH operations", "req-4p")
+}
+
+func assertRespond415Envelope(t *testing.T, w *httptest.ResponseRecorder, wantDetail, wantReqID string) {
+	t.Helper()
 
 	if w.Code != 415 {
 		t.Fatalf("status = %d, want 415", w.Code)
@@ -87,11 +102,11 @@ func TestRespond415_DropsMultipartWording(t *testing.T) {
 	if strings.Contains(resp.Error.Detail, "multipart") {
 		t.Errorf("detail = %q, must not mention multipart", resp.Error.Detail)
 	}
-	if resp.Error.Detail != "Content-Type must be application/json" {
-		t.Errorf("detail = %q, want Content-Type must be application/json", resp.Error.Detail)
+	if resp.Error.Detail != wantDetail {
+		t.Errorf("detail = %q, want %q", resp.Error.Detail, wantDetail)
 	}
-	if resp.Error.RequestID != "req-4" {
-		t.Errorf("request_id = %q, want req-4", resp.Error.RequestID)
+	if resp.Error.RequestID != wantReqID {
+		t.Errorf("request_id = %q, want %q", resp.Error.RequestID, wantReqID)
 	}
 }
 

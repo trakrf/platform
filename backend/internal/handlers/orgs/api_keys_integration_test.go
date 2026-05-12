@@ -457,11 +457,11 @@ func TestCreateAPIKey_RejectsScansWrite(t *testing.T) {
 		"detail must name the offending scope so the integrator knows what to remove")
 }
 
-// TestCreateAPIKey_AcceptsHistoryRead is the positive companion: history:read
-// (renamed from scans:read in TRA-578) remains a valid scope and must continue
-// to mint cleanly.
-func TestCreateAPIKey_AcceptsHistoryRead(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-tra578-read")
+// TestCreateAPIKey_AcceptsTrackingRead is the positive companion: tracking:read
+// is the canonical name for the scope that gates both /assets/{id}/history
+// (time-series) and /reports/asset-locations (current-state snapshot).
+func TestCreateAPIKey_AcceptsTrackingRead(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-tracking-read")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -470,7 +470,7 @@ func TestCreateAPIKey_AcceptsHistoryRead(t *testing.T) {
 
 	r := newAdminRouter(t, store)
 
-	body := []byte(`{"name":"tra-578-positive","scopes":["history:read"]}`)
+	body := []byte(`{"name":"tracking-read-positive","scopes":["tracking:read"]}`)
 	req := httptest.NewRequest(http.MethodPost,
 		fmt.Sprintf("/api/v1/orgs/%d/api-keys", orgID),
 		bytes.NewReader(body))

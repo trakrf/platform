@@ -68,7 +68,7 @@ func TestMintAPIKey_Success(t *testing.T) {
 
 	r := newTestRouter(t, store)
 
-	scopes := []string{"assets:read", "assets:write", "locations:read", "locations:write", "history:read"}
+	scopes := []string{"assets:read", "assets:write", "locations:read", "locations:write", "tracking:read"}
 	body, _ := json.Marshal(map[string]any{"scopes": scopes})
 	req := httptest.NewRequest(http.MethodPost, "/test/apikeys", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
