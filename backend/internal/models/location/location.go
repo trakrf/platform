@@ -69,7 +69,7 @@ type CreateLocationRequest struct {
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"]
 // (the spec-side readOnly markers are coordinated under TRA-672).
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at", "external_key", "tags", "parent_external_key"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "deleted_at", "external_key", "tags", "parent_external_key"}
 
 // UpdateLocationRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so

@@ -242,7 +242,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `asset_deleted_at`, `external_key`, `tags`, `location_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To change the location on PATCH, send `location_id` (surrogate); to clear it, send `"location_id": null`. The natural-key form `location_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `location_id`. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `location_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To change the location on PATCH, send `location_id` (surrogate); to clear it, send `"location_id": null`. The natural-key form `location_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `location_id`. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
@@ -282,7 +282,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	// TRA-674 / BB27 F3: external_key and tags are on PublicReadOnlyFields
 	// and silently stripped by the decoder along with id, created_at,
-	// updated_at, asset_deleted_at. TRA-681 extends the same strip to
+	// updated_at, deleted_at. TRA-681 extends the same strip to
 	// location_external_key — the derived natural-key form is read-only on
 	// PATCH and PATCH bodies use the surrogate location_id form exclusively.
 	// Rename still goes through POST /assets/{id}/rename; tag mutations
@@ -532,7 +532,7 @@ func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
 // @Param location_external_key query []string false "filter by current location external_key (may repeat); mutually exclusive with location_id (400 ambiguous_fields if both supplied)" collectionFormat(multi)
 // @Param external_key          query []string false "filter by asset external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active             query bool   false "filter by active flag"
-// @Param include_deleted       query bool   false "when true, include soft-deleted rows in the response. asset_deleted_at is populated for those rows. Orthogonal to is_active." default(false)
+// @Param include_deleted       query bool   false "when true, include soft-deleted rows in the response. deleted_at is populated for those rows. Orthogonal to is_active." default(false)
 // @Param q                     query string false "substring search (case-insensitive) on name, external_key, description, and active tag values"
 // @Param sort                  query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(external_key, -external_key, name, -name, created_at, -created_at, updated_at, -updated_at)
 // @Success 200 {object} assets.ListAssetsResponse

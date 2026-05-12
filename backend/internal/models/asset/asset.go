@@ -47,7 +47,7 @@ type CreateAssetRequest struct {
 // Stripe does. Mutating either still has a dedicated path
 // (POST /assets/{asset_id}/rename, POST/DELETE /assets/{asset_id}/tags); the
 // PATCH body just silently ignores them, the same way it silently ignores
-// `id` / `created_at` / `updated_at` / `asset_deleted_at`. The previous
+// `id` / `created_at` / `updated_at` / `deleted_at`. The previous
 // rejection-based behavior (TRA-643 for `tags`, TRA-664 for `external_key`)
 // forced every code-generated client to write a strip-on-PATCH helper, so
 // the rule is reversed pre-launch in favor of the more generator-friendly
@@ -65,7 +65,7 @@ type CreateAssetRequest struct {
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"]
 // (the spec-side readOnly markers are coordinated under TRA-672).
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_deleted_at", "external_key", "tags", "location_external_key"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at", "external_key", "tags", "location_external_key"}
 
 // UpdateAssetRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so

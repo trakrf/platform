@@ -21,9 +21,12 @@ import (
 // `*time.Time` shape generated `Date | null` in typescript-fetch and
 // forced null-checks the asset side never required.
 //
-// location_deleted_at is always emitted (null for live rows, populated for
+// deleted_at is always emitted (null for live rows, populated for
 // soft-deleted rows surfaced via ?include_deleted=true) per TRA-659 / BB25
-// A3 — matches the asset_deleted_at shape on /api/v1/locations/current.
+// A3. Per-resource views use the unprefixed `deleted_at` (TRA-679 / BB27 S7
+// option a) — the prefix was redundant inside the location namespace. The
+// prefixed `asset_deleted_at` is retained only in cross-resource report
+// shapes (PublicCurrentLocationItem) where disambiguation matters.
 type PublicLocationView struct {
 	ID                int          `json:"id"`
 	ExternalKey       string       `json:"external_key"`
@@ -38,7 +41,7 @@ type PublicLocationView struct {
 	ValidTo           *time.Time   `json:"valid_to"`
 	CreatedAt         time.Time    `json:"created_at"`
 	UpdatedAt         time.Time    `json:"updated_at"`
-	LocationDeletedAt *time.Time   `json:"location_deleted_at"`
+	DeletedAt         *time.Time   `json:"deleted_at"`
 	Tags              []shared.Tag `json:"tags"`
 }
 
@@ -66,7 +69,7 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 		ValidTo:           l.ValidTo,
 		CreatedAt:         l.CreatedAt,
 		UpdatedAt:         updatedAt,
-		LocationDeletedAt: l.DeletedAt,
+		DeletedAt:         l.DeletedAt,
 		Tags:              l.Tags,
 	}
 }

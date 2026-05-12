@@ -15,9 +15,12 @@ import (
 // description and valid_to are always emitted (null when unset) per
 // TRA-610 / BB18 §1.8 audit alignment with PublicLocationView.
 //
-// asset_deleted_at is always emitted (null for live rows, populated for
+// deleted_at is always emitted (null for live rows, populated for
 // soft-deleted rows surfaced via ?include_deleted=true) per TRA-659 / BB25
-// A3 — matches the field shape /api/v1/locations/current emits per TRA-610.
+// A3. Per-resource views use the unprefixed `deleted_at` (TRA-679 / BB27 S7
+// option a) — the prefix was redundant inside the asset namespace. The
+// prefixed `asset_deleted_at` is retained only in cross-resource report
+// shapes (PublicCurrentLocationItem) where disambiguation matters.
 type PublicAssetView struct {
 	ID                  int          `json:"id"`
 	ExternalKey         string       `json:"external_key"`
@@ -31,7 +34,7 @@ type PublicAssetView struct {
 	ValidTo             *time.Time   `json:"valid_to"`
 	CreatedAt           time.Time    `json:"created_at"`
 	UpdatedAt           time.Time    `json:"updated_at"`
-	AssetDeletedAt      *time.Time   `json:"asset_deleted_at"`
+	DeletedAt           *time.Time   `json:"deleted_at"`
 	Tags                []shared.Tag `json:"tags"`
 }
 
@@ -60,7 +63,7 @@ func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
 		ValidTo:             a.ValidTo,
 		CreatedAt:           a.CreatedAt,
 		UpdatedAt:           a.UpdatedAt,
-		AssetDeletedAt:      a.DeletedAt,
+		DeletedAt:           a.DeletedAt,
 		Tags:                a.Tags,
 	}
 }

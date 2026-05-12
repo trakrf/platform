@@ -310,7 +310,7 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 				if field == "" {
 					field = "(body)"
 				}
-				msg := fmt.Sprintf("%s must be an RFC3339 date or datetime string", field)
+				msg := fmt.Sprintf("%s must be an RFC 3339 timestamp", field)
 				WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
 					msg, requestID,
 					[]apierrors.FieldError{{

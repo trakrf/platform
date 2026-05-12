@@ -6,7 +6,7 @@
 //
 // TRA-674 / BB27 F3: `tags` and `external_key` are now silently stripped on
 // PATCH along with id / created_at / updated_at / tree_path / depth /
-// location_deleted_at so a verbatim GET → PATCH round-trip succeeds. Tag
+// deleted_at so a verbatim GET → PATCH round-trip succeeds. Tag
 // mutation still goes through /locations/{id}/tags and rename still goes
 // through /locations/{id}/rename.
 
@@ -89,7 +89,7 @@ func TestPutLocation_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	}
 
 	// Mutate name and PATCH the full body back. All read-only fields
-	// (id, created_at, updated_at, tree_path, depth, location_deleted_at,
+	// (id, created_at, updated_at, tree_path, depth, deleted_at,
 	// external_key, tags) are silently stripped server-side per TRA-674 /
 	// BB27 F3 — the integrator does not need to scrub the body first.
 	getResp.Data["name"] = "Warehouse 1 (renamed)"
