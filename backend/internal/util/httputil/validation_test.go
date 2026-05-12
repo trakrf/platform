@@ -186,8 +186,11 @@ func TestRespondValidationError_RequiredOnEmptyStringRelabelsAsTooShort(t *testi
 	f := resp.Error.Fields[0]
 	assert.Equal(t, "name", f.Field)
 	assert.Equal(t, "too_short", f.Code, "empty string must not be labeled `required`")
-	assert.Contains(t, f.Message, "characters",
-		"string min violation message should mention characters; got %q", f.Message)
+	// TRA-685 F12: singular form when count==1 ("1 character" not "1 characters").
+	assert.Contains(t, f.Message, "character",
+		"string min violation message should mention character(s); got %q", f.Message)
+	assert.NotContains(t, f.Message, "characters",
+		"n=1 must use singular form; got %q", f.Message)
 	assert.EqualValues(t, 1, f.Params["min_length"], "implicit min_length=1 from relabeled required")
 }
 
@@ -294,7 +297,9 @@ func TestRespondValidationError_AbsentRequiredLengthFieldEmitsTooShort(t *testin
 	f := resp.Error.Fields[0]
 	assert.Equal(t, "name", f.Field)
 	assert.Equal(t, "too_short", f.Code, "length-bearing required must always be too_short")
-	assert.Contains(t, f.Message, "characters")
+	// TRA-685 F12: singular form at count==1.
+	assert.Contains(t, f.Message, "character")
+	assert.NotContains(t, f.Message, "characters")
 	assert.EqualValues(t, 1, f.Params["min_length"])
 }
 

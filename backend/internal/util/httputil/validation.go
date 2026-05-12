@@ -153,6 +153,15 @@ func isNumericKind(k reflect.Kind) bool {
 	return false
 }
 
+// pluralizeForCount returns singular when n == "1", plural otherwise.
+// Bare-string compare matches how min/max validator params arrive.
+func pluralizeForCount(n, singular, plural string) string {
+	if n == "1" {
+		return singular
+	}
+	return plural
+}
+
 // messageForField produces a short human-safe message. Embeds the
 // validator parameter (e.g. allowed enum values, max length) so the
 // string is informative on its own; Params carries the structured form.
@@ -168,14 +177,15 @@ func messageForField(fe validator.FieldError) string {
 			minLen = "1"
 		}
 		if isCollectionKind(fe.Kind()) {
-			return fmt.Sprintf("%s must contain at least %s items", fe.Field(), minLen)
+			return fmt.Sprintf("%s must contain at least %s %s", fe.Field(), minLen, pluralizeForCount(minLen, "item", "items"))
 		}
-		return fmt.Sprintf("%s must be at least %s characters", fe.Field(), minLen)
+		return fmt.Sprintf("%s must be at least %s %s", fe.Field(), minLen, pluralizeForCount(minLen, "character", "characters"))
 	case "too_long":
+		maxLen := fe.Param()
 		if isCollectionKind(fe.Kind()) {
-			return fmt.Sprintf("%s must contain at most %s items", fe.Field(), fe.Param())
+			return fmt.Sprintf("%s must contain at most %s %s", fe.Field(), maxLen, pluralizeForCount(maxLen, "item", "items"))
 		}
-		return fmt.Sprintf("%s must be at most %s characters", fe.Field(), fe.Param())
+		return fmt.Sprintf("%s must be at most %s %s", fe.Field(), maxLen, pluralizeForCount(maxLen, "character", "characters"))
 	case "too_small":
 		return fmt.Sprintf("%s must be >= %s", fe.Field(), fe.Param())
 	case "too_large":
@@ -262,6 +272,20 @@ func RespondValidationError(w http.ResponseWriter, r *http.Request, err error, r
 			Params:  paramsForField(fe),
 		})
 	}
+	// TRA-685 F13: surface the first field message in `detail` rather than
+	// the generic "Request did not pass validation". Documented contract
+	// already directs branching to `error.type` / `error.title`; `detail`
+	// is human-readable cause-of-this-particular-failure, and the field-
+	// level message is exactly that. Suffix with "(and N more)" so the
+	// summary stays honest when multiple fields fail.
+	detail := "Request did not pass validation"
+	if len(fields) == 1 {
+		detail = fields[0].Message
+	} else if len(fields) > 1 {
+		detail = fmt.Sprintf("%s (and %d more validation %s)",
+			fields[0].Message, len(fields)-1,
+			pluralizeForCount(strconv.Itoa(len(fields)-1), "error", "errors"))
+	}
 	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-		"Request did not pass validation", requestID, fields)
+		detail, requestID, fields)
 }

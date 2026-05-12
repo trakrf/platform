@@ -17,14 +17,22 @@ import (
 // common method and chi never resolves to the parameter sibling.
 //
 // HEAD is intentionally absent — chimiddleware.GetHead rewrites HEAD→GET
-// upstream, so registering GET implicitly covers HEAD. OPTIONS is absent
-// because middleware.CORS short-circuits it before chi routing runs.
+// upstream, so registering GET implicitly covers HEAD.
+//
+// OPTIONS is included so that CORS-disabled deployments (TRA-685 F10) emit
+// the correct Allow header on OPTIONS probes. When CORS is enabled, the CORS
+// middleware short-circuits OPTIONS before routing and the handler registered
+// here is never reached. When CORS is disabled, OPTIONS falls through to chi
+// and would otherwise resolve to the /api/* catchall, whose
+// computeAllowedMethods probe would falsely report the 405-emitter siblings
+// as accepted methods on the static path.
 var guardedMethods = []string{
 	http.MethodGet,
 	http.MethodPost,
 	http.MethodPut,
 	http.MethodPatch,
 	http.MethodDelete,
+	http.MethodOptions,
 }
 
 // register404Static registers a normalized 404 emitter for every common HTTP
