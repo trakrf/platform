@@ -44,6 +44,12 @@ type GetOrgMeResponse struct {
 // customers hit to verify a key works end-to-end.
 func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
+	// DELIBERATE-VIOLATION (TRA-678 audit): unconditional 500 on a known-clean
+	// read endpoint. Schemathesis's not_a_server_error check must reject this
+	// PR. DO NOT MERGE.
+	httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+		"deliberate violation", reqID)
+	return
 	principal := middleware.GetAPIKeyPrincipal(r)
 	if principal == nil {
 		httputil.Respond401(w, r, "API key authentication required", reqID)
