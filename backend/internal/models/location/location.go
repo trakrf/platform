@@ -35,15 +35,15 @@ type LocationWithRelations struct {
 }
 
 type CreateLocationRequest struct {
-	Name string `json:"name" validate:"required,min=1,max=255" example:"Warehouse 1"`
+	Name string `json:"name" validate:"required,min=1,max=255,no_control_chars" example:"Warehouse 1"`
 	// external_key is optional. Omit to receive a server-assigned key in the
 	// format LOC-NNNN (per-organization sequence), parallel to assets'
 	// ASSET-NNNN behavior. When supplied, must satisfy the external_key_pattern.
 	// TRA-665 / BB26 D3.
 	ExternalKey       string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
-	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
+	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
-	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024" example:"Main warehouse location"`
+	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Main warehouse location"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	IsActive          *bool                `json:"is_active,omitempty" example:"true"`
@@ -88,10 +88,10 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path
 // silently stripped along with other read-only fields per
 // TRA-674 / BB27 F3 — see PublicReadOnlyFields.
 type UpdateLocationRequest struct {
-	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255" example:"Warehouse 1"`
-	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
+	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,no_control_chars" example:"Warehouse 1"`
+	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
-	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024" example:"Updated description"`
+	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	// Set by the PATCH handler when the body had an explicit `null` for the

@@ -72,6 +72,23 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 	boolAllow := toSet(allow.BoolFilters)
 	sortAllow := toSet(allow.Sorts)
 
+	// Reject NUL bytes / other C0 control chars in any query-string value
+	// before they leak into pgx-bound SQL (TRA-678). Postgres TEXT columns
+	// reject NUL outright (SQLSTATE 22021), and unfiltered control chars in
+	// ILIKE patterns are line-noise in log/audit. Mirrors the body-side
+	// no_control_chars validator.
+	for key, values := range q {
+		for _, v := range values {
+			if containsDisallowedControl(v) {
+				return out, &ListParamError{Fields: []apierrors.FieldError{{
+					Field:   key,
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("%s must not contain control characters (NUL, etc.)", key),
+				}}}
+			}
+		}
+	}
+
 	for key, values := range q {
 		switch key {
 		case "limit":
@@ -120,6 +137,18 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 					Params:  map[string]any{"min": float64(0)},
 				}}}
 			}
+			// Upper-bound to int4 max (TRA-678). The downstream LIMIT/OFFSET
+			// binding goes through pgx as int4, and the spec advertises
+			// `maximum: 2147483647` on the offset query parameter; reject the
+			// boundary case here instead of leaking the pgx encoder error.
+			if int64(n) > SurrogateIDMax {
+				return out, &ListParamError{Fields: []apierrors.FieldError{{
+					Field:   "offset",
+					Code:    "too_large",
+					Message: fmt.Sprintf("offset must be ≤ %d", SurrogateIDMax),
+					Params:  map[string]any{"max": float64(SurrogateIDMax)},
+				}}}
+			}
 			out.Offset = n
 		case "sort":
 			parsed, err := parseSort(values[0], sortAllow)
@@ -159,6 +188,8 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 
 func parseSort(raw string, allow map[string]struct{}) ([]SortField, error) {
 	if strings.TrimSpace(raw) == "" {
+		// `?sort=` decodes to the param default (empty array) per the
+		// spec annotation added in TRA-678 postprocess. No sorting applied.
 		return nil, nil
 	}
 	parts := strings.Split(raw, ",")

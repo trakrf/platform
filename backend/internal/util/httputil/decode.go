@@ -31,7 +31,14 @@ func (e *JSONDecodeError) Unwrap() error { return e.Cause }
 // in *JSONDecodeError so the caller does not surface encoding/json
 // internals to the client.
 func DecodeJSON(r *http.Request, dst any) error {
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return &JSONDecodeError{Cause: err}
+	}
+	if err := rejectNULByteBody(body); err != nil {
+		return err
+	}
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(dst); err != nil {
 		return &JSONDecodeError{Cause: err}
 	}
 	return nil
@@ -41,10 +48,30 @@ func DecodeJSON(r *http.Request, dst any) error {
 // public API endpoints where unrecognised body fields should produce a
 // 400 rather than being silently ignored.
 func DecodeJSONStrict(r *http.Request, dst any) error {
-	dec := json.NewDecoder(r.Body)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return &JSONDecodeError{Cause: err}
+	}
+	if err := rejectNULByteBody(body); err != nil {
+		return err
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return &JSONDecodeError{Cause: err}
+	}
+	return nil
+}
+
+// rejectNULByteBody returns a JSONDecodeError when the raw body bytes
+// contain a NUL byte. Postgres TEXT columns reject NUL outright (SQLSTATE
+// 22021); a NUL anywhere in the body — including nested JSON strings
+// inside `metadata` or other free-form objects — would land in pgx as a
+// 5xx (TRA-678). Pre-screening at the boundary turns this into a
+// deterministic 400 before any decode work happens.
+func rejectNULByteBody(body []byte) error {
+	if bytes.IndexByte(body, 0x00) >= 0 {
+		return &JSONDecodeError{Cause: errors.New("request body must not contain NUL bytes")}
 	}
 	return nil
 }
@@ -63,6 +90,9 @@ func DecodeJSONStrictWithPresence(r *http.Request, dst any) (map[string]struct{}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, &JSONDecodeError{Cause: err}
+	}
+	if err := rejectNULByteBody(body); err != nil {
+		return nil, err
 	}
 	present := map[string]struct{}{}
 	var raw map[string]json.RawMessage
@@ -177,6 +207,19 @@ func decodeStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, nil, &JSONDecodeError{Cause: err}
+	}
+	if err := rejectNULByteBody(body); err != nil {
+		return nil, nil, err
+	}
+
+	// A literal `null` parses successfully into any struct destination as a
+	// silent no-op — every field stays at the Go zero value and the handler
+	// has no signal that the body was structurally invalid. Schemathesis
+	// flags this as "API accepted schema-violating request" on PATCH because
+	// the spec declares the body as type:object (TRA-678). Reject upfront so
+	// the response is a 400 bad_request, not a no-op 200.
+	if bytes.Equal(bytes.TrimSpace(body), []byte("null")) {
+		return nil, nil, &JSONDecodeError{Cause: errors.New("request body must be a JSON object, not null")}
 	}
 
 	explicitNulls := map[string]struct{}{}

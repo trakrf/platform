@@ -11,6 +11,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
+func strPtr(s string) *string { return &s }
+
 func TestGetTagsByAssetID(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
@@ -163,7 +165,7 @@ func TestAddTagToAsset(t *testing.T) {
 	orgID := 1
 	assetID := 10
 	req := shared.TagRequest{
-		TagType: "rfid",
+		TagType: strPtr("rfid"),
 		Value:   "E20000009999",
 	}
 
@@ -174,7 +176,7 @@ func TestAddTagToAsset(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
-		WithArgs(orgID, req.TagType, req.Value, assetID).
+		WithArgs(orgID, req.GetType(), req.Value, assetID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
@@ -199,7 +201,7 @@ func TestAddTagToAsset_Duplicate(t *testing.T) {
 	orgID := 1
 	assetID := 10
 	req := shared.TagRequest{
-		TagType: "rfid",
+		TagType: strPtr("rfid"),
 		Value:   "E20000009999",
 	}
 
@@ -207,7 +209,7 @@ func TestAddTagToAsset_Duplicate(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
-		WithArgs(orgID, req.TagType, req.Value, assetID).
+		WithArgs(orgID, req.GetType(), req.Value, assetID).
 		WillReturnError(errors.New("duplicate key value violates unique constraint"))
 	mock.ExpectRollback()
 
@@ -229,7 +231,7 @@ func TestAddTagToLocation(t *testing.T) {
 	orgID := 1
 	locationID := 20
 	req := shared.TagRequest{
-		TagType: "barcode",
+		TagType: strPtr("barcode"),
 		Value:   "LOC-SHELF-01",
 	}
 
@@ -240,7 +242,7 @@ func TestAddTagToLocation(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`INSERT INTO trakrf.tags`).
-		WithArgs(orgID, req.TagType, req.Value, locationID).
+		WithArgs(orgID, req.GetType(), req.Value, locationID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
 
@@ -560,7 +562,7 @@ func TestTagsToJSON(t *testing.T) {
 
 	t.Run("single tag", func(t *testing.T) {
 		input := []shared.TagRequest{
-			{TagType: "rfid", Value: "E20000001234"},
+			{TagType: strPtr("rfid"), Value: "E20000001234"},
 		}
 		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
@@ -570,8 +572,8 @@ func TestTagsToJSON(t *testing.T) {
 
 	t.Run("multiple tags", func(t *testing.T) {
 		input := []shared.TagRequest{
-			{TagType: "rfid", Value: "E20000001234"},
-			{TagType: "ble", Value: "AA:BB:CC:DD:EE:FF"},
+			{TagType: strPtr("rfid"), Value: "E20000001234"},
+			{TagType: strPtr("ble"), Value: "AA:BB:CC:DD:EE:FF"},
 		}
 		result, err := tagsToJSON(input)
 		assert.NoError(t, err)
@@ -591,7 +593,7 @@ func TestTagsToJSON(t *testing.T) {
 
 	t.Run("mixed explicit and default types", func(t *testing.T) {
 		input := []shared.TagRequest{
-			{TagType: "ble", Value: "AA:BB:CC:DD:EE:FF"},
+			{TagType: strPtr("ble"), Value: "AA:BB:CC:DD:EE:FF"},
 			{Value: "E20000001234"}, // no type, defaults to rfid
 		}
 		result, err := tagsToJSON(input)
@@ -603,7 +605,7 @@ func TestTagsToJSON(t *testing.T) {
 
 func TestTagRequestGetType(t *testing.T) {
 	t.Run("returns explicit type", func(t *testing.T) {
-		req := shared.TagRequest{TagType: "ble", Value: "test"}
+		req := shared.TagRequest{TagType: strPtr("ble"), Value: "test"}
 		assert.Equal(t, "ble", req.GetType())
 	})
 

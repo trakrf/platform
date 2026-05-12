@@ -123,6 +123,7 @@
           "timestamp": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -172,6 +173,7 @@
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -187,6 +189,7 @@
           "last_seen": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "location_external_key": {
@@ -247,12 +250,14 @@
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
           "created_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -297,18 +302,21 @@
           "updated_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -342,11 +350,13 @@
         "type": "object"
       },
       "CreateAssetWithTagsRequest": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "external_key": {
@@ -357,6 +367,7 @@
           },
           "is_active": {
             "example": true,
+            "nullable": true,
             "type": "boolean"
           },
           "location_external_key": {
@@ -370,34 +381,41 @@
           "location_id": {
             "example": 42,
             "format": "int32",
+            "maximum": 2147483647,
+            "minimum": 1,
             "nullable": true,
             "type": "integer"
           },
           "metadata": {
-            "additionalProperties": true,
+            "additionalProperties": {},
+            "nullable": true,
             "type": "object"
           },
           "name": {
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "tags": {
             "items": {
               "$ref": "#/components/schemas/TagRequest"
             },
+            "nullable": true,
             "type": "array"
           },
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -418,12 +436,14 @@
         "type": "object"
       },
       "CreateLocationWithTagsRequest": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "example": "Main warehouse location",
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "external_key": {
@@ -436,12 +456,14 @@
           },
           "is_active": {
             "example": true,
+            "nullable": true,
             "type": "boolean"
           },
           "name": {
             "example": "Warehouse 1",
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "parent_external_key": {
@@ -455,6 +477,7 @@
           "parent_id": {
             "example": 42,
             "format": "int32",
+            "maximum": 2147483647,
             "minimum": 1,
             "nullable": true,
             "type": "integer"
@@ -463,18 +486,21 @@
             "items": {
               "$ref": "#/components/schemas/TagRequest"
             },
+            "nullable": true,
             "type": "array"
           },
           "valid_from": {
             "example": "2025-12-14T00:00:00Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-12-14T00:00:00Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -557,7 +583,8 @@
               "too_long",
               "too_small",
               "too_large",
-              "immutable_field"
+              "immutable_field",
+              "fk_not_found"
             ],
             "example": "required",
             "type": "string",
@@ -779,6 +806,7 @@
           "created_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -806,6 +834,7 @@
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -835,18 +864,21 @@
           "updated_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -889,6 +921,7 @@
         "type": "object"
       },
       "RenameAssetRequest": {
+        "additionalProperties": false,
         "properties": {
           "external_key": {
             "example": "ASSET-0042",
@@ -915,6 +948,7 @@
         "type": "object"
       },
       "RenameLocationRequest": {
+        "additionalProperties": false,
         "properties": {
           "external_key": {
             "example": "wh1",
@@ -971,6 +1005,7 @@
           "value": {
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           }
         },
@@ -983,6 +1018,7 @@
         "type": "object"
       },
       "TagRequest": {
+        "additionalProperties": false,
         "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
         "properties": {
           "tag_type": {
@@ -994,12 +1030,14 @@
               "barcode"
             ],
             "example": "rfid",
+            "nullable": true,
             "type": "string",
             "x-extensible-enum": true
           },
           "value": {
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           }
         },
@@ -1009,11 +1047,13 @@
         "type": "object"
       },
       "UpdateAssetRequest": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "is_active": {
@@ -1030,27 +1070,32 @@
           "location_id": {
             "example": 42,
             "format": "int32",
+            "maximum": 2147483647,
+            "minimum": 1,
             "nullable": true,
             "type": "integer"
           },
           "metadata": {
-            "additionalProperties": true,
+            "additionalProperties": {},
             "type": "object"
           },
           "name": {
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -1068,12 +1113,14 @@
         "type": "object"
       },
       "UpdateLocationRequest": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "example": "Updated description",
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "is_active": {
@@ -1084,6 +1131,7 @@
             "example": "Warehouse 1",
             "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
             "type": "string"
           },
           "parent_external_key": {
@@ -1097,6 +1145,7 @@
           "parent_id": {
             "example": 42,
             "format": "int32",
+            "maximum": 2147483647,
             "minimum": 1,
             "nullable": true,
             "type": "integer"
@@ -1104,12 +1153,14 @@
           "valid_from": {
             "example": "2025-12-14T00:00:00Z",
             "format": "date-time",
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-12-14T00:00:00Z",
             "format": "date-time",
             "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -1174,6 +1225,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "maximum": 2147483647,
               "minimum": 0,
               "type": "integer"
             }
@@ -1184,7 +1236,10 @@
             "in": "query",
             "name": "location_id",
             "schema": {
+              "default": [],
               "items": {
+                "maximum": 2147483647,
+                "minimum": 1,
                 "type": "integer"
               },
               "type": "array"
@@ -1197,7 +1252,9 @@
             "in": "query",
             "name": "location_external_key",
             "schema": {
+              "default": [],
               "items": {
+                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
                 "type": "string"
               },
               "type": "array"
@@ -1210,7 +1267,9 @@
             "in": "query",
             "name": "external_key",
             "schema": {
+              "default": [],
               "items": {
+                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
                 "type": "string"
               },
               "type": "array"
@@ -1239,6 +1298,7 @@
             "in": "query",
             "name": "q",
             "schema": {
+              "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
               "type": "string"
             }
           },
@@ -1248,20 +1308,9 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "items": {
-                "enum": [
-                  "external_key",
-                  "-external_key",
-                  "name",
-                  "-name",
-                  "created_at",
-                  "-created_at",
-                  "updated_at",
-                  "-updated_at"
-                ],
-                "type": "string"
-              },
-              "type": "array"
+              "default": "",
+              "pattern": "^(|(?:external_key|-external_key|name|-name|created_at|-created_at|updated_at|-updated_at)(?:,(?:external_key|-external_key|name|-name|created_at|-created_at|updated_at|-updated_at))*)$",
+              "type": "string"
             },
             "style": "form"
           }
@@ -2541,6 +2590,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "maximum": 2147483647,
               "minimum": 0,
               "type": "integer"
             }
@@ -2552,6 +2602,7 @@
             "schema": {
               "example": "2025-04-29T12:34:56Z",
               "format": "date-time",
+              "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
               "type": "string"
             }
           },
@@ -2562,6 +2613,7 @@
             "schema": {
               "example": "2025-04-29T12:34:56Z",
               "format": "date-time",
+              "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
               "type": "string"
             }
           },
@@ -2571,14 +2623,9 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "items": {
-                "enum": [
-                  "timestamp",
-                  "-timestamp"
-                ],
-                "type": "string"
-              },
-              "type": "array"
+              "default": "",
+              "pattern": "^(|(?:timestamp|-timestamp)(?:,(?:timestamp|-timestamp))*)$",
+              "type": "string"
             },
             "style": "form"
           }
@@ -3664,6 +3711,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "maximum": 2147483647,
               "minimum": 0,
               "type": "integer"
             }
@@ -3674,7 +3722,10 @@
             "in": "query",
             "name": "parent_id",
             "schema": {
+              "default": [],
               "items": {
+                "maximum": 2147483647,
+                "minimum": 1,
                 "type": "integer"
               },
               "type": "array"
@@ -3687,7 +3738,9 @@
             "in": "query",
             "name": "parent_external_key",
             "schema": {
+              "default": [],
               "items": {
+                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
                 "type": "string"
               },
               "type": "array"
@@ -3700,7 +3753,9 @@
             "in": "query",
             "name": "external_key",
             "schema": {
+              "default": [],
               "items": {
+                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
                 "type": "string"
               },
               "type": "array"
@@ -3729,6 +3784,7 @@
             "in": "query",
             "name": "q",
             "schema": {
+              "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
               "type": "string"
             }
           },
@@ -3738,20 +3794,9 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "items": {
-                "enum": [
-                  "tree_path",
-                  "-tree_path",
-                  "external_key",
-                  "-external_key",
-                  "name",
-                  "-name",
-                  "created_at",
-                  "-created_at"
-                ],
-                "type": "string"
-              },
-              "type": "array"
+              "default": "",
+              "pattern": "^(|(?:tree_path|-tree_path|external_key|-external_key|name|-name|created_at|-created_at)(?:,(?:tree_path|-tree_path|external_key|-external_key|name|-name|created_at|-created_at))*)$",
+              "type": "string"
             },
             "style": "form"
           }
@@ -5055,6 +5100,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "maximum": 2147483647,
               "minimum": 0,
               "type": "integer"
             }
@@ -5308,6 +5354,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "maximum": 2147483647,
               "minimum": 0,
               "type": "integer"
             }
@@ -5561,6 +5608,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "maximum": 2147483647,
               "minimum": 0,
               "type": "integer"
             }
@@ -6892,6 +6940,7 @@
             "name": "offset",
             "schema": {
               "default": 0,
+              "maximum": 2147483647,
               "minimum": 0,
               "type": "integer"
             }
@@ -6902,7 +6951,10 @@
             "in": "query",
             "name": "location_id",
             "schema": {
+              "default": [],
               "items": {
+                "maximum": 2147483647,
+                "minimum": 1,
                 "type": "integer"
               },
               "type": "array"
@@ -6915,7 +6967,9 @@
             "in": "query",
             "name": "location_external_key",
             "schema": {
+              "default": [],
               "items": {
+                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
                 "type": "string"
               },
               "type": "array"
@@ -6927,6 +6981,7 @@
             "in": "query",
             "name": "q",
             "schema": {
+              "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
               "type": "string"
             }
           },
@@ -6945,18 +7000,9 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "items": {
-                "enum": [
-                  "last_seen",
-                  "-last_seen",
-                  "asset_external_key",
-                  "-asset_external_key",
-                  "location_external_key",
-                  "-location_external_key"
-                ],
-                "type": "string"
-              },
-              "type": "array"
+              "default": "",
+              "pattern": "^(|(?:last_seen|-last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key)(?:,(?:last_seen|-last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key))*)$",
+              "type": "string"
             },
             "style": "form"
           }

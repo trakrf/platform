@@ -82,6 +82,7 @@ components:
                 timestamp:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - timestamp
@@ -119,6 +120,7 @@ components:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 asset_external_key:
@@ -131,6 +133,7 @@ components:
                 last_seen:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 location_external_key:
                     nullable: true
@@ -177,11 +180,13 @@ components:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 created_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 description:
@@ -215,16 +220,19 @@ components:
                 updated_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 valid_from:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - id
@@ -250,11 +258,13 @@ components:
                 - data
             type: object
         CreateAssetWithTagsRequest:
+            additionalProperties: false
             properties:
                 description:
                     maxLength: 1024
                     minLength: 1
                     nullable: true
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 external_key:
                     maxLength: 255
@@ -263,6 +273,7 @@ components:
                     type: string
                 is_active:
                     example: true
+                    nullable: true
                     type: boolean
                 location_external_key:
                     example: WHS-01
@@ -274,28 +285,35 @@ components:
                 location_id:
                     example: 42
                     format: int32
+                    maximum: 2147483647
+                    minimum: 1
                     nullable: true
                     type: integer
                 metadata:
-                    additionalProperties: true
+                    additionalProperties: {}
+                    nullable: true
                     type: object
                 name:
                     maxLength: 255
                     minLength: 1
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 tags:
                     items:
                         $ref: '#/components/schemas/TagRequest'
+                    nullable: true
                     type: array
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - name
@@ -308,12 +326,14 @@ components:
                 - data
             type: object
         CreateLocationWithTagsRequest:
+            additionalProperties: false
             properties:
                 description:
                     example: Main warehouse location
                     maxLength: 1024
                     minLength: 1
                     nullable: true
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 external_key:
                     description: |-
@@ -328,11 +348,13 @@ components:
                     type: string
                 is_active:
                     example: true
+                    nullable: true
                     type: boolean
                 name:
                     example: Warehouse 1
                     maxLength: 255
                     minLength: 1
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 parent_external_key:
                     example: wh1
@@ -344,22 +366,26 @@ components:
                 parent_id:
                     example: 42
                     format: int32
+                    maximum: 2147483647
                     minimum: 1
                     nullable: true
                     type: integer
                 tags:
                     items:
                         $ref: '#/components/schemas/TagRequest'
+                    nullable: true
                     type: array
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - name
@@ -424,6 +450,7 @@ components:
                         - too_small
                         - too_large
                         - immutable_field
+                        - fk_not_found
                     example: required
                     type: string
                     x-extensible-enum: true
@@ -585,6 +612,7 @@ components:
                 created_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 depth:
@@ -606,6 +634,7 @@ components:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 name:
@@ -628,16 +657,19 @@ components:
                 updated_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 valid_from:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - id
@@ -671,6 +703,7 @@ components:
                 - name
             type: object
         RenameAssetRequest:
+            additionalProperties: false
             properties:
                 external_key:
                     example: ASSET-0042
@@ -689,6 +722,7 @@ components:
                 - data
             type: object
         RenameLocationRequest:
+            additionalProperties: false
             properties:
                 external_key:
                     example: wh1
@@ -732,6 +766,7 @@ components:
                 value:
                     maxLength: 255
                     minLength: 1
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
             required:
                 - id
@@ -740,6 +775,7 @@ components:
                 - is_active
             type: object
         TagRequest:
+            additionalProperties: false
             description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
             properties:
                 tag_type:
@@ -750,21 +786,25 @@ components:
                         - ble
                         - barcode
                     example: rfid
+                    nullable: true
                     type: string
                     x-extensible-enum: true
                 value:
                     maxLength: 255
                     minLength: 1
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
             required:
                 - value
             type: object
         UpdateAssetRequest:
+            additionalProperties: false
             properties:
                 description:
                     maxLength: 1024
                     minLength: 1
                     nullable: true
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 is_active:
                     type: boolean
@@ -778,23 +818,28 @@ components:
                 location_id:
                     example: 42
                     format: int32
+                    maximum: 2147483647
+                    minimum: 1
                     nullable: true
                     type: integer
                 metadata:
-                    additionalProperties: true
+                    additionalProperties: {}
                     type: object
                 name:
                     maxLength: 255
                     minLength: 1
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             type: object
         UpdateAssetResponse:
@@ -805,12 +850,14 @@ components:
                 - data
             type: object
         UpdateLocationRequest:
+            additionalProperties: false
             properties:
                 description:
                     example: Updated description
                     maxLength: 1024
                     minLength: 1
                     nullable: true
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 is_active:
                     example: true
@@ -819,6 +866,7 @@ components:
                     example: Warehouse 1
                     maxLength: 255
                     minLength: 1
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 parent_external_key:
                     example: wh1
@@ -830,17 +878,20 @@ components:
                 parent_id:
                     example: 42
                     format: int32
+                    maximum: 2147483647
                     minimum: 1
                     nullable: true
                     type: integer
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
                     format: date-time
                     nullable: true
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             type: object
         UpdateLocationResponse:
@@ -897,6 +948,7 @@ paths:
                   name: offset
                   schema:
                     default: 0
+                    maximum: 2147483647
                     minimum: 0
                     type: integer
                 - description: filter by current location id (canonical, may repeat)
@@ -904,7 +956,10 @@ paths:
                   in: query
                   name: location_id
                   schema:
+                    default: []
                     items:
+                        maximum: 2147483647
+                        minimum: 1
                         type: integer
                     type: array
                   style: form
@@ -913,7 +968,9 @@ paths:
                   in: query
                   name: location_external_key
                   schema:
+                    default: []
                     items:
+                        pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                         type: string
                     type: array
                   style: form
@@ -922,7 +979,9 @@ paths:
                   in: query
                   name: external_key
                   schema:
+                    default: []
                     items:
+                        pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                         type: string
                     type: array
                   style: form
@@ -941,24 +1000,16 @@ paths:
                   in: query
                   name: q
                   schema:
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 - description: comma-separated; prefix '-' for DESC
                   explode: false
                   in: query
                   name: sort
                   schema:
-                    items:
-                        enum:
-                            - external_key
-                            - -external_key
-                            - name
-                            - -name
-                            - created_at
-                            - -created_at
-                            - updated_at
-                            - -updated_at
-                        type: string
-                    type: array
+                    default: ""
+                    pattern: ^(|(?:external_key|-external_key|name|-name|created_at|-created_at|updated_at|-updated_at)(?:,(?:external_key|-external_key|name|-name|created_at|-created_at|updated_at|-updated_at))*)$
+                    type: string
                   style: form
             responses:
                 "200":
@@ -1792,6 +1843,7 @@ paths:
                   name: offset
                   schema:
                     default: 0
+                    maximum: 2147483647
                     minimum: 0
                     type: integer
                 - description: RFC 3339 start timestamp
@@ -1800,6 +1852,7 @@ paths:
                   schema:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 - description: RFC 3339 end timestamp
                   in: query
@@ -1807,18 +1860,16 @@ paths:
                   schema:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
+                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 - description: comma-separated; prefix '-' for DESC
                   explode: false
                   in: query
                   name: sort
                   schema:
-                    items:
-                        enum:
-                            - timestamp
-                            - -timestamp
-                        type: string
-                    type: array
+                    default: ""
+                    pattern: ^(|(?:timestamp|-timestamp)(?:,(?:timestamp|-timestamp))*)$
+                    type: string
                   style: form
             responses:
                 "200":
@@ -2522,6 +2573,7 @@ paths:
                   name: offset
                   schema:
                     default: 0
+                    maximum: 2147483647
                     minimum: 0
                     type: integer
                 - description: filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key
@@ -2529,7 +2581,10 @@ paths:
                   in: query
                   name: parent_id
                   schema:
+                    default: []
                     items:
+                        maximum: 2147483647
+                        minimum: 1
                         type: integer
                     type: array
                   style: form
@@ -2538,7 +2593,9 @@ paths:
                   in: query
                   name: parent_external_key
                   schema:
+                    default: []
                     items:
+                        pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                         type: string
                     type: array
                   style: form
@@ -2547,7 +2604,9 @@ paths:
                   in: query
                   name: external_key
                   schema:
+                    default: []
                     items:
+                        pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                         type: string
                     type: array
                   style: form
@@ -2566,24 +2625,16 @@ paths:
                   in: query
                   name: q
                   schema:
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 - description: comma-separated, prefix '-' for DESC
                   explode: false
                   in: query
                   name: sort
                   schema:
-                    items:
-                        enum:
-                            - tree_path
-                            - -tree_path
-                            - external_key
-                            - -external_key
-                            - name
-                            - -name
-                            - created_at
-                            - -created_at
-                        type: string
-                    type: array
+                    default: ""
+                    pattern: ^(|(?:tree_path|-tree_path|external_key|-external_key|name|-name|created_at|-created_at)(?:,(?:tree_path|-tree_path|external_key|-external_key|name|-name|created_at|-created_at))*)$
+                    type: string
                   style: form
             responses:
                 "200":
@@ -3426,6 +3477,7 @@ paths:
                   name: offset
                   schema:
                     default: 0
+                    maximum: 2147483647
                     minimum: 0
                     type: integer
             responses:
@@ -3587,6 +3639,7 @@ paths:
                   name: offset
                   schema:
                     default: 0
+                    maximum: 2147483647
                     minimum: 0
                     type: integer
             responses:
@@ -3748,6 +3801,7 @@ paths:
                   name: offset
                   schema:
                     default: 0
+                    maximum: 2147483647
                     minimum: 0
                     type: integer
             responses:
@@ -4601,6 +4655,7 @@ paths:
                   name: offset
                   schema:
                     default: 0
+                    maximum: 2147483647
                     minimum: 0
                     type: integer
                 - description: filter by location id (canonical, may repeat)
@@ -4608,7 +4663,10 @@ paths:
                   in: query
                   name: location_id
                   schema:
+                    default: []
                     items:
+                        maximum: 2147483647
+                        minimum: 1
                         type: integer
                     type: array
                   style: form
@@ -4617,7 +4675,9 @@ paths:
                   in: query
                   name: location_external_key
                   schema:
+                    default: []
                     items:
+                        pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                         type: string
                     type: array
                   style: form
@@ -4625,6 +4685,7 @@ paths:
                   in: query
                   name: q
                   schema:
+                    pattern: "^[^\0-\b\v\f\x0E-\x1F\x7F]*$"
                     type: string
                 - description: include rows for soft-deleted assets
                   in: query
@@ -4637,16 +4698,9 @@ paths:
                   in: query
                   name: sort
                   schema:
-                    items:
-                        enum:
-                            - last_seen
-                            - -last_seen
-                            - asset_external_key
-                            - -asset_external_key
-                            - location_external_key
-                            - -location_external_key
-                        type: string
-                    type: array
+                    default: ""
+                    pattern: ^(|(?:last_seen|-last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key)(?:,(?:last_seen|-last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key))*)$
+                    type: string
                   style: form
             responses:
                 "200":

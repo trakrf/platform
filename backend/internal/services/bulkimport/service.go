@@ -214,9 +214,10 @@ func (s *Service) processCSVAsync(
 	for _, pr := range validRows {
 		// Convert tag values to TagRequest with type "rfid"
 		identifiers := make([]shared.TagRequest, len(pr.tagValues))
+		rfid := shared.DefaultTagType
 		for i, tag := range pr.tagValues {
 			identifiers[i] = shared.TagRequest{
-				TagType: "rfid",
+				TagType: &rfid,
 				Value:   tag,
 			}
 		}

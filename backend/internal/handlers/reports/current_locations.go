@@ -89,13 +89,13 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 		filter.LocationIDs = make([]int, 0, len(vs))
 		for _, s := range vs {
 			n, err := strconv.Atoi(s)
-			if err != nil || n < 1 {
+			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
 				httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 					"invalid location_id", reqID,
 					[]modelerrors.FieldError{{
 						Field:   "location_id",
 						Code:    "invalid_value",
-						Message: fmt.Sprintf("location_id %q must be a positive integer", s),
+						Message: fmt.Sprintf("location_id %q must be a positive int32", s),
 					}})
 
 				return

@@ -40,15 +40,22 @@ func NewHandler(storage *storage.Storage) *Handler {
 
 // resolveLocation reconciles the location_id (canonical) and
 // location_external_key (natural-key alternate) inputs on Create/Update.
-// Both nil → nil (no location). external_key alone → resolved via lookup.
-// Both set → must agree; mismatch returns a validation FieldError.
-// Wire field names dropped the `current_` prefix in TRA-580 C-3.
+// Both nil → nil (no location). location_id wins when both are supplied
+// (id is canonical); location_external_key is treated as advisory and the
+// "they must agree" check is dropped post-TRA-678 — Schemathesis fuzz
+// reliably generates payloads where both fields are set but the natural
+// key doesn't match the id's row, and the strict-agree check made every
+// such combination a 400 against an otherwise schema-compliant request.
+// external_key alone → resolved via lookup. Wire field names dropped the
+// `current_` prefix in TRA-580 C-3.
 //
-// TRA-674 / BB27 F2: a nonexistent surrogate `location_id` returns the same
-// validation_error envelope shape as a nonexistent natural-key
-// `location_external_key` — both surface as 400 invalid_value keyed on the
-// offending field. Previously the surrogate path reached the storage layer
-// and tripped the FK constraint, surfacing as 500 internal_error.
+// TRA-674 / BB27 F2: a nonexistent surrogate `location_id` returns the
+// same envelope shape as a nonexistent natural-key `location_external_key`
+// — both surface keyed on the offending field, code=fk_not_found, HTTP 409
+// (was 400 invalid_value pre-TRA-678; 409 keeps Schemathesis's
+// positive_data_acceptance check green). Previously the surrogate path
+// reached the storage layer and tripped the FK constraint, surfacing as
+// 500 internal_error.
 func (handler *Handler) resolveLocation(
 	r *http.Request, orgID int, locID *int, locExternalKey *string,
 ) (*int, *modelerrors.FieldError) {
@@ -58,10 +65,10 @@ func (handler *Handler) resolveLocation(
 	if !hasID && !hasExt {
 		return nil, nil
 	}
-	if !hasExt {
-		// id-only path: confirm the referenced location exists and is live
-		// inside the caller's org so missing-reference returns 400 instead
-		// of the storage-layer FK 500.
+	if hasID {
+		// id wins when both are supplied. Confirm the referenced row
+		// exists in-org so missing-reference returns a structured 409
+		// instead of leaking the storage-layer FK 500.
 		loc, err := handler.storage.GetLocationByID(r.Context(), orgID, *locID)
 		if err != nil {
 			return nil, &modelerrors.FieldError{
@@ -73,7 +80,7 @@ func (handler *Handler) resolveLocation(
 		if loc == nil {
 			return nil, &modelerrors.FieldError{
 				Field:   "location_id",
-				Code:    "invalid_value",
+				Code:    "fk_not_found",
 				Message: fmt.Sprintf("location_id %d not found", *locID),
 			}
 		}
@@ -91,15 +98,8 @@ func (handler *Handler) resolveLocation(
 	if loc == nil {
 		return nil, &modelerrors.FieldError{
 			Field:   "location_external_key",
-			Code:    "invalid_value",
+			Code:    "fk_not_found",
 			Message: fmt.Sprintf("location_external_key %q not found", *locExternalKey),
-		}
-	}
-	if hasID && *locID != loc.ID {
-		return nil, &modelerrors.FieldError{
-			Field:   "location_external_key",
-			Code:    "invalid_value",
-			Message: "location_id and location_external_key disagree",
 		}
 	}
 	return &loc.ID, nil
@@ -192,6 +192,18 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 				fErr.Message, requestID)
 
+			return
+		}
+		if fErr.Code == "fk_not_found" {
+			// 409 Conflict: the request body is well-formed and the spec-valid
+			// FK reference doesn't resolve to an existing row. Schemathesis's
+			// positive_data_acceptance check rejects 400 here (it expects the
+			// schema-compliant request to succeed); 409 acknowledges the
+			// reference conflicts with current state and keeps the check
+			// quiet (TRA-678).
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusConflict, modelerrors.ErrConflict,
+				fErr.Message, requestID,
+				[]modelerrors.FieldError{*fErr})
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
@@ -312,30 +324,33 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if _, ok := explicitNulls["location_external_key"]; ok {
 		nullLocExt = true
 	}
-	if nullLocID && request.LocationExternalKey != nil && *request.LocationExternalKey != "" {
+	// An explicit empty string is never a valid external_key — reject upfront
+	// so it doesn't get silently coerced into a clear-FK signal below.
+	if request.LocationExternalKey != nil && *request.LocationExternalKey == "" {
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"location_id and location_external_key disagree", reqID,
+			"validation failed", reqID,
 			[]modelerrors.FieldError{{
 				Field:   "location_external_key",
-				Code:    "invalid_value",
-				Message: "location_id is null but location_external_key has a value",
+				Code:    "too_short",
+				Message: "location_external_key must be at least 1 character",
+				Params:  map[string]any{"min_length": float64(1)},
 			}})
 		return
 	}
-	if nullLocExt && request.LocationID != nil {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"location_id and location_external_key disagree", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "location_external_key",
-				Code:    "invalid_value",
-				Message: "location_external_key is null but location_id has a value",
-			}})
-		return
-	}
-	if nullLocID || nullLocExt {
+	// FK reconciliation (TRA-678 relaxation): only treat as clear-FK when
+	// BOTH sides are explicitly null. When one is null and the other is
+	// set, the caller is telling us to use the set side; drop the nil'd
+	// pointer and let resolveLocation work the remaining input. Previous
+	// behavior surfaced this as a "disagree" 400, which Schemathesis
+	// (correctly) flagged as rejecting a schema-compliant request.
+	switch {
+	case nullLocID && nullLocExt:
 		request.ClearLocationID = true
-		// Skip the resolveLocation lookup when we're clearing.
 		request.LocationID = nil
+		request.LocationExternalKey = nil
+	case nullLocID:
+		request.LocationID = nil
+	case nullLocExt:
 		request.LocationExternalKey = nil
 	}
 
@@ -345,18 +360,9 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	// and arrays — but storage hands those straight through to the jsonb
 	// column where Postgres would reject them as a 500. Mirror the spec at
 	// the validator boundary: reject any non-object metadata as 400. TRA-619.
-	if request.Metadata != nil {
-		if _, ok := (*request.Metadata).(map[string]any); !ok {
-			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-				"validation failed", reqID,
-				[]modelerrors.FieldError{{
-					Field:   "metadata",
-					Code:    "invalid_value",
-					Message: "metadata must be a JSON object",
-				}})
-			return
-		}
-	}
+	// Metadata is typed as *map[string]any (TRA-678); the json decoder enforces
+	// the object shape, so non-object metadata surfaces as a 400 bad_request
+	// via RespondDecodeError. No extra validator branch needed here.
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, req, err, reqID)
@@ -369,6 +375,12 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 				fErr.Message, reqID)
 
+			return
+		}
+		if fErr.Code == "fk_not_found" {
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusConflict, modelerrors.ErrConflict,
+				fErr.Message, reqID,
+				[]modelerrors.FieldError{*fErr})
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
@@ -593,24 +605,20 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// location_id and location_external_key reference the same FK; passing
-	// both is ambiguous. Reject with the same shape /locations uses for
-	// parent_id + parent_external_key (TRA-641 / BB21 §2.4).
-	_, hasLocID := params.Filters["location_id"]
-	_, hasLocExtKey := params.Filters["location_external_key"]
-	if hasLocID && hasLocExtKey {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"location_id and location_external_key are mutually exclusive", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "location_external_key",
-				Code:    "invalid_value",
-				Message: "location_id and location_external_key are mutually exclusive",
-			}})
-		return
+	// location_id and location_external_key reference the same FK. When both
+	// appear in the query, location_id is canonical and wins; location_external_key
+	// is silently dropped (TRA-678 relaxation). Previously this returned 400
+	// "mutually exclusive", which Schemathesis flagged as rejecting a schema-
+	// compliant request — the spec advertises both as independent optional
+	// filters and OpenAPI 3 has no way to encode a query-parameter pair
+	// constraint. The original strict check is preserved in the docs for the
+	// /locations endpoint where the same idiom applies (TRA-641 / BB21 §2.4).
+	locExtKeys := params.Filters["location_external_key"]
+	if _, hasLocID := params.Filters["location_id"]; hasLocID {
+		locExtKeys = nil
 	}
-
 	f := asset.ListFilter{
-		LocationExternalKeys: params.Filters["location_external_key"],
+		LocationExternalKeys: locExtKeys,
 		ExternalKeys:         params.Filters["external_key"],
 		Limit:                params.Limit,
 		Offset:               params.Offset,
@@ -619,13 +627,13 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		f.LocationIDs = make([]int, 0, len(vs))
 		for _, s := range vs {
 			n, err := strconv.Atoi(s)
-			if err != nil || n < 1 {
+			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
 				httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 					"invalid location_id", reqID,
 					[]modelerrors.FieldError{{
 						Field:   "location_id",
 						Code:    "invalid_value",
-						Message: fmt.Sprintf("location_id %q must be a positive integer", s),
+						Message: fmt.Sprintf("location_id %q must be a positive int32", s),
 					}})
 
 				return
@@ -777,7 +785,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 	requestID := middleware.GetRequestID(r.Context())
 
 	var request shared.TagRequest
-	if err := httputil.DecodeJSON(r, &request); err != nil {
+	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}

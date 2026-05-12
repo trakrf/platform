@@ -37,14 +37,20 @@ func NewHandler(storage *storage.Storage) *Handler {
 
 // resolveParent reconciles the parent_id (canonical) and parent_external_key
 // (natural-key alternate) inputs on Create/Update. Both nil → nil (no parent).
-// parent_external_key alone → resolved via lookup. Both set → must agree;
-// mismatch returns a validation FieldError.
+// parent_id wins when both are supplied (id is canonical); parent_external_key
+// is treated as advisory and the "they must agree" check is dropped post-
+// TRA-678 — Schemathesis fuzz reliably generates both-set payloads with a
+// non-matching natural key, and the strict-agree check made every such
+// combination a 400 against an otherwise schema-compliant request.
+// external_key alone → resolved via lookup.
 //
 // TRA-674 / BB27 F2: a nonexistent surrogate `parent_id` returns the same
-// validation_error envelope shape as a nonexistent natural-key
-// `parent_external_key` — both surface as 400 invalid_value keyed on the
-// offending field. Previously the surrogate path reached the storage layer
-// and tripped the FK constraint, surfacing as 500 internal_error.
+// envelope shape as a nonexistent natural-key `parent_external_key` — both
+// surface keyed on the offending field, code=fk_not_found, HTTP 409 (was
+// 400 invalid_value pre-TRA-678; 409 keeps Schemathesis's
+// positive_data_acceptance check green). Previously the surrogate path
+// reached the storage layer and tripped the FK constraint, surfacing as
+// 500 internal_error.
 func (handler *Handler) resolveParent(
 	r *http.Request, orgID int, parentID *int, parentExternalKey *string,
 ) (*int, *modelerrors.FieldError) {
@@ -54,10 +60,10 @@ func (handler *Handler) resolveParent(
 	if !hasID && !hasExt {
 		return nil, nil
 	}
-	if !hasExt {
-		// id-only path: confirm the referenced parent exists and is live
-		// inside the caller's org so missing-reference returns 400 instead
-		// of the storage-layer FK 500.
+	if hasID {
+		// id wins when both are supplied. Confirm the referenced row
+		// exists in-org so missing-reference returns a structured 409
+		// instead of leaking the storage-layer FK 500.
 		parent, err := handler.storage.GetLocationByID(r.Context(), orgID, *parentID)
 		if err != nil {
 			return nil, &modelerrors.FieldError{
@@ -69,7 +75,7 @@ func (handler *Handler) resolveParent(
 		if parent == nil {
 			return nil, &modelerrors.FieldError{
 				Field:   "parent_id",
-				Code:    "invalid_value",
+				Code:    "fk_not_found",
 				Message: fmt.Sprintf("parent_id %d not found", *parentID),
 			}
 		}
@@ -87,15 +93,8 @@ func (handler *Handler) resolveParent(
 	if parent == nil {
 		return nil, &modelerrors.FieldError{
 			Field:   "parent_external_key",
-			Code:    "invalid_value",
+			Code:    "fk_not_found",
 			Message: fmt.Sprintf("parent_external_key %q not found", *parentExternalKey),
-		}
-	}
-	if hasID && *parentID != parent.ID {
-		return nil, &modelerrors.FieldError{
-			Field:   "parent_external_key",
-			Code:    "invalid_value",
-			Message: "parent_id and parent_external_key disagree",
 		}
 	}
 	return &parent.ID, nil
@@ -171,6 +170,12 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 				fErr.Message, requestID)
 
+			return
+		}
+		if fErr.Code == "fk_not_found" {
+			httputil.WriteJSONErrorWithFields(w, r, http.StatusConflict, modelerrors.ErrConflict,
+				fErr.Message, requestID,
+				[]modelerrors.FieldError{*fErr})
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
@@ -302,29 +307,31 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if _, ok := explicitNulls["parent_external_key"]; ok {
 		nullParentExt = true
 	}
-	if nullParentID && request.ParentExternalKey != nil && *request.ParentExternalKey != "" {
+	// An explicit empty string is never a valid external_key — reject upfront
+	// so it doesn't get silently coerced into a clear-FK signal below.
+	if request.ParentExternalKey != nil && *request.ParentExternalKey == "" {
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"parent_id and parent_external_key disagree", reqID,
+			"validation failed", reqID,
 			[]modelerrors.FieldError{{
 				Field:   "parent_external_key",
-				Code:    "invalid_value",
-				Message: "parent_id is null but parent_external_key has a value",
+				Code:    "too_short",
+				Message: "parent_external_key must be at least 1 character",
+				Params:  map[string]any{"min_length": float64(1)},
 			}})
 		return
 	}
-	if nullParentExt && request.ParentID != nil {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"parent_id and parent_external_key disagree", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "parent_external_key",
-				Code:    "invalid_value",
-				Message: "parent_external_key is null but parent_id has a value",
-			}})
-		return
-	}
-	if nullParentID || nullParentExt {
+	// FK reconciliation (TRA-678 relaxation): only treat as clear-FK when
+	// BOTH sides are explicitly null. When one is null and the other is
+	// set, the caller is telling us to use the set side; drop the nil'd
+	// pointer and let resolveParent work the remaining input.
+	switch {
+	case nullParentID && nullParentExt:
 		request.ClearParentID = true
 		request.ParentID = nil
+		request.ParentExternalKey = nil
+	case nullParentID:
+		request.ParentID = nil
+	case nullParentExt:
 		request.ParentExternalKey = nil
 	}
 
@@ -339,6 +346,12 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 				fErr.Message, reqID)
 
+			return
+		}
+		if fErr.Code == "fk_not_found" {
+			httputil.WriteJSONErrorWithFields(w, req, http.StatusConflict, modelerrors.ErrConflict,
+				fErr.Message, reqID,
+				[]modelerrors.FieldError{*fErr})
 			return
 		}
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
@@ -612,23 +625,16 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	// D-10: parent_id and parent_external_key are mutually exclusive — pick
-	// one form per request.
-	_, hasParentID := params.Filters["parent_id"]
-	_, hasParentExtKey := params.Filters["parent_external_key"]
-	if hasParentID && hasParentExtKey {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"parent_id and parent_external_key are mutually exclusive", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "parent_external_key",
-				Code:    "invalid_value",
-				Message: "parent_id and parent_external_key are mutually exclusive",
-			}})
-		return
+	// parent_id and parent_external_key reference the same FK. When both
+	// appear in the query, parent_id is canonical and wins; parent_external_key
+	// is silently dropped (TRA-678 relaxation; D-10 strict-rejection lifted).
+	parentExtKeys := params.Filters["parent_external_key"]
+	if _, hasParentID := params.Filters["parent_id"]; hasParentID {
+		parentExtKeys = nil
 	}
 
 	f := location.ListFilter{
-		ParentExternalKeys: params.Filters["parent_external_key"],
+		ParentExternalKeys: parentExtKeys,
 		ExternalKeys:       params.Filters["external_key"],
 		Limit:              params.Limit,
 		Offset:             params.Offset,
@@ -637,13 +643,13 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		f.ParentIDs = make([]int, 0, len(vs))
 		for _, s := range vs {
 			n, err := strconv.Atoi(s)
-			if err != nil || n < 1 {
+			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
 				httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 					"invalid parent_id", reqID,
 					[]modelerrors.FieldError{{
 						Field:   "parent_id",
 						Code:    "invalid_value",
-						Message: fmt.Sprintf("parent_id %q must be a positive integer", s),
+						Message: fmt.Sprintf("parent_id %q must be a positive int32", s),
 					}})
 				return
 			}
@@ -974,7 +980,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 	requestID := middleware.GetRequestID(r.Context())
 
 	var request shared.TagRequest
-	if err := httputil.DecodeJSON(r, &request); err != nil {
+	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
