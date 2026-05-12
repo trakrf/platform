@@ -597,7 +597,8 @@
               "too_small",
               "too_large",
               "fk_not_found",
-              "ambiguous_fields"
+              "ambiguous_fields",
+              "read_only"
             ],
             "example": "required",
             "type": "string",

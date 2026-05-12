@@ -5,6 +5,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/models/org"
 	"github.com/trakrf/platform/backend/internal/models/shared"
+	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
 type Asset struct {
@@ -38,20 +39,19 @@ type CreateAssetRequest struct {
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicAssetView that the PATCH
-// handler strips from the request body before strict decoding so a verbatim
-// GET → PATCH round-trip succeeds (TRA-608 / BB18 §1.7). Fields not listed
-// here (typos, write-only fields off this resource) still produce a 400.
+// handler silently strips from the request body before strict decoding so a
+// verbatim GET → PATCH round-trip succeeds (TRA-608 / BB18 §1.7). Only the
+// round-trip-safe, server-owned timestamps and surrogate IDs are on this
+// list. Fields not listed here (typos, write-only fields off this resource)
+// still produce a 400.
 //
-// TRA-674 / BB27 F3: `external_key` and `tags` were moved onto the strip list
-// to make full-object PATCH the supported integrator idiom — mirrors what
-// Stripe does. Mutating either still has a dedicated path
-// (POST /assets/{asset_id}/rename, POST/DELETE /assets/{asset_id}/tags); the
-// PATCH body just silently ignores them, the same way it silently ignores
-// `id` / `created_at` / `updated_at` / `deleted_at`. The previous
-// rejection-based behavior (TRA-643 for `tags`, TRA-664 for `external_key`)
-// forced every code-generated client to write a strip-on-PATCH helper, so
-// the rule is reversed pre-launch in favor of the more generator-friendly
-// shape.
+// TRA-686 / BB29 F7+F8: `external_key` and `tags` were removed from the
+// strip list. They now each have a dedicated reject category on PATCH —
+// see PublicRejectPatchFields — because silent-drop hid bugs in
+// read-modify-write integrations (the integrator believed the mutation
+// took effect; the server quietly ignored it). The strip-on-PATCH rule
+// established in TRA-674 was reversed because the visible-failure mode is
+// the safer integrator contract.
 //
 // TRA-681: `location_external_key` is the derived natural-key form for the
 // `location_id` FK and is read-only on PATCH — silently stripped along with
@@ -60,19 +60,23 @@ type CreateAssetRequest struct {
 // with stale `location_external_key` still in the body; the server strips
 // it and processes `location_id` unconditionally. The strip is uniform
 // regardless of agreement with the surrogate — natural-key on PATCH
-// expresses a read, not a write.
+// expresses a read, not a write. (Unlike `external_key`, there is no
+// rename endpoint for the FK; the natural-key form is fully derivable, so
+// echoing the GET-side value back is genuinely a no-op rather than a
+// caller-visible mistake.)
 //
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"]
 // (the spec-side readOnly markers are coordinated under TRA-672).
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at", "external_key", "tags", "location_external_key"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at", "location_external_key"}
 
 // UpdateAssetRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
 // PublicAssetView's round-trip-safe read-only fields (id, created_at,
-// updated_at) are silently ignored on a verbatim GET → PATCH round-trip
-// while any other unknown field — including `tags`, which is managed via
-// the /assets/{id}/tags subresource — still produces a 400.
+// updated_at, deleted_at, location_external_key) are silently stripped on
+// a verbatim GET → PATCH round-trip. `external_key` and `tags` are
+// pre-decode rejected with 400 instead of silently dropped (TRA-686 /
+// BB29 F7+F8) — see PublicRejectPatchFields.
 //
 // description, location_id, and valid_to all accept JSON null on the wire
 // and clear the field server-side (TRA-614 / BB19 §S1). Each null surfaces
@@ -84,8 +88,8 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // join key downstream systems rely on; mutating it via a generic PATCH
 // would silently disconnect those joins. POST /api/v1/assets/{asset_id}/rename
 // is the dedicated path (TRA-664 / BB26 D7). On PATCH, an external_key
-// field is silently stripped along with other read-only fields per
-// TRA-674 / BB27 F3 — see PublicReadOnlyFields.
+// field is rejected with 400 read_only naming the rename endpoint
+// (TRA-686 / BB29 F8).
 //
 // location_external_key is intentionally NOT on this struct (TRA-681).
 // The natural-key form is derived from location_id and is read-only on
@@ -108,16 +112,31 @@ type UpdateAssetRequest struct {
 	IsActive         *bool           `json:"is_active"`
 }
 
-// PublicImmutablePatchFields maps the JSON keys that PATCH /api/v1/assets/{id}
-// must reject to the dedicated operation that can mutate them.
+// PublicRejectPatchFields names the JSON keys that PATCH /api/v1/assets/{id}
+// rejects pre-decode with 400 validation_error. Two categories:
 //
-// TRA-674 / BB27 F3: previously contained `external_key`, but the strip-on-
-// PATCH rule now applies (see PublicReadOnlyFields). Kept as the registration
-// point for any future field that genuinely needs a hard rejection (a field
-// where silent strip would be confusing or unsafe) rather than the
-// strip-and-ignore default. Empty map means RejectImmutableFields is a no-op
-// for assets.
-var PublicImmutablePatchFields = map[string]string{}
+//   - `tags` is managed via the dedicated /assets/{asset_id}/tags
+//     subresource (POST + DELETE). On PATCH a `tags` body field is rejected
+//     with code=invalid_value pointing at the subresource endpoints. The
+//     silent-drop alternative hid bugs in read-modify-write integrations
+//     where callers reused the GET body shape — the asset's tag set looked
+//     unchanged, the server quietly ignored the write.
+//   - `external_key` is mutated through POST /assets/{asset_id}/rename. On
+//     PATCH it is rejected with code=read_only pointing at the rename
+//     endpoint, mirroring the rationale: a "rename via PATCH" silently
+//     dropped is a much worse failure mode than an explicit 400.
+//
+// Source: TRA-686 / BB29 F7+F8.
+var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{
+	"tags": {
+		Code:    "invalid_value",
+		Message: "tags are managed via POST /api/v1/assets/{asset_id}/tags and DELETE /api/v1/assets/{asset_id}/tags/{tag_id}",
+	},
+	"external_key": {
+		Code:    "read_only",
+		Message: "external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename",
+	},
+}
 
 // RenameAssetRequest is the body of POST /api/v1/assets/{asset_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation

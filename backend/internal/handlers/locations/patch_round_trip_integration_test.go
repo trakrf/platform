@@ -2,12 +2,13 @@
 // +build integration
 
 // TRA-608 / BB18 §1.7 + TRA-610 / BB18 §1.8: locations counterpart to the
-// assets PUT round-trip + always-emit tests.
+// assets PATCH round-trip + always-emit tests.
 //
-// TRA-674 / BB27 F3: `tags` and `external_key` are now silently stripped on
-// PATCH along with id / created_at / updated_at / deleted_at so a verbatim
-// GET → PATCH round-trip succeeds. Tag mutation still goes through
-// /locations/{id}/tags and rename still goes through /locations/{id}/rename.
+// TRA-686 / BB29 F7+F8: `tags`, `external_key`, and `parent_external_key`
+// are pre-decode rejected with 400 — `tags` as invalid_value pointing at
+// /locations/{id}/tags, the two natural-key forms as read_only pointing
+// at /locations/{id}/rename. The strip-on-PATCH default (TRA-674 /
+// TRA-681) was reversed because silent-drop hid read-modify-write bugs.
 
 package locations
 
@@ -87,11 +88,14 @@ func TestPutLocation_GETBodyRoundTrip_Succeeds(t *testing.T) {
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
-	// Mutate name and PATCH the full body back. All read-only fields
-	// (id, created_at, updated_at, deleted_at, external_key, tags) are
-	// silently stripped server-side per TRA-674 / BB27 F3 — the integrator
-	// does not need to scrub the body first.
+	// Mutate name and PATCH back. tags, external_key, and
+	// parent_external_key are pre-decode rejected (TRA-686) and must be
+	// stripped client-side before re-sending. The round-trip-safe
+	// read-only fields stay on the body to exercise the silent-drop list.
 	getResp.Data["name"] = "Warehouse 1 (renamed)"
+	delete(getResp.Data, "tags")
+	delete(getResp.Data, "external_key")
+	delete(getResp.Data, "parent_external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -145,7 +149,7 @@ func TestPutLocation_TypoFieldStillRejected(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "nme", resp.Error.Fields[0].Field)
-	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Equal(t, "unknown_field", resp.Error.Fields[0].Code)
 }
 
 func TestGetLocation_OptionalFieldsAlwaysEmittedNullWhenUnset(t *testing.T) {
@@ -206,10 +210,13 @@ func TestPutLocation_NullClearsReadSideNullableFields(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
 
+	// TRA-686: parent_external_key is no longer a clear-on-null
+	// surrogate — clearing the parent FK is expressed exclusively via
+	// `parent_id: null`. parent_external_key in a PATCH body now returns
+	// 400 read_only (see TestPatchLocation_ParentExternalKeyRejected400).
 	body := []byte(`{
 		"description": null,
 		"parent_id": null,
-		"parent_external_key": null,
 		"valid_to": null
 	}`)
 	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", childID), bytes.NewReader(body))
@@ -226,7 +233,7 @@ func TestPutLocation_NullClearsReadSideNullableFields(t *testing.T) {
 	require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
 	assert.Nil(t, resp.Data["description"], "description cleared")
 	assert.Nil(t, resp.Data["parent_id"], "parent_id cleared")
-	assert.Nil(t, resp.Data["parent_external_key"], "parent_external_key cleared")
+	assert.Nil(t, resp.Data["parent_external_key"], "parent_external_key derives from cleared parent_id")
 	assert.Nil(t, resp.Data["valid_to"], "valid_to cleared")
 
 	var dbDesc string
@@ -240,12 +247,12 @@ func TestPutLocation_NullClearsReadSideNullableFields(t *testing.T) {
 	assert.Nil(t, dbValidTo)
 }
 
-// TRA-681 supersedes TRA-614: parent_external_key is read-only on PATCH
-// and stripped before validation, so
-// `{"parent_id": null, "parent_external_key": "X-99"}` is processed as
-// `{"parent_id": null}` — clear the FK. The previous "disagree → 400" rule
-// no longer applies.
-func TestPutLocation_ParentNullStripsExternalKey_ClearsFK(t *testing.T) {
+// TRA-686 supersedes TRA-681: parent_external_key in a PATCH body is no
+// longer silently stripped — it's rejected with 400 read_only pointing
+// at the rename endpoint. Re-parenting on PATCH is exclusively via
+// `parent_id`; the natural-key form has no write semantic on this verb.
+// PATCH with just `parent_id: null` still clears the FK (sole signal).
+func TestPatchLocation_ParentIDNull_ClearsFK(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -253,32 +260,32 @@ func TestPutLocation_ParentNullStripsExternalKey_ClearsFK(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	parentID := seedLocationRoundTrip(t, pool, orgID, "PARENT-STRIP", "parent")
+	parentID := seedLocationRoundTrip(t, pool, orgID, "PARENT-CLR", "parent")
 	var childID int
 	err := pool.QueryRow(context.Background(), `
 		INSERT INTO trakrf.locations
 		  (org_id, external_key, name, description, parent_location_id, valid_from, is_active)
-		VALUES ($1, 'CHILD-STRIP', 'child-strip', '', $2, $3, true) RETURNING id
+		VALUES ($1, 'CHILD-CLR', 'child-clr', '', $2, $3, true) RETURNING id
 	`, orgID, parentID, time.Now().UTC()).Scan(&childID)
 	require.NoError(t, err)
 
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
 
-	body := []byte(`{"parent_id": null, "parent_external_key": "X-99"}`)
+	body := []byte(`{"parent_id": null}`)
 	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", childID), bytes.NewReader(body))
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
 	router.ServeHTTP(putRec, patchReq)
 
-	require.Equal(t, http.StatusOK, putRec.Code, "PATCH must strip natural-key + clear FK via null id: %s", putRec.Body.String())
+	require.Equal(t, http.StatusOK, putRec.Code, "PATCH must clear FK via parent_id null: %s", putRec.Body.String())
 
 	var dbParent *int
 	err = pool.QueryRow(context.Background(),
 		`SELECT parent_location_id FROM trakrf.locations WHERE id = $1`, childID).Scan(&dbParent)
 	require.NoError(t, err)
-	assert.Nil(t, dbParent, "parent FK must be cleared (parent_id: null wins after strip)")
+	assert.Nil(t, dbParent, "parent FK must be cleared")
 }
 
 // TRA-615 / BB19 §S5+§C2: external_key with reserved punctuation (space,
@@ -507,13 +514,10 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}
 }
 
-// TRA-674 / BB27 F3: `tags` in a PATCH body is silently stripped. Tag
-// mutation still goes through POST/DELETE /locations/{id}/tags; the PATCH
-// body just tolerates the read-only field so a verbatim GET → PATCH
-// round-trip succeeds. Previously (TRA-643 / BB22 F1) a `tags` key
-// surfaced as 400 invalid_value, but the strip-vs-reject rule was reversed
-// pre-launch — see PublicReadOnlyFields.
-func TestPutLocation_TagsStripped200(t *testing.T) {
+// TRA-686 / BB29 F7: `tags` in a PATCH body is rejected with 400
+// invalid_value pointing at /locations/{id}/tags. Silent-drop hid bugs in
+// read-modify-write integrations.
+func TestPatchLocation_TagsRejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -521,7 +525,7 @@ func TestPutLocation_TagsStripped200(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedLocationRoundTrip(t, pool, orgID, "LOC-TAGS-STRIP", "TagsStrip")
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-TAGS-REJ", "TagsRej")
 
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
@@ -532,23 +536,180 @@ func TestPutLocation_TagsStripped200(t *testing.T) {
 	}{
 		{"empty array", `{"tags":[]}`},
 		{"tags with values", `{"tags":[{"key":"foo","value":"bar"}]}`},
-		{"tags alongside name", `{"name":"TagsStrip renamed","tags":[]}`},
+		{"tags alongside name", `{"name":"TagsRej renamed","tags":[]}`},
+		{"tags null", `{"tags":null}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(tc.body)))
 			patchReq.Header.Set("Content-Type", "application/json")
 			patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
-			putRec := httptest.NewRecorder()
-			router.ServeHTTP(putRec, patchReq)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, patchReq)
 
-			require.Equal(t, http.StatusOK, putRec.Code,
-				"tags in PATCH body must be 200 silent-strip (got %d): %s", putRec.Code, putRec.Body.String())
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"tags in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field   string `json:"field"`
+						Code    string `json:"code"`
+						Message string `json:"message"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
+			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+			assert.Contains(t, resp.Error.Fields[0].Message,
+				"POST /api/v1/locations/{location_id}/tags")
 
 			var tagCount int
 			require.NoError(t, pool.QueryRow(context.Background(),
 				`SELECT count(*) FROM trakrf.tags WHERE location_id = $1 AND deleted_at IS NULL`, id).Scan(&tagCount))
-			assert.Equal(t, 0, tagCount, "PATCH must not mutate tag subresource")
+			assert.Equal(t, 0, tagCount, "rejected PATCH must not have mutated tags")
+		})
+	}
+}
+
+// TRA-686 / BB29 F8: `external_key` in a PATCH body is rejected with 400
+// read_only pointing at /locations/{id}/rename.
+func TestPatchLocation_ExternalKeyRejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-EK-REJ", "EKRej")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"only external_key", `{"external_key":"LOC-9999"}`},
+		{"external_key alongside name", `{"name":"x","external_key":"LOC-9999"}`},
+		{"external_key null", `{"external_key":null}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(tc.body)))
+			patchReq.Header.Set("Content-Type", "application/json")
+			patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, patchReq)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"external_key in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field   string `json:"field"`
+						Code    string `json:"code"`
+						Message string `json:"message"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
+			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+			assert.Contains(t, resp.Error.Fields[0].Message,
+				"POST /api/v1/locations/{location_id}/rename")
+
+			var ek string
+			require.NoError(t, pool.QueryRow(context.Background(),
+				`SELECT external_key FROM trakrf.locations WHERE id = $1`, id).Scan(&ek))
+			assert.Equal(t, "LOC-EK-REJ", ek, "rejected PATCH must not have mutated external_key")
+		})
+	}
+}
+
+// TRA-686 / BB29 F8: `parent_external_key` in a PATCH body is rejected
+// with 400 read_only pointing at the rename endpoint. The natural-key
+// form of the parent FK is owned by the parent row — mutating it via
+// this location's PATCH would silently disconnect the join.
+func TestPatchLocation_ParentExternalKeyRejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	parentID := seedLocationRoundTrip(t, pool, orgID, "PARENT-PEK-REJ", "parent")
+	var childID int
+	err := pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations
+		  (org_id, external_key, name, description, parent_location_id, valid_from, is_active)
+		VALUES ($1, 'CHILD-PEK-REJ', 'child-pek-rej', '', $2, $3, true) RETURNING id
+	`, orgID, parentID, time.Now().UTC()).Scan(&childID)
+	require.NoError(t, err)
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"only parent_external_key", `{"parent_external_key":"OTHER-PARENT"}`},
+		{"parent_external_key null", `{"parent_external_key":null}`},
+		{"parent_id null + parent_external_key set", `{"parent_id":null,"parent_external_key":"OTHER-PARENT"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", childID), bytes.NewReader([]byte(tc.body)))
+			patchReq.Header.Set("Content-Type", "application/json")
+			patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, patchReq)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"parent_external_key in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field   string `json:"field"`
+						Code    string `json:"code"`
+						Message string `json:"message"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.NotEmpty(t, resp.Error.Fields)
+			// parent_external_key must be among the rejected fields.
+			var found bool
+			for _, f := range resp.Error.Fields {
+				if f.Field == "parent_external_key" {
+					found = true
+					assert.Equal(t, "read_only", f.Code)
+					assert.Contains(t, f.Message,
+						"POST /api/v1/locations/{location_id}/rename")
+				}
+			}
+			assert.True(t, found, "parent_external_key must appear in fields[]")
+
+			// FK must not have been cleared by a co-rejected parent_id null.
+			var dbParent *int
+			require.NoError(t, pool.QueryRow(context.Background(),
+				`SELECT parent_location_id FROM trakrf.locations WHERE id = $1`, childID).Scan(&dbParent))
+			require.NotNil(t, dbParent, "rejected PATCH must not have cleared parent FK")
+			assert.Equal(t, parentID, *dbParent)
 		})
 	}
 }

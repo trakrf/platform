@@ -36,6 +36,10 @@ const (
 //     supplied on a surface that requires oneOf. The FieldError is emitted
 //     once per offending field; both fields share the same message so
 //     integrators can branch on either.
+//   - read_only: a body field that is immutable via this verb because a
+//     dedicated rename endpoint owns the mutation (e.g. external_key on
+//     PATCH /assets/{id} → use POST /assets/{id}/rename). The message
+//     names the dedicated endpoint. TRA-686 / BB29 F8.
 //
 // Numeric values are float64 so that both integer constraints ("8") and
 // fractional constraints ("1.5") parse without loss. JSON numbers decode to
@@ -45,7 +49,7 @@ const (
 // Params is omitted entirely when no structured data is available.
 type FieldError struct {
 	Field   string         `json:"field"`
-	Code    string         `json:"code" example:"required" enums:"required,invalid_value,unknown_field,too_short,too_long,too_small,too_large,fk_not_found,ambiguous_fields" extensions:"x-extensible-enum=true"`
+	Code    string         `json:"code" example:"required" enums:"required,invalid_value,unknown_field,too_short,too_long,too_small,too_large,fk_not_found,ambiguous_fields,read_only" extensions:"x-extensible-enum=true"`
 	Message string         `json:"message"`
 	Params  map[string]any `json:"params,omitempty"`
 }

@@ -671,13 +671,14 @@ func TestMarkRequiredFields_ErrorsOnMissingField(t *testing.T) {
 
 // TestPostprocess_MarksReadOnlyFields covers TRA-587 / BB16 S8: round-trip-safe
 // server-managed fields on read views are tagged readOnly so codegen splits
-// read and write types and a verbatim GET → PUT round-trip is type-safe.
+// read and write types and a verbatim GET → PATCH round-trip is type-safe.
 //
-// `tags` is intentionally excluded from the readOnly list (TRA-643 / BB22 F1):
-// tag mutation goes through the /tags subresource, and the PUT validator
-// rejects a `tags` body field with 400 invalid_value. Keeping `tags` writable
-// in the spec preserves that signal — codegen tools won't strip it, so an SDK
-// that mistakenly sends it surfaces the failure.
+// `tags` and `external_key` are intentionally excluded from the readOnly list
+// (TRA-686 / BB29 F7+F8, history TRA-643): each has a dedicated mutation path,
+// and the PATCH validator rejects them with per-category codes (tags →
+// invalid_value, external_key → read_only). Keeping these fields writable in
+// the spec preserves the runtime signal — codegen tools won't strip them, so
+// an SDK that mistakenly sends them surfaces the failure.
 func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{

@@ -150,21 +150,41 @@ func DecodeJSONStrictWithNullsTolerantAndPresence(r *http.Request, dst any, drop
 	return decodeStrictWithNullsTolerant(r, dst, drop)
 }
 
-// RejectImmutableFields peeks at the request body for any of the named
-// top-level keys and, if any are present, writes a 400 validation_error with
-// code=immutable_field for each match. Returns true if the response was
-// written and the caller should return; false if the body is clean (and
-// r.Body has been replaced with a fresh reader that the downstream decoder
-// can still consume).
+// FieldRejectPolicy is the per-field rule used by RejectFields: if the
+// field is present in the PATCH body, emit a 400 validation_error with
+// the configured code and message.
 //
-// `fields` maps the JSON key being rejected to the operation pointer that
-// should appear in the error message (e.g. "POST /api/v1/assets/{asset_id}/rename").
-// A non-object body is left to the downstream decoder.
+// TRA-686 / BB29 F7+F8: PATCH validators distinguish three categories of
+// fields the body might carry — round-trip-safe read-onlys (silent drop),
+// managed-via-subresource (reject with invalid_value), and
+// managed-via-rename (reject with read_only). The first stays on the
+// strip list (PublicReadOnlyFields); the other two each use a
+// FieldRejectPolicy with the appropriate code and a message naming the
+// dedicated endpoint.
+type FieldRejectPolicy struct {
+	Code    string
+	Message string
+}
+
+// RejectFields peeks at the request body for any of the named top-level
+// keys and, if any are present, writes a 400 validation_error with the
+// per-field code/message from the policy map. Returns true if the response
+// was written and the caller should return; false if the body is clean
+// (and r.Body has been replaced with a fresh reader that the downstream
+// decoder can still consume).
 //
-// TRA-664 / BB26 D7: enforces external_key immutability on PATCH without
-// silently dropping the field on the server side — silent drops would let
-// integrators mutate keys they think changed.
-func RejectImmutableFields(w http.ResponseWriter, r *http.Request, requestID string, fields map[string]string) bool {
+// A non-object body is left to the downstream decoder. An empty `policies`
+// map is a no-op.
+//
+// TRA-664 / BB26 D7 introduced the pre-decode reject for external_key;
+// TRA-686 / BB29 F7+F8 generalized it so PATCH validators can reject
+// `tags` (managed via subresource → invalid_value) alongside
+// `external_key` / `parent_external_key` (managed via rename → read_only)
+// without falling back to the strip-and-silently-ignore default.
+func RejectFields(w http.ResponseWriter, r *http.Request, requestID string, policies map[string]FieldRejectPolicy) bool {
+	if len(policies) == 0 {
+		return false
+	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
@@ -180,26 +200,25 @@ func RejectImmutableFields(w http.ResponseWriter, r *http.Request, requestID str
 	}
 
 	var violations []apierrors.FieldError
-	for field, renameOp := range fields {
+	for field, policy := range policies {
 		if _, present := raw[field]; !present {
 			continue
 		}
 		violations = append(violations, apierrors.FieldError{
 			Field:   field,
-			Code:    "immutable_field",
-			Message: fmt.Sprintf("%s is immutable; use %s to change it", field, renameOp),
+			Code:    policy.Code,
+			Message: policy.Message,
 		})
 	}
 	if len(violations) == 0 {
 		return false
 	}
 
-	// Detail: take the first violation. Most callers only ever list one
-	// immutable field per resource, and even when several appear, branching
-	// happens on fields[].code, not the detail string.
+	// Detail: take the first violation's message. Most callers only ever
+	// hit one rejected field per resource, and even when several appear,
+	// branching happens on fields[].code, not the detail string.
 	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-		fmt.Sprintf("%s cannot be mutated via PATCH; use %s instead", violations[0].Field, fields[violations[0].Field]),
-		requestID, violations)
+		violations[0].Message, requestID, violations)
 	return true
 }
 

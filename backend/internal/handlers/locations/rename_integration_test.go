@@ -9,10 +9,13 @@
 // parent_id) so integrators can decide whether to refresh derived
 // natural-key joins.
 //
-// TRA-674 / BB27 F3: PATCH no longer rejects an `external_key` body field
-// with 400 immutable_field; the strip-on-PATCH rule now silently drops it
-// so a verbatim GET → PATCH round-trip succeeds. Callers that need to
-// rename still go through POST /rename.
+// TRA-686 / BB29 F8: PATCH rejects an `external_key` (and on locations,
+// also `parent_external_key`) body field with 400 read_only naming the
+// rename endpoint. Silent-drop under TRA-674 hid bugs in read-modify-write
+// integrations. Runtime reject coverage lives in
+// TestPatchLocation_ExternalKeyRejected400 +
+// TestPatchLocation_ParentExternalKeyRejected400; this file pins the
+// happy-path rename endpoint behavior.
 
 package locations
 
@@ -54,58 +57,6 @@ func seedLocationRoundTripWithParent(t *testing.T, pool *pgxpool.Pool, orgID int
 	`, orgID, extKey, name, parent, time.Now().UTC()).Scan(&id)
 	require.NoError(t, err)
 	return id
-}
-
-// TRA-674 / BB27 F3: PATCH with an `external_key` body field returns 200
-// and silently strips the field — the persisted external_key is unchanged.
-// Mutations still require POST /rename.
-func TestPatchLocation_ExternalKey_Stripped200(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	const startKey = "LOC-IMMUT"
-	id := seedLocationRoundTrip(t, pool, orgID, startKey, "ImmutLoc")
-
-	handler := NewHandler(store)
-	r := setupRenameLocationRouter(handler)
-
-	cases := []struct {
-		name string
-		body string
-	}{
-		{"explicit value", `{"external_key":"LOC-RENAMED"}`},
-		{"explicit null", `{"external_key":null}`},
-		{"with other fields", `{"name":"x","external_key":"LOC-OTHER"}`},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPatch,
-				fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(tc.body)))
-			req.Header.Set("Content-Type", "application/json")
-			req = withLocationRoundTripOrgContext(req, orgID)
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, req)
-
-			require.Equal(t, http.StatusOK, rec.Code,
-				"PATCH with external_key must be 200 silent-strip (got %d): %s", rec.Code, rec.Body.String())
-
-			var resp struct {
-				Data map[string]any `json:"data"`
-			}
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Equal(t, startKey, resp.Data["external_key"],
-				"PATCH must not mutate external_key — POST /rename is the dedicated path")
-
-			var dbExtKey string
-			require.NoError(t, pool.QueryRow(context.Background(),
-				`SELECT external_key FROM trakrf.locations WHERE id = $1`, id).Scan(&dbExtKey))
-			assert.Equal(t, startKey, dbExtKey, "persisted external_key must be unchanged")
-		})
-	}
 }
 
 // POST /rename returns 200 with the updated LocationView and a 0 descendant
