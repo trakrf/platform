@@ -213,8 +213,37 @@ test-contract:
     # Other checks (negative_data_rejection, response_schema_conformance,
     # not_a_server_error, status_code_conformance, …) remain on, so
     # spec/response shape drift is still detected.
+    #
+    # `--user "$(id -u):$(id -g)"` (so report files end up owned by the
+    # host invoker / CI runner) leaves the container with no writable
+    # home; the image's default `/app` cwd exposes that in two places:
+    #
+    #   * Hypothesis logs `HypothesisWarning: ... falling back to
+    #     in-memory database` once per generated case
+    #     (`/app/.hypothesis/examples` not writable).
+    #   * TracecovHandler logs `PermissionError ... './schema-coverage.html'`
+    #     at the end of the run when writing the optional coverage report.
+    #
+    # Both are non-fatal — Hypothesis works fine in memory and the
+    # schema-coverage HTML is a nice-to-have we don't surface — but
+    # together they bury the actual run output. Fixes:
+    #
+    #   * `-w /out` moves the container cwd to the mounted writable dir
+    #     so the schema-coverage report writes cleanly alongside
+    #     junit/har/ndjson rather than blowing up TracecovHandler.
+    #   * `--tmpfs /app/.hypothesis` gives Hypothesis the writable cache
+    #     directory it asks for. `--generation-deterministic` already
+    #     means examples never persist across runs (the tmpfs evaporates
+    #     with the container), but having the directory exist lets the
+    #     library initialize cleanly instead of firing
+    #     HypothesisWarning once per generated test case. We don't use
+    #     `--generation-database=none` because Schemathesis rejects it
+    #     with `--generation-deterministic` (the two flags express the
+    #     same intent and are mutually exclusive at the CLI).
     docker run --rm --network host \
         --user "$(id -u):$(id -g)" \
+        -w /out \
+        --tmpfs /app/.hypothesis:uid=$(id -u),gid=$(id -g) \
         -v "$REPO_ROOT/docs/api/openapi.public.yaml:/spec.yaml:ro" \
         -v "$REPO_ROOT/backend/contract-tests:/out" \
         schemathesis/schemathesis:4.18.2 \
