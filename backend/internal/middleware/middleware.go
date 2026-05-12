@@ -87,12 +87,18 @@ func CORS(next http.Handler) http.Handler {
 }
 
 // ContentType enforces allowed Content-Type headers for write operations.
+// Allows:
+// - application/json (standard API requests)
+// - application/merge-patch+json (RFC 7396 — PATCH operations)
+// - multipart/form-data (internal bulk-CSV upload)
+// - empty Content-Type (legacy compatibility)
 //
-// PATCH operations follow RFC 7396 strict merge-patch semantics: the only
-// declared content type is application/merge-patch+json. POST and PUT
-// accept application/json. multipart/form-data is allowed on the internal
-// bulk-CSV endpoint; the public spec never declares it. Empty Content-Type
-// is allowed for backwards compatibility.
+// PATCH operations follow RFC 7396 strict merge-patch semantics — the
+// public spec declares only application/merge-patch+json on PATCH. That
+// strictness lives in RequireMergePatchCT, attached per-route on the two
+// PATCH endpoints, so undeclared-PATCH probes against POST-only paths
+// (e.g. /assets/{id}/tags) get chi's 405 instead of a 415 from this
+// middleware running before routing.
 func ContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
@@ -105,20 +111,36 @@ func ContentType(next http.Handler) http.Handler {
 			}
 
 			// Note: multipart/form-data includes boundary parameter
-			var isAllowed bool
-			if r.Method == "PATCH" {
-				isAllowed = ct == "application/merge-patch+json" ||
-					ct == "application/merge-patch+json; charset=utf-8"
-			} else {
-				isAllowed = ct == "application/json" ||
-					ct == "application/json; charset=utf-8" ||
-					strings.HasPrefix(ct, "multipart/form-data")
-			}
+			isAllowed := ct == "application/json" ||
+				ct == "application/json; charset=utf-8" ||
+				ct == "application/merge-patch+json" ||
+				ct == "application/merge-patch+json; charset=utf-8" ||
+				strings.HasPrefix(ct, "multipart/form-data")
 
 			if !isAllowed {
 				httputil.Respond415(w, r, GetRequestID(r.Context()))
 				return
 			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireMergePatchCT is a per-route middleware that enforces the
+// PATCH-strict content-type. Attach to PATCH handlers so the public spec's
+// declared `application/merge-patch+json` is the only accepted CT on those
+// operations (RFC 7396; BB28 W2/S4). Empty Content-Type is allowed for
+// backwards compatibility, matching the global ContentType policy.
+//
+// This is per-route rather than global so PATCH probes against paths
+// without a registered PATCH handler (POST-only /tags, /rename subpaths)
+// produce chi's natural 405 instead of being intercepted with a 415.
+func RequireMergePatchCT(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ct := r.Header.Get("Content-Type")
+		if ct != "" && ct != "application/merge-patch+json" && ct != "application/merge-patch+json; charset=utf-8" {
+			httputil.Respond415(w, r, GetRequestID(r.Context()))
+			return
 		}
 		next.ServeHTTP(w, r)
 	})

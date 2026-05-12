@@ -83,9 +83,10 @@ func TestContentType(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			description:    "PUT with file upload",
 		},
-		// PATCH operations follow RFC 7396 strictly — only merge-patch+json.
-		// application/json on PATCH is rejected so the spec's declared CT and
-		// the wire enforcement stay in lockstep (BB28 W2/S4).
+		// PATCH on the global middleware accepts both application/json and
+		// application/merge-patch+json. Strict RFC 7396 single-CT enforcement
+		// for PATCH lives in RequireMergePatchCT (per-route), so undeclared
+		// PATCH probes against POST-only paths get chi's 405 instead of 415.
 		{
 			name:           "PATCH with application/merge-patch+json",
 			method:         http.MethodPatch,
@@ -94,25 +95,11 @@ func TestContentType(t *testing.T) {
 			description:    "PATCH with merge-patch+json (RFC 7396)",
 		},
 		{
-			name:           "PATCH with application/merge-patch+json; charset=utf-8",
-			method:         http.MethodPatch,
-			contentType:    "application/merge-patch+json; charset=utf-8",
-			expectedStatus: http.StatusOK,
-			description:    "PATCH with merge-patch+json + charset",
-		},
-		{
-			name:           "PATCH with application/json rejected",
+			name:           "PATCH with application/json (global middleware lets it through)",
 			method:         http.MethodPatch,
 			contentType:    "application/json",
-			expectedStatus: http.StatusUnsupportedMediaType,
-			description:    "PATCH must declare merge-patch+json; plain JSON no longer accepted",
-		},
-		{
-			name:           "PATCH with multipart/form-data rejected",
-			method:         http.MethodPatch,
-			contentType:    "multipart/form-data; boundary=----X",
-			expectedStatus: http.StatusUnsupportedMediaType,
-			description:    "PATCH does not accept multipart",
+			expectedStatus: http.StatusOK,
+			description:    "Global middleware passes PATCH+json; per-route RequireMergePatchCT enforces strict",
 		},
 		// Invalid Content-Types
 		{
@@ -121,13 +108,6 @@ func TestContentType(t *testing.T) {
 			contentType:    "text/plain",
 			expectedStatus: http.StatusUnsupportedMediaType,
 			description:    "Text plain not allowed",
-		},
-		{
-			name:           "POST with application/merge-patch+json rejected",
-			method:         http.MethodPost,
-			contentType:    "application/merge-patch+json",
-			expectedStatus: http.StatusUnsupportedMediaType,
-			description:    "merge-patch+json is PATCH-only; POST keeps plain JSON",
 		},
 		{
 			name:           "POST with application/xml",
@@ -203,6 +183,51 @@ func TestContentType(t *testing.T) {
 				}
 				if strings.Contains(resp.Error.Detail, "multipart") {
 					t.Errorf("detail = %q, must not mention multipart", resp.Error.Detail)
+				}
+			}
+		})
+	}
+}
+
+// RequireMergePatchCT enforces RFC 7396 strict on PATCH-handling routes
+// (BB28 W2/S4). Empty CT is allowed for backwards compatibility, matching
+// the global ContentType policy. Per-route placement is deliberate: chi's
+// 405 must fire for PATCH probes against POST-only paths.
+func TestRequireMergePatchCT(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	tests := []struct {
+		name           string
+		contentType    string
+		expectedStatus int
+	}{
+		{"merge-patch+json", "application/merge-patch+json", http.StatusOK},
+		{"merge-patch+json with charset", "application/merge-patch+json; charset=utf-8", http.StatusOK},
+		{"empty CT allowed", "", http.StatusOK},
+		{"application/json rejected", "application/json", http.StatusUnsupportedMediaType},
+		{"application/json with charset rejected", "application/json; charset=utf-8", http.StatusUnsupportedMediaType},
+		{"multipart rejected", "multipart/form-data; boundary=----X", http.StatusUnsupportedMediaType},
+		{"text/plain rejected", "text/plain", http.StatusUnsupportedMediaType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPatch, "/api/v1/assets/1", strings.NewReader("{}"))
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			rr := httptest.NewRecorder()
+			RequireMergePatchCT(next).ServeHTTP(rr, req)
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("got %d, want %d", rr.Code, tt.expectedStatus)
+			}
+			if tt.expectedStatus == http.StatusUnsupportedMediaType {
+				var resp apierrors.ErrorResponse
+				if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if resp.Error.Detail != "Content-Type must be application/merge-patch+json on PATCH operations" {
+					t.Errorf("detail = %q, want method-aware PATCH detail", resp.Error.Detail)
 				}
 			}
 		})
