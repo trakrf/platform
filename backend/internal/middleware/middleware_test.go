@@ -83,13 +83,36 @@ func TestContentType(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			description:    "PUT with file upload",
 		},
-		// PATCH requests with valid Content-Types
+		// PATCH operations follow RFC 7396 strictly — only merge-patch+json.
+		// application/json on PATCH is rejected so the spec's declared CT and
+		// the wire enforcement stay in lockstep (BB28 W2/S4).
 		{
-			name:           "PATCH with application/json",
+			name:           "PATCH with application/merge-patch+json",
+			method:         http.MethodPatch,
+			contentType:    "application/merge-patch+json",
+			expectedStatus: http.StatusOK,
+			description:    "PATCH with merge-patch+json (RFC 7396)",
+		},
+		{
+			name:           "PATCH with application/merge-patch+json; charset=utf-8",
+			method:         http.MethodPatch,
+			contentType:    "application/merge-patch+json; charset=utf-8",
+			expectedStatus: http.StatusOK,
+			description:    "PATCH with merge-patch+json + charset",
+		},
+		{
+			name:           "PATCH with application/json rejected",
 			method:         http.MethodPatch,
 			contentType:    "application/json",
-			expectedStatus: http.StatusOK,
-			description:    "PATCH with JSON",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "PATCH must declare merge-patch+json; plain JSON no longer accepted",
+		},
+		{
+			name:           "PATCH with multipart/form-data rejected",
+			method:         http.MethodPatch,
+			contentType:    "multipart/form-data; boundary=----X",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "PATCH does not accept multipart",
 		},
 		// Invalid Content-Types
 		{
@@ -98,6 +121,13 @@ func TestContentType(t *testing.T) {
 			contentType:    "text/plain",
 			expectedStatus: http.StatusUnsupportedMediaType,
 			description:    "Text plain not allowed",
+		},
+		{
+			name:           "POST with application/merge-patch+json rejected",
+			method:         http.MethodPost,
+			contentType:    "application/merge-patch+json",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "merge-patch+json is PATCH-only; POST keeps plain JSON",
 		},
 		{
 			name:           "POST with application/xml",

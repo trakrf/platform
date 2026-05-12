@@ -8,7 +8,7 @@ import { CreateKeyModal } from './apikeys/CreateKeyModal';
 import { ShowOnceModal } from './apikeys/ShowOnceModal';
 import { RevokeConfirmModal } from './apikeys/RevokeConfirmModal';
 
-function scopeChip(scopes: Scope[], resource: 'assets' | 'locations' | 'history'): string | null {
+function scopeChip(scopes: Scope[], resource: 'assets' | 'locations' | 'tracking'): string | null {
   const read = scopes.includes(`${resource}:read` as Scope);
   const write = scopes.includes(`${resource}:write` as Scope);
   if (read && write) return `${resource.charAt(0).toUpperCase()}${resource.slice(1)} R/W`;
@@ -120,7 +120,7 @@ export default function APIKeysScreen() {
           </thead>
           <tbody>
             {keys.map((k) => {
-              const chips = (['assets', 'locations', 'history'] as const)
+              const chips = (['assets', 'locations', 'tracking'] as const)
                 .map((r) => scopeChip(k.scopes, r))
                 .filter((x): x is string => !!x);
               return (

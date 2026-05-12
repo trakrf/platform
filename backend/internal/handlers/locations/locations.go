@@ -741,7 +741,7 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary List location ancestors
-// @Description Sort order is fixed: ancestors are returned ordered by `depth` ascending (root first), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list. Origin: BB27 S6 (TRA-679).
+// @Description Sort order is fixed: ancestors are returned ordered by `depth` ascending (root first), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list.
 // @Tags locations,public
 // @ID locations.ancestors
 // @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)
@@ -801,7 +801,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 }
 
 // @Summary List location descendants
-// @Description Sort order is fixed: descendants are returned in depth-first tree order (ordered by ltree `path` ascending), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list. Origin: BB27 S6 (TRA-679).
+// @Description Sort order is fixed: descendants are returned in depth-first tree order (ordered by ltree `path` ascending), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list.
 // @Tags locations,public
 // @ID locations.descendants
 // @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)
@@ -861,7 +861,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 }
 
 // @Summary List location children
-// @Description Sort order is fixed: immediate children are returned ordered alphabetically by `name` ascending, with `id` ascending as a deterministic tiebreaker when sibling names collide. No `sort` query parameter is exposed because alphabetical-by-name is the only meaningful order for a single level of siblings. Origin: BB27 S6 (TRA-679).
+// @Description Sort order is fixed: immediate children are returned ordered alphabetically by `name` ascending, with `id` ascending as a deterministic tiebreaker when sibling names collide. No `sort` query parameter is exposed because alphabetical-by-name is the only meaningful order for a single level of siblings.
 // @Tags locations,public
 // @ID locations.children
 // @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)

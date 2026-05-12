@@ -39,7 +39,6 @@ type CreateLocationRequest struct {
 	// external_key is optional. Omit to receive a server-assigned key in the
 	// format LOC-NNNN (per-organization sequence), parallel to assets'
 	// ASSET-NNNN behavior. When supplied, must satisfy the external_key_pattern.
-	// TRA-665 / BB26 D3.
 	ExternalKey       string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`

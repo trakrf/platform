@@ -164,7 +164,7 @@ test-contract:
     echo "🔑 Minting contract-test API key..."
     KEY="$(curl -sf -X POST http://localhost:8081/test/apikeys \
         -H 'Content-Type: application/json' \
-        -d '{"scopes":["assets:read","assets:write","locations:read","locations:write","history:read"]}' \
+        -d '{"scopes":["assets:read","assets:write","locations:read","locations:write","tracking:read"]}' \
         | jq -r .token)"
     if [ -z "$KEY" ] || [ "$KEY" = "null" ]; then
         echo "❌ Failed to mint API key" >&2

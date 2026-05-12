@@ -87,11 +87,12 @@ func CORS(next http.Handler) http.Handler {
 }
 
 // ContentType enforces allowed Content-Type headers for write operations.
-// Allows:
-// - application/json (standard API requests)
-// - application/merge-patch+json (RFC 7396 — PATCH operations per TRA-663)
-// - multipart/form-data (file uploads)
-// - empty Content-Type (legacy compatibility)
+//
+// PATCH operations follow RFC 7396 strict merge-patch semantics: the only
+// declared content type is application/merge-patch+json. POST and PUT
+// accept application/json. multipart/form-data is allowed on the internal
+// bulk-CSV endpoint; the public spec never declares it. Empty Content-Type
+// is allowed for backwards compatibility.
 func ContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
@@ -103,13 +104,16 @@ func ContentType(next http.Handler) http.Handler {
 				return
 			}
 
-			// Check against allowed content types
 			// Note: multipart/form-data includes boundary parameter
-			isAllowed := ct == "application/json" ||
-				ct == "application/json; charset=utf-8" ||
-				ct == "application/merge-patch+json" ||
-				ct == "application/merge-patch+json; charset=utf-8" ||
-				strings.HasPrefix(ct, "multipart/form-data")
+			var isAllowed bool
+			if r.Method == "PATCH" {
+				isAllowed = ct == "application/merge-patch+json" ||
+					ct == "application/merge-patch+json; charset=utf-8"
+			} else {
+				isAllowed = ct == "application/json" ||
+					ct == "application/json; charset=utf-8" ||
+					strings.HasPrefix(ct, "multipart/form-data")
+			}
 
 			if !isAllowed {
 				httputil.Respond415(w, r, GetRequestID(r.Context()))

@@ -278,7 +278,7 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 				msg, requestID,
 				[]apierrors.FieldError{{
 					Field:   fieldName,
-					Code:    "invalid_value",
+					Code:    "unknown_field",
 					Message: msg,
 				}})
 			return

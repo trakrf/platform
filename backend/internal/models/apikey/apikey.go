@@ -14,7 +14,7 @@ var ValidScopes = map[string]bool{
 	"assets:write":    true,
 	"locations:read":  true,
 	"locations:write": true,
-	"history:read":    true,
+	"tracking:read":   true,
 	"keys:admin":      true,
 }
 

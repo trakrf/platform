@@ -24,13 +24,15 @@ const (
 // Params carries structured, programmatically-introspectable context for
 // the failure. Populated keys depend on Code:
 //   - invalid_value (from oneof tag): allowed_values []any (string elements)
+//   - unknown_field: a top-level body key that is not declared on the
+//     request schema. No params; the message names the offending key. The
+//     FieldError is keyed on the unknown field name so clients can branch
+//     on fields[].code without parsing the detail string.
 //   - too_short / too_long (min/max on string/slice): min_length / max_length float64
 //   - too_small / too_large (min/max/gte/lte on numeric): min / max float64
-//   - immutable_field (TRA-664 / BB26 D7): no params; the message carries a
-//     pointer to the dedicated operation that can mutate the field.
 //   - fk_not_found: surrogate or natural-key reference did not resolve to
-//     an existing in-org row on Create/Update (TRA-681). No params.
-//   - ambiguous_fields (TRA-681): paired surrogate/natural-key fields both
+//     an existing in-org row on Create/Update. No params.
+//   - ambiguous_fields: paired surrogate/natural-key fields both
 //     supplied on a surface that requires oneOf. The FieldError is emitted
 //     once per offending field; both fields share the same message so
 //     integrators can branch on either.
@@ -43,7 +45,7 @@ const (
 // Params is omitted entirely when no structured data is available.
 type FieldError struct {
 	Field   string         `json:"field"`
-	Code    string         `json:"code" example:"required" enums:"required,invalid_value,too_short,too_long,too_small,too_large,immutable_field,fk_not_found,ambiguous_fields" extensions:"x-extensible-enum=true"`
+	Code    string         `json:"code" example:"required" enums:"required,invalid_value,unknown_field,too_short,too_long,too_small,too_large,fk_not_found,ambiguous_fields" extensions:"x-extensible-enum=true"`
 	Message string         `json:"message"`
 	Params  map[string]any `json:"params,omitempty"`
 }
