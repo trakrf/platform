@@ -82,7 +82,7 @@ jobs:
               --branch=main \
               --event=push \
               --limit=1 \
-              --json status,conclusion,databaseId,htmlUrl,createdAt,headSha)
+              --json status,conclusion,databaseId,url,createdAt,headSha)
 
             if [ "$run_json" = "[]" ]; then
               echo "::warning::No push-event Contract Tests run exists for main yet."
@@ -94,7 +94,7 @@ jobs:
 
             status=$(echo "$run_json" | jq -r '.[0].status')
             conclusion=$(echo "$run_json" | jq -r '.[0].conclusion')
-            url=$(echo "$run_json" | jq -r '.[0].htmlUrl')
+            url=$(echo "$run_json" | jq -r '.[0].url')
             head_sha=$(echo "$run_json" | jq -r '.[0].headSha')
             short_sha=${head_sha:0:7}
 
