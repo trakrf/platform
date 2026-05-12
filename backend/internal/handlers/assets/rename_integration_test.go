@@ -5,11 +5,13 @@
 // path for mutating an asset's external_key (single audit-log surface for
 // the natural / join key).
 //
-// TRA-674 / BB27 F3: PATCH no longer rejects an `external_key` body field
-// with 400 immutable_field; the strip-on-PATCH rule now silently drops it
-// so a verbatim GET → PATCH round-trip succeeds without integrator
-// stripping. Callers that genuinely want to rename still go through
-// POST /rename — PATCH is a no-op on that field.
+// TRA-686 / BB29 F8: PATCH rejects an `external_key` body field with 400
+// read_only naming the rename endpoint. The TRA-674 strip-on-PATCH rule
+// was reversed — silent-drop hid bugs where an integrator believed a
+// rename PATCH took effect while the natural key (the join key downstream
+// systems rely on) stayed unchanged. The runtime reject coverage lives in
+// TestPatchAsset_ExternalKeyRejected400; this file pins the happy-path
+// rename endpoint behavior.
 
 package assets
 
@@ -37,59 +39,6 @@ func setupRenameAssetRouter(handler *Handler) *chi.Mux {
 	r.Patch("/api/v1/assets/{asset_id}", handler.Update)
 	r.Post("/api/v1/assets/{asset_id}/rename", handler.Rename)
 	return r
-}
-
-// TRA-674 / BB27 F3: PATCH with an `external_key` body field returns 200
-// and silently strips the field — the persisted external_key is unchanged.
-// Mutations to external_key still require POST /rename; PATCH just tolerates
-// the read-only field so a verbatim GET → PATCH round-trip succeeds.
-func TestPatchAsset_ExternalKey_Stripped200(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	const startKey = "AST-IMMUT"
-	id := seedRoundTripAsset(t, pool, orgID, startKey, "ImmutableAsset")
-
-	handler := NewHandler(store)
-	r := setupRenameAssetRouter(handler)
-
-	cases := []struct {
-		name string
-		body string
-	}{
-		{"explicit value", `{"external_key":"AST-RENAMED"}`},
-		{"explicit null", `{"external_key":null}`},
-		{"with other fields", `{"name":"x","external_key":"AST-OTHER"}`},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPatch,
-				fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
-			req.Header.Set("Content-Type", "application/json")
-			req = withRoundTripOrgContext(req, orgID)
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, req)
-
-			require.Equal(t, http.StatusOK, rec.Code,
-				"PATCH with external_key must be 200 silent-strip (got %d): %s", rec.Code, rec.Body.String())
-
-			var resp struct {
-				Data map[string]any `json:"data"`
-			}
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Equal(t, startKey, resp.Data["external_key"],
-				"PATCH must not mutate external_key — POST /rename is the dedicated path")
-
-			var dbExtKey string
-			require.NoError(t, pool.QueryRow(context.Background(),
-				`SELECT external_key FROM trakrf.assets WHERE id = $1`, id).Scan(&dbExtKey))
-			assert.Equal(t, startKey, dbExtKey, "persisted external_key must be unchanged")
-		})
-	}
 }
 
 // POST /api/v1/assets/{id}/rename with a valid new external_key returns 200

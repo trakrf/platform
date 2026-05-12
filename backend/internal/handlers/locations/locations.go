@@ -265,16 +265,15 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
-	// TRA-674 / BB27 F3: external_key and tags are on PublicReadOnlyFields
-	// and silently stripped along with id, created_at, updated_at,
-	// deleted_at. TRA-681 extends the same strip to parent_external_key —
-	// the derived natural-key form is read-only on PATCH and PATCH bodies
-	// use the surrogate parent_id form exclusively. Rename still goes
-	// through POST /locations/{id}/rename; tag mutations through
-	// POST/DELETE /locations/{id}/tags. RejectImmutableFields is left in
-	// place for any future field that genuinely needs a hard rejection
-	// rather than the strip-and-ignore default.
-	if httputil.RejectImmutableFields(w, req, reqID, location.PublicImmutablePatchFields) {
+	// TRA-686 / BB29 F7+F8: reject managed-via-subresource (`tags`) and
+	// managed-via-rename (`external_key`, `parent_external_key`) fields
+	// pre-decode with 400. The silent-drop default established under
+	// TRA-674 / TRA-681 hid bugs in read-modify-write integrations —
+	// callers reused the GET body, the server quietly ignored the write,
+	// and the location looked unchanged. id, created_at, updated_at, and
+	// deleted_at stay on the strip list (echoing those back is a genuine
+	// no-op).
+	if httputil.RejectFields(w, req, reqID, location.PublicRejectPatchFields) {
 		return
 	}
 

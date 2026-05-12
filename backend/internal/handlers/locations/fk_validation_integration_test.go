@@ -16,6 +16,7 @@ package locations
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -259,8 +260,10 @@ func TestListLocations_BothParentForms_Rejected400(t *testing.T) {
 }
 
 // PATCH /api/v1/locations/{id} with parent_external_key in the body is
-// silently stripped. TRA-681: natural-key form is read-only on PATCH.
-func TestPatchLocation_ParentExternalKey_StrippedSilently(t *testing.T) {
+// rejected with 400 read_only pointing at the rename endpoint
+// (TRA-686 / BB29 F8). Replaces the silent-strip behavior from TRA-681 —
+// silent-drop hid bugs in read-modify-write integrations.
+func TestPatchLocation_ParentExternalKey_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -268,24 +271,39 @@ func TestPatchLocation_ParentExternalKey_StrippedSilently(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedLocationRoundTrip(t, pool, orgID, "LOC-STRIP-EXTFK", "strip-extfk")
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-REJ-EXTFK", "rej-extfk")
 
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
 
-	body := []byte(`{"name":"renamed-with-stale-extkey","parent_external_key":"DOES-NOT-EXIST"}`)
+	body := []byte(`{"name":"renamed","parent_external_key":"DOES-NOT-EXIST"}`)
 	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = withLocationRoundTripOrgContext(req, orgID)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code,
-		"PATCH with stale natural-key must succeed via strip (got %d): %s", rec.Code, rec.Body.String())
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"PATCH with parent_external_key must be 400 read_only (got %d): %s", rec.Code, rec.Body.String())
 
 	var resp struct {
-		Data map[string]any `json:"data"`
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "renamed-with-stale-extkey", resp.Data["name"])
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "parent_external_key", resp.Error.Fields[0].Field)
+	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+
+	// And the location row remains unchanged.
+	var dbName string
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT name FROM trakrf.locations WHERE id = $1`, id).Scan(&dbName))
+	assert.Equal(t, "rej-extfk", dbName, "rejected PATCH must not have mutated name")
 }

@@ -1501,12 +1501,15 @@ var internalOnlyRequiredFields = map[string][]string{
 // schema into read and write variants so SDK consumers can't accidentally send
 // these fields back on a verbatim read → write round-trip.
 //
-// `tags` is intentionally not marked readOnly. Tag mutation goes through the
-// dedicated POST/DELETE /tags subresource endpoints, and the PUT validator
-// rejects a `tags` body field with 400 invalid_value rather than silently
-// dropping it (TRA-643 / BB22 F1). Keeping `tags` out of the readOnly list
-// preserves that signal — codegen tools won't strip it from request shapes,
-// so an SDK that mistakenly sends it surfaces the failure.
+// `tags`, `external_key`, and `parent_external_key` (locations) are
+// intentionally NOT marked readOnly. They have dedicated mutation paths —
+// POST/DELETE /tags for tags and POST /rename for the natural keys — and
+// the PATCH validator rejects each with a per-category code (tags →
+// invalid_value, the natural-key forms → read_only) rather than silently
+// dropping them (TRA-686 / BB29 F7+F8, history TRA-643 / TRA-664). Keeping
+// these fields out of the readOnly list preserves the runtime signal —
+// codegen tools won't strip them from request shapes, so an SDK that
+// mistakenly sends them surfaces the failure.
 //
 // markReadOnlyFields errors if a configured schema or field is missing from
 // the spec — keeps this map honest as struct fields rename or move.

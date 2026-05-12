@@ -459,6 +459,7 @@ components:
                         - too_large
                         - fk_not_found
                         - ambiguous_fields
+                        - read_only
                     example: required
                     type: string
                     x-extensible-enum: true

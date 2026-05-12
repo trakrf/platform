@@ -5,6 +5,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/models/org"
 	"github.com/trakrf/platform/backend/internal/models/shared"
+	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
 type Location struct {
@@ -47,33 +48,32 @@ type CreateLocationRequest struct {
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicLocationView that the
-// PATCH handler strips from the request body before strict decoding so a
-// verbatim GET → PATCH round-trip succeeds (TRA-608 / BB18 §1.7).
+// PATCH handler silently strips from the request body before strict
+// decoding so a verbatim GET → PATCH round-trip succeeds (TRA-608 / BB18
+// §1.7). Only the round-trip-safe, server-owned timestamps and surrogate
+// IDs are on this list.
 //
-// TRA-674 / BB27 F3: `external_key` and `tags` were moved onto the strip
-// list to make full-object PATCH the supported integrator idiom. See
-// asset.PublicReadOnlyFields for the full rationale. Mutating either still
-// has a dedicated path (POST /locations/{location_id}/rename,
-// POST/DELETE /locations/{location_id}/tags).
-//
-// TRA-681: `parent_external_key` is the derived natural-key form for the
-// `parent_id` FK and is read-only on PATCH — silently stripped along with
-// the other server-owned fields. The surrogate `parent_id` remains the
-// mutable form. Integrators do GET → mutate `parent_id` → PATCH back with
-// stale `parent_external_key` still in the body; the server strips it and
-// processes `parent_id` unconditionally.
+// TRA-686 / BB29 F7+F8: `external_key`, `tags`, and `parent_external_key`
+// were removed from the strip list. The first two each have a dedicated
+// reject category on PATCH — see PublicRejectPatchFields — because
+// silent-drop hid bugs in read-modify-write integrations. The third
+// (parent_external_key) remains on the rename-managed reject list
+// alongside `external_key`: on locations both natural-key forms are
+// rooted in a renameable column on a different row, so the rename
+// endpoint is the only valid mutation path.
 //
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"]
 // (the spec-side readOnly markers are coordinated under TRA-672).
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at", "external_key", "tags", "parent_external_key"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at"}
 
 // UpdateLocationRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
 // PublicLocationView's round-trip-safe read-only fields (id, created_at,
-// updated_at) are silently ignored on a verbatim GET → PATCH round-trip
-// while any other unknown field — including `tags`, which is managed via
-// the /locations/{id}/tags subresource — still produces a 400.
+// updated_at, deleted_at) are silently stripped on a verbatim GET → PATCH
+// round-trip. `external_key`, `tags`, and `parent_external_key` are
+// pre-decode rejected with 400 instead of silently dropped (TRA-686 /
+// BB29 F7+F8) — see PublicRejectPatchFields.
 //
 // description, parent_id, and valid_to all accept JSON null on the wire
 // and clear the field server-side (TRA-614 / BB19 §S1). Each null surfaces
@@ -81,18 +81,12 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // remains nil because Go's json decoder treats `null` and "omitted" the
 // same on pointer fields.
 //
-// external_key is intentionally NOT on this struct. It is the natural /
-// join key downstream systems rely on; mutating it via a generic PATCH
-// would silently disconnect joins. POST /api/v1/locations/{location_id}/rename
-// is the dedicated path (TRA-664 / BB26 D7). On PATCH, an external_key
-// field is silently stripped along with other read-only fields per
-// TRA-674 / BB27 F3 — see PublicReadOnlyFields.
-//
-// parent_external_key is intentionally NOT on this struct (TRA-681). The
-// natural-key form is derived from parent_id and is read-only on PATCH —
-// silently stripped along with the other server-owned fields (see
-// PublicReadOnlyFields). To re-parent on PATCH, send parent_id; to clear
-// it, send `"parent_id": null`.
+// external_key and parent_external_key are intentionally NOT on this
+// struct. They are natural-key fields rooted in renameable columns —
+// mutating them via a generic PATCH would silently disconnect downstream
+// joins. POST /api/v1/locations/{location_id}/rename is the dedicated
+// path (TRA-664 / BB26 D7). On PATCH both forms are rejected with 400
+// read_only naming the rename endpoint (TRA-686 / BB29 F8).
 type UpdateLocationRequest struct {
 	Name        *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,no_control_chars" example:"Warehouse 1"`
 	ParentID    *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
@@ -108,15 +102,37 @@ type UpdateLocationRequest struct {
 	IsActive         *bool `json:"is_active,omitempty" example:"true"`
 }
 
-// PublicImmutablePatchFields maps the JSON keys that PATCH /api/v1/locations/{id}
-// must reject to the dedicated operation that can mutate them.
+// PublicRejectPatchFields names the JSON keys that PATCH
+// /api/v1/locations/{id} rejects pre-decode with 400 validation_error.
+// Three fields, two categories — see asset.PublicRejectPatchFields for
+// the underlying rationale (silent-drop on read-modify-write is the
+// failure mode this prevents).
 //
-// TRA-674 / BB27 F3: previously contained `external_key`, but the strip-on-
-// PATCH rule now applies (see PublicReadOnlyFields). Kept as the
-// registration point for any future field that genuinely needs a hard
-// rejection rather than the strip-and-ignore default. Empty map means
-// RejectImmutableFields is a no-op for locations.
-var PublicImmutablePatchFields = map[string]string{}
+//   - `tags` → invalid_value, points at POST/DELETE
+//     /locations/{location_id}/tags.
+//   - `external_key` and `parent_external_key` → read_only, both point at
+//     POST /locations/{location_id}/rename. parent_external_key is the
+//     natural-key form of the parent_id FK; mutating it on PATCH would
+//     either be a no-op (if it agrees with parent_id, redundant) or a
+//     write to the wrong row (the parent's natural key is owned by the
+//     parent location, not this one), so the only legal mutation path is
+//     the rename endpoint on the parent row.
+//
+// Source: TRA-686 / BB29 F7+F8.
+var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{
+	"tags": {
+		Code:    "invalid_value",
+		Message: "tags are managed via POST /api/v1/locations/{location_id}/tags and DELETE /api/v1/locations/{location_id}/tags/{tag_id}",
+	},
+	"external_key": {
+		Code:    "read_only",
+		Message: "external_key is immutable via PATCH; use POST /api/v1/locations/{location_id}/rename",
+	},
+	"parent_external_key": {
+		Code:    "read_only",
+		Message: "parent_external_key is immutable via PATCH; rename the parent location with POST /api/v1/locations/{location_id}/rename, or re-parent this row by sending `parent_id`",
+	},
+}
 
 // RenameLocationRequest is the body of POST /api/v1/locations/{location_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation
