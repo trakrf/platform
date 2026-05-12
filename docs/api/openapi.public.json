@@ -362,7 +362,7 @@
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "external_key": {
@@ -400,7 +400,7 @@
           "name": {
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "tags": {
@@ -455,7 +455,7 @@
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "external_key": {
@@ -475,7 +475,7 @@
             "example": "Warehouse 1",
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "parent_external_key": {
@@ -1008,7 +1008,7 @@
           "value": {
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           }
         },
@@ -1040,7 +1040,7 @@
           "value": {
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           }
         },
@@ -1056,7 +1056,7 @@
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "is_active": {
@@ -1077,7 +1077,7 @@
           "name": {
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "valid_from": {
@@ -1115,7 +1115,7 @@
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "is_active": {
@@ -1126,7 +1126,7 @@
             "example": "Warehouse 1",
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
             "type": "string"
           },
           "parent_id": {
@@ -1241,7 +1241,7 @@
             "schema": {
               "default": [],
               "items": {
-                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+                "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
                 "type": "string"
               },
               "type": "array"
@@ -1256,7 +1256,7 @@
             "schema": {
               "default": [],
               "items": {
-                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+                "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
                 "type": "string"
               },
               "type": "array"
@@ -1285,7 +1285,7 @@
             "in": "query",
             "name": "q",
             "schema": {
-              "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+              "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
               "type": "string"
             }
           },
@@ -3754,7 +3754,7 @@
             "schema": {
               "default": [],
               "items": {
-                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+                "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
                 "type": "string"
               },
               "type": "array"
@@ -3769,7 +3769,7 @@
             "schema": {
               "default": [],
               "items": {
-                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+                "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
                 "type": "string"
               },
               "type": "array"
@@ -3798,7 +3798,7 @@
             "in": "query",
             "name": "q",
             "schema": {
-              "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+              "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
               "type": "string"
             }
           },
@@ -7016,7 +7016,7 @@
             "schema": {
               "default": [],
               "items": {
-                "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+                "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
                 "type": "string"
               },
               "type": "array"
@@ -7028,7 +7028,7 @@
             "in": "query",
             "name": "q",
             "schema": {
-              "pattern": "^[^\u0000-\b\u000b\f\u000e-\u001f]*$",
+              "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
               "type": "string"
             }
           },
