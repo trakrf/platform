@@ -240,6 +240,23 @@ test-contract:
     #     `--generation-database=none` because Schemathesis rejects it
     #     with `--generation-deterministic` (the two flags express the
     #     same intent and are mutually exclusive at the CLI).
+    #
+    # `--max-examples=30` caps the per-operation test-case count.
+    # Schemathesis 4.x defaults to 100 cases per operation, which on
+    # 22 operations × 4 phases pushes the Coverage phase alone to
+    # ~4 min — dominating cycle time. 30 examples retains > 90% of the
+    # regression-finding signal on this surface (verified against
+    # TRA-672/674/678's fuzz-discovered findings, which all reproduce
+    # within the first ~20 generated cases per operation) while
+    # cutting wall-clock from ~5 min to ~2:30 — at parity with the
+    # other slow CI jobs (CodeQL Go analyze, Docker build-backend) so
+    # further reduction here would not move the cycle floor anyway.
+    # `--workers=N` was evaluated and rejected: parallel execution
+    # triggers TCP accept-queue saturation on the local backend
+    # (Errno 11 / "Resource temporarily unavailable") and one
+    # not-reproducible "API accepted schema-violating request" finding
+    # that did not survive re-runs at the same seed — i.e. flakiness
+    # from racing requests, not real coverage.
     docker run --rm --network host \
         --user "$(id -u):$(id -g)" \
         -w /out \
@@ -250,6 +267,7 @@ test-contract:
         run \
         --checks=all \
         --exclude-checks=positive_data_acceptance \
+        --max-examples=30 \
         --warnings=off \
         --suppress-health-check=all \
         --generation-deterministic \
