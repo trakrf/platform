@@ -1429,6 +1429,14 @@ func withEmptyRequiredFields(t *testing.T) {
 	readOnlyFields = map[string][]string{}
 	savedAdditive := publicResponseSchemas
 	publicResponseSchemas = nil
+	// TRA-681: mutuallyExclusiveFieldPairs is strict (errors on unknown
+	// schema) like requiredFields / readOnlyFields above. Clear it here so
+	// minimal in-memory test docs that don't seed the Create* schemas don't
+	// trip the strict guard inside postprocessPublic. Coverage for the pass
+	// itself lives in postprocess_test.go alongside the other strict-map
+	// passes.
+	savedMutuallyExclusive := mutuallyExclusiveFieldPairs
+	mutuallyExclusiveFieldPairs = nil
 	// TRA-660: existing tests pre-seed schemas under the dotted Go-package
 	// names and assert on those names after calling postprocessPublic. The
 	// public-spec rename pass would rewrite those keys, so disable it here
@@ -1445,6 +1453,7 @@ func withEmptyRequiredFields(t *testing.T) {
 		internalOnlyRequiredFields = savedInternal
 		readOnlyFields = savedReadOnly
 		publicResponseSchemas = savedAdditive
+		mutuallyExclusiveFieldPairs = savedMutuallyExclusive
 		publicSchemaRenames = savedSchemaRenames
 		publicOperationIdRenames = savedOpIDRenames
 		publicTagDescriptions = savedTagDescriptions
