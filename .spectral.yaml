@@ -280,10 +280,18 @@ rules:
 
   trakrf-location-header-on-201-top-level-create:
     description: >
+      Policy (authoritative): top-level creates only declare a `Location`
+      response header on 201; sub-resource creates omit by design.
+
       Top-level POST operations (e.g., `POST /api/v1/assets`) must declare a
-      `Location` response header on 201. Sub-resource POSTs (e.g., `/tags`)
-      are exempt because the parent resource's URL is already known. Origin:
-      BB27 S3.
+      `Location` response header on 201. Sub-resource POSTs (e.g.,
+      `/{resource}/{id}/tags`) intentionally omit it — the parent resource's
+      URL is already known to the caller, and sub-resources do not have
+      top-level canonical URLs to point at. This rule is the source of truth
+      for the policy: it fires only on top-level paths and is silent on
+      sub-resource paths, so individual sub-resource 201s do not need
+      per-operation "no Location header" annotations.
+      Origin: BB27 S3 (TRA-668), TRA-679.
     message: "Top-level POST 201 missing Location header — BB27 S3"
     severity: error
     given:

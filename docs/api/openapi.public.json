@@ -246,17 +246,17 @@
       },
       "AssetView": {
         "properties": {
-          "asset_deleted_at": {
+          "created_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "nullable": true,
             "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
-          "created_at": {
+          "deleted_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
+            "nullable": true,
             "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
@@ -333,7 +333,7 @@
           "valid_to",
           "created_at",
           "updated_at",
-          "asset_deleted_at",
+          "deleted_at",
           "tags"
         ],
         "type": "object"
@@ -823,6 +823,14 @@
             "readOnly": true,
             "type": "string"
           },
+          "deleted_at": {
+            "example": "2025-04-29T12:34:56Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+            "readOnly": true,
+            "type": "string"
+          },
           "depth": {
             "format": "int32",
             "readOnly": true,
@@ -842,14 +850,6 @@
           },
           "is_active": {
             "type": "boolean"
-          },
-          "location_deleted_at": {
-            "example": "2025-04-29T12:34:56Z",
-            "format": "date-time",
-            "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
-            "readOnly": true,
-            "type": "string"
           },
           "name": {
             "type": "string"
@@ -909,7 +909,7 @@
           "valid_to",
           "created_at",
           "updated_at",
-          "location_deleted_at",
+          "deleted_at",
           "tags"
         ],
         "type": "object"
@@ -1282,7 +1282,7 @@
             }
           },
           {
-            "description": "when true, include soft-deleted rows in the response. asset_deleted_at is populated for those rows. Orthogonal to is_active.",
+            "description": "when true, include soft-deleted rows in the response. deleted_at is populated for those rows. Orthogonal to is_active.",
             "in": "query",
             "name": "include_deleted",
             "schema": {
@@ -2263,7 +2263,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `asset_deleted_at`, `external_key`, `tags`, `location_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To change the location on PATCH, send `location_id` (surrogate); to clear it, send `\"location_id\": null`. The natural-key form `location_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `location_id`. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `location_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To change the location on PATCH, send `location_id` (surrogate); to clear it, send `\"location_id\": null`. The natural-key form `location_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `location_id`. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
         "operationId": "patchAsset",
         "parameters": [
           {
@@ -3768,7 +3768,7 @@
             }
           },
           {
-            "description": "when true, include soft-deleted rows in the response. location_deleted_at is populated for those rows. Orthogonal to is_active.",
+            "description": "when true, include soft-deleted rows in the response. deleted_at is populated for those rows. Orthogonal to is_active.",
             "in": "query",
             "name": "include_deleted",
             "schema": {
@@ -4773,7 +4773,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `tree_path`, `depth`, `location_deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `\"parent_id\": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename (also cascades `tree_path` across descendants); mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `tree_path`, `depth`, `deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `\"parent_id\": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename (also cascades `tree_path` across descendants); mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
         "operationId": "patchLocation",
         "parameters": [
           {
@@ -5065,7 +5065,7 @@
     },
     "/api/v1/locations/{location_id}/ancestors": {
       "get": {
-        "description": "**Required scope:** `locations:read`",
+        "description": "**Required scope:** `locations:read`\n\nSort order is fixed: ancestors are returned ordered by `depth` ascending (root first), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list. Origin: BB27 S6 (TRA-679).",
         "operationId": "listLocationAncestors",
         "parameters": [
           {
@@ -5319,7 +5319,7 @@
     },
     "/api/v1/locations/{location_id}/children": {
       "get": {
-        "description": "**Required scope:** `locations:read`",
+        "description": "**Required scope:** `locations:read`\n\nSort order is fixed: immediate children are returned ordered alphabetically by `name` ascending, with `id` ascending as a deterministic tiebreaker when sibling names collide. No `sort` query parameter is exposed because alphabetical-by-name is the only meaningful order for a single level of siblings. Origin: BB27 S6 (TRA-679).",
         "operationId": "listLocationChildren",
         "parameters": [
           {
@@ -5573,7 +5573,7 @@
     },
     "/api/v1/locations/{location_id}/descendants": {
       "get": {
-        "description": "**Required scope:** `locations:read`",
+        "description": "**Required scope:** `locations:read`\n\nSort order is fixed: descendants are returned in depth-first tree order (ordered by ltree `path` ascending), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list. Origin: BB27 S6 (TRA-679).",
         "operationId": "listLocationDescendants",
         "parameters": [
           {

@@ -65,7 +65,7 @@ func seedRoundTripAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, nam
 // TRA-608 / TRA-643 / TRA-674 acceptance: GET /api/v1/assets/{id} →
 // mutate one field → PATCH the full body back succeeds with 200. The
 // server silently strips every read-only field (id, created_at, updated_at,
-// asset_deleted_at, external_key, tags) so the naive read-mutate-write
+// deleted_at, external_key, tags) so the naive read-mutate-write
 // integrator flow works without per-field client-side scrubbing.
 func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
@@ -98,7 +98,7 @@ func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	}
 
 	// Mutate name and PATCH the full body back. Every read-only field
-	// (id, created_at, updated_at, asset_deleted_at, external_key, tags)
+	// (id, created_at, updated_at, deleted_at, external_key, tags)
 	// is silently stripped server-side (TRA-674 / BB27 F3); the client
 	// does not need to scrub them out first.
 	getResp.Data["name"] = "Forklift 7 (renamed)"
@@ -299,7 +299,7 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 
 	// PATCH-back of the verbatim GET body — the connector flow from §S2.
 	// TRA-674 / BB27 F3: tags and external_key are now silently stripped
-	// server-side along with id/created_at/updated_at/asset_deleted_at.
+	// server-side along with id/created_at/updated_at/deleted_at.
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 

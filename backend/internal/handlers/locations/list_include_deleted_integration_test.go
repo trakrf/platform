@@ -2,9 +2,10 @@
 // +build integration
 
 // TRA-659 / BB25 A3: GET /api/v1/locations?include_deleted=true returns
-// soft-deleted rows alongside live rows, with location_deleted_at populated
-// for deleted rows and null for live rows. is_active and include_deleted
-// are orthogonal toggles.
+// soft-deleted rows alongside live rows, with deleted_at populated
+// for deleted rows and null for live rows (TRA-679 / BB27 S7 renamed the
+// per-resource field from location_deleted_at to deleted_at). is_active
+// and include_deleted are orthogonal toggles.
 
 package locations
 
@@ -40,7 +41,7 @@ func TestListLocations_IncludeDeleted_DefaultExcludesDeleted(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 	require.Len(t, resp.Data, 1)
 	assert.Equal(t, "LIVE-1", resp.Data[0].ExternalKey)
-	assert.Nil(t, resp.Data[0].LocationDeletedAt, "live row location_deleted_at must be null")
+	assert.Nil(t, resp.Data[0].DeletedAt, "live row deleted_at must be null")
 }
 
 func TestListLocations_IncludeDeleted_True_SurfacesDeleted(t *testing.T) {
@@ -70,8 +71,8 @@ func TestListLocations_IncludeDeleted_True_SurfacesDeleted(t *testing.T) {
 	}
 	require.Contains(t, byKey, "LIVE-1")
 	require.Contains(t, byKey, "DEAD-1")
-	assert.Nil(t, resp.Data[byKey["LIVE-1"]].LocationDeletedAt, "live row location_deleted_at must be null")
-	assert.NotNil(t, resp.Data[byKey["DEAD-1"]].LocationDeletedAt, "deleted row location_deleted_at must be populated")
+	assert.Nil(t, resp.Data[byKey["LIVE-1"]].DeletedAt, "live row deleted_at must be null")
+	assert.NotNil(t, resp.Data[byKey["DEAD-1"]].DeletedAt, "deleted row deleted_at must be populated")
 }
 
 func TestListLocations_IncludeDeleted_OrthogonalToIsActive(t *testing.T) {
