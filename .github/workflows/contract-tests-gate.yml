@@ -35,18 +35,38 @@ name: Contract Tests Gate
 # In exchange, the per-PR Contract Tests job no longer blocks merge, removing
 # the ~5 min wall from every PR's cycle time.
 #
-# Why not nightly cron?
-# ====================
+# Recovery path when main is red
+# ==============================
 #
-# Nightly cron was considered and rejected. The cron's value-add over this
-# gate is "alert via a separate channel within 24h" — but the merger (solo
-# pre-launch dev) wouldn't open the email/Slack until the next PR opens
-# anyway. This at-merge gate is sharper: red main blocks the next merge
-# immediately, no out-of-band signal needed.
+# If main goes red and an open PR can't merge under this gate, the fix
+# PR would also be blocked by the same rule (chicken-and-egg). To break
+# the loop, the gate passes any PR carrying the `override-main-gate`
+# label. Use it on:
+#
+#   * Fix-forward PRs that address the contract-tests regression on
+#     main. Verify the fix locally first (`just backend test-contract`),
+#     then add the label so the PR can land. The post-merge run on
+#     main confirms or refutes within ~5 min.
+#   * PRs that touch paths unrelated to contract-tests (frontend-only,
+#     docs, infra) and shouldn't be blocked by a backend regression.
+#
+# The label is grep-able and survives in PR history, so the bypass is
+# auditable. Prefer this over admin-merge: admin-merge bypasses ALL
+# required checks (lint, build, codeql), losing safety nets that the
+# label-based override preserves.
+#
+# Why not nightly cron?
+# =====================
+#
+# Nightly cron was considered and rejected. The cron's value-add over
+# this gate is "alert via a separate channel within 24h" — but the
+# merger (solo pre-launch dev) wouldn't open the email/Slack until the
+# next PR opens anyway. This at-merge gate is sharper: red main blocks
+# the next merge immediately, no out-of-band signal needed.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
 
 permissions:
   actions: read
@@ -62,7 +82,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Check for override label
+        id: override
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+          if echo "$LABELS" | jq -e 'any(. == "override-main-gate")' >/dev/null; then
+            echo "::notice::PR carries the 'override-main-gate' label — bypassing main-status lookback."
+            echo "::notice::Recovery context: verify locally with 'just backend test-contract' before merging."
+            echo "bypassed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bypassed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Look back at main's last contract-tests run
+        if: steps.override.outputs.bypassed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
