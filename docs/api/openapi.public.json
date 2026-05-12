@@ -1512,6 +1512,9 @@
         "summary": "List assets",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:read"
         ]
       },
       "post": {
@@ -1794,6 +1797,9 @@
         "summary": "Create an asset",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:write"
         ]
       }
     },
@@ -2043,6 +2049,9 @@
         "summary": "Delete an asset",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:write"
         ]
       },
       "get": {
@@ -2249,6 +2258,9 @@
         "summary": "Get asset by canonical id",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:read"
         ]
       },
       "patch": {
@@ -2539,6 +2551,9 @@
         "summary": "Update an asset",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:write"
         ]
       }
     },
@@ -2827,6 +2842,9 @@
         "summary": "Asset movement history",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "tracking:read"
         ]
       }
     },
@@ -3119,6 +3137,9 @@
         "summary": "Rename an asset (mutate external_key)",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:write"
         ]
       }
     },
@@ -3411,6 +3432,9 @@
         "summary": "Add a tag to an asset",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:write"
         ]
       }
     },
@@ -3672,6 +3696,9 @@
         "summary": "Remove a tag from an asset",
         "tags": [
           "assets"
+        ],
+        "x-required-scopes": [
+          "assets:write"
         ]
       }
     },
@@ -3998,6 +4025,9 @@
         "summary": "List locations",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:read"
         ]
       },
       "post": {
@@ -4280,6 +4310,9 @@
         "summary": "Create a location",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:write"
         ]
       }
     },
@@ -4553,6 +4586,9 @@
         "summary": "Delete location",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:write"
         ]
       },
       "get": {
@@ -4759,6 +4795,9 @@
         "summary": "Get location by ID",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:read"
         ]
       },
       "patch": {
@@ -5049,6 +5088,9 @@
         "summary": "Update a location",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:write"
         ]
       }
     },
@@ -5303,6 +5345,9 @@
         "summary": "List location ancestors",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:read"
         ]
       }
     },
@@ -5557,6 +5602,9 @@
         "summary": "List location children",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:read"
         ]
       }
     },
@@ -5811,6 +5859,9 @@
         "summary": "List location descendants",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:read"
         ]
       }
     },
@@ -6103,6 +6154,9 @@
         "summary": "Rename a location (mutate external_key)",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:write"
         ]
       }
     },
@@ -6395,6 +6449,9 @@
         "summary": "Add a tag to a location",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:write"
         ]
       }
     },
@@ -6656,6 +6713,9 @@
         "summary": "Remove a tag from a location",
         "tags": [
           "locations"
+        ],
+        "x-required-scopes": [
+          "locations:write"
         ]
       }
     },
@@ -7204,6 +7264,9 @@
         "summary": "List current asset locations",
         "tags": [
           "reports"
+        ],
+        "x-required-scopes": [
+          "tracking:read"
         ]
       }
     }

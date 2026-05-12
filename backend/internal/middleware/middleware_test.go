@@ -491,3 +491,53 @@ func TestAPIKey_XAPIKeyWithoutAuthorization_HintsBearer(t *testing.T) {
 		t.Errorf("detail = %q, want a hint containing %q", resp.Error.Detail, "Authorization: Bearer")
 	}
 }
+
+// TRA-685 F10: CORS-disabled deployments must NOT short-circuit OPTIONS to
+// 204. With CORS disabled there is no preflight semantics to honor, and
+// returning 204 with neither `Allow` nor `Access-Control-Allow-Methods` was
+// worst-of-both. OPTIONS must fall through to the inner handler (which in
+// production is chi's MethodNotAllowed → 405 with Allow).
+func TestCORS_DisabledOriginPassesOptionsThrough(t *testing.T) {
+	t.Setenv("BACKEND_CORS_ORIGIN", "disabled")
+	reached := false
+	h := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodOptions, "/x", nil)
+	h.ServeHTTP(w, r)
+
+	if !reached {
+		t.Fatalf("OPTIONS under disabled CORS must fall through to the next handler")
+	}
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d (inner handler's response)", w.Code, http.StatusMethodNotAllowed)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want empty under disabled CORS", got)
+	}
+}
+
+// TRA-685 F10: CORS-enabled deployments keep the preflight short-circuit —
+// OPTIONS returns 204 with proper Access-Control-Allow-* headers and never
+// reaches downstream middleware.
+func TestCORS_EnabledOriginShortCircuitsOptions(t *testing.T) {
+	t.Setenv("BACKEND_CORS_ORIGIN", "https://app.example.com")
+	h := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("CORS-enabled OPTIONS must not reach the next handler")
+	}))
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodOptions, "/x", nil)
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "https://app.example.com")
+	}
+	if got := w.Header().Get("Access-Control-Allow-Methods"); got == "" {
+		t.Errorf("Access-Control-Allow-Methods must be set on preflight responses")
+	}
+}

@@ -63,6 +63,14 @@ func Recovery(next http.Handler) http.Handler {
 }
 
 // CORS handles Cross-Origin Resource Sharing headers.
+//
+// TRA-685 F10: OPTIONS short-circuit (204) is the CORS-preflight response
+// and is only emitted when CORS is enabled. When BACKEND_CORS_ORIGIN is set
+// to "disabled", OPTIONS is treated like any other unsupported verb — the
+// request falls through to chi, which calls the root MethodNotAllowed
+// handler and returns 405 with a proper `Allow` header (matching the
+// existing 405 behavior on PUT/POST/etc. against read-only routes).
+// Returning 204 with neither CORS headers nor `Allow` was worst-of-both.
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := os.Getenv("BACKEND_CORS_ORIGIN")
@@ -70,16 +78,17 @@ func CORS(next http.Handler) http.Handler {
 			origin = "*"
 		}
 
-		if origin != "disabled" {
+		corsEnabled := origin != "disabled"
+		if corsEnabled {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "3600")
-		}
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusNoContent)
-			return
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		}
 
 		next.ServeHTTP(w, r)

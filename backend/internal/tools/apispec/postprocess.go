@@ -1887,10 +1887,16 @@ func normalizeArrayQueryParams(doc *openapi3.T) {
 // SecurityRequirements where the underlying scheme is http or apiKey.
 // OpenAPI 3.0 §4.8.30 only permits scope arrays for oauth2 and openIdConnect
 // schemes; swaggo's `@Security BearerAuth[assets:read]` syntax produces invalid
-// arrays under http-bearer. To preserve the scope information for human
-// readers, the captured scopes are injected into the operation's
-// description as a "**Required scope:** `<scope>`" markdown line. The pass
-// is idempotent — repeated runs do not double-prepend.
+// arrays under http-bearer. To preserve the scope information:
+//
+//  1. captured scopes are injected into the operation's description as a
+//     "**Required scope:** `<scope>`" markdown line (human readers).
+//  2. captured scopes are emitted as `x-required-scopes: [<scope>, ...]`
+//     on the operation (machine-readable; TRA-685 F4). Standard codegen
+//     won't auto-surface this, but scope-aware partners can read it.
+//
+// The pass is idempotent — repeated runs do not double-prepend the marker
+// nor double-write the extension.
 func stripBearerScopeArrays(doc *openapi3.T) {
 	if doc.Paths == nil {
 		return
@@ -1911,6 +1917,10 @@ func stripBearerScopeArrays(doc *openapi3.T) {
 				continue
 			}
 			op.Description = injectScopeMarker(op.Description, scopes)
+			if op.Extensions == nil {
+				op.Extensions = map[string]any{}
+			}
+			op.Extensions["x-required-scopes"] = append([]string(nil), scopes...)
 		}
 	}
 }

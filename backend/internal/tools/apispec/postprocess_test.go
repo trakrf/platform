@@ -971,6 +971,31 @@ func TestPostprocess_StripsBearerScopeArrays_NoOpWithoutScopes(t *testing.T) {
 	require.NoError(t, postprocessPublic(doc))
 	assert.Equal(t, "Paginated list of assets.", op.Description,
 		"no scopes => no marker injected")
+	_, hasExt := op.Extensions["x-required-scopes"]
+	assert.False(t, hasExt, "no scopes => no x-required-scopes extension")
+}
+
+// TestPostprocess_StripsBearerScopeArrays_EmitsExtension locks in TRA-685 F4.
+// Captured scopes must surface as `x-required-scopes` on the operation so
+// scope-aware partners can read the required scopes machine-readably.
+// Standard codegen won't auto-surface this (matching prior behavior), but
+// the spec stays honest about the auth model.
+func TestPostprocess_StripsBearerScopeArrays_EmitsExtension(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	op := doc.Paths.Find("/assets").Get
+	require.NotNil(t, op)
+	op.Description = "Paginated list of assets."
+	op.Security = openapi3.NewSecurityRequirements().With(
+		openapi3.SecurityRequirement{"BearerAuth": []string{"assets:read"}},
+	)
+
+	require.NoError(t, postprocessPublic(doc))
+
+	require.NotNil(t, op.Extensions, "extensions must be populated")
+	got, ok := op.Extensions["x-required-scopes"]
+	require.True(t, ok, "x-required-scopes must be present on scope-gated operations")
+	assert.Equal(t, []string{"assets:read"}, got)
 }
 
 // TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs locks in TRA-585 S1.
