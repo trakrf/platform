@@ -27,13 +27,13 @@ type Asset struct {
 type CreateAssetRequest struct {
 	OrgID               int                  `json:"-" swaggerignore:"true"`
 	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern"`
-	Name                string               `json:"name" validate:"required,min=1,max=255"`
-	Description         *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024"`
-	LocationID          *int                 `json:"location_id,omitempty" example:"42"`
+	Name                string               `json:"name" validate:"required,min=1,max=255,no_control_chars"`
+	Description         *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars"`
+	LocationID          *int                 `json:"location_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
 	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
-	Metadata            any                  `json:"metadata,omitempty"`
+	Metadata            map[string]any       `json:"metadata,omitempty"`
 	IsActive            *bool                `json:"is_active,omitempty" example:"true"`
 }
 
@@ -78,20 +78,20 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "asset_del
 // field is silently stripped along with other read-only fields per
 // TRA-674 / BB27 F3 — see PublicReadOnlyFields.
 type UpdateAssetRequest struct {
-	Name                *string              `json:"name" validate:"omitempty,min=1,max=255"`
-	Description         *string              `json:"description" validate:"omitempty,min=1,max=1024"`
-	LocationID          *int                 `json:"location_id" example:"42"`
+	Name                *string              `json:"name" validate:"omitempty,min=1,max=255,no_control_chars"`
+	Description         *string              `json:"description" validate:"omitempty,min=1,max=1024,no_control_chars"`
+	LocationID          *int                 `json:"location_id" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
 	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
 	// Set by the PATCH handler when the body had an explicit `null` for the
 	// corresponding read-side-nullable field, to request a column-clear
 	// (TRA-614 / TRA-468). Not decoded from JSON directly.
-	ClearDescription bool  `json:"-" swaggerignore:"true"`
-	ClearLocationID  bool  `json:"-" swaggerignore:"true"`
-	ClearValidTo     bool  `json:"-" swaggerignore:"true"`
-	Metadata         *any  `json:"metadata"`
-	IsActive         *bool `json:"is_active"`
+	ClearDescription bool            `json:"-" swaggerignore:"true"`
+	ClearLocationID  bool            `json:"-" swaggerignore:"true"`
+	ClearValidTo     bool            `json:"-" swaggerignore:"true"`
+	Metadata         *map[string]any `json:"metadata"`
+	IsActive         *bool           `json:"is_active"`
 }
 
 // PublicImmutablePatchFields maps the JSON keys that PATCH /api/v1/assets/{id}

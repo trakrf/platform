@@ -60,12 +60,8 @@ jobs:
           : > backend/internal/handlers/swaggerspec/openapi.public.yaml
 
       - name: Run contract tests
-        # Non-blocking initially per TRA-671: the spec is expected to be red
-        # against the live API on introduction. Phase-3 (TRA-669) will green
-        # the findings, at which point `continue-on-error` should be removed
-        # in the same PR that lands the fixes. Mirrors the Spectral posture
-        # in .github/workflows/api-spec.yml.
-        continue-on-error: true
+        # Blocking as of TRA-678 — Phase-3 fix-wave (TRA-672..677) drove findings to zero.
+        # Mirrors the Spectral posture in .github/workflows/api-spec.yml.
         run: just test-contract
 
       - name: Upload Schemathesis reports

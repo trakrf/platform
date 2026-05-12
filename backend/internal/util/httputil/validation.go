@@ -44,6 +44,27 @@ func RegisterCustomValidations(v *validator.Validate) {
 		}
 		return ExternalKeyPattern.MatchString(val)
 	})
+	_ = v.RegisterValidation("no_control_chars", func(fl validator.FieldLevel) bool {
+		return !containsDisallowedControl(fl.Field().String())
+	})
+}
+
+// containsDisallowedControl reports whether s contains a C0 control
+// character other than tab/newline/carriage-return, or the DEL byte.
+// Postgres text columns reject NUL bytes outright (TRA-678 / BB28 Class A
+// reproducers on POST /assets, POST /locations, POST /tags); other C0
+// controls leak through to UI/log/audit surfaces as line-noise. Whitelist
+// tab/newline/CR for descriptions and similar free-form text.
+func containsDisallowedControl(s string) bool {
+	for _, r := range s {
+		switch {
+		case r == '\t' || r == '\n' || r == '\r':
+			// allowed in free-form text fields
+		case r < 0x20 || r == 0x7F:
+			return true
+		}
+	}
+	return false
 }
 
 // tagToCode maps go-playground/validator tag names to our public error
@@ -168,6 +189,9 @@ func messageForField(fe validator.FieldError) string {
 		if fe.Tag() == "external_key_pattern" {
 			return fmt.Sprintf("%s must match %s (alphanumerics and hyphens only — underscore, period, whitespace, slash, and colon are reserved)",
 				fe.Field(), ExternalKeyPattern.String())
+		}
+		if fe.Tag() == "no_control_chars" {
+			return fmt.Sprintf("%s must not contain control characters (NUL, etc.)", fe.Field())
 		}
 		return fmt.Sprintf("%s is not a valid value", fe.Field())
 	}

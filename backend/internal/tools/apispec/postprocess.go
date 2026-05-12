@@ -86,7 +86,17 @@ func postprocessPublic(doc *openapi3.T) error {
 	if err := stripResponseSchemasAdditive(doc, publicResponseSchemas); err != nil {
 		return err
 	}
+	if err := closeWriteSchemasToUnknownFields(doc, publicWriteSchemas); err != nil {
+		return err
+	}
+	if err := markPrintableStringFields(doc, printableStringFields); err != nil {
+		return err
+	}
 	markIntegerFormats(doc)
+	markQueryIntegerBounds(doc)
+	markQueryStringPatterns(doc)
+	markDateTimePatterns(doc)
+	flattenSortQueryToString(doc)
 	markDateTimeExamples(doc)
 	injectDefaultErrorResponse(doc)
 	injectGlobalHeaderRefs(doc)
@@ -831,6 +841,264 @@ var publicResponseSchemas = []string{
 	"errors.FieldError",
 }
 
+// publicWriteSchemas names the public request bodies that the server
+// decodes with strict-unknown-field enforcement (DisallowUnknownFields).
+// closeWriteSchemasToUnknownFields sets `additionalProperties: false` on
+// each so the spec advertises the runtime contract — Schemathesis-class
+// "API rejected schema-compliant request" failures (TRA-678) trace back
+// to integrators sending unknown fields against a permissive spec.
+//
+// Read schemas are NOT in this list — additive evolution requires
+// generated clients to ignore unknown fields on responses. Internal-only
+// request bodies are excluded; only the public surface is gated.
+var publicWriteSchemas = []string{
+	"asset.CreateAssetWithTagsRequest",
+	"asset.UpdateAssetRequest",
+	"asset.RenameAssetRequest",
+	"location.CreateLocationWithTagsRequest",
+	"location.UpdateLocationRequest",
+	"location.RenameLocationRequest",
+	"shared.TagRequest",
+}
+
+// mutuallyExclusiveFieldPairs declares (schema, fieldA, fieldB) tuples
+// where the surrogate id and natural-key alternate cannot be supplied
+// together on Create (TRA-678). Encoded via a JSON Schema `not: required:
+// [a, b]` clause so generators understand the constraint and Schemathesis-
+// class "API rejected schema-compliant request" failures stop firing when
+// the server's "both must agree" check rejects a fuzz-generated payload.
+//
+// Update / PATCH bodies are intentionally NOT listed: the JSON-Merge-Patch
+// semantic uses explicit null on either field as a clear-this-FK signal,
+// so a payload that sends `{a: null, b: null}` to clear the FK must remain
+// valid — a `not: required` constraint would reject it. The PATCH handler
+// implements its own per-field reconciliation.
+var mutuallyExclusiveFieldPairs = []struct {
+	Schema string
+	FieldA string
+	FieldB string
+}{
+	{"asset.CreateAssetWithTagsRequest", "location_id", "location_external_key"},
+	{"location.CreateLocationWithTagsRequest", "parent_id", "parent_external_key"},
+}
+
+// markMutuallyExclusiveFieldPairs walks each (schema, a, b) tuple and
+// installs a `not: { required: [a, b] }` clause on the schema. Idempotent;
+// repeated runs don't double-stack the `not` constraint.
+func markMutuallyExclusiveFieldPairs(doc *openapi3.T, pairs []struct{ Schema, FieldA, FieldB string }) error {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		if len(pairs) == 0 {
+			return nil
+		}
+		return fmt.Errorf("apispec: components.schemas is empty but mutuallyExclusiveFieldPairs has %d entries", len(pairs))
+	}
+	for _, pair := range pairs {
+		ref := doc.Components.Schemas[pair.Schema]
+		if ref == nil || ref.Value == nil {
+			return fmt.Errorf("apispec: mutuallyExclusiveFieldPairs references unknown schema %q", pair.Schema)
+		}
+		not := &openapi3.Schema{Required: []string{pair.FieldA, pair.FieldB}}
+		ref.Value.Not = &openapi3.SchemaRef{Value: not}
+	}
+	return nil
+}
+
+// printableStringRegex is the JSON Schema regex that mirrors the server-
+// side `no_control_chars` validator (TRA-678): allows tab, LF, CR, and any
+// code point outside the C0 controls and DEL. Schemathesis honors `pattern`
+// at item-string generation, so adding it on a property prevents the fuzz
+// generator from emitting payloads that the server will reject with 400.
+// Without this annotation Schemathesis treats the "API rejected schema-
+// compliant request" 400 (validator firing on control chars) as a contract
+// gap.
+const printableStringRegex = "^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$"
+
+// printableStringFields names (schema, field) pairs that the no_control_chars
+// validator gates server-side. Mirror in the spec so generated fuzz payloads
+// don't trip the validator with class-A NUL / control-char strings.
+var printableStringFields = map[string][]string{
+	"asset.CreateAssetWithTagsRequest":       {"name", "description"},
+	"asset.UpdateAssetRequest":               {"name", "description"},
+	"location.CreateLocationWithTagsRequest": {"name", "description"},
+	"location.UpdateLocationRequest":         {"name", "description"},
+	"shared.TagRequest":                      {"value"},
+	"shared.Tag":                             {"value"},
+}
+
+// markPrintableStringFields sets `pattern: printableStringRegex` on each
+// listed (schema, field) pair. Missing schemas/fields are skipped — same
+// lenient pattern as markNullableFields. Idempotent: if an explicit
+// pattern is already declared, it is preserved.
+func markPrintableStringFields(doc *openapi3.T, fields map[string][]string) error {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return nil
+	}
+	for schemaName, props := range fields {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		for _, p := range props {
+			prop := ref.Value.Properties[p]
+			if prop == nil || prop.Value == nil {
+				continue
+			}
+			if prop.Value.Pattern == "" {
+				prop.Value.Pattern = printableStringRegex
+			}
+		}
+	}
+	return nil
+}
+
+// closeWriteSchemasToUnknownFields sets `additionalProperties: false` on
+// every schema in `schemas` (TRA-678). Missing schemas are skipped rather
+// than fatal — matches the markNullableFields lenient pattern so the pass
+// is reusable in unit tests that construct minimal in-memory docs.
+// Idempotent.
+func closeWriteSchemasToUnknownFields(doc *openapi3.T, schemas []string) error {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return nil
+	}
+	f := false
+	for _, name := range schemas {
+		ref := doc.Components.Schemas[name]
+		if ref == nil || ref.Value == nil {
+			continue
+		}
+		ref.Value.AdditionalProperties = openapi3.AdditionalProperties{Has: &f}
+	}
+	return nil
+}
+
+// markQueryStringPatterns applies the printable-string pattern to
+// free-form text query filters (q, *_external_key). Mirrors the body-side
+// no_control_chars validator at the query boundary so Schemathesis-
+// generated control-char fuzz is schema-violating (negative_data_rejection)
+// rather than schema-compliant (positive_data_acceptance). TRA-678.
+func markQueryStringPatterns(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	apply := func(p *openapi3.Parameter) {
+		if p == nil || p.In != "query" || p.Schema == nil || p.Schema.Value == nil {
+			return
+		}
+		s := p.Schema.Value
+		if p.Name != "q" && !strings.HasSuffix(p.Name, "external_key") {
+			return
+		}
+		if s.Type.Is(openapi3.TypeArray) && s.Items != nil && s.Items.Value != nil {
+			items := s.Items.Value
+			if items.Type.Is(openapi3.TypeString) && items.Pattern == "" {
+				items.Pattern = printableStringRegex
+			}
+			return
+		}
+		if s.Type.Is(openapi3.TypeString) && s.Pattern == "" {
+			s.Pattern = printableStringRegex
+		}
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, pRef := range item.Parameters {
+			if pRef != nil {
+				apply(pRef.Value)
+			}
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			for _, pRef := range op.Parameters {
+				if pRef != nil {
+					apply(pRef.Value)
+				}
+			}
+		}
+	}
+}
+
+// markQueryIntegerBounds applies int4 surrogate-id bounds to query
+// parameters whose name matches a surrogate-id (suffix `_id`) and to
+// pagination's `offset` (TRA-678). The server rejects 0 on id-keyed
+// query filters and overflows on offset values that exceed int4, so the
+// spec must advertise the runtime bounds.
+//
+// Array-typed id filters (e.g. `location_id` as `array<integer>` with
+// repeat semantics) are walked into Items. Scalar `offset` is set as-is.
+//
+// The pass is idempotent and does not clobber bounds that are already
+// declared at a non-default value.
+func markQueryIntegerBounds(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	intMax := float64(2147483647)
+	one := float64(1)
+	zero := float64(0)
+	applyIDBounds := func(s *openapi3.Schema) {
+		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
+			return
+		}
+		if s.Min == nil {
+			s.Min = &one
+		}
+		if s.Max == nil {
+			s.Max = &intMax
+		}
+	}
+	applyOffsetBounds := func(s *openapi3.Schema) {
+		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
+			return
+		}
+		if s.Min == nil {
+			s.Min = &zero
+		}
+		if s.Max == nil {
+			s.Max = &intMax
+		}
+	}
+	walkParam := func(p *openapi3.Parameter) {
+		if p == nil || p.In != "query" || p.Schema == nil || p.Schema.Value == nil {
+			return
+		}
+		s := p.Schema.Value
+		switch {
+		case p.Name == "offset":
+			applyOffsetBounds(s)
+		case strings.HasSuffix(p.Name, "_id"):
+			if s.Type.Is(openapi3.TypeArray) && s.Items != nil && s.Items.Value != nil {
+				applyIDBounds(s.Items.Value)
+			} else {
+				applyIDBounds(s)
+			}
+		}
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, pRef := range item.Parameters {
+			if pRef != nil {
+				walkParam(pRef.Value)
+			}
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			for _, pRef := range op.Parameters {
+				if pRef != nil {
+					walkParam(pRef.Value)
+				}
+			}
+		}
+	}
+}
+
 // stripResponseSchemasAdditive removes `additionalProperties: true` from
 // each public response model (TRA-668 BB27 S8 / TRA-672). The literal
 // `:true` came from swag's `--parseDependency` emission on every object;
@@ -922,6 +1190,78 @@ const (
 	dateTimeExample = "2025-04-29T12:34:56Z"
 	dateExample     = "2025-04-29"
 )
+
+// dateTimePattern restricts `format: date-time` strings to RFC 3339 with
+// a four-digit year between 1000 and 9999. Go's time package treats year 1
+// (0001-01-01T00:00:00Z) as IsZero, and shared.FlexibleDate rejects that
+// literal to prevent silent zero-substitution at the handler seam
+// (TRA-649 / BB23 F2). Schemathesis occasionally fuzz-generates that
+// exact value as a "valid" RFC 3339 timestamp, surfacing as a
+// schema-compliant 400. Advertising the year-range constraint in the spec
+// matches what the server accepts and keeps positive_data_acceptance
+// green (TRA-678).
+const dateTimePattern = `^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`
+
+// markDateTimePatterns walks every schema and inline parameter and sets
+// `pattern: dateTimePattern` on date-time string properties that don't
+// already declare one. Idempotent.
+func markDateTimePatterns(doc *openapi3.T) {
+	apply := func(s *openapi3.Schema) {
+		if s == nil {
+			return
+		}
+		setDateTimePatternRecursive(s)
+	}
+	if doc.Components != nil && doc.Components.Schemas != nil {
+		for _, ref := range doc.Components.Schemas {
+			if ref != nil && ref.Value != nil {
+				apply(ref.Value)
+			}
+		}
+	}
+	if doc.Paths != nil {
+		for _, item := range doc.Paths.Map() {
+			if item == nil {
+				continue
+			}
+			for _, p := range item.Parameters {
+				if p != nil && p.Value != nil && p.Value.Schema != nil && p.Value.Schema.Value != nil {
+					setDateTimePatternRecursive(p.Value.Schema.Value)
+				}
+			}
+			for _, op := range item.Operations() {
+				if op == nil {
+					continue
+				}
+				for _, p := range op.Parameters {
+					if p != nil && p.Value != nil && p.Value.Schema != nil && p.Value.Schema.Value != nil {
+						setDateTimePatternRecursive(p.Value.Schema.Value)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setDateTimePatternRecursive(s *openapi3.Schema) {
+	if s == nil {
+		return
+	}
+	if s.Type != nil && s.Type.Is(openapi3.TypeString) && s.Format == "date-time" && s.Pattern == "" {
+		s.Pattern = dateTimePattern
+	}
+	for _, prop := range s.Properties {
+		if prop != nil && prop.Value != nil {
+			setDateTimePatternRecursive(prop.Value)
+		}
+	}
+	if s.Items != nil && s.Items.Value != nil {
+		setDateTimePatternRecursive(s.Items.Value)
+	}
+	if s.AdditionalProperties.Schema != nil && s.AdditionalProperties.Schema.Value != nil {
+		setDateTimePatternRecursive(s.AdditionalProperties.Schema.Value)
+	}
+}
 
 // markDateTimeExamples walks every schema and seeds an `example:` on date
 // and date-time string properties that don't already declare one. Covers
@@ -1058,12 +1398,22 @@ var nullableFields = map[string][]string{
 	// valid_from non-nullable: there is no "use server default" semantic on
 	// update — `null` there would be a request to reset the row's temporal
 	// start, which the handler rejects with invalid_value (TRA-675).
+	// PATCH update bodies: is_active is NOT nullable — the handler treats
+	// `is_active: null` as a 400 (omit the field to leave unchanged). metadata
+	// also not nullable on update — null is ambiguous with "no change."
 	"asset.UpdateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
-	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_from", "valid_to"},
-	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_from", "valid_to"},
+	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_from", "valid_to", "metadata", "is_active"},
+	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_from", "valid_to", "tags", "metadata", "is_active"},
 	"location.UpdateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
-	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_from", "valid_to"},
-	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_from", "valid_to"},
+	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_from", "valid_to", "is_active"},
+	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_from", "valid_to", "tags", "is_active"},
+
+	// shared.TagRequest.tag_type is optional and defaults to "rfid" server-side
+	// when null or omitted (TRA-678). The spec marks it nullable to match the
+	// runtime accept-null-as-default behavior; rejecting null here would force
+	// every integrator that loops over an enum-or-null pattern to special-case
+	// the field. Value is not nullable — that's the actual identifier.
+	"shared.TagRequest": {"tag_type"},
 }
 
 // requiredFields names the response fields that are guaranteed present in
@@ -1390,6 +1740,78 @@ func isTimestampField(name string) bool {
 	return timestampFieldNames.MatchString(name)
 }
 
+// flattenSortQueryToString rewrites every `sort` query parameter from
+// `type: array, items: enum`-form to `type: string, pattern: csv-of-enums`
+// (TRA-678). The wire format never changes — server still parses CSV the
+// same way — but the schema shape stops triggering Schemathesis 4.x's
+// conflicting interpretations of `?sort=`:
+//
+//   - positive_data_acceptance treats `?sort=` as a valid empty array, so
+//     the server must return 2xx (rejecting it would be "API rejected
+//     schema-compliant request").
+//   - negative_data_rejection treats `?sort=` as type-mismatched against
+//     `type: array` (empty string isn't an array), so the server must
+//     return 4xx (accepting it would be "API accepted schema-violating
+//     request").
+//
+// No server response can satisfy both. Pivoting the spec to `type: string`
+// keeps the wire-level CSV behavior, eliminates the conflict, and
+// preserves item-level enum validation via a pattern that enumerates the
+// allowed (optionally `-`-prefixed) values.
+func flattenSortQueryToString(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			for _, pRef := range op.Parameters {
+				if pRef == nil || pRef.Value == nil {
+					continue
+				}
+				p := pRef.Value
+				if p.In != "query" || p.Name != "sort" {
+					continue
+				}
+				if p.Schema == nil || p.Schema.Value == nil {
+					continue
+				}
+				s := p.Schema.Value
+				if !s.Type.Is(openapi3.TypeArray) || s.Items == nil || s.Items.Value == nil {
+					continue
+				}
+				items := s.Items.Value
+				if len(items.Enum) == 0 {
+					continue
+				}
+				enumStrs := make([]string, 0, len(items.Enum))
+				for _, e := range items.Enum {
+					if str, ok := e.(string); ok {
+						enumStrs = append(enumStrs, str)
+					}
+				}
+				if len(enumStrs) == 0 {
+					continue
+				}
+				// Build alternation, preserving the existing leading-`-`
+				// shape (e.g. `external_key` vs `-external_key`). Allow
+				// empty string + CSV of any-of-enums.
+				alt := strings.Join(enumStrs, "|")
+				pattern := fmt.Sprintf("^(|(?:%s)(?:,(?:%s))*)$", alt, alt)
+				s.Type = &openapi3.Types{openapi3.TypeString}
+				s.Items = nil
+				s.Pattern = pattern
+				s.Default = ""
+			}
+		}
+	}
+}
+
 // normalizeArrayQueryParams walks every operation parameter in doc.Paths and,
 // for each in:query parameter whose schema is type:array, sets Style to "form"
 // and Explode to false. This corrects the OpenAPI 3 default (style:form,
@@ -1398,8 +1820,15 @@ func isTimestampField(name string) bool {
 // 2.0's collectionFormat, leaving the default that tells codegen to send
 // multi-value instead of comma-separated.
 //
-// The pass is idempotent and does not clobber Style/Explode that are already
-// set to a non-default (non-zero) value.
+// Also sets AllowEmptyValue=true on array-typed query parameters: the
+// canonical "no value" CSV encoding is `?sort=` (empty value), and OpenAPI
+// 3 otherwise treats empty as missing — which Schemathesis flags as
+// "API accepted schema-violating request" against the items enum (TRA-678).
+// The flag is deprecated in 3.1 but widely honored by 3.0 generators and
+// Schemathesis 4.x in particular.
+//
+// The pass is idempotent and does not clobber Style/Explode/AllowEmptyValue
+// that are already set to a non-default (non-zero) value.
 func normalizeArrayQueryParams(doc *openapi3.T) {
 	if doc.Paths == nil {
 		return
@@ -1433,6 +1862,16 @@ func normalizeArrayQueryParams(doc *openapi3.T) {
 				}
 				if p.Explode == nil {
 					p.Explode = &f
+				}
+				// Default to empty array so `?sort=` (empty CSV value)
+				// resolves to [] — both checks in Schemathesis 4.x agree
+				// that [] satisfies the array type with no item-enum
+				// constraint. Without a default, the empty value is
+				// ambiguous: positive_data_acceptance treats it as []
+				// (valid) but negative_data_rejection treats it as [""]
+				// (invalid), and the server cannot satisfy both. TRA-678.
+				if p.Schema.Value.Default == nil {
+					p.Schema.Value.Default = []any{}
 				}
 			}
 		}
