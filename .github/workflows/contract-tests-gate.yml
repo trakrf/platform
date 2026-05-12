@@ -142,7 +142,7 @@ jobs:
                 fi
                 echo "::error::Main's latest Contract Tests run is ${conclusion} (sha=${short_sha})"
                 echo "::error::Fix-forward in a follow-up PR before merging this one."
-                echo "::error::Admin-merge the fix PR to bypass this gate on the fix itself."
+                echo "::error::Recovery: verify the fix locally ('just backend test-contract'), then add the 'override-main-gate' label on the fix PR to bypass this gate. Prefer this over admin-merge — admin-merge bypasses every required check, not just this one."
                 echo "::error::${url}"
                 exit 1
                 ;;
@@ -150,7 +150,7 @@ jobs:
                 now=$(date +%s)
                 if [ "$now" -ge "$deadline" ]; then
                   echo "::error::Main's Contract Tests is still '${status}' after ${MAX_WAIT_SECONDS}s (sha=${short_sha})"
-                  echo "::error::Re-run this check once main resolves."
+                  echo "::error::Re-run this check once main resolves, or add the 'override-main-gate' label to bypass."
                   echo "::error::${url}"
                   exit 1
                 fi
