@@ -1,7 +1,26 @@
 name: Contract Tests
 
+# Pull-request runs are advisory: the job reports a status but is NOT a
+# required check (branch protection lists `contract-tests-gate` instead, which
+# looks back at main's latest contract-tests result rather than waiting on
+# this run). This removes the ~5 min Coverage-phase wall-clock from per-PR
+# cycle time without dropping the underlying signal — see
+# .github/workflows/contract-tests-gate.yml for the deferred-blocking pattern.
+#
+# Push-to-main runs are the authoritative result: after a merge, contract
+# tests run against the resolved main state, and the next PR's gate reads
+# that conclusion. Cycle time on the merge itself is unaffected because the
+# job runs asynchronously; the cost lands at "open the next PR" if main
+# turned red.
 on:
   pull_request:
+    paths:
+      - 'backend/**'
+      - 'docs/api/openapi.public.yaml'
+      - '.github/workflows/contract-tests.yml'
+  push:
+    branches:
+      - main
     paths:
       - 'backend/**'
       - 'docs/api/openapi.public.yaml'
@@ -60,8 +79,10 @@ jobs:
           : > backend/internal/handlers/swaggerspec/openapi.public.yaml
 
       - name: Run contract tests
-        # Blocking as of TRA-678 — Phase-3 fix-wave (TRA-672..677) drove findings to zero.
-        # Mirrors the Spectral posture in .github/workflows/api-spec.yml.
+        # Authoritative on push-to-main, advisory on pull_request. The
+        # contract-tests-gate workflow is the required check on PRs; it reads
+        # this job's latest conclusion on main and fails fast if main is red
+        # or still in-flight. See contract-tests-gate.yml for rationale.
         run: just test-contract
 
       - name: Upload Schemathesis reports
