@@ -38,24 +38,23 @@ func NewHandler(storage *storage.Storage) *Handler {
 	}
 }
 
-// resolveLocation reconciles the location_id (canonical) and
-// location_external_key (natural-key alternate) inputs on Create/Update.
-// Both nil → nil (no location). location_id wins when both are supplied
-// (id is canonical); location_external_key is treated as advisory and the
-// "they must agree" check is dropped post-TRA-678 — Schemathesis fuzz
-// reliably generates payloads where both fields are set but the natural
-// key doesn't match the id's row, and the strict-agree check made every
-// such combination a 400 against an otherwise schema-compliant request.
-// external_key alone → resolved via lookup. Wire field names dropped the
-// `current_` prefix in TRA-580 C-3.
+// resolveLocation reconciles the location_id (canonical surrogate) and
+// location_external_key (natural-key alternate) inputs on Create. Exactly
+// one is expected to be set (TRA-681 oneOf constraint enforced upstream
+// in the Create handler via the ambiguous_fields pre-check). PATCH never
+// supplies the natural-key form — it is stripped before this function
+// runs (see asset.PublicReadOnlyFields).
 //
-// TRA-674 / BB27 F2: a nonexistent surrogate `location_id` returns the
-// same envelope shape as a nonexistent natural-key `location_external_key`
-// — both surface keyed on the offending field, code=fk_not_found, HTTP 409
-// (was 400 invalid_value pre-TRA-678; 409 keeps Schemathesis's
-// positive_data_acceptance check green). Previously the surrogate path
-// reached the storage layer and tripped the FK constraint, surfacing as
-// 500 internal_error.
+// Both nil → nil (no location). When location_id is set it is used;
+// otherwise location_external_key is resolved via lookup. Wire field
+// names dropped the `current_` prefix in TRA-580 C-3.
+//
+// TRA-674 / BB27 F2 / TRA-681: a nonexistent surrogate `location_id`
+// returns the same envelope shape as a nonexistent natural-key
+// `location_external_key` — both surface keyed on the offending field
+// as 400 validation_error with code=fk_not_found. Previously the
+// surrogate path reached the storage layer and tripped the FK
+// constraint, surfacing as 500 internal_error.
 func (handler *Handler) resolveLocation(
 	r *http.Request, orgID int, locID *int, locExternalKey *string,
 ) (*int, *modelerrors.FieldError) {
@@ -66,9 +65,6 @@ func (handler *Handler) resolveLocation(
 		return nil, nil
 	}
 	if hasID {
-		// id wins when both are supplied. Confirm the referenced row
-		// exists in-org so missing-reference returns a structured 409
-		// instead of leaking the storage-layer FK 500.
 		loc, err := handler.storage.GetLocationByID(r.Context(), orgID, *locID)
 		if err != nil {
 			return nil, &modelerrors.FieldError{
@@ -181,6 +177,24 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// TRA-681: location_id and location_external_key form a oneOf on Create
+	// bodies — the spec encodes `not: {required: [location_id,
+	// location_external_key]}` on CreateAssetWithTagsRequest. Reject both-
+	// supplied at the handler so callers get a typed ambiguous_fields code
+	// they can branch on, rather than relying on a silent server pick.
+	_, hasLocID := presentKeys["location_id"]
+	_, hasLocExt := presentKeys["location_external_key"]
+	if hasLocID && hasLocExt {
+		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			"location_id and location_external_key are mutually exclusive; supply exactly one",
+			requestID,
+			[]modelerrors.FieldError{
+				{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+				{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+			})
+		return
+	}
+
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, r, err, requestID)
 		return
@@ -194,18 +208,13 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
-		if fErr.Code == "fk_not_found" {
-			// 409 Conflict: the request body is well-formed and the spec-valid
-			// FK reference doesn't resolve to an existing row. Schemathesis's
-			// positive_data_acceptance check rejects 400 here (it expects the
-			// schema-compliant request to succeed); 409 acknowledges the
-			// reference conflicts with current state and keeps the check
-			// quiet (TRA-678).
-			httputil.WriteJSONErrorWithFields(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				fErr.Message, requestID,
-				[]modelerrors.FieldError{*fErr})
-			return
-		}
+		// TRA-681: fk_not_found surfaces as 400 validation_error on both
+		// surrogate and natural-key paths. Industry precedent (Stripe, AWS,
+		// Atlassian) treats "your body references a row that does not exist"
+		// as a validation failure rather than a state-conflict; 409 is
+		// reserved for true state-conflict cases like the non-leaf-location-
+		// delete pattern. The typed code stays so generated clients can
+		// branch precisely.
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 			fErr.Message, requestID,
 			[]modelerrors.FieldError{*fErr})
@@ -233,7 +242,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `asset_deleted_at`, `external_key`, `tags`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `asset_deleted_at`, `external_key`, `tags`, `location_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To change the location on PATCH, send `location_id` (surrogate); to clear it, send `"location_id": null`. The natural-key form `location_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `location_id`. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
@@ -271,13 +280,15 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
-	// TRA-674 / BB27 F3: external_key and tags moved onto PublicReadOnlyFields
-	// and are silently stripped by the decoder along with id, created_at,
-	// updated_at, asset_deleted_at — see asset.PublicReadOnlyFields. Rename
-	// still goes through POST /assets/{id}/rename; tag mutations through
-	// POST/DELETE /assets/{id}/tags. RejectImmutableFields is left in place
-	// for any future field that genuinely needs a hard rejection rather than
-	// the strip-and-ignore default.
+	// TRA-674 / BB27 F3: external_key and tags are on PublicReadOnlyFields
+	// and silently stripped by the decoder along with id, created_at,
+	// updated_at, asset_deleted_at. TRA-681 extends the same strip to
+	// location_external_key — the derived natural-key form is read-only on
+	// PATCH and PATCH bodies use the surrogate location_id form exclusively.
+	// Rename still goes through POST /assets/{id}/rename; tag mutations
+	// through POST/DELETE /assets/{id}/tags. RejectImmutableFields is left
+	// in place for any future field that genuinely needs a hard rejection
+	// rather than the strip-and-ignore default.
 	if httputil.RejectImmutableFields(w, req, reqID, asset.PublicImmutablePatchFields) {
 		return
 	}
@@ -307,69 +318,24 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if _, ok := explicitNulls["valid_to"]; ok {
 		request.ClearValidTo = true
 	}
-	// description, location_id, location_external_key are read-side-nullable
-	// per PublicAssetView. An explicit null on PATCH clears the corresponding
-	// column, per TRA-614 / BB19 §S1. location_id and location_external_key
-	// are alternate references to the same FK (current_location_id), so a
-	// null on either implies clearing that FK; conflicting forms (one null,
-	// the other a value) are 400.
 	if _, ok := explicitNulls["description"]; ok {
 		request.ClearDescription = true
 	}
-	nullLocID := false
+	// TRA-614 / BB19 §S1: explicit `null` on location_id clears the FK.
+	// location_external_key never reaches this point (stripped by the
+	// decoder via PublicReadOnlyFields per TRA-681) so the only clear-FK
+	// signal on PATCH is `"location_id": null`.
 	if _, ok := explicitNulls["location_id"]; ok {
-		nullLocID = true
-	}
-	nullLocExt := false
-	if _, ok := explicitNulls["location_external_key"]; ok {
-		nullLocExt = true
-	}
-	// An explicit empty string is never a valid external_key — reject upfront
-	// so it doesn't get silently coerced into a clear-FK signal below.
-	if request.LocationExternalKey != nil && *request.LocationExternalKey == "" {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"validation failed", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "location_external_key",
-				Code:    "too_short",
-				Message: "location_external_key must be at least 1 character",
-				Params:  map[string]any{"min_length": float64(1)},
-			}})
-		return
-	}
-	// FK reconciliation (TRA-678 relaxation): only treat as clear-FK when
-	// BOTH sides are explicitly null. When one is null and the other is
-	// set, the caller is telling us to use the set side; drop the nil'd
-	// pointer and let resolveLocation work the remaining input. Previous
-	// behavior surfaced this as a "disagree" 400, which Schemathesis
-	// (correctly) flagged as rejecting a schema-compliant request.
-	switch {
-	case nullLocID && nullLocExt:
 		request.ClearLocationID = true
 		request.LocationID = nil
-		request.LocationExternalKey = nil
-	case nullLocID:
-		request.LocationID = nil
-	case nullLocExt:
-		request.LocationExternalKey = nil
 	}
-
-	// metadata is declared `type: object` in the public spec (apispec
-	// postprocess upgrades the empty schema to a free-form object). The Go
-	// field is `*any`, so json.Decode happily accepts strings, numbers, bools,
-	// and arrays — but storage hands those straight through to the jsonb
-	// column where Postgres would reject them as a 500. Mirror the spec at
-	// the validator boundary: reject any non-object metadata as 400. TRA-619.
-	// Metadata is typed as *map[string]any (TRA-678); the json decoder enforces
-	// the object shape, so non-object metadata surfaces as a 400 bad_request
-	// via RespondDecodeError. No extra validator branch needed here.
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, req, err, reqID)
 		return
 	}
 
-	resolved, fErr := handler.resolveLocation(req, orgID, request.LocationID, request.LocationExternalKey)
+	resolved, fErr := handler.resolveLocation(req, orgID, request.LocationID, nil)
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -377,12 +343,8 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 			return
 		}
-		if fErr.Code == "fk_not_found" {
-			httputil.WriteJSONErrorWithFields(w, req, http.StatusConflict, modelerrors.ErrConflict,
-				fErr.Message, reqID,
-				[]modelerrors.FieldError{*fErr})
-			return
-		}
+		// TRA-681: fk_not_found is 400 validation_error (was 409 conflict
+		// under TRA-678). See Create for rationale.
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 			fErr.Message, reqID,
 			[]modelerrors.FieldError{*fErr})
@@ -566,8 +528,8 @@ func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
 // @Produce json
 // @Param limit                 query int    false "max 200"   default(50) minimum(1) maximum(200)
 // @Param offset                query int    false "min 0"     default(0) minimum(0)
-// @Param location_id           query []int    false "filter by current location id (canonical, may repeat)" collectionFormat(multi)
-// @Param location_external_key query []string false "filter by current location external_key (may repeat)" collectionFormat(multi)
+// @Param location_id           query []int    false "filter by current location id (canonical, may repeat); mutually exclusive with location_external_key (400 ambiguous_fields if both supplied)" collectionFormat(multi)
+// @Param location_external_key query []string false "filter by current location external_key (may repeat); mutually exclusive with location_id (400 ambiguous_fields if both supplied)" collectionFormat(multi)
 // @Param external_key          query []string false "filter by asset external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active             query bool   false "filter by active flag"
 // @Param include_deleted       query bool   false "when true, include soft-deleted rows in the response. asset_deleted_at is populated for those rows. Orthogonal to is_active." default(false)
@@ -605,20 +567,25 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// location_id and location_external_key reference the same FK. When both
-	// appear in the query, location_id is canonical and wins; location_external_key
-	// is silently dropped (TRA-678 relaxation). Previously this returned 400
-	// "mutually exclusive", which Schemathesis flagged as rejecting a schema-
-	// compliant request — the spec advertises both as independent optional
-	// filters and OpenAPI 3 has no way to encode a query-parameter pair
-	// constraint. The original strict check is preserved in the docs for the
-	// /locations endpoint where the same idiom applies (TRA-641 / BB21 §2.4).
-	locExtKeys := params.Filters["location_external_key"]
-	if _, hasLocID := params.Filters["location_id"]; hasLocID {
-		locExtKeys = nil
+	// TRA-681: location_id and location_external_key form a oneOf on the
+	// GET filter — reject 400 ambiguous_fields when both are supplied so
+	// integrators get a typed signal rather than a silent winner. OpenAPI 3
+	// can't encode a query-parameter pair constraint, so the rule lives in
+	// the per-parameter description and the handler validation here.
+	_, hasLocID := params.Filters["location_id"]
+	_, hasLocExt := params.Filters["location_external_key"]
+	if hasLocID && hasLocExt {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"location_id and location_external_key are mutually exclusive; supply exactly one",
+			reqID,
+			[]modelerrors.FieldError{
+				{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+				{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+			})
+		return
 	}
 	f := asset.ListFilter{
-		LocationExternalKeys: locExtKeys,
+		LocationExternalKeys: params.Filters["location_external_key"],
 		ExternalKeys:         params.Filters["external_key"],
 		Limit:                params.Limit,
 		Offset:               params.Offset,

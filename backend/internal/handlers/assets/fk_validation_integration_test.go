@@ -1,14 +1,17 @@
 //go:build integration
 // +build integration
 
-// TRA-674 / BB27 F2: missing-reference on the surrogate `location_id` returns
-// the same validation_error envelope shape as missing-reference on the
-// natural-key `location_external_key` — both surface as 400 invalid_value
-// keyed on the offending field. Previously the surrogate path reached the
-// storage layer and tripped the FK constraint as 500 internal_error, while
-// the natural-key path was already a clean 400. Two different envelopes for
-// the same logical case forced integrators to write branch code per FK
-// form; the fix collapses them onto one shape.
+// TRA-674 / BB27 F2 / TRA-681: missing-reference on the surrogate
+// `location_id` returns the same envelope shape as missing-reference on the
+// natural-key `location_external_key` — both surface as 400 validation_error
+// keyed on the offending field with code=fk_not_found.
+//
+// Pre-TRA-674 the surrogate path reached the storage layer and tripped the
+// FK constraint as 500 internal_error. TRA-674 collapsed both onto 400
+// invalid_value; TRA-678 then moved both to 409 conflict / fk_not_found to
+// silence Schemathesis's positive_data_acceptance check; TRA-681 reverts to
+// 400 validation_error / fk_not_found per design review. The typed code
+// stays so generated clients can branch precisely.
 
 package assets
 
@@ -30,8 +33,7 @@ import (
 )
 
 // POST /api/v1/assets with a surrogate location_id that does not exist
-// returns 400 validation_error / invalid_value keyed on `location_id`.
-// Mirrors the existing natural-key behavior for `location_external_key`.
+// returns 400 validation_error / fk_not_found keyed on `location_id`.
 func TestPostAsset_MissingLocationID_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -74,12 +76,59 @@ func TestPostAsset_MissingLocationID_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "location_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+}
+
+// POST /api/v1/assets with a natural-key location_external_key that does
+// not exist returns 400 validation_error / fk_not_found keyed on
+// `location_external_key` — same envelope as the surrogate-id path.
+func TestPostAsset_MissingLocationExternalKey_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"external_key":          "ASSET-MISSING-EXTFK",
+		"name":                  "missing-extfk",
+		"location_external_key": "NOPE-XYZ",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"missing location_external_key must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "location_external_key", resp.Error.Fields[0].Field)
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
 }
 
 // PATCH /api/v1/assets/{id} with a surrogate location_id that does not
-// exist returns the same shape as POST — 400 validation_error /
-// invalid_value keyed on `location_id`.
+// exist returns 400 validation_error / fk_not_found keyed on `location_id`.
 func TestPatchAsset_MissingLocationID_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -116,5 +165,136 @@ func TestPatchAsset_MissingLocationID_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "location_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+}
+
+// POST /api/v1/assets with both location_id and location_external_key
+// returns 400 validation_error / ambiguous_fields. TRA-681 oneOf rule —
+// no silent winner on a request the integrator explicitly constructed.
+func TestPostAsset_BothLocationForms_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"external_key":          "ASSET-BOTH-FORMS",
+		"name":                  "both-forms",
+		"location_id":           42,
+		"location_external_key": "WHS-01",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"both forms must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 2)
+	for _, fld := range resp.Error.Fields {
+		assert.Equal(t, "ambiguous_fields", fld.Code, "field %s should carry ambiguous_fields", fld.Field)
+		assert.Contains(t, []string{"location_id", "location_external_key"}, fld.Field)
+	}
+}
+
+// GET /api/v1/assets?location_id=N&location_external_key=K is 400
+// validation_error / ambiguous_fields — same oneOf rule as POST body.
+func TestListAssets_BothLocationForms_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Get("/api/v1/assets", handler.ListAssets)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location_id=42&location_external_key=WHS-01", nil)
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"both filter forms must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 2)
+	for _, fld := range resp.Error.Fields {
+		assert.Equal(t, "ambiguous_fields", fld.Code, "field %s should carry ambiguous_fields", fld.Field)
+		assert.Contains(t, []string{"location_id", "location_external_key"}, fld.Field)
+	}
+}
+
+// PATCH /api/v1/assets/{id} with location_external_key in the body is
+// silently stripped. The body can disagree with the surrogate (or have no
+// surrogate at all) and the request still succeeds. TRA-681: natural-key
+// form is read-only on PATCH.
+func TestPatchAsset_LocationExternalKey_StrippedSilently(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-STRIP-EXTFK", "strip-extfk")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	// A nonexistent natural-key alongside a name update: if the strip is
+	// in place the request succeeds, name updates, and the nonexistent
+	// natural-key is silently ignored. If the strip is missing the handler
+	// either resolves it (success) or rejects fk_not_found (fail). The
+	// test asserts the stripped path: 200 + nothing happened to the FK.
+	body := []byte(`{"name":"renamed-with-stale-extkey","location_external_key":"DOES-NOT-EXIST"}`)
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code,
+		"PATCH with stale natural-key must succeed via strip (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "renamed-with-stale-extkey", resp.Data["name"])
 }

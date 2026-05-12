@@ -19,11 +19,9 @@ const externalKeyPattern = "^[A-Za-z0-9-]+$"
 // external_key_pattern constraint in the spec. Mirrors the
 // `validate:"...,external_key_pattern"` tags on the matching Go structs.
 var externalKeyPatternFields = map[string][]string{
-	"asset.UpdateAssetRequest":               {"location_external_key"},
 	"asset.CreateAssetRequest":               {"external_key", "location_external_key"},
 	"asset.CreateAssetWithTagsRequest":       {"external_key", "location_external_key"},
 	"asset.RenameAssetRequest":               {"external_key"},
-	"location.UpdateLocationRequest":         {"parent_external_key"},
 	"location.CreateLocationRequest":         {"external_key", "parent_external_key"},
 	"location.CreateLocationWithTagsRequest": {"external_key", "parent_external_key"},
 	"location.RenameLocationRequest":         {"external_key"},
@@ -87,6 +85,9 @@ func postprocessPublic(doc *openapi3.T) error {
 		return err
 	}
 	if err := closeWriteSchemasToUnknownFields(doc, publicWriteSchemas); err != nil {
+		return err
+	}
+	if err := markMutuallyExclusiveFieldPairs(doc, mutuallyExclusiveFieldPairs); err != nil {
 		return err
 	}
 	if err := markPrintableStringFields(doc, printableStringFields); err != nil {
@@ -1401,10 +1402,14 @@ var nullableFields = map[string][]string{
 	// PATCH update bodies: is_active is NOT nullable — the handler treats
 	// `is_active: null` as a 400 (omit the field to leave unchanged). metadata
 	// also not nullable on update — null is ambiguous with "no change."
-	"asset.UpdateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
+	// TRA-681: location_external_key / parent_external_key dropped from
+	// UpdateXxxRequest — the natural-key form is read-only on PATCH and is
+	// stripped from the body before validation. The struct fields no longer
+	// exist; the corresponding spec entries go too.
+	"asset.UpdateAssetRequest":               {"description", "location_id", "valid_to"},
 	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_from", "valid_to", "metadata", "is_active"},
 	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_from", "valid_to", "tags", "metadata", "is_active"},
-	"location.UpdateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
+	"location.UpdateLocationRequest":         {"description", "parent_id", "valid_to"},
 	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_from", "valid_to", "is_active"},
 	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_from", "valid_to", "tags", "is_active"},
 

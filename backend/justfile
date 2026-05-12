@@ -188,6 +188,31 @@ test-contract:
     # if it lists zero failures/errors the run passes regardless of phase
     # status. `|| true` swallows the schemathesis exit and the JUnit guard
     # below restores hard-fail semantics on real findings.
+    # TRA-681: `positive_data_acceptance` is disabled. The check enforces
+    # "spec-compliant request must return 2xx/401/403/404/409/5xx" — i.e. a
+    # 400 on a syntactically-valid body is always a failure. That model is
+    # incompatible with two server-side semantic rules established in
+    # design review:
+    #
+    #   * FK-existence (`fk_not_found`): a body that's spec-valid by shape
+    #     can still reference an in-org row that does not exist. Industry
+    #     precedent (Stripe, AWS, Atlassian) and the BB27 F2 design review
+    #     pin this on 400 validation_error, not 409 — Schemathesis's
+    #     accepted set explicitly excludes 400.
+    #
+    #   * Paired-key oneOf on GET filters: `?location_id=N&location_external_key=K`
+    #     is spec-shaped (OpenAPI 3 can't encode query-param pair
+    #     exclusivity) but server returns 400 ambiguous_fields per design.
+    #
+    # The POST-body oneOf case is encoded in the spec via
+    # `not: required:[a,b]` (markMutuallyExclusiveFieldPairs) so the
+    # generator no longer emits those payloads — that's the only one of
+    # the three cases that *can* be expressed in the schema. The other
+    # two need this check disabled to keep the gate honest.
+    #
+    # Other checks (negative_data_rejection, response_schema_conformance,
+    # not_a_server_error, status_code_conformance, …) remain on, so
+    # spec/response shape drift is still detected.
     docker run --rm --network host \
         --user "$(id -u):$(id -g)" \
         -v "$REPO_ROOT/docs/api/openapi.public.yaml:/spec.yaml:ro" \
@@ -195,6 +220,7 @@ test-contract:
         schemathesis/schemathesis:4.18.2 \
         run \
         --checks=all \
+        --exclude-checks=positive_data_acceptance \
         --warnings=off \
         --suppress-health-check=all \
         --generation-deterministic \

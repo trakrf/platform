@@ -59,10 +59,17 @@ type CreateLocationRequest struct {
 // has a dedicated path (POST /locations/{location_id}/rename,
 // POST/DELETE /locations/{location_id}/tags).
 //
+// TRA-681: `parent_external_key` is the derived natural-key form for the
+// `parent_id` FK and is read-only on PATCH — silently stripped along with
+// the other server-owned fields. The surrogate `parent_id` remains the
+// mutable form. Integrators do GET → mutate `parent_id` → PATCH back with
+// stale `parent_external_key` still in the body; the server strips it and
+// processes `parent_id` unconditionally.
+//
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["location.PublicLocationView"]
 // (the spec-side readOnly markers are coordinated under TRA-672).
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at", "external_key", "tags"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path", "depth", "location_deleted_at", "external_key", "tags", "parent_external_key"}
 
 // UpdateLocationRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
@@ -72,11 +79,11 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path
 // is managed via the /locations/{id}/tags subresource — still produces a
 // 400.
 //
-// description, parent_id, parent_external_key, and valid_to all accept
-// JSON null on the wire and clear the field server-side (TRA-614 / BB19
-// §S1). Each null surfaces here as a Clear* sentinel set by the handler;
-// the underlying pointer remains nil because Go's json decoder treats
-// `null` and "omitted" the same on pointer fields.
+// description, parent_id, and valid_to all accept JSON null on the wire
+// and clear the field server-side (TRA-614 / BB19 §S1). Each null surfaces
+// here as a Clear* sentinel set by the handler; the underlying pointer
+// remains nil because Go's json decoder treats `null` and "omitted" the
+// same on pointer fields.
 //
 // external_key is intentionally NOT on this struct. It is the natural /
 // join key downstream systems rely on and is the canonical source for
@@ -87,13 +94,18 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "tree_path
 // tree_path across descendants. On PATCH, an external_key field is
 // silently stripped along with other read-only fields per
 // TRA-674 / BB27 F3 — see PublicReadOnlyFields.
+//
+// parent_external_key is intentionally NOT on this struct (TRA-681). The
+// natural-key form is derived from parent_id and is read-only on PATCH —
+// silently stripped along with the other server-owned fields (see
+// PublicReadOnlyFields). To re-parent on PATCH, send parent_id; to clear
+// it, send `"parent_id": null`.
 type UpdateLocationRequest struct {
-	Name              *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,no_control_chars" example:"Warehouse 1"`
-	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
-	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
-	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
-	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
-	ValidTo           *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
+	Name        *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,no_control_chars" example:"Warehouse 1"`
+	ParentID    *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
+	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
+	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
+	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
 	// Set by the PATCH handler when the body had an explicit `null` for the
 	// corresponding read-side-nullable field, to request a column-clear
 	// (TRA-614 / TRA-468). Not decoded from JSON directly.

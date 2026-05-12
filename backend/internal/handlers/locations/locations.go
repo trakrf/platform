@@ -35,22 +35,22 @@ func NewHandler(storage *storage.Storage) *Handler {
 	}
 }
 
-// resolveParent reconciles the parent_id (canonical) and parent_external_key
-// (natural-key alternate) inputs on Create/Update. Both nil → nil (no parent).
-// parent_id wins when both are supplied (id is canonical); parent_external_key
-// is treated as advisory and the "they must agree" check is dropped post-
-// TRA-678 — Schemathesis fuzz reliably generates both-set payloads with a
-// non-matching natural key, and the strict-agree check made every such
-// combination a 400 against an otherwise schema-compliant request.
-// external_key alone → resolved via lookup.
+// resolveParent reconciles the parent_id (canonical surrogate) and
+// parent_external_key (natural-key alternate) inputs on Create. Exactly
+// one is expected to be set (TRA-681 oneOf constraint enforced upstream
+// in the Create handler via the ambiguous_fields pre-check). PATCH never
+// supplies the natural-key form — it is stripped before this function
+// runs (see location.PublicReadOnlyFields).
 //
-// TRA-674 / BB27 F2: a nonexistent surrogate `parent_id` returns the same
-// envelope shape as a nonexistent natural-key `parent_external_key` — both
-// surface keyed on the offending field, code=fk_not_found, HTTP 409 (was
-// 400 invalid_value pre-TRA-678; 409 keeps Schemathesis's
-// positive_data_acceptance check green). Previously the surrogate path
-// reached the storage layer and tripped the FK constraint, surfacing as
-// 500 internal_error.
+// Both nil → nil (no parent). When parent_id is set it is used; otherwise
+// parent_external_key is resolved via lookup.
+//
+// TRA-674 / BB27 F2 / TRA-681: a nonexistent surrogate `parent_id`
+// returns the same envelope shape as a nonexistent natural-key
+// `parent_external_key` — both surface keyed on the offending field as
+// 400 validation_error with code=fk_not_found. Previously the surrogate
+// path reached the storage layer and tripped the FK constraint,
+// surfacing as 500 internal_error.
 func (handler *Handler) resolveParent(
 	r *http.Request, orgID int, parentID *int, parentExternalKey *string,
 ) (*int, *modelerrors.FieldError) {
@@ -61,9 +61,6 @@ func (handler *Handler) resolveParent(
 		return nil, nil
 	}
 	if hasID {
-		// id wins when both are supplied. Confirm the referenced row
-		// exists in-org so missing-reference returns a structured 409
-		// instead of leaking the storage-layer FK 500.
 		parent, err := handler.storage.GetLocationByID(r.Context(), orgID, *parentID)
 		if err != nil {
 			return nil, &modelerrors.FieldError{
@@ -159,6 +156,24 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// TRA-681: parent_id and parent_external_key form a oneOf on Create
+	// bodies — the spec encodes `not: {required: [parent_id,
+	// parent_external_key]}` on CreateLocationWithTagsRequest. Reject both-
+	// supplied at the handler so callers get a typed ambiguous_fields code
+	// they can branch on, rather than relying on a silent server pick.
+	_, hasParentID := presentKeys["parent_id"]
+	_, hasParentExt := presentKeys["parent_external_key"]
+	if hasParentID && hasParentExt {
+		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			"parent_id and parent_external_key are mutually exclusive; supply exactly one",
+			requestID,
+			[]modelerrors.FieldError{
+				{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+				{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+			})
+		return
+	}
+
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationError(w, r, err, requestID)
 		return
@@ -172,12 +187,8 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
-		if fErr.Code == "fk_not_found" {
-			httputil.WriteJSONErrorWithFields(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				fErr.Message, requestID,
-				[]modelerrors.FieldError{*fErr})
-			return
-		}
+		// TRA-681: fk_not_found is 400 validation_error (was 409 conflict
+		// under TRA-678). See assets.Create for rationale.
 		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 			fErr.Message, requestID,
 			[]modelerrors.FieldError{*fErr})
@@ -216,7 +227,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `tree_path`, `depth`, `location_deleted_at`, `external_key`, `tags`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. Mutate `external_key` via POST /locations/{location_id}/rename (also cascades `tree_path` across descendants); mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `tree_path`, `depth`, `location_deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `"parent_id": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename (also cascades `tree_path` across descendants); mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -254,9 +265,11 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
-	// TRA-674 / BB27 F3: external_key and tags moved onto PublicReadOnlyFields
-	// and are silently stripped along with id, created_at, updated_at,
-	// tree_path, depth, location_deleted_at — see location.PublicReadOnlyFields.
+	// TRA-674 / BB27 F3: external_key and tags are on PublicReadOnlyFields
+	// and silently stripped along with id, created_at, updated_at,
+	// tree_path, depth, location_deleted_at. TRA-681 extends the same strip
+	// to parent_external_key — the derived natural-key form is read-only on
+	// PATCH and PATCH bodies use the surrogate parent_id form exclusively.
 	// Rename still goes through POST /locations/{id}/rename (which cascades
 	// tree_path across descendants); tag mutations through POST/DELETE
 	// /locations/{id}/tags. RejectImmutableFields is left in place for any
@@ -291,48 +304,16 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if _, ok := explicitNulls["valid_to"]; ok {
 		request.ClearValidTo = true
 	}
-	// description, parent_id, parent_external_key are read-side-nullable per
-	// PublicLocationView. An explicit null on PATCH clears the corresponding
-	// column, per TRA-614 / BB19 §S1. parent_id and parent_external_key are
-	// alternate references to the same FK (parent_location_id); a null on
-	// either implies clearing that FK; conflicting forms are 400.
 	if _, ok := explicitNulls["description"]; ok {
 		request.ClearDescription = true
 	}
-	nullParentID := false
+	// TRA-614 / BB19 §S1: explicit `null` on parent_id clears the FK.
+	// parent_external_key never reaches this point (stripped by the decoder
+	// via PublicReadOnlyFields per TRA-681) so the only clear-FK signal on
+	// PATCH is `"parent_id": null`.
 	if _, ok := explicitNulls["parent_id"]; ok {
-		nullParentID = true
-	}
-	nullParentExt := false
-	if _, ok := explicitNulls["parent_external_key"]; ok {
-		nullParentExt = true
-	}
-	// An explicit empty string is never a valid external_key — reject upfront
-	// so it doesn't get silently coerced into a clear-FK signal below.
-	if request.ParentExternalKey != nil && *request.ParentExternalKey == "" {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"validation failed", reqID,
-			[]modelerrors.FieldError{{
-				Field:   "parent_external_key",
-				Code:    "too_short",
-				Message: "parent_external_key must be at least 1 character",
-				Params:  map[string]any{"min_length": float64(1)},
-			}})
-		return
-	}
-	// FK reconciliation (TRA-678 relaxation): only treat as clear-FK when
-	// BOTH sides are explicitly null. When one is null and the other is
-	// set, the caller is telling us to use the set side; drop the nil'd
-	// pointer and let resolveParent work the remaining input.
-	switch {
-	case nullParentID && nullParentExt:
 		request.ClearParentID = true
 		request.ParentID = nil
-		request.ParentExternalKey = nil
-	case nullParentID:
-		request.ParentID = nil
-	case nullParentExt:
-		request.ParentExternalKey = nil
 	}
 
 	if err := validate.Struct(request); err != nil {
@@ -340,7 +321,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 
-	resolved, fErr := handler.resolveParent(req, orgID, request.ParentID, request.ParentExternalKey)
+	resolved, fErr := handler.resolveParent(req, orgID, request.ParentID, nil)
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -348,12 +329,8 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 			return
 		}
-		if fErr.Code == "fk_not_found" {
-			httputil.WriteJSONErrorWithFields(w, req, http.StatusConflict, modelerrors.ErrConflict,
-				fErr.Message, reqID,
-				[]modelerrors.FieldError{*fErr})
-			return
-		}
+		// TRA-681: fk_not_found is 400 validation_error (was 409 conflict
+		// under TRA-678). See assets.Create for rationale.
 		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
 			fErr.Message, reqID,
 			[]modelerrors.FieldError{*fErr})
@@ -590,8 +567,8 @@ type ListDescendantsResponse struct {
 // @ID locations.list
 // @Param limit               query int    false "max 200"  default(50) minimum(1) maximum(200)
 // @Param offset              query int    false "min 0"   default(0) minimum(0)
-// @Param parent_id            query []int    false "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key" collectionFormat(multi)
-// @Param parent_external_key query []string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id" collectionFormat(multi)
+// @Param parent_id            query []int    false "filter by parent id (canonical, may repeat); mutually exclusive with parent_external_key (400 ambiguous_fields if both supplied)" collectionFormat(multi)
+// @Param parent_external_key query []string false "filter by parent's external_key (may repeat); mutually exclusive with parent_id (400 ambiguous_fields if both supplied)" collectionFormat(multi)
 // @Param external_key         query []string false "filter by location external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active           query bool   false "filter by active flag"
 // @Param include_deleted     query bool   false "when true, include soft-deleted rows in the response. location_deleted_at is populated for those rows. Orthogonal to is_active." default(false)
@@ -625,16 +602,26 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	// parent_id and parent_external_key reference the same FK. When both
-	// appear in the query, parent_id is canonical and wins; parent_external_key
-	// is silently dropped (TRA-678 relaxation; D-10 strict-rejection lifted).
-	parentExtKeys := params.Filters["parent_external_key"]
-	if _, hasParentID := params.Filters["parent_id"]; hasParentID {
-		parentExtKeys = nil
+	// TRA-681: parent_id and parent_external_key form a oneOf on the GET
+	// filter — reject 400 ambiguous_fields when both are supplied so
+	// integrators get a typed signal rather than a silent winner. OpenAPI 3
+	// can't encode a query-parameter pair constraint, so the rule lives in
+	// the per-parameter description and the handler validation here.
+	_, hasParentID := params.Filters["parent_id"]
+	_, hasParentExt := params.Filters["parent_external_key"]
+	if hasParentID && hasParentExt {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"parent_id and parent_external_key are mutually exclusive; supply exactly one",
+			reqID,
+			[]modelerrors.FieldError{
+				{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+				{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+			})
+		return
 	}
 
 	f := location.ListFilter{
-		ParentExternalKeys: parentExtKeys,
+		ParentExternalKeys: params.Filters["parent_external_key"],
 		ExternalKeys:       params.Filters["external_key"],
 		Limit:              params.Limit,
 		Offset:             params.Offset,

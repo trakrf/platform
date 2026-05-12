@@ -28,6 +28,12 @@ const (
 //   - too_small / too_large (min/max/gte/lte on numeric): min / max float64
 //   - immutable_field (TRA-664 / BB26 D7): no params; the message carries a
 //     pointer to the dedicated operation that can mutate the field.
+//   - fk_not_found: surrogate or natural-key reference did not resolve to
+//     an existing in-org row on Create/Update (TRA-681). No params.
+//   - ambiguous_fields (TRA-681): paired surrogate/natural-key fields both
+//     supplied on a surface that requires oneOf. The FieldError is emitted
+//     once per offending field; both fields share the same message so
+//     integrators can branch on either.
 //
 // Numeric values are float64 so that both integer constraints ("8") and
 // fractional constraints ("1.5") parse without loss. JSON numbers decode to
@@ -37,7 +43,7 @@ const (
 // Params is omitted entirely when no structured data is available.
 type FieldError struct {
 	Field   string         `json:"field"`
-	Code    string         `json:"code" example:"required" enums:"required,invalid_value,too_short,too_long,too_small,too_large,immutable_field,fk_not_found" extensions:"x-extensible-enum=true"`
+	Code    string         `json:"code" example:"required" enums:"required,invalid_value,too_short,too_long,too_small,too_large,immutable_field,fk_not_found,ambiguous_fields" extensions:"x-extensible-enum=true"`
 	Message string         `json:"message"`
 	Params  map[string]any `json:"params,omitempty"`
 }

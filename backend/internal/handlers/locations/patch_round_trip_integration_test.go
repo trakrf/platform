@@ -241,8 +241,12 @@ func TestPutLocation_NullClearsReadSideNullableFields(t *testing.T) {
 	assert.Nil(t, dbValidTo)
 }
 
-// TRA-614: parent_id null + parent_external_key value is a conflict.
-func TestPutLocation_ParentNullVsValueIsConflict(t *testing.T) {
+// TRA-681 supersedes TRA-614: parent_external_key is read-only on PATCH
+// and stripped before validation, so
+// `{"parent_id": null, "parent_external_key": "X-99"}` is processed as
+// `{"parent_id": null}` — clear the FK. The previous "disagree → 400" rule
+// no longer applies.
+func TestPutLocation_ParentNullStripsExternalKey_ClearsFK(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -250,19 +254,32 @@ func TestPutLocation_ParentNullVsValueIsConflict(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedLocationRoundTrip(t, pool, orgID, "PARENT-CONFLICT", "p")
+	parentID := seedLocationRoundTrip(t, pool, orgID, "PARENT-STRIP", "parent")
+	var childID int
+	err := pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations
+		  (org_id, external_key, name, description, parent_location_id, valid_from, is_active)
+		VALUES ($1, 'CHILD-STRIP', 'child-strip', '', $2, $3, true) RETURNING id
+	`, orgID, parentID, time.Now().UTC()).Scan(&childID)
+	require.NoError(t, err)
 
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
 
 	body := []byte(`{"parent_id": null, "parent_external_key": "X-99"}`)
-	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(body))
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", childID), bytes.NewReader(body))
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
 	router.ServeHTTP(putRec, patchReq)
 
-	require.Equal(t, http.StatusBadRequest, putRec.Code, "null/value conflict on parent pair must be 400: %s", putRec.Body.String())
+	require.Equal(t, http.StatusOK, putRec.Code, "PATCH must strip natural-key + clear FK via null id: %s", putRec.Body.String())
+
+	var dbParent *int
+	err = pool.QueryRow(context.Background(),
+		`SELECT parent_location_id FROM trakrf.locations WHERE id = $1`, childID).Scan(&dbParent)
+	require.NoError(t, err)
+	assert.Nil(t, dbParent, "parent FK must be cleared (parent_id: null wins after strip)")
 }
 
 // TRA-615 / BB19 §S5+§C2: external_key with reserved punctuation (space,

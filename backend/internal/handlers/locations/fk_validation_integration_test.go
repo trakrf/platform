@@ -1,11 +1,16 @@
 //go:build integration
 // +build integration
 
-// TRA-674 / BB27 F2: missing-reference on the surrogate `parent_id` returns
-// the same validation_error envelope shape as missing-reference on the
-// natural-key `parent_external_key` — both surface as 400 invalid_value
-// keyed on the offending field. Mirrors the fix on the assets surface for
-// location_id ↔ location_external_key.
+// TRA-674 / BB27 F2 / TRA-681: missing-reference on the surrogate
+// `parent_id` returns the same envelope shape as missing-reference on the
+// natural-key `parent_external_key` — both surface as 400 validation_error
+// keyed on the offending field with code=fk_not_found. Mirrors the fix on
+// the assets surface for location_id ↔ location_external_key.
+//
+// History: TRA-678 routed this to 409 conflict / fk_not_found to silence
+// Schemathesis; TRA-681 reverts to 400 validation_error / fk_not_found per
+// design review (industry precedent, conceptual cleanliness — see
+// assets/fk_validation_integration_test.go for full notes).
 
 package locations
 
@@ -27,7 +32,7 @@ import (
 )
 
 // POST /api/v1/locations with a surrogate parent_id that does not exist
-// returns 400 validation_error / invalid_value keyed on `parent_id`.
+// returns 400 validation_error / fk_not_found keyed on `parent_id`.
 func TestPostLocation_MissingParentID_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -70,11 +75,59 @@ func TestPostLocation_MissingParentID_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "parent_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+}
+
+// POST /api/v1/locations with a natural-key parent_external_key that does
+// not exist returns 400 validation_error / fk_not_found keyed on
+// `parent_external_key` — same envelope as the surrogate-id path.
+func TestPostLocation_MissingParentExternalKey_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"external_key":        "LOC-MISSING-EXTFK",
+		"name":                "missing-extfk",
+		"parent_external_key": "NOPE-XYZ",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"missing parent_external_key must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "parent_external_key", resp.Error.Fields[0].Field)
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
 }
 
 // PATCH /api/v1/locations/{id} with a surrogate parent_id that does not
-// exist returns 400 validation_error / invalid_value keyed on `parent_id`.
+// exist returns 400 validation_error / fk_not_found keyed on `parent_id`.
 func TestPatchLocation_MissingParentID_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -111,5 +164,128 @@ func TestPatchLocation_MissingParentID_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "parent_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+}
+
+// POST /api/v1/locations with both parent_id and parent_external_key
+// returns 400 validation_error / ambiguous_fields. TRA-681 oneOf rule.
+func TestPostLocation_BothParentForms_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/locations", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"external_key":        "LOC-BOTH-FORMS",
+		"name":                "both-forms",
+		"parent_id":           42,
+		"parent_external_key": "WHS-01",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"both forms must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 2)
+	for _, fld := range resp.Error.Fields {
+		assert.Equal(t, "ambiguous_fields", fld.Code, "field %s should carry ambiguous_fields", fld.Field)
+		assert.Contains(t, []string{"parent_id", "parent_external_key"}, fld.Field)
+	}
+}
+
+// GET /api/v1/locations?parent_id=N&parent_external_key=K is 400
+// validation_error / ambiguous_fields — same oneOf rule as POST body.
+func TestListLocations_BothParentForms_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Get("/api/v1/locations", handler.ListLocations)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations?parent_id=42&parent_external_key=WHS-01", nil)
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"both filter forms must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 2)
+	for _, fld := range resp.Error.Fields {
+		assert.Equal(t, "ambiguous_fields", fld.Code, "field %s should carry ambiguous_fields", fld.Field)
+		assert.Contains(t, []string{"parent_id", "parent_external_key"}, fld.Field)
+	}
+}
+
+// PATCH /api/v1/locations/{id} with parent_external_key in the body is
+// silently stripped. TRA-681: natural-key form is read-only on PATCH.
+func TestPatchLocation_ParentExternalKey_StrippedSilently(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-STRIP-EXTFK", "strip-extfk")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	body := []byte(`{"name":"renamed-with-stale-extkey","parent_external_key":"DOES-NOT-EXIST"}`)
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withLocationRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code,
+		"PATCH with stale natural-key must succeed via strip (got %d): %s", rec.Code, rec.Body.String())
+
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "renamed-with-stale-extkey", resp.Data["name"])
 }

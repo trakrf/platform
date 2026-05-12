@@ -312,9 +312,13 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	require.Equal(t, http.StatusOK, putRec.Code, "GET → PUT round-trip with explicit nulls must succeed: %s", putRec.Body.String())
 }
 
-// TRA-614: location_id null + location_external_key value (or vice versa)
-// is a 400 conflict, not a silent clear.
-func TestPutAsset_LocationNullVsValueIsConflict(t *testing.T) {
+// TRA-681 supersedes TRA-614: the natural-key form is read-only on PATCH
+// and stripped before validation, so a body like
+// `{"location_id": null, "location_external_key": "WHS-99"}` is processed
+// as `{"location_id": null}` — clear the FK. The previous "disagree → 400"
+// rule from BB19 §S1 no longer applies; on PATCH, the only signal the
+// server reads from the pair is the surrogate.
+func TestPutAsset_LocationNullStripsExternalKey_ClearsFK(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -322,19 +326,40 @@ func TestPutAsset_LocationNullVsValueIsConflict(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedRoundTripAsset(t, pool, orgID, "ASSET-CONFLICT", "conflict")
+	// Seed an asset that starts with a real location so the clear is
+	// observable.
+	var locID int
+	err := pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from, is_active)
+		VALUES ($1, 'LOC-FOR-STRIP', 'loc-for-strip', '', $2, true) RETURNING id
+	`, orgID, time.Now().UTC()).Scan(&locID)
+	require.NoError(t, err)
+
+	var assetID int
+	err = pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.assets
+		  (org_id, external_key, name, description, current_location_id, valid_from, is_active)
+		VALUES ($1, 'ASSET-STRIP-CLEAR', 'StripClear', '', $2, $3, true) RETURNING id
+	`, orgID, locID, time.Now().UTC()).Scan(&assetID)
+	require.NoError(t, err)
 
 	handler := NewHandler(store)
 	router := setupRoundTripRouter(handler)
 
 	body := []byte(`{"location_id": null, "location_external_key": "WHS-99"}`)
-	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", assetID), bytes.NewReader(body))
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchReq = withRoundTripOrgContext(patchReq, orgID)
 	putRec := httptest.NewRecorder()
 	router.ServeHTTP(putRec, patchReq)
 
-	require.Equal(t, http.StatusBadRequest, putRec.Code, "null/value conflict on location pair must be 400: %s", putRec.Body.String())
+	require.Equal(t, http.StatusOK, putRec.Code, "PATCH must strip natural-key + clear FK via null id: %s", putRec.Body.String())
+
+	var dbLoc *int
+	err = pool.QueryRow(context.Background(),
+		`SELECT current_location_id FROM trakrf.assets WHERE id = $1`, assetID).Scan(&dbLoc)
+	require.NoError(t, err)
+	assert.Nil(t, dbLoc, "FK must be cleared (location_id: null wins after strip)")
 }
 
 // TRA-615 / BB19 §S5: external_key with reserved punctuation (space, slash,
