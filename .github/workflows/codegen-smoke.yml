@@ -1,0 +1,166 @@
+name: Codegen Smoke
+
+# Generates a client for each BB.md-named codegen target against the current
+# OpenAPI spec, then runs a minimal import/compile smoke test. Catches the
+# class of spec changes that pass Spectral + Schemathesis but break downstream
+# SDK generators (BB29 F6 multi-line regex in pattern → Python SyntaxError;
+# the same pattern would have produced a NUL-byte Go compile error).
+#
+# Non-blocking on initial rollout per TRA-691: the workflow surfaces failures
+# but does not fail the workflow run, mirroring the TRA-670 → TRA-678 soak-
+# then-block pattern used for Spectral. Flip to blocking by removing the
+# job-level `continue-on-error: true` after TRA-690 lands and one full week
+# of green runs has accumulated.
+
+on:
+  pull_request:
+    paths:
+      - 'docs/api/openapi.public.yaml'
+      - 'docs/api/openapi.public.json'
+      - '.github/workflows/codegen-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/api/openapi.public.yaml'
+      - 'docs/api/openapi.public.json'
+      - '.github/workflows/codegen-smoke.yml'
+
+concurrency:
+  group: codegen-smoke-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python codegen smoke
+    runs-on: ubuntu-latest
+    # Non-blocking until TRA-690 lands + soak completes. See file header.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Java
+        # openapi-generator-cli is an npm wrapper around a Java jar.
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate Python client
+        run: |
+          pnpm --package=@openapitools/openapi-generator-cli dlx \
+            openapi-generator-cli generate \
+              -i docs/api/openapi.public.yaml \
+              -g python \
+              -o generated/python \
+              --additional-properties=packageName=trakrf_client,projectName=trakrf-client
+
+      - name: Smoke test — install + import generated Python client
+        working-directory: generated/python
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -c "import trakrf_client; print('trakrf_client imported OK')"
+
+  typescript:
+    name: TypeScript codegen smoke
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate TypeScript types (openapi-typescript)
+        run: |
+          mkdir -p generated/typescript
+          pnpm --package=openapi-typescript dlx openapi-typescript \
+            docs/api/openapi.public.yaml \
+            -o generated/typescript/schema.d.ts
+
+      - name: Smoke test — tsc --noEmit against generated types
+        working-directory: generated/typescript
+        run: |
+          cat > tsconfig.json <<'EOF'
+          {
+            "compilerOptions": {
+              "strict": true,
+              "noEmit": true,
+              "target": "ES2022",
+              "module": "ESNext",
+              "moduleResolution": "bundler",
+              "skipLibCheck": false
+            },
+            "include": ["schema.d.ts"]
+          }
+          EOF
+          pnpm --package=typescript dlx tsc --noEmit -p tsconfig.json
+
+  go:
+    name: Go codegen smoke
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Generate Go client
+        run: |
+          pnpm --package=@openapitools/openapi-generator-cli dlx \
+            openapi-generator-cli generate \
+              -i docs/api/openapi.public.yaml \
+              -g go \
+              -o generated/go \
+              --additional-properties=packageName=trakrfclient,withGoMod=true,isGoSubmodule=false
+
+      - name: Smoke test — go build generated client
+        # `go build ./...` is the verifier the Python regex regression bypassed:
+        # a multi-line regex literal lands as an unterminated string / NUL byte
+        # in the generated Go source and fails compilation. Tidy first to
+        # resolve the import graph the generator emits.
+        working-directory: generated/go
+        run: |
+          go mod tidy
+          go build ./...
