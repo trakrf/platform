@@ -108,6 +108,9 @@ func postprocessPublic(doc *openapi3.T) error {
 	rewriteMergePatchContentType(doc)
 	annotateReadOnlyTags(doc)
 	annotateTagPolymorphism(doc)
+	if err := hoistInlineEnums(doc); err != nil {
+		return fmt.Errorf("hoist inline enums: %w", err)
+	}
 	if err := renamePublicSpec(doc); err != nil {
 		return fmt.Errorf("rename public spec: %w", err)
 	}

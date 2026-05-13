@@ -551,22 +551,7 @@
                 "type": "string"
               },
               "type": {
-                "enum": [
-                  "validation_error",
-                  "bad_request",
-                  "unauthorized",
-                  "forbidden",
-                  "not_found",
-                  "conflict",
-                  "rate_limited",
-                  "internal_error",
-                  "method_not_allowed",
-                  "unsupported_media_type",
-                  "missing_org_context"
-                ],
-                "example": "validation_error",
-                "type": "string",
-                "x-extensible-enum": true
+                "$ref": "#/components/schemas/ErrorType"
               }
             },
             "required": [
@@ -585,24 +570,28 @@
         ],
         "type": "object"
       },
+      "ErrorType": {
+        "enum": [
+          "validation_error",
+          "bad_request",
+          "unauthorized",
+          "forbidden",
+          "not_found",
+          "conflict",
+          "rate_limited",
+          "internal_error",
+          "method_not_allowed",
+          "unsupported_media_type",
+          "missing_org_context"
+        ],
+        "example": "validation_error",
+        "type": "string",
+        "x-extensible-enum": true
+      },
       "FieldError": {
         "properties": {
           "code": {
-            "enum": [
-              "required",
-              "invalid_value",
-              "unknown_field",
-              "too_short",
-              "too_long",
-              "too_small",
-              "too_large",
-              "fk_not_found",
-              "ambiguous_fields",
-              "read_only"
-            ],
-            "example": "required",
-            "type": "string",
-            "x-extensible-enum": true
+            "$ref": "#/components/schemas/FieldErrorCode"
           },
           "field": {
             "type": "string"
@@ -621,6 +610,23 @@
           "message"
         ],
         "type": "object"
+      },
+      "FieldErrorCode": {
+        "enum": [
+          "required",
+          "invalid_value",
+          "unknown_field",
+          "too_short",
+          "too_long",
+          "too_small",
+          "too_large",
+          "fk_not_found",
+          "ambiguous_fields",
+          "read_only"
+        ],
+        "example": "required",
+        "type": "string",
+        "x-extensible-enum": true
       },
       "GetAssetResponse": {
         "properties": {
@@ -995,15 +1001,7 @@
             "type": "boolean"
           },
           "tag_type": {
-            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
-            "enum": [
-              "rfid",
-              "ble",
-              "barcode"
-            ],
-            "example": "rfid",
-            "type": "string",
-            "x-extensible-enum": true
+            "$ref": "#/components/schemas/TagType"
           },
           "value": {
             "maxLength": 255,
@@ -1025,17 +1023,13 @@
         "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
         "properties": {
           "tag_type": {
-            "default": "rfid",
-            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
-            "enum": [
-              "rfid",
-              "ble",
-              "barcode"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TagType"
+              }
             ],
-            "example": "rfid",
-            "nullable": true,
-            "type": "string",
-            "x-extensible-enum": true
+            "default": "rfid",
+            "nullable": true
           },
           "value": {
             "maxLength": 255,
@@ -1048,6 +1042,17 @@
           "value"
         ],
         "type": "object"
+      },
+      "TagType": {
+        "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
+        "enum": [
+          "rfid",
+          "ble",
+          "barcode"
+        ],
+        "example": "rfid",
+        "type": "string",
+        "x-extensible-enum": true
       },
       "UpdateAssetRequest": {
         "additionalProperties": false,
