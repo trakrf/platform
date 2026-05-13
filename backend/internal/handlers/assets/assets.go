@@ -137,7 +137,11 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request asset.CreateAssetWithTagsRequest
-	presentKeys, err := httputil.DecodeJSONStrictWithPresence(r, &request)
+	// TRA-692: capture both presence and explicit-null sets so the validation
+	// envelope can promote omitted/null required fields back to code=required
+	// (per §1.2). The drop list is nil — Create has no read-only fields to
+	// silently strip (that's a PATCH concern).
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(r, &request, nil)
 	if err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
@@ -172,7 +176,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			ExternalKey string `json:"external_key" validate:"min=1,max=255,external_key_pattern"`
 		}
 		if err := validate.Struct(extKeyCheck{ExternalKey: request.ExternalKey}); err != nil {
-			httputil.RespondValidationError(w, r, err, requestID)
+			httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys, explicitNulls)
 			return
 		}
 	}
@@ -196,7 +200,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, r, err, requestID)
+		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys, explicitNulls)
 		return
 	}
 
@@ -293,7 +297,12 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	var request asset.UpdateAssetRequest
-	explicitNulls, _, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, asset.PublicReadOnlyFields)
+	// TRA-692: capture presentKeys alongside explicitNulls so the validator
+	// response can promote any future length-bearing required violation to
+	// code=required for the omitted/null cases. UpdateAssetRequest has no
+	// `required` tags today, but threading presence here keeps the pattern
+	// consistent with POST.
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, asset.PublicReadOnlyFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
@@ -330,7 +339,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, reqID)
+		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
 		return
 	}
 
@@ -490,12 +499,17 @@ func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var request asset.RenameAssetRequest
-	if err := httputil.DecodeJSONStrict(req, &request); err != nil {
+	// TRA-692: swap to a presence-tracking decoder so an omitted or null
+	// `external_key` surfaces as code=required (not the TRA-675-collapsed
+	// too_short). The body has a single required string field, so this is
+	// exactly the §1.2 case.
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, nil)
+	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
 	}
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, reqID)
+		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
 		return
 	}
 
@@ -751,13 +765,17 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 	requestID := middleware.GetRequestID(r.Context())
 
 	var request shared.TagRequest
-	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
+	// TRA-692: presence-tracking decoder so an omitted `value` surfaces as
+	// code=required (the TRA-675 collapse to too_short doesn't match the
+	// §1.2 contract for a missing key).
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(r, &request, nil)
+	if err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, r, err, requestID)
+		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys, explicitNulls)
 		return
 	}
 
