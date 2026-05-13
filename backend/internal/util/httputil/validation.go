@@ -207,6 +207,28 @@ func messageForField(fe validator.FieldError) string {
 	return fmt.Sprintf("%s failed validation", fe.Field())
 }
 
+// messageForFieldWithCode renders the human-safe message for a field error
+// using a caller-overridden code. Equivalent to messageForField when
+// code == codeForTag(fe); when the caller has promoted too_short → required
+// via the presence overlay (TRA-692 §1.2), the message follows.
+func messageForFieldWithCode(fe validator.FieldError, code string) string {
+	if code == "required" {
+		return fmt.Sprintf("%s is required", fe.Field())
+	}
+	return messageForField(fe)
+}
+
+// paramsForFieldWithCode is paramsForField with the same code-override
+// semantics as messageForFieldWithCode. A promoted `required` returns nil
+// params — there is no min_length to report once the violation is reframed
+// as presence-class.
+func paramsForFieldWithCode(fe validator.FieldError, code string) map[string]any {
+	if code == "required" {
+		return nil
+	}
+	return paramsForField(fe)
+}
+
 // paramsForField returns structured context for a failure, or nil when
 // nothing useful can be derived. See FieldError.Params for the key schema.
 func paramsForField(fe validator.FieldError) map[string]any {
@@ -256,7 +278,29 @@ func paramsForField(fe validator.FieldError) map[string]any {
 // fields (string, slice, array, map with `required`) surface as code=too_short
 // with params.min_length whether the field was sent empty or omitted entirely
 // — see errors.mdx and the codeForTag comment for the rationale. TRA-675.
+//
+// Callers that have request-body presence and explicit-null tracking should
+// prefer RespondValidationErrorWithPresence, which promotes the collapsed
+// too_short back to `required` for the omitted / null-on-non-nullable cases
+// per TRA-692 §1.2.
 func RespondValidationError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
+	respondValidationErrorCore(w, r, err, requestID, nil, nil)
+}
+
+// RespondValidationErrorWithPresence is RespondValidationError that uses
+// request-body presence and explicit-null information to override the
+// TRA-675 collapse: when a length-bearing `required` violation fires AND the
+// JSON key was absent from the body OR was sent as explicit null on a
+// non-nullable Go field, emit code `required` instead of `too_short`. Empty
+// string on a min_length:1 field still emits `too_short` (TRA-692 §1.2).
+//
+// Pass nil/empty maps to opt out of the override (identical behavior to
+// RespondValidationError).
+func RespondValidationErrorWithPresence(w http.ResponseWriter, r *http.Request, err error, requestID string, present, nulls map[string]struct{}) {
+	respondValidationErrorCore(w, r, err, requestID, present, nulls)
+}
+
+func respondValidationErrorCore(w http.ResponseWriter, r *http.Request, err error, requestID string, present, nulls map[string]struct{}) {
 	var ves validator.ValidationErrors
 	if !errors.As(err, &ves) {
 		WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
@@ -265,11 +309,29 @@ func RespondValidationError(w http.ResponseWriter, r *http.Request, err error, r
 	}
 	fields := make([]apierrors.FieldError, 0, len(ves))
 	for _, fe := range ves {
+		code := codeForTag(fe)
+		// TRA-692 §1.2: when the caller has presence info, promote a
+		// TRA-675-collapsed too_short back to `required` for the two cases
+		// that are semantically presence-class rather than length-class:
+		// (a) the JSON key was absent from the body, or
+		// (b) the JSON key was present with explicit `null` on a
+		//     non-nullable Go field (encoding/json silently zeroes the
+		//     destination, so the validator sees an empty string here).
+		// Empty-string-on-min_length-1 stays as too_short (the field WAS
+		// present and the value WAS provided — just shorter than allowed).
+		if code == "too_short" && fe.Tag() == "required" && (present != nil || nulls != nil) {
+			key := fe.Field()
+			if _, ok := present[key]; !ok {
+				code = "required"
+			} else if _, isNull := nulls[key]; isNull {
+				code = "required"
+			}
+		}
 		fields = append(fields, apierrors.FieldError{
 			Field:   fe.Field(),
-			Code:    codeForTag(fe),
-			Message: messageForField(fe),
-			Params:  paramsForField(fe),
+			Code:    code,
+			Message: messageForFieldWithCode(fe, code),
+			Params:  paramsForFieldWithCode(fe, code),
 		})
 	}
 	// TRA-685 F13: surface the first field message in `detail` rather than

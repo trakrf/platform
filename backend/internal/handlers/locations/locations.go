@@ -132,7 +132,10 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request location.CreateLocationWithTagsRequest
-	presentKeys, err := httputil.DecodeJSONStrictWithPresence(r, &request)
+	// TRA-692: capture both presence and explicit-null sets so the validation
+	// envelope can promote omitted/null required fields back to code=required
+	// (per §1.2). Drop list is nil — Create has no read-only fields to strip.
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(r, &request, nil)
 	if err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
@@ -151,7 +154,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			ExternalKey string `json:"external_key" validate:"min=1,max=255,external_key_pattern"`
 		}
 		if err := validate.Struct(extKeyCheck{ExternalKey: request.ExternalKey}); err != nil {
-			httputil.RespondValidationError(w, r, err, requestID)
+			httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys, explicitNulls)
 			return
 		}
 	}
@@ -175,7 +178,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, r, err, requestID)
+		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys, explicitNulls)
 		return
 	}
 
@@ -278,7 +281,10 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	var request location.UpdateLocationRequest
-	explicitNulls, _, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, location.PublicReadOnlyFields)
+	// TRA-692: capture presentKeys alongside explicitNulls so the validator
+	// response can promote any future length-bearing required violation to
+	// code=required for omitted/null cases. Consistent with POST.
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, location.PublicReadOnlyFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
@@ -315,7 +321,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, reqID)
+		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
 		return
 	}
 
@@ -507,12 +513,16 @@ func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var request location.RenameLocationRequest
-	if err := httputil.DecodeJSONStrict(req, &request); err != nil {
+	// TRA-692: presence-tracking decoder so an omitted or null `external_key`
+	// surfaces as code=required (not the TRA-675-collapsed too_short). Body
+	// has a single required string field, exactly the §1.2 case.
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, nil)
+	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
 	}
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, req, err, reqID)
+		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
 		return
 	}
 
@@ -969,13 +979,16 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 	requestID := middleware.GetRequestID(r.Context())
 
 	var request shared.TagRequest
-	if err := httputil.DecodeJSONStrict(r, &request); err != nil {
+	// TRA-692: presence-tracking decoder so an omitted `value` surfaces as
+	// code=required.
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(r, &request, nil)
+	if err != nil {
 		httputil.RespondDecodeError(w, r, err, requestID)
 		return
 	}
 
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, r, err, requestID)
+		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys, explicitNulls)
 		return
 	}
 
