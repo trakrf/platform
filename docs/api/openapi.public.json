@@ -365,7 +365,6 @@
           },
           "is_active": {
             "example": true,
-            "nullable": true,
             "type": "boolean"
           },
           "location_external_key": {
@@ -386,7 +385,6 @@
           },
           "metadata": {
             "additionalProperties": {},
-            "nullable": true,
             "type": "object"
           },
           "name": {
@@ -405,7 +403,6 @@
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
-            "nullable": true,
             "type": "string"
           },
           "valid_to": {
@@ -458,7 +455,6 @@
           },
           "is_active": {
             "example": true,
-            "nullable": true,
             "type": "boolean"
           },
           "name": {
@@ -494,7 +490,6 @@
           "valid_from": {
             "example": "2025-12-14T00:00:00Z",
             "format": "date-time",
-            "nullable": true,
             "type": "string"
           },
           "valid_to": {

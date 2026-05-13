@@ -141,6 +141,26 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TRA-705 (BB32 §C6): valid_from and is_active are non-nullable on
+	// both Create and Update. Omission already means "use server default"
+	// — accepting null on Create only (the prior TRA-675 "null-as-now"
+	// carve-out) muddied the semantics. Reject explicit null with
+	// invalid_value; accumulate every violation (BB32 §D3 pattern).
+	var nullViolations []modelerrors.FieldError
+	for _, f := range []string{"valid_from", "is_active"} {
+		if _, ok := explicitNulls[f]; ok {
+			nullViolations = append(nullViolations, modelerrors.FieldError{
+				Field:   f,
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("%s cannot be null; omit the field to use the server default, or provide a value", f),
+			})
+		}
+	}
+	if len(nullViolations) > 0 {
+		httputil.WriteValidationError(w, r, requestID, nullViolations)
+		return
+	}
+
 	// TRA-665 / BB26 D3: external_key is optional only by *omission* — an
 	// absent key triggers the server auto-mint of LOC-NNNN. When the caller
 	// sends `external_key` explicitly, it must validate (min=1 + pattern)
