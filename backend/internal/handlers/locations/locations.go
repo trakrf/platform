@@ -230,7 +230,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `"parent_id": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Round-trip-safe server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`) are silently stripped from the body. The natural-key reference fields `external_key` and `parent_external_key` are read-only on PATCH: a value matching the current resource state is silently stripped (so a verbatim GET → PATCH round-trip succeeds), and a differing value returns 400 with `code: read_only` naming the correct write path. To re-parent via PATCH send `parent_id` (surrogate; `null` clears the FK); to re-parent via natural key use POST /locations/{location_id}/rename. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -268,14 +268,12 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
-	// TRA-686 / BB29 F7+F8: reject managed-via-subresource (`tags`) and
-	// managed-via-rename (`external_key`, `parent_external_key`) fields
-	// pre-decode with 400. The silent-drop default established under
-	// TRA-674 / TRA-681 hid bugs in read-modify-write integrations —
-	// callers reused the GET body, the server quietly ignored the write,
-	// and the location looked unchanged. id, created_at, updated_at, and
-	// deleted_at stay on the strip list (echoing those back is a genuine
-	// no-op).
+	// TRA-686 / BB29 F7: reject `tags` pre-decode with 400 invalid_value —
+	// tags are managed via the /locations/{id}/tags subresource.
+	//
+	// TRA-699 (BB31 §2): `external_key` and `parent_external_key` are no
+	// longer on this reject list. Both follow the uniform
+	// accept-if-matches, reject-if-differs rule implemented below.
 	if httputil.RejectFields(w, req, reqID, location.PublicRejectPatchFields) {
 		return
 	}
@@ -312,13 +310,68 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		request.ClearDescription = true
 	}
 	// TRA-614 / BB19 §S1: explicit `null` on parent_id clears the FK.
-	// parent_external_key never reaches this point (stripped by the decoder
-	// via PublicReadOnlyFields per TRA-681) so the only clear-FK signal on
-	// PATCH is `"parent_id": null`.
+	// TRA-699 (BB31 §2): parent_external_key follows the new echo check
+	// (see below); only parent_id signals a clear via the surrogate.
 	if _, ok := explicitNulls["parent_id"]; ok {
 		request.ClearParentID = true
 		request.ParentID = nil
 	}
+
+	// TRA-699 (BB31 §2): natural-key echo check. Two fields are read-only
+	// on PATCH but accept a verbatim echo of the current value as a silent
+	// no-op so a GET → PATCH round-trip without an explicit strip succeeds.
+	// A differing value is 400 read_only naming POST /locations/{id}/rename.
+	//
+	//   external_key         → mutates own natural key via /rename
+	//   parent_external_key  → re-parent via /rename, or send parent_id
+	current, err := handler.storage.GetLocationWithParentByID(req.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			err.Error(), reqID)
+		return
+	}
+	if current == nil {
+		httputil.Respond404(w, req, apierrors.LocationNotFound, reqID)
+		return
+	}
+	var echoViolations []modelerrors.FieldError
+	if _, present := presentKeys["external_key"]; present {
+		matched := request.ExternalKey != nil && *request.ExternalKey == current.ExternalKey
+		if !matched {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "external_key",
+				Code:    "read_only",
+				Message: "external_key is immutable via PATCH; use POST /api/v1/locations/{location_id}/rename to change it",
+			})
+		}
+	}
+	if _, present := presentKeys["parent_external_key"]; present {
+		_, bodyNull := explicitNulls["parent_external_key"]
+		curNull := current.ParentExternalKey == nil
+		matched := bodyNull && curNull
+		if !bodyNull && !curNull && request.ParentExternalKey != nil && current.ParentExternalKey != nil &&
+			*request.ParentExternalKey == *current.ParentExternalKey {
+			matched = true
+		}
+		if !matched {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "parent_external_key",
+				Code:    "read_only",
+				Message: "parent reference is immutable via PATCH; use POST /api/v1/locations/{location_id}/rename to re-parent, or send `parent_id` to change the parent via surrogate",
+			})
+		}
+	}
+	if len(echoViolations) > 0 {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"validation failed", reqID, echoViolations)
+		return
+	}
+	request.ExternalKey = nil
+	request.ParentExternalKey = nil
+	delete(presentKeys, "external_key")
+	delete(presentKeys, "parent_external_key")
+	delete(explicitNulls, "external_key")
+	delete(explicitNulls, "parent_external_key")
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)

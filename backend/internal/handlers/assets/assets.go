@@ -246,7 +246,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `location_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To change the location on PATCH, send `location_id` (surrogate); to clear it, send `"location_id": null`. The natural-key form `location_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `location_id`. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Round-trip-safe server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`) are silently stripped from the body. The natural-key reference fields `external_key`, `location_id`, and `location_external_key` are read-only on PATCH: a value matching the current resource state is silently stripped (so a verbatim GET → PATCH round-trip succeeds), and a differing value returns 400 with `code: read_only` naming the correct write path. Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
@@ -284,14 +284,14 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
-	// TRA-686 / BB29 F7+F8: reject managed-via-subresource (`tags`) and
-	// managed-via-rename (`external_key`) fields pre-decode with 400. The
-	// silent-drop default established under TRA-674 hid bugs in
-	// read-modify-write integrations — callers reused the GET body, the
-	// server quietly ignored the write, and the asset looked unchanged.
-	// id, created_at, updated_at, deleted_at, and location_external_key
-	// stay on the strip list because echoing those back is genuinely a
-	// no-op (TRA-608, TRA-681).
+	// TRA-686 / BB29 F7: reject `tags` pre-decode with 400 invalid_value —
+	// tags are managed via the /assets/{id}/tags subresource. The
+	// silent-drop default hid bugs in read-modify-write integrations.
+	//
+	// TRA-699 (BB31 §2): `external_key`, `location_id`, and
+	// `location_external_key` are no longer on this reject list. They
+	// follow the uniform accept-if-matches, reject-if-differs rule
+	// implemented below after decode.
 	if httputil.RejectFields(w, req, reqID, asset.PublicRejectPatchFields) {
 		return
 	}
@@ -329,37 +329,89 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	if _, ok := explicitNulls["description"]; ok {
 		request.ClearDescription = true
 	}
-	// TRA-614 / BB19 §S1: explicit `null` on location_id clears the FK.
-	// location_external_key never reaches this point (stripped by the
-	// decoder via PublicReadOnlyFields per TRA-681) so the only clear-FK
-	// signal on PATCH is `"location_id": null`.
-	if _, ok := explicitNulls["location_id"]; ok {
-		request.ClearLocationID = true
-		request.LocationID = nil
+
+	// TRA-699 (BB31 §2): natural-key echo check. Three fields are read-only
+	// on PATCH but accept a verbatim echo of the current value as a silent
+	// no-op so a GET → PATCH round-trip without an explicit strip succeeds.
+	// A differing value is 400 read_only naming the dedicated write path.
+	//
+	//   external_key            → POST /assets/{asset_id}/rename
+	//   location_id             → record a scan event (record-of-origin posture; TRA-411)
+	//   location_external_key   → record a scan event
+	current, err := handler.storage.GetAssetWithLocationByID(req.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			err.Error(), reqID)
+		return
 	}
+	if current == nil {
+		httputil.Respond404(w, req, apierrors.AssetNotFound, reqID)
+		return
+	}
+	var echoViolations []modelerrors.FieldError
+	if _, present := presentKeys["external_key"]; present {
+		matched := request.ExternalKey != nil && *request.ExternalKey == current.ExternalKey
+		if !matched {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "external_key",
+				Code:    "read_only",
+				Message: "external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename to change it",
+			})
+		}
+	}
+	if _, present := presentKeys["location_id"]; present {
+		_, bodyNull := explicitNulls["location_id"]
+		curNull := current.LocationID == nil
+		matched := bodyNull && curNull
+		if !bodyNull && !curNull && request.LocationID != nil && *request.LocationID == *current.LocationID {
+			matched = true
+		}
+		if !matched {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "location_id",
+				Code:    "read_only",
+				Message: "asset location is derived from scan events and not directly settable; record a scan event to update asset location",
+			})
+		}
+	}
+	if _, present := presentKeys["location_external_key"]; present {
+		_, bodyNull := explicitNulls["location_external_key"]
+		curNull := current.LocationExternalKey == nil
+		matched := bodyNull && curNull
+		if !bodyNull && !curNull && request.LocationExternalKey != nil && current.LocationExternalKey != nil &&
+			*request.LocationExternalKey == *current.LocationExternalKey {
+			matched = true
+		}
+		if !matched {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "location_external_key",
+				Code:    "read_only",
+				Message: "asset location is derived from scan events and not directly settable; record a scan event to update asset location",
+			})
+		}
+	}
+	if len(echoViolations) > 0 {
+		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
+			"validation failed", reqID, echoViolations)
+		return
+	}
+	// Echo passed (or fields absent). Strip the natural-key fields so they
+	// don't reach storage as writable fields, and clear any presence/null
+	// signals so the validator doesn't treat them as required violations.
+	request.ExternalKey = nil
+	request.LocationID = nil
+	request.LocationExternalKey = nil
+	delete(presentKeys, "external_key")
+	delete(presentKeys, "location_id")
+	delete(presentKeys, "location_external_key")
+	delete(explicitNulls, "external_key")
+	delete(explicitNulls, "location_id")
+	delete(explicitNulls, "location_external_key")
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
 		return
 	}
-
-	resolved, fErr := handler.resolveLocation(req, orgID, request.LocationID, nil)
-	if fErr != nil {
-		if fErr.Code == "internal_error" {
-			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
-				fErr.Message, reqID)
-
-			return
-		}
-		// TRA-681: fk_not_found is 400 validation_error (was 409 conflict
-		// under TRA-678). See Create for rationale.
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			fErr.Message, reqID,
-			[]modelerrors.FieldError{*fErr})
-
-		return
-	}
-	request.LocationID = resolved
 
 	result, err := handler.storage.UpdateAsset(req.Context(), orgID, id, request)
 	if err != nil {
@@ -697,7 +749,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	view, err := handler.storage.GetAssetWithLocationByIDForTest(req.Context(), orgID, id)
+	view, err := handler.storage.GetAssetWithLocationByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			err.Error(), reqID)
