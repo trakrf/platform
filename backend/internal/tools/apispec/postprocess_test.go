@@ -1472,6 +1472,13 @@ func withEmptyRequiredFields(t *testing.T) {
 	publicOperationIdRenames = map[string]string{}
 	savedTagDescriptions := publicTagDescriptions
 	publicTagDescriptions = nil
+	// TRA-691: hoistInlineEnums is strict (errors on unknown source schema)
+	// like the other strict-map passes. Minimal in-memory test docs don't
+	// seed shared.Tag / errors.ErrorResponse / errors.FieldError, so clear
+	// the extraction list here. Coverage for the pass itself lives in
+	// hoist_enums_test.go.
+	savedInlineEnumExtractions := inlineEnumExtractions
+	inlineEnumExtractions = nil
 	t.Cleanup(func() {
 		requiredFields = saved
 		internalOnlyRequiredFields = savedInternal
@@ -1481,5 +1488,6 @@ func withEmptyRequiredFields(t *testing.T) {
 		publicSchemaRenames = savedSchemaRenames
 		publicOperationIdRenames = savedOpIDRenames
 		publicTagDescriptions = savedTagDescriptions
+		inlineEnumExtractions = savedInlineEnumExtractions
 	})
 }
