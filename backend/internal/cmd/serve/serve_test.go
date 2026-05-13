@@ -111,21 +111,36 @@ func TestRouterRegistration(t *testing.T) {
 	}
 }
 
-func TestPublicOpenAPISpec_ServedAt_V1Path(t *testing.T) {
+// TRA-693 / BB30 §2.3: /api/v1/openapi.{json,yaml} redirects to the canonical
+// /api/openapi.{json,yaml} variant. Permanent (301) so caching proxies can
+// rewrite indefinitely.
+func TestPublicOpenAPISpec_V1Path_RedirectsToCanonical_JSON(t *testing.T) {
 	r := setupTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.json", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /api/v1/openapi.json = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /api/v1/openapi.json = %d, want 301; body: %s", rec.Code, rec.Body.String())
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("Content-Type = %q, want application/json", ct)
+	if loc := rec.Header().Get("Location"); loc != "/api/openapi.json" {
+		t.Fatalf("Location = %q, want /api/openapi.json", loc)
 	}
-	if !strings.Contains(rec.Body.String(), `"openapi"`) {
-		t.Fatalf("body does not contain \"openapi\" key: %s", rec.Body.String()[:min(200, len(rec.Body.String()))])
+}
+
+func TestPublicOpenAPISpec_V1Path_RedirectsToCanonical_YAML(t *testing.T) {
+	r := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.yaml", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /api/v1/openapi.yaml = %d, want 301; body: %s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/api/openapi.yaml" {
+		t.Fatalf("Location = %q, want /api/openapi.yaml", loc)
 	}
 }
 
@@ -196,8 +211,8 @@ func TestOpenAPISpec_RootRedirect_JSON(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusFound {
-		t.Fatalf("GET /openapi.json = %d, want 302; body: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /openapi.json = %d, want 301; body: %s", rec.Code, rec.Body.String())
 	}
 	if loc := rec.Header().Get("Location"); loc != "/api/openapi.json" {
 		t.Fatalf("Location = %q, want /api/openapi.json", loc)
@@ -211,8 +226,8 @@ func TestOpenAPISpec_RootRedirect_YAML(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusFound {
-		t.Fatalf("GET /openapi.yaml = %d, want 302; body: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /openapi.yaml = %d, want 301; body: %s", rec.Code, rec.Body.String())
 	}
 	if loc := rec.Header().Get("Location"); loc != "/api/openapi.yaml" {
 		t.Fatalf("Location = %q, want /api/openapi.yaml", loc)
@@ -222,12 +237,12 @@ func TestOpenAPISpec_RootRedirect_YAML(t *testing.T) {
 func TestHeadRequestMatches_OpenAPISpec(t *testing.T) {
 	r := setupTestRouter(t)
 
-	req := httptest.NewRequest(http.MethodHead, "/api/v1/openapi.json", nil)
+	req := httptest.NewRequest(http.MethodHead, "/api/openapi.json", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("HEAD /api/v1/openapi.json = %d, want 200; body: %s", rec.Code, rec.Body.String())
+		t.Fatalf("HEAD /api/openapi.json = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
 }
 

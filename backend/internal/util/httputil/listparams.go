@@ -192,6 +192,16 @@ func parseSort(raw string, allow map[string]struct{}) ([]SortField, error) {
 		// spec annotation added in TRA-678 postprocess. No sorting applied.
 		return nil, nil
 	}
+	// Endpoints that declare no sort fields (sub-resources, etc.) don't
+	// support sorting at all — surface that explicitly so clients don't try
+	// to guess at the field name. TRA-693 / BB30 §2.4.
+	if len(allow) == 0 {
+		return nil, &ListParamError{Fields: []apierrors.FieldError{{
+			Field:   "sort",
+			Code:    "invalid_value",
+			Message: "sort parameter not supported on this endpoint",
+		}}}
+	}
 	parts := strings.Split(raw, ",")
 	out := make([]SortField, 0, len(parts))
 	for _, p := range parts {

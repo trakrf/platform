@@ -23,13 +23,13 @@ func TestGetTagsByAssetID(t *testing.T) {
 	orgID := 1
 	assetID := 1
 
-	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
-		AddRow(101, "rfid", "E20000001234", true).
-		AddRow(102, "ble", "AA:BB:CC:DD:EE:FF", true)
+	rows := pgxmock.NewRows([]string{"id", "type", "value"}).
+		AddRow(101, "rfid", "E20000001234").
+		AddRow(102, "ble", "AA:BB:CC:DD:EE:FF")
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT id, type, value`).
 		WithArgs(assetID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -56,11 +56,11 @@ func TestGetTagsByAssetID_Empty(t *testing.T) {
 	orgID := 1
 	assetID := 1
 
-	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"})
+	rows := pgxmock.NewRows([]string{"id", "type", "value"})
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT id, type, value`).
 		WithArgs(assetID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -85,7 +85,7 @@ func TestGetTagsByAssetID_DatabaseError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT id, type, value`).
 		WithArgs(assetID, orgID).
 		WillReturnError(errors.New("connection lost"))
 	mock.ExpectRollback()
@@ -108,12 +108,12 @@ func TestGetTagsByLocationID(t *testing.T) {
 	orgID := 1
 	locationID := 1
 
-	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
-		AddRow(201, "barcode", "LOC-001", true)
+	rows := pgxmock.NewRows([]string{"id", "type", "value"}).
+		AddRow(201, "barcode", "LOC-001")
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT id, type, value`).
 		WithArgs(locationID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -138,11 +138,11 @@ func TestGetTagsByLocationID_Empty(t *testing.T) {
 	orgID := 1
 	locationID := 1
 
-	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"})
+	rows := pgxmock.NewRows([]string{"id", "type", "value"})
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT id, type, value`).
 		WithArgs(locationID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -169,8 +169,8 @@ func TestAddTagToAsset(t *testing.T) {
 		Value:   "E20000009999",
 	}
 
-	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
-		AddRow(301, "rfid", "E20000009999", true)
+	rows := pgxmock.NewRows([]string{"id", "type", "value"}).
+		AddRow(301, "rfid", "E20000009999")
 
 	// Expect transaction flow for RLS context
 	mock.ExpectBegin()
@@ -187,7 +187,6 @@ func TestAddTagToAsset(t *testing.T) {
 	assert.Equal(t, 301, result.ID)
 	assert.Equal(t, "rfid", result.TagType)
 	assert.Equal(t, "E20000009999", result.Value)
-	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -235,8 +234,8 @@ func TestAddTagToLocation(t *testing.T) {
 		Value:   "LOC-SHELF-01",
 	}
 
-	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
-		AddRow(401, "barcode", "LOC-SHELF-01", true)
+	rows := pgxmock.NewRows([]string{"id", "type", "value"}).
+		AddRow(401, "barcode", "LOC-SHELF-01")
 
 	// Expect transaction flow for RLS context
 	mock.ExpectBegin()
@@ -253,7 +252,6 @@ func TestAddTagToLocation(t *testing.T) {
 	assert.Equal(t, 401, result.ID)
 	assert.Equal(t, "barcode", result.TagType)
 	assert.Equal(t, "LOC-SHELF-01", result.Value)
-	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -419,12 +417,12 @@ func TestGetTagByID(t *testing.T) {
 	orgID := 1
 	tagID := 101
 
-	rows := pgxmock.NewRows([]string{"id", "type", "value", "is_active"}).
-		AddRow(101, "rfid", "E20000001234", true)
+	rows := pgxmock.NewRows([]string{"id", "type", "value"}).
+		AddRow(101, "rfid", "E20000001234")
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT id, type, value`).
 		WithArgs(tagID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -436,7 +434,6 @@ func TestGetTagByID(t *testing.T) {
 	assert.Equal(t, 101, result.ID)
 	assert.Equal(t, "rfid", result.TagType)
 	assert.Equal(t, "E20000001234", result.Value)
-	assert.True(t, result.IsActive)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -452,7 +449,7 @@ func TestGetTagByID_NotFound(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT id, type, value`).
 		WithArgs(tagID, orgID).
 		WillReturnError(errors.New("no rows in result set"))
 	mock.ExpectCommit()
@@ -474,15 +471,15 @@ func TestGetTagsForAssets_Batch(t *testing.T) {
 	orgID := 1
 	assetIDs := []int{1, 2, 3}
 
-	rows := pgxmock.NewRows([]string{"asset_id", "id", "type", "value", "is_active"}).
-		AddRow(1, 101, "rfid", "E20000001111", true).
-		AddRow(1, 102, "ble", "AA:AA:AA:AA:AA:AA", true).
-		AddRow(2, 201, "barcode", "BC-002", true)
+	rows := pgxmock.NewRows([]string{"asset_id", "id", "type", "value"}).
+		AddRow(1, 101, "rfid", "E20000001111").
+		AddRow(1, 102, "ble", "AA:AA:AA:AA:AA:AA").
+		AddRow(2, 201, "barcode", "BC-002")
 	// Note: asset 3 has no tags
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT asset_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT asset_id, id, type, value`).
 		WithArgs(assetIDs, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -518,14 +515,14 @@ func TestGetTagsForLocations_Batch(t *testing.T) {
 	orgID := 1
 	locationIDs := []int{10, 20}
 
-	rows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"}).
-		AddRow(10, 1001, "barcode", "LOC-10", true).
-		AddRow(20, 2001, "rfid", "E20000020001", true).
-		AddRow(20, 2002, "barcode", "LOC-20", true)
+	rows := pgxmock.NewRows([]string{"location_id", "id", "type", "value"}).
+		AddRow(10, 1001, "barcode", "LOC-10").
+		AddRow(20, 2001, "rfid", "E20000020001").
+		AddRow(20, 2002, "barcode", "LOC-20")
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT location_id, id, type, value`).
 		WithArgs(locationIDs, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()

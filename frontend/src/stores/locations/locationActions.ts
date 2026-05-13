@@ -266,7 +266,7 @@ export function createCacheActions(
           // Build EPC index from location's tags
           if (location.tags) {
             for (const tag of location.tags) {
-              if (tag.is_active && tag.tag_type === 'rfid') {
+              if (tag.tag_type === 'rfid') {
                 cache.byTagEpc.set(tag.value, location);
               }
             }

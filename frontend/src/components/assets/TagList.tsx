@@ -145,29 +145,9 @@ export function TagRow({ tag, size = 'sm', entityId, entityType, onDelete }: Tag
     ? 'text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium flex-shrink-0'
     : 'text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium flex-shrink-0';
 
-  const statusBadgeClasses = isSmall
-    ? `text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
-        tag.is_active
-          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-      }`
-    : `inline-flex items-center px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${
-        tag.is_active
-          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-      }`;
-
   const locateButtonClasses = isSmall
-    ? `p-1 rounded transition-colors flex-shrink-0 ${
-        tag.is_active
-          ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
-          : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-      }`
-    : `p-1.5 rounded transition-colors flex-shrink-0 ${
-        tag.is_active
-          ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
-          : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-      }`;
+    ? 'p-1 rounded transition-colors flex-shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
+    : 'p-1.5 rounded transition-colors flex-shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20';
 
   return (
     <div className={containerClasses}>
@@ -179,15 +159,11 @@ export function TagRow({ tag, size = 'sm', entityId, entityType, onDelete }: Tag
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className={statusBadgeClasses}>
-          {tag.is_active ? 'Active' : 'Inactive'}
-        </span>
         <button
           onClick={handleLocate}
-          disabled={!tag.is_active}
           className={locateButtonClasses}
           aria-label={`Locate tag ${tag.value}`}
-          title={tag.is_active ? 'Locate this tag' : 'Tag is inactive'}
+          title="Locate this tag"
         >
           <Target className={isSmall ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
         </button>

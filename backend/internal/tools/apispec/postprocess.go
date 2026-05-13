@@ -1453,7 +1453,7 @@ var requiredFields = map[string][]string{
 	"errors.FieldError":    {"field", "code", "message"},
 
 	// shared
-	"shared.Tag": {"id", "tag_type", "value", "is_active"},
+	"shared.Tag": {"id", "tag_type", "value"},
 
 	// asset
 	"asset.PublicAssetView": {"id", "external_key", "name", "description", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},

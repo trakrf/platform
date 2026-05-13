@@ -117,25 +117,11 @@ export function TagsModal({
                     <span className="flex-1 text-sm font-mono text-gray-900 dark:text-gray-100 truncate min-w-0">
                       {tag.value}
                     </span>
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded flex-shrink-0 ${
-                        tag.is_active
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      {tag.is_active ? 'Active' : 'Inactive'}
-                    </span>
                     <button
                       onClick={() => handleLocateTag(tag.value)}
-                      disabled={!tag.is_active}
-                      className={`p-1.5 rounded transition-colors flex-shrink-0 ${
-                        tag.is_active
-                          ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20'
-                          : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                      }`}
+                      className="p-1.5 rounded transition-colors flex-shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
                       aria-label={`Locate tag ${tag.value}`}
-                      title={tag.is_active ? 'Locate this tag' : 'Tag is inactive'}
+                      title="Locate this tag"
                     >
                       <Target className="w-4 h-4" />
                     </button>

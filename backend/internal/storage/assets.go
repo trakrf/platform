@@ -575,7 +575,7 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 		LEFT JOIN latest_scan ls ON true
 		LEFT JOIN trakrf.locations l
 			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			AND l.org_id = a.org_id
 		WHERE a.id = $1 AND a.org_id = $2 AND a.deleted_at IS NULL
 		LIMIT 1
 	`
@@ -679,7 +679,7 @@ func (s *Storage) GetAssetByExternalKey(
 		LEFT JOIN latest_scan ls ON true
 		LEFT JOIN trakrf.locations l
 			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			AND l.org_id = a.org_id
 		WHERE a.org_id = $1 AND a.external_key = $2 AND a.deleted_at IS NULL
 		LIMIT 1
 	`
@@ -795,7 +795,7 @@ func (s *Storage) ListAssetsFiltered(
 		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
 		LEFT JOIN trakrf.locations l
 			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			AND l.org_id = a.org_id
 		WHERE %s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
@@ -875,7 +875,7 @@ func (s *Storage) CountAssetsFiltered(
 		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
 		LEFT JOIN trakrf.locations l
 			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id AND l.deleted_at IS NULL
+			AND l.org_id = a.org_id
 		WHERE %s
 	`, where)
 

@@ -146,3 +146,35 @@ func TestListLocations_IncludeDeleted_InvalidValue_400(t *testing.T) {
 	code, _ := doLocFilterRequest(t, router, orgID, "include_deleted=banana")
 	assert.Equal(t, http.StatusBadRequest, code)
 }
+
+// TRA-693 / BB30 §2.6: with include_deleted=true, a soft-deleted child must
+// still project its parent_external_key — even when the parent is also
+// soft-deleted — because the value lives on the parent row and is useful to
+// integrators reconciling tombstoned hierarchies.
+func TestListLocations_IncludeDeleted_SoftDeletedParent_ChildProjectsParentExternalKey(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	parentID := seedLocationForFilter(t, pool, orgID, "tra693-parent", "Parent")
+	childID := seedLocationForFilter(t, pool, orgID, "tra693-child", "Child")
+	_, err := pool.Exec(context.Background(),
+		`UPDATE trakrf.locations SET parent_location_id = $1 WHERE id = $2`, parentID, childID)
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(),
+		`UPDATE trakrf.locations SET deleted_at = now() WHERE id IN ($1, $2)`, parentID, childID)
+	require.NoError(t, err)
+
+	router := setupLocFilterRouter(NewHandler(store))
+
+	code, resp := doLocFilterRequest(t, router, orgID, "include_deleted=true&external_key=tra693-child")
+	require.Equal(t, http.StatusOK, code)
+	require.Len(t, resp.Data, 1, "soft-deleted child must surface under include_deleted=true")
+	assert.NotNil(t, resp.Data[0].DeletedAt, "child deleted_at must be populated")
+	require.NotNil(t, resp.Data[0].ParentExternalKey,
+		"parent_external_key must reflect the parent's external_key even when the parent is also soft-deleted")
+	assert.Equal(t, "tra693-parent", *resp.Data[0].ParentExternalKey)
+}

@@ -18,5 +18,4 @@ export interface Tag {
   id: number;
   tag_type: TagType;
   value: string;
-  is_active: boolean;
 }
