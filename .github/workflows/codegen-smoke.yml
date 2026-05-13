@@ -17,12 +17,14 @@ on:
     paths:
       - 'docs/api/openapi.public.yaml'
       - 'docs/api/openapi.public.json'
+      - 'docs/codegen/**'
       - '.github/workflows/codegen-smoke.yml'
   push:
     branches: [main]
     paths:
       - 'docs/api/openapi.public.yaml'
       - 'docs/api/openapi.public.json'
+      - 'docs/codegen/**'
       - '.github/workflows/codegen-smoke.yml'
 
 concurrency:
@@ -101,9 +103,23 @@ jobs:
             docs/api/openapi.public.yaml \
             -o generated/typescript/schema.d.ts
 
-      - name: Smoke test — tsc --noEmit against generated types
+      - name: Stage merge-patch helper + smoke test
+        # TRA-706 — openapi-fetch is spec-agnostic at runtime and defaults
+        # PATCH Content-Type to application/json, which our spec rejects with
+        # 415. The helper under docs/codegen/typescript/ middlewares PATCH
+        # requests to application/merge-patch+json; verify it stays compatible
+        # with the generated schema and that the runtime behavior holds.
+        run: |
+          cp docs/codegen/typescript/merge-patch.ts generated/typescript/
+          cp docs/codegen/typescript/smoke-test.ts  generated/typescript/
+
+      - name: Smoke test — tsc --noEmit against generated types + helper
         working-directory: generated/typescript
         run: |
+          cat > package.json <<'EOF'
+          { "name": "codegen-ts-smoke", "type": "module", "private": true }
+          EOF
+          pnpm add openapi-fetch tsx typescript @types/node
           cat > tsconfig.json <<'EOF'
           {
             "compilerOptions": {
@@ -112,12 +128,18 @@ jobs:
               "target": "ES2022",
               "module": "ESNext",
               "moduleResolution": "bundler",
-              "skipLibCheck": false
+              "skipLibCheck": false,
+              "lib": ["ES2022", "DOM"],
+              "types": ["node"]
             },
-            "include": ["schema.d.ts"]
+            "include": ["schema.d.ts", "merge-patch.ts", "smoke-test.ts"]
           }
           EOF
-          pnpm --package=typescript dlx tsc --noEmit -p tsconfig.json
+          ./node_modules/.bin/tsc --noEmit -p tsconfig.json
+
+      - name: Runtime smoke — merge-patch helper sets correct Content-Type
+        working-directory: generated/typescript
+        run: ./node_modules/.bin/tsx smoke-test.ts
 
   go:
     name: Go codegen smoke
