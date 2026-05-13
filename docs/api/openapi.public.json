@@ -123,7 +123,6 @@
           "timestamp": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -173,7 +172,6 @@
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -189,7 +187,6 @@
           "last_seen": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "location_external_key": {
@@ -249,7 +246,6 @@
           "created_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -257,7 +253,6 @@
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -302,21 +297,18 @@
           "updated_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -414,14 +406,12 @@
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -505,14 +495,12 @@
             "example": "2025-12-14T00:00:00Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-12-14T00:00:00Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -828,7 +816,6 @@
           "created_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -836,7 +823,6 @@
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
@@ -877,21 +863,18 @@
           "updated_at": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2025-04-29T12:34:56Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -1087,14 +1070,12 @@
           "valid_from": {
             "example": "2025-01-01T00:00:00Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-01-01T00:00:00Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -1144,14 +1125,12 @@
           "valid_from": {
             "example": "2025-12-14T00:00:00Z",
             "format": "date-time",
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           },
           "valid_to": {
             "example": "2026-12-14T00:00:00Z",
             "format": "date-time",
             "nullable": true,
-            "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
             "type": "string"
           }
         },
@@ -2584,7 +2563,6 @@
             "schema": {
               "example": "2025-04-29T12:34:56Z",
               "format": "date-time",
-              "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
               "type": "string"
             }
           },
@@ -2595,7 +2573,6 @@
             "schema": {
               "example": "2025-04-29T12:34:56Z",
               "format": "date-time",
-              "pattern": "^[1-9]\\d{3}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
               "type": "string"
             }
           },
