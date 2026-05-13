@@ -71,7 +71,14 @@ func setupRouter(
 	r.Use(middleware.Recovery)
 	r.Use(middleware.CORS)
 	r.Use(middleware.APIv1DefaultRateLimitHeaders(rl))
-	r.Use(middleware.ContentType)
+	// ContentType is intentionally NOT global. Applying it globally would
+	// reject POST/PUT/PATCH probes against retired and static-only paths
+	// (`/api/v1/{assets,locations}/lookup`, `/api/v1/locations/current`,
+	// the /api/v1/orgs/me method-allow guards) with 415 before chi's
+	// routing-precedence guards return their normalized 404/405. Each
+	// group below that registers a real write handler attaches ContentType
+	// at the group head; groups that register only GETs or 404/405 guards
+	// deliberately omit it.
 	r.Use(chimiddleware.GetHead)
 
 	r.Handle("/assets/*", http.HandlerFunc(frontendHandler.ServeFrontend))
@@ -111,11 +118,19 @@ func setupRouter(
 
 	healthHandler.RegisterRoutes(r)
 
-	authHandler.RegisterRoutes(r, middleware.Auth)
+	// Auth handler registers POST endpoints (signup, login, …) plus
+	// GET /api/v1/auth/invitation-info. ContentType is only consulted on
+	// POST/PUT/PATCH, so wrapping the whole registration with it leaves
+	// the GET unaffected while enforcing CT on the auth writes.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.ContentType)
+		authHandler.RegisterRoutes(r, middleware.Auth)
+	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 		r.Use(middleware.SentryContext)
+		r.Use(middleware.ContentType)
 
 		orgsHandler.RegisterRoutes(r, store)
 		orgsHandler.RegisterMeRoutes(r)
@@ -152,6 +167,7 @@ func setupRouter(
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.RateLimit(rl, allowTestRateLimitBypass))
 		r.Use(middleware.SentryContext)
+		r.Use(middleware.ContentType)
 		orgsHandler.RegisterAPIKeyRoutes(r, store)
 	})
 
@@ -190,6 +206,7 @@ func setupRouter(
 		r.Use(middleware.WriteAudit)
 		r.Use(middleware.RateLimit(rl, allowTestRateLimitBypass))
 		r.Use(middleware.SentryContext)
+		r.Use(middleware.ContentType)
 
 		// Assets
 		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
@@ -253,7 +270,13 @@ func setupRouter(
 	})
 
 	if os.Getenv("APP_ENV") != "production" {
-		testHandler.RegisterRoutes(r)
+		// Test handler registers /test/* with POST + GETs. ContentType is
+		// method-gated, so wrapping leaves GETs untouched and enforces CT
+		// on POST /test/apikeys.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.ContentType)
+			testHandler.RegisterRoutes(r)
+		})
 	}
 
 	// JSON 404/405 for unknown /api/* paths so clients don't blow up mid-deserialize
