@@ -438,12 +438,10 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	} else if req.Description != nil {
 		fields["description"] = *req.Description
 	}
-	// current_location_id is *int → SQL NULL is the natural representation.
-	if req.ClearLocationID {
-		fields["current_location_id"] = nil
-	} else if req.LocationID != nil {
-		fields["current_location_id"] = *req.LocationID
-	}
+	// TRA-699 (BB31 §2): current_location_id is no longer writable via PATCH.
+	// The handler strips any incoming location_id / location_external_key
+	// after the echo check, so req.LocationID is always nil here. Mutations
+	// to asset location happen via scan events (TRA-411 record-of-origin).
 	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {
 		fields["valid_from"] = req.ValidFrom.ToTime()
 	}
@@ -988,9 +986,10 @@ func parseAssetWithTagsError(err error, externalKey string) error {
 	return fmt.Errorf("failed to create asset with tags: %w", err)
 }
 
-// GetAssetWithLocationByIDForTest exposes getAssetWithLocationByID to integration
-// tests in the same package. Production code must use GetAssetByExternalKey or
-// the CreateAssetWithTags / UpdateAsset return values.
-func (s *Storage) GetAssetWithLocationByIDForTest(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
+// GetAssetWithLocationByID exposes getAssetWithLocationByID so handlers (and
+// integration tests) can fetch an AssetView joined with the current location's
+// natural key in one round-trip. Used by the PATCH handler's TRA-699 echo
+// check against current state.
+func (s *Storage) GetAssetWithLocationByID(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
 	return s.getAssetWithLocationByID(ctx, orgID, id)
 }

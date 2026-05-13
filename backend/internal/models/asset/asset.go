@@ -45,96 +45,84 @@ type CreateAssetRequest struct {
 // list. Fields not listed here (typos, write-only fields off this resource)
 // still produce a 400.
 //
-// TRA-686 / BB29 F7+F8: `external_key` and `tags` were removed from the
-// strip list. They now each have a dedicated reject category on PATCH —
-// see PublicRejectPatchFields — because silent-drop hid bugs in
-// read-modify-write integrations (the integrator believed the mutation
-// took effect; the server quietly ignored it). The strip-on-PATCH rule
-// established in TRA-674 was reversed because the visible-failure mode is
-// the safer integrator contract.
-//
-// TRA-681: `location_external_key` is the derived natural-key form for the
-// `location_id` FK and is read-only on PATCH — silently stripped along with
-// the other server-owned fields. The surrogate `location_id` remains the
-// mutable form. Integrators do GET → mutate `location_id` → PATCH back
-// with stale `location_external_key` still in the body; the server strips
-// it and processes `location_id` unconditionally. The strip is uniform
-// regardless of agreement with the surrogate — natural-key on PATCH
-// expresses a read, not a write. (Unlike `external_key`, there is no
-// rename endpoint for the FK; the natural-key form is fully derivable, so
-// echoing the GET-side value back is genuinely a no-op rather than a
-// caller-visible mistake.)
+// TRA-699 (BB31 §2): `external_key`, `location_external_key`, and
+// `location_id` are NOT on this list. They are policed by the post-decode
+// natural-key echo check in the PATCH handler — accept the value if it
+// matches the current resource state (silent no-op); reject if it differs
+// (400 read_only naming the proper write path). The previous behaviors
+// (TRA-686 F7+F8 pre-decode reject on external_key, TRA-681 silent strip
+// on location_external_key, TRA-614 writable location_id with null-clear)
+// are all superseded by the uniform rule.
 //
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"]
 // (the spec-side readOnly markers are coordinated under TRA-672).
-var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at", "location_external_key"}
+var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at"}
 
 // UpdateAssetRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
 // DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
 // PublicAssetView's round-trip-safe read-only fields (id, created_at,
-// updated_at, deleted_at, location_external_key) are silently stripped on
-// a verbatim GET → PATCH round-trip. `external_key` and `tags` are
-// pre-decode rejected with 400 instead of silently dropped (TRA-686 /
-// BB29 F7+F8) — see PublicRejectPatchFields.
+// updated_at, deleted_at) are silently stripped on a verbatim GET → PATCH
+// round-trip. `tags` is pre-decode rejected with 400 invalid_value
+// (managed via /assets/{id}/tags) — see PublicRejectPatchFields.
 //
-// description, location_id, and valid_to all accept JSON null on the wire
-// and clear the field server-side (TRA-614 / BB19 §S1). Each null surfaces
-// here as a Clear* sentinel set by the handler; the underlying pointer
-// remains nil because Go's json decoder treats `null` and "omitted" the
-// same on pointer fields.
+// description and valid_to accept JSON null on the wire and clear the
+// field server-side (TRA-614 / BB19 §S1). Each null surfaces here as a
+// Clear* sentinel set by the handler; the underlying pointer remains nil
+// because Go's json decoder treats `null` and "omitted" the same on
+// pointer fields.
 //
-// external_key is intentionally NOT on this struct. It is the natural /
-// join key downstream systems rely on; mutating it via a generic PATCH
-// would silently disconnect those joins. POST /api/v1/assets/{asset_id}/rename
-// is the dedicated path (TRA-664 / BB26 D7). On PATCH, an external_key
-// field is rejected with 400 read_only naming the rename endpoint
-// (TRA-686 / BB29 F8).
+// TRA-699 (BB31 §2): three natural-key reference fields are decoded into
+// dedicated pointers but policed by the post-decode echo check in the
+// PATCH handler — accept the value if it matches the current resource
+// state (silent no-op); reject if it differs (400 read_only naming the
+// proper write path). Fields:
+//   - ExternalKey (own natural key) → POST /assets/{id}/rename
+//   - LocationExternalKey, LocationID (derived from scan events) →
+//     record a scan event to update asset location
 //
-// location_external_key is intentionally NOT on this struct (TRA-681).
-// The natural-key form is derived from location_id and is read-only on
-// PATCH — silently stripped along with the other server-owned fields
-// (see PublicReadOnlyFields). To change the location on PATCH, send
-// location_id; to clear it, send `"location_id": null`.
+// None of these three fields carry validation tags because the value is
+// never written by PATCH; the only valid use is to echo the current value
+// back. The handler nils them out after the echo check passes.
 type UpdateAssetRequest struct {
 	Name        *string              `json:"name" validate:"omitempty,min=1,max=255,no_control_chars"`
 	Description *string              `json:"description" validate:"omitempty,min=1,max=1024,no_control_chars"`
-	LocationID  *int                 `json:"location_id" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
+	// TRA-699 natural-key echo fields. Decoded so the handler can compare
+	// against current state, then nilled before storage update.
+	ExternalKey         *string `json:"external_key" swaggerignore:"true"`
+	LocationID          *int    `json:"location_id" swaggerignore:"true"`
+	LocationExternalKey *string `json:"location_external_key" swaggerignore:"true"`
 	// Set by the PATCH handler when the body had an explicit `null` for the
 	// corresponding read-side-nullable field, to request a column-clear
 	// (TRA-614 / TRA-468). Not decoded from JSON directly.
 	ClearDescription bool            `json:"-" swaggerignore:"true"`
-	ClearLocationID  bool            `json:"-" swaggerignore:"true"`
 	ClearValidTo     bool            `json:"-" swaggerignore:"true"`
 	Metadata         *map[string]any `json:"metadata"`
 	IsActive         *bool           `json:"is_active"`
 }
 
 // PublicRejectPatchFields names the JSON keys that PATCH /api/v1/assets/{id}
-// rejects pre-decode with 400 validation_error. Two categories:
+// rejects pre-decode with 400 validation_error.
 //
 //   - `tags` is managed via the dedicated /assets/{asset_id}/tags
 //     subresource (POST + DELETE). On PATCH a `tags` body field is rejected
 //     with code=invalid_value pointing at the subresource endpoints. The
 //     silent-drop alternative hid bugs in read-modify-write integrations
 //     where callers reused the GET body shape — the asset's tag set looked
-//     unchanged, the server quietly ignored the write.
-//   - `external_key` is mutated through POST /assets/{asset_id}/rename. On
-//     PATCH it is rejected with code=read_only pointing at the rename
-//     endpoint, mirroring the rationale: a "rename via PATCH" silently
-//     dropped is a much worse failure mode than an explicit 400.
+//     unchanged, the server quietly ignored the write (TRA-686 / BB29 F7).
 //
-// Source: TRA-686 / BB29 F7+F8.
+// TRA-699 (BB31 §2): `external_key` moved off this map. It is now policed
+// by the post-decode natural-key echo check in the PATCH handler under the
+// uniform accept-if-matches, reject-if-differs rule. Same end-state for a
+// caller who tries to mutate (400 with read_only naming /rename); the new
+// shape additionally accepts a verbatim GET → PATCH echo as a silent
+// no-op rather than 400-ing it.
 var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{
 	"tags": {
 		Code:    "invalid_value",
 		Message: "tags are managed via POST /api/v1/assets/{asset_id}/tags and DELETE /api/v1/assets/{asset_id}/tags/{tag_id}",
-	},
-	"external_key": {
-		Code:    "read_only",
-		Message: "external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename",
 	},
 }
 

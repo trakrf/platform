@@ -1049,14 +1049,6 @@
           "is_active": {
             "type": "boolean"
           },
-          "location_id": {
-            "example": 42,
-            "format": "int32",
-            "maximum": 2147483647,
-            "minimum": 1,
-            "nullable": true,
-            "type": "integer"
-          },
           "metadata": {
             "additionalProperties": {},
             "type": "object"
@@ -2224,7 +2216,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `location_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To change the location on PATCH, send `location_id` (surrogate); to clear it, send `\"location_id\": null`. The natural-key form `location_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `location_id`. Mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Round-trip-safe server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`) are silently stripped from the body. The natural-key reference fields `external_key`, `location_id`, and `location_external_key` are read-only on PATCH: a value matching the current resource state is silently stripped (so a verbatim GET → PATCH round-trip succeeds), and a differing value returns 400 with `code: read_only` naming the correct write path. Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
         "operationId": "updateAsset",
         "parameters": [
           {
@@ -4711,7 +4703,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`, `external_key`, `tags`, `parent_external_key`) are silently stripped from the body so a verbatim GET → PATCH round-trip succeeds. To re-parent on PATCH, send `parent_id` (surrogate); to clear it, send `\"parent_id\": null`. The natural-key form `parent_external_key` is read-only on PATCH and is stripped from the body regardless of agreement with `parent_id`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Round-trip-safe server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`) are silently stripped from the body. The natural-key reference fields `external_key` and `parent_external_key` are read-only on PATCH: a value matching the current resource state is silently stripped (so a verbatim GET → PATCH round-trip succeeds), and a differing value returns 400 with `code: read_only` naming the correct write path. To re-parent via PATCH send `parent_id` (surrogate; `null` clears the FK); to re-parent via natural key use POST /locations/{location_id}/rename. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
         "operationId": "updateLocation",
         "parameters": [
           {

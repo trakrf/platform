@@ -1181,10 +1181,10 @@ func mapLocationReqToFields(req location.UpdateLocationRequest) (map[string]any,
 	return fields, nil
 }
 
-// GetLocationWithParentByIDForTest exposes getLocationWithParentByID to
-// integration tests in the same package. Production code must use
-// GetLocationByExternalKey or the CreateLocationWithTags /
-// UpdateLocation return values.
-func (s *Storage) GetLocationWithParentByIDForTest(ctx context.Context, orgID, id int) (*location.LocationWithParent, error) {
+// GetLocationWithParentByID exposes getLocationWithParentByID so handlers
+// (and integration tests) can fetch a LocationView joined with its parent's
+// natural key in one round-trip. Used by the PATCH handler's TRA-699 echo
+// check against current state.
+func (s *Storage) GetLocationWithParentByID(ctx context.Context, orgID, id int) (*location.LocationWithParent, error) {
 	return s.getLocationWithParentByID(ctx, orgID, id)
 }
