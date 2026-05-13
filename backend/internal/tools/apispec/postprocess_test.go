@@ -587,6 +587,64 @@ func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
 	assert.Equal(t, "date", props["birth_date"].Value.Format, "pre-existing format must not be overwritten")
 }
 
+// TRA-698 (BB31 §1.4): `pattern` on `format: date-time` breaks
+// openapi-generator-cli's Python template — its `@field_validator` runs
+// AFTER Pydantic parses the string into a `datetime`, then stringifies
+// that datetime (space separator, not `T`) before regex-matching, so
+// every read path that returns a timestamp throws a ValidationError. The
+// spec-level pattern is redundant on `format: date-time` (RFC 3339 is
+// already implied) and must not be emitted by postprocess. Covers both
+// component schemas and inline path/query parameters.
+func TestPostprocess_DoesNotSetPatternOnDateTimeFields(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := docWithSchemas(openapi3.Schemas{
+		"AssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"created_at": stringProp("date-time"),
+				"updated_at": stringProp("date-time"),
+				"name":       stringProp(""), // not a timestamp — must be left alone
+			},
+		}},
+		"AssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"timestamp": stringProp("date-time"),
+			},
+		}},
+	})
+	// Inline query parameter with format: date-time — covers the
+	// /assets/{asset_id}/history `from`/`to` shape.
+	doc.Paths = openapi3.NewPaths()
+	doc.Paths.Set("/api/v1/assets/{asset_id}/history", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Parameters: openapi3.Parameters{
+				{Value: &openapi3.Parameter{
+					Name: "from",
+					In:   "query",
+					Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{
+						Type:   &openapi3.Types{openapi3.TypeString},
+						Format: "date-time",
+					}},
+				}},
+			},
+		},
+	})
+
+	require.NoError(t, postprocessPublic(doc))
+
+	assert.Equal(t, "", doc.Components.Schemas["AssetView"].Value.Properties["created_at"].Value.Pattern,
+		"AssetView.created_at must not declare a pattern (BB31 §1.4)")
+	assert.Equal(t, "", doc.Components.Schemas["AssetView"].Value.Properties["updated_at"].Value.Pattern,
+		"AssetView.updated_at must not declare a pattern (BB31 §1.4)")
+	assert.Equal(t, "", doc.Components.Schemas["AssetHistoryItem"].Value.Properties["timestamp"].Value.Pattern,
+		"AssetHistoryItem.timestamp must not declare a pattern (BB31 §1.4)")
+
+	fromParam := doc.Paths.Find("/api/v1/assets/{asset_id}/history").Get.Parameters[0]
+	assert.Equal(t, "", fromParam.Value.Schema.Value.Pattern,
+		"inline date-time query parameter must not declare a pattern (BB31 §1.4)")
+}
+
 func TestInjectTopLevelSecurity_AddsDefaultWhenAbsent(t *testing.T) {
 	doc := &openapi3.T{}
 	injectTopLevelSecurity(doc)

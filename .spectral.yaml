@@ -291,6 +291,35 @@ rules:
       - field: headers.Allow
         function: truthy
 
+  trakrf-no-pattern-on-date-time-format:
+    description: >
+      Schema properties declared as `format: date-time` must not also
+      declare a `pattern`. RFC 3339 is already implied by the format, so
+      the pattern is redundant on the response-shape contract — and
+      openapi-generator-cli's Python template applies the pattern via a
+      `@field_validator` that runs AFTER Pydantic parses the string into
+      a `datetime` object, then stringifies that datetime (space
+      separator, not `T`) before regex-matching. The match always fails
+      and every read path that returns a timestamp throws a
+      ValidationError at deserialize time. Origin: BB31 §1.4 / TRA-698.
+      Distinct from `trakrf-no-control-bytes-in-pattern` (BB29 F6 /
+      TRA-687, an encoding bug) — different root cause, different
+      category.
+    message: "Property declares both format:date-time and pattern; drop the pattern (BB31 §1.4 / TRA-698)"
+    severity: error
+    # Deep-walk every node in the document whose `format` is `date-time`,
+    # then assert `pattern` is falsy on that node. Covers component schema
+    # properties, inline path/query parameter schemas, and any future
+    # nested shapes uniformly — no need to enumerate paths separately.
+    # Same JSONPath dialect note as `trakrf-int4-bounded-id-path-params`:
+    # use `.match(/.../)` not `=~` for any regex predicates; here we only
+    # need `==`, which nimma supports.
+    given:
+      - "$..[?(@.format == 'date-time')]"
+    then:
+      - field: pattern
+        function: falsy
+
   trakrf-no-control-bytes-in-pattern:
     description: >
       `pattern` values must not contain literal control bytes (0x00–0x1F or

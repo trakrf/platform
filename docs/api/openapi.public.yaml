@@ -82,7 +82,6 @@ components:
                 timestamp:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - timestamp
@@ -120,7 +119,6 @@ components:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 asset_external_key:
@@ -133,7 +131,6 @@ components:
                 last_seen:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 location_external_key:
                     nullable: true
@@ -179,14 +176,12 @@ components:
                 created_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 deleted_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 description:
@@ -220,19 +215,16 @@ components:
                 updated_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 valid_from:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - id
@@ -311,13 +303,11 @@ components:
                     example: "2025-01-01T00:00:00Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - name
@@ -386,13 +376,11 @@ components:
                     example: "2025-12-14T00:00:00Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - name
@@ -627,14 +615,12 @@ components:
                 created_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 deleted_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 description:
@@ -665,19 +651,16 @@ components:
                 updated_at:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     readOnly: true
                     type: string
                 valid_from:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             required:
                 - id
@@ -826,13 +809,11 @@ components:
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             type: object
         UpdateAssetResponse:
@@ -871,13 +852,11 @@ components:
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
                     format: date-time
                     nullable: true
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
             type: object
         UpdateLocationResponse:
@@ -1833,7 +1812,6 @@ paths:
                   schema:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 - description: RFC 3339 end timestamp
                   in: query
@@ -1841,7 +1819,6 @@ paths:
                   schema:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
-                    pattern: ^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
                     type: string
                 - description: comma-separated; prefix '-' for DESC
                   explode: false
