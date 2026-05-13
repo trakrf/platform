@@ -999,9 +999,6 @@
             "readOnly": true,
             "type": "integer"
           },
-          "is_active": {
-            "type": "boolean"
-          },
           "tag_type": {
             "$ref": "#/components/schemas/TagType"
           },
@@ -1015,8 +1012,7 @@
         "required": [
           "id",
           "tag_type",
-          "value",
-          "is_active"
+          "value"
         ],
         "type": "object"
       },
@@ -1949,30 +1945,6 @@
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "unsupported_media_type",
-            "headers": {
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/XRateLimitLimit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/XRateLimitRemaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/XRateLimitReset"
-              },
-              "X-Request-Id": {
-                "$ref": "#/components/headers/XRequestId"
-              }
-            }
           },
           "429": {
             "content": {
@@ -3597,30 +3569,6 @@
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "unsupported_media_type",
-            "headers": {
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/XRateLimitLimit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/XRateLimitRemaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/XRateLimitReset"
-              },
-              "X-Request-Id": {
-                "$ref": "#/components/headers/XRequestId"
-              }
-            }
-          },
           "429": {
             "content": {
               "application/json": {
@@ -4472,30 +4420,6 @@
               }
             },
             "description": "conflict — has descendants or placed assets",
-            "headers": {
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/XRateLimitLimit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/XRateLimitRemaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/XRateLimitReset"
-              },
-              "X-Request-Id": {
-                "$ref": "#/components/headers/XRequestId"
-              }
-            }
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "unsupported_media_type",
             "headers": {
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
@@ -6614,30 +6538,6 @@
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "unsupported_media_type",
-            "headers": {
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/XRateLimitLimit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/XRateLimitRemaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/XRateLimitReset"
-              },
-              "X-Request-Id": {
-                "$ref": "#/components/headers/XRequestId"
-              }
-            }
-          },
           "429": {
             "content": {
               "application/json": {
@@ -6975,7 +6875,7 @@
     },
     "/api/v1/reports/asset-locations": {
       "get": {
-        "description": "**Required scope:** `tracking:read`\n\nSnapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.\n\nTemporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible — matching how soft-deleted locations are projected.",
+        "description": "**Required scope:** `tracking:read`\n\nSnapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.\n\nTemporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible. Soft-deleted locations are projected the same way here — null on the report row — even though the identifier still lives on the location row; reports endpoints intentionally hide tombstoned anchor points from scan-derived summaries. Use the locations endpoint with `include_deleted=true` to retrieve the underlying identifier.",
         "operationId": "getAssetLocations",
         "parameters": [
           {
