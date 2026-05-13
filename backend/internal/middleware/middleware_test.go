@@ -20,6 +20,7 @@ func TestContentType(t *testing.T) {
 	tests := []struct {
 		name           string
 		method         string
+		path           string
 		contentType    string
 		expectedStatus int
 		description    string
@@ -55,18 +56,12 @@ func TestContentType(t *testing.T) {
 			description:    "JSON with charset parameter",
 		},
 		{
-			name:           "POST with multipart/form-data",
+			name:           "POST to /api/v1/assets/bulk with multipart/form-data",
 			method:         http.MethodPost,
+			path:           "/api/v1/assets/bulk",
 			contentType:    "multipart/form-data; boundary=----WebKitFormBoundary",
 			expectedStatus: http.StatusOK,
-			description:    "File upload request",
-		},
-		{
-			name:           "POST with empty Content-Type",
-			method:         http.MethodPost,
-			contentType:    "",
-			expectedStatus: http.StatusOK,
-			description:    "Empty Content-Type for backwards compatibility",
+			description:    "Internal CSV-upload endpoint accepts multipart",
 		},
 		// PUT requests with valid Content-Types
 		{
@@ -75,13 +70,6 @@ func TestContentType(t *testing.T) {
 			contentType:    "application/json",
 			expectedStatus: http.StatusOK,
 			description:    "PUT with JSON",
-		},
-		{
-			name:           "PUT with multipart/form-data",
-			method:         http.MethodPut,
-			contentType:    "multipart/form-data; boundary=----WebKitFormBoundary",
-			expectedStatus: http.StatusOK,
-			description:    "PUT with file upload",
 		},
 		// PATCH on the global middleware accepts both application/json and
 		// application/merge-patch+json. Strict RFC 7396 single-CT enforcement
@@ -101,7 +89,69 @@ func TestContentType(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			description:    "Global middleware passes PATCH+json; per-route RequireMergePatchCT enforces strict",
 		},
-		// Invalid Content-Types
+		// TRA-703 / BB32 D4: empty Content-Type rejected on every write method.
+		{
+			name:           "POST with empty Content-Type rejected (TRA-703)",
+			method:         http.MethodPost,
+			contentType:    "",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "Missing CT is a wrong CT per docs",
+		},
+		{
+			name:           "PUT with empty Content-Type rejected (TRA-703)",
+			method:         http.MethodPut,
+			contentType:    "",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "Missing CT is a wrong CT per docs",
+		},
+		{
+			name:           "PATCH with empty Content-Type rejected (TRA-703)",
+			method:         http.MethodPatch,
+			contentType:    "",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "Missing CT is a wrong CT per docs",
+		},
+		// TRA-703 / BB32 D4: merge-patch+json is PATCH-only on the public surface.
+		{
+			name:           "POST with application/merge-patch+json rejected (TRA-703)",
+			method:         http.MethodPost,
+			contentType:    "application/merge-patch+json",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "merge-patch+json is PATCH-only per public docs",
+		},
+		{
+			name:           "PUT with application/merge-patch+json rejected (TRA-703)",
+			method:         http.MethodPut,
+			contentType:    "application/merge-patch+json",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "merge-patch+json is PATCH-only per public docs",
+		},
+		// TRA-703 / BB32 D4: multipart on a non-bulk POST path now 415.
+		{
+			name:           "POST to non-bulk path with multipart/form-data rejected (TRA-703)",
+			method:         http.MethodPost,
+			path:           "/api/v1/assets",
+			contentType:    "multipart/form-data; boundary=----WebKitFormBoundary",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "Only /api/v1/assets/bulk accepts multipart",
+		},
+		{
+			name:           "PUT with multipart/form-data rejected (TRA-703)",
+			method:         http.MethodPut,
+			contentType:    "multipart/form-data; boundary=----WebKitFormBoundary",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "PUT never accepts multipart",
+		},
+		// Bulk endpoint must reject non-multipart CT.
+		{
+			name:           "POST to /api/v1/assets/bulk with application/json rejected (TRA-703)",
+			method:         http.MethodPost,
+			path:           "/api/v1/assets/bulk",
+			contentType:    "application/json",
+			expectedStatus: http.StatusUnsupportedMediaType,
+			description:    "Bulk endpoint requires multipart",
+		},
+		// Other invalid Content-Types
 		{
 			name:           "POST with text/plain",
 			method:         http.MethodPost,
@@ -121,7 +171,7 @@ func TestContentType(t *testing.T) {
 			method:         http.MethodPost,
 			contentType:    "text/csv",
 			expectedStatus: http.StatusUnsupportedMediaType,
-			description:    "CSV not allowed as Content-Type (must use multipart/form-data)",
+			description:    "CSV not allowed as Content-Type (multipart/form-data only on /api/v1/assets/bulk)",
 		},
 		{
 			name:           "PUT with application/x-www-form-urlencoded",
@@ -142,8 +192,11 @@ func TestContentType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create request
-			req := httptest.NewRequest(tt.method, "/test", strings.NewReader("{}"))
+			path := tt.path
+			if path == "" {
+				path = "/test"
+			}
+			req := httptest.NewRequest(tt.method, path, strings.NewReader("{}"))
 			if tt.contentType != "" {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
@@ -204,7 +257,9 @@ func TestRequireMergePatchCT(t *testing.T) {
 	}{
 		{"merge-patch+json", "application/merge-patch+json", http.StatusOK},
 		{"merge-patch+json with charset", "application/merge-patch+json; charset=utf-8", http.StatusOK},
-		{"empty CT allowed", "", http.StatusOK},
+		// TRA-703 / BB32 D4: missing CT is a wrong CT — 415 to match the
+		// "every wrong Content-Type returns 415" docs promise.
+		{"empty CT rejected", "", http.StatusUnsupportedMediaType},
 		{"application/json rejected", "application/json", http.StatusUnsupportedMediaType},
 		{"application/json with charset rejected", "application/json; charset=utf-8", http.StatusUnsupportedMediaType},
 		{"multipart rejected", "multipart/form-data; boundary=----X", http.StatusUnsupportedMediaType},
@@ -249,8 +304,11 @@ func TestGenerateRequestID_ULIDFormat(t *testing.T) {
 	}
 }
 
+// TestContentType_MultipartBoundary verifies the /api/v1/assets/bulk path
+// accepts multipart with all the boundary forms a CSV-upload client emits.
+// Probed at the bulk path because every other route now 415s multipart
+// (TRA-703 / BB32 D4).
 func TestContentType_MultipartBoundary(t *testing.T) {
-	// Test that multipart/form-data works with various boundary formats
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -266,7 +324,7 @@ func TestContentType_MultipartBoundary(t *testing.T) {
 
 	for _, boundary := range boundaries {
 		t.Run(boundary, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/test", nil)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/assets/bulk", nil)
 			req.Header.Set("Content-Type", boundary)
 			rr := httptest.NewRecorder()
 

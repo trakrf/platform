@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/models/apikey"
@@ -12,6 +13,12 @@ import (
 	"github.com/trakrf/platform/backend/internal/ratelimit"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
+
+// apiV1Prefix gates the path-scoped rate-limit-header middleware so
+// /metrics, /swagger, /openapi.* aliases, and the SPA asset routes stay
+// header-free. The /api/v1 (no trailing slash) variant is included so a
+// probe for the bare prefix still gets X-RateLimit-* on its 404.
+const apiV1Prefix = "/api/v1"
 
 // writeRateLimitHeaders emits the three IETF rate-limit headers from a Decision.
 // Used by both RateLimit (per-key, post-auth) and DefaultRateLimitHeaders
@@ -36,6 +43,30 @@ func DefaultRateLimitHeaders(lim *ratelimit.Limiter) func(http.Handler) http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			writeRateLimitHeaders(w, lim.AnonDecision())
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// APIv1DefaultRateLimitHeaders is DefaultRateLimitHeaders scoped to the
+// public /api/v1/* path prefix, intended for use as a global middleware
+// that runs before ContentType. It guarantees the three X-RateLimit-*
+// headers appear on every public-API response — including 415 rejections
+// from ContentType, which fire before routing and therefore before any
+// per-group DefaultRateLimitHeaders the request would otherwise reach
+// (TRA-703 / BB32 C1). For non-/api/v1 paths (SPA assets, /metrics,
+// /swagger) the middleware is a no-op so those responses stay header-free.
+//
+// Per-group DefaultRateLimitHeaders is still wired on each /api/v1/* group
+// because RateLimit overwrites the same headers with real per-key bucket
+// values after API-key auth; the per-group call leaves a clean reset point
+// after this global default in chains where authentication may not run.
+func APIv1DefaultRateLimitHeaders(lim *ratelimit.Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == apiV1Prefix || strings.HasPrefix(r.URL.Path, apiV1Prefix+"/") {
+				writeRateLimitHeaders(w, lim.AnonDecision())
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
