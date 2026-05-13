@@ -96,7 +96,6 @@ func postprocessPublic(doc *openapi3.T) error {
 	markIntegerFormats(doc)
 	markQueryIntegerBounds(doc)
 	markQueryStringPatterns(doc)
-	markDateTimePatterns(doc)
 	flattenSortQueryToString(doc)
 	markDateTimeExamples(doc)
 	injectDefaultErrorResponse(doc)
@@ -1202,78 +1201,6 @@ const (
 	dateTimeExample = "2025-04-29T12:34:56Z"
 	dateExample     = "2025-04-29"
 )
-
-// dateTimePattern restricts `format: date-time` strings to RFC 3339 with
-// a four-digit year between 1000 and 9999. Go's time package treats year 1
-// (0001-01-01T00:00:00Z) as IsZero, and shared.FlexibleDate rejects that
-// literal to prevent silent zero-substitution at the handler seam
-// (TRA-649 / BB23 F2). Schemathesis occasionally fuzz-generates that
-// exact value as a "valid" RFC 3339 timestamp, surfacing as a
-// schema-compliant 400. Advertising the year-range constraint in the spec
-// matches what the server accepts and keeps positive_data_acceptance
-// green (TRA-678).
-const dateTimePattern = `^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`
-
-// markDateTimePatterns walks every schema and inline parameter and sets
-// `pattern: dateTimePattern` on date-time string properties that don't
-// already declare one. Idempotent.
-func markDateTimePatterns(doc *openapi3.T) {
-	apply := func(s *openapi3.Schema) {
-		if s == nil {
-			return
-		}
-		setDateTimePatternRecursive(s)
-	}
-	if doc.Components != nil && doc.Components.Schemas != nil {
-		for _, ref := range doc.Components.Schemas {
-			if ref != nil && ref.Value != nil {
-				apply(ref.Value)
-			}
-		}
-	}
-	if doc.Paths != nil {
-		for _, item := range doc.Paths.Map() {
-			if item == nil {
-				continue
-			}
-			for _, p := range item.Parameters {
-				if p != nil && p.Value != nil && p.Value.Schema != nil && p.Value.Schema.Value != nil {
-					setDateTimePatternRecursive(p.Value.Schema.Value)
-				}
-			}
-			for _, op := range item.Operations() {
-				if op == nil {
-					continue
-				}
-				for _, p := range op.Parameters {
-					if p != nil && p.Value != nil && p.Value.Schema != nil && p.Value.Schema.Value != nil {
-						setDateTimePatternRecursive(p.Value.Schema.Value)
-					}
-				}
-			}
-		}
-	}
-}
-
-func setDateTimePatternRecursive(s *openapi3.Schema) {
-	if s == nil {
-		return
-	}
-	if s.Type != nil && s.Type.Is(openapi3.TypeString) && s.Format == "date-time" && s.Pattern == "" {
-		s.Pattern = dateTimePattern
-	}
-	for _, prop := range s.Properties {
-		if prop != nil && prop.Value != nil {
-			setDateTimePatternRecursive(prop.Value)
-		}
-	}
-	if s.Items != nil && s.Items.Value != nil {
-		setDateTimePatternRecursive(s.Items.Value)
-	}
-	if s.AdditionalProperties.Schema != nil && s.AdditionalProperties.Schema.Value != nil {
-		setDateTimePatternRecursive(s.AdditionalProperties.Schema.Value)
-	}
-}
 
 // markDateTimeExamples walks every schema and seeds an `example:` on date
 // and date-time string properties that don't already declare one. Covers
