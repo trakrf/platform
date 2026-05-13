@@ -1,2 +1,10 @@
+# Default: ignore everything in this directory (Schemathesis writes JUnit /
+# HAR / NDJSON reports here at runtime; the dir is also chmod 0777 to let the
+# docker container's UID write). The exceptions below preserve the deterministic
+# case runner + coverage gate (TRA-692).
 *
 !.gitignore
+!explicit_error_cases.py
+!check_field_error_coverage.py
+!test_check_field_error_coverage.py
+!requirements.txt
