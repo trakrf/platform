@@ -23,7 +23,7 @@ export function LocateTagPopover({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  const activeTags = tags.filter((t) => t.is_active);
+  const activeTags = tags;
   const hasActiveTags = activeTags.length > 0;
   const canLocate = isActive && hasActiveTags;
 

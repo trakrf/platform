@@ -234,9 +234,9 @@ func TestUpdateLocation(t *testing.T) {
 	// GetTagsByLocationID: empty tags (wrapped in WithOrgTx)
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
+	mock.ExpectQuery(`SELECT id, type, value[\s\S]+FROM trakrf.tags`).
 		WithArgs(locationID, 1).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value"}))
 	mock.ExpectCommit()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
@@ -292,9 +292,9 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 	// GetTagsByLocationID: empty tags (wrapped in WithOrgTx)
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
+	mock.ExpectQuery(`SELECT id, type, value[\s\S]+FROM trakrf.tags`).
 		WithArgs(locationID, 1).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value"}))
 	mock.ExpectCommit()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
@@ -338,9 +338,9 @@ func TestUpdateLocation_NoFields(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT id, type, value, is_active[\s\S]+FROM trakrf.tags`).
+	mock.ExpectQuery(`SELECT id, type, value[\s\S]+FROM trakrf.tags`).
 		WithArgs(locationID, 1).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value", "is_active"}))
+		WillReturnRows(pgxmock.NewRows([]string{"id", "type", "value"}))
 	mock.ExpectCommit()
 
 	result, err := storage.UpdateLocation(context.Background(), 1, locationID, request)
@@ -612,10 +612,10 @@ func TestGetAncestors(t *testing.T) {
 	mock.ExpectCommit()
 
 	// getTagsForLocations (wrapped in WithOrgTx)
-	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value"})
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT location_id, id, type, value`).
 		WithArgs([]int{1, 2}, orgID).
 		WillReturnRows(identifierRows)
 	mock.ExpectCommit()
@@ -696,9 +696,9 @@ func TestListAncestorsPaginated(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT location_id, id, type, value`).
 		WithArgs([]int{2}, orgID).
-		WillReturnRows(pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"}))
+		WillReturnRows(pgxmock.NewRows([]string{"location_id", "id", "type", "value"}))
 	mock.ExpectCommit()
 
 	results, err := storage.ListAncestorsPaginated(context.Background(), orgID, locationID, limit, offset)
@@ -766,10 +766,10 @@ func TestGetDescendants(t *testing.T) {
 	mock.ExpectCommit()
 
 	// getTagsForLocations (wrapped in WithOrgTx)
-	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value"})
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT location_id, id, type, value`).
 		WithArgs([]int{2, 3, 4}, orgID).
 		WillReturnRows(identifierRows)
 	mock.ExpectCommit()
@@ -851,9 +851,9 @@ func TestListDescendantsPaginated(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT location_id, id, type, value`).
 		WithArgs([]int{3, 4}, orgID).
-		WillReturnRows(pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"}))
+		WillReturnRows(pgxmock.NewRows([]string{"location_id", "id", "type", "value"}))
 	mock.ExpectCommit()
 
 	results, err := storage.ListDescendantsPaginated(context.Background(), orgID, rootID, limit, offset)
@@ -914,10 +914,10 @@ func TestGetChildren(t *testing.T) {
 	mock.ExpectCommit()
 
 	// getTagsForLocations (wrapped in WithOrgTx)
-	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"})
+	identifierRows := pgxmock.NewRows([]string{"location_id", "id", "type", "value"})
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT location_id, id, type, value`).
 		WithArgs([]int{3, 4}, orgID).
 		WillReturnRows(identifierRows)
 	mock.ExpectCommit()
@@ -999,9 +999,9 @@ func TestListChildrenPaginated(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`SELECT location_id, id, type, value, is_active`).
+	mock.ExpectQuery(`SELECT location_id, id, type, value`).
 		WithArgs([]int{2, 3}, orgID).
-		WillReturnRows(pgxmock.NewRows([]string{"location_id", "id", "type", "value", "is_active"}))
+		WillReturnRows(pgxmock.NewRows([]string{"location_id", "id", "type", "value"}))
 	mock.ExpectCommit()
 
 	results, err := storage.ListChildrenPaginated(context.Background(), orgID, parentID, limit, offset)

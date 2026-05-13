@@ -443,10 +443,9 @@ func TestPostprocess_AnnotatesTagPolymorphism(t *testing.T) {
 		"shared.Tag": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
-				"id":        &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
-				"tag_type":  tagTypeProp(),
-				"value":     stringProp(""),
-				"is_active": &openapi3.SchemaRef{Value: openapi3.NewBoolSchema()},
+				"id":       &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"tag_type": tagTypeProp(),
+				"value":    stringProp(""),
 			},
 		}},
 		"shared.TagRequest": &openapi3.SchemaRef{Value: &openapi3.Schema{

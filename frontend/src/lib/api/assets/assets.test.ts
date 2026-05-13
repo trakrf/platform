@@ -356,7 +356,7 @@ describe('assetsApi', () => {
   describe('addTag()', () => {
     it('should call POST /assets/by-id/:assetId/tags with tag data', async () => {
       const mockResponse = {
-        data: { id: 1, tag_type: 'rfid', value: 'TAG-001', is_active: true },
+        data: { id: 1, tag_type: 'rfid', value: 'TAG-001' },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
@@ -371,7 +371,7 @@ describe('assetsApi', () => {
 
     it('should return the created tag', async () => {
       const mockResponse = {
-        data: { id: 42, tag_type: 'rfid', value: 'NEW-TAG', is_active: true },
+        data: { id: 42, tag_type: 'rfid', value: 'NEW-TAG' },
       };
 
       vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse });
@@ -383,7 +383,6 @@ describe('assetsApi', () => {
 
       expect(result.data.data.id).toBe(42);
       expect(result.data.data.value).toBe('NEW-TAG');
-      expect(result.data.data.is_active).toBe(true);
     });
 
     it('should handle duplicate tag errors', async () => {

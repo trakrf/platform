@@ -22,9 +22,9 @@ vi.mock('react-hot-toast', () => ({
 
 describe('TagsModal', () => {
   const mockTags: Tag[] = [
-    { id: 1, tag_type: 'rfid', value: 'TAG-001', is_active: true },
-    { id: 2, tag_type: 'rfid', value: 'TAG-002', is_active: true },
-    { id: 3, tag_type: 'rfid', value: 'TAG-003', is_active: false },
+    { id: 1, tag_type: 'rfid', value: 'TAG-001' },
+    { id: 2, tag_type: 'rfid', value: 'TAG-002' },
+    { id: 3, tag_type: 'rfid', value: 'TAG-003' },
   ];
 
   const defaultProps = {
@@ -83,16 +83,6 @@ describe('TagsModal', () => {
 
       const rfidBadges = screen.getAllByText('RFID');
       expect(rfidBadges).toHaveLength(3);
-    });
-
-    it('displays Active/Inactive status badges', () => {
-      render(<TagsModal {...defaultProps} />);
-
-      const activeBadges = screen.getAllByText('Active');
-      const inactiveBadges = screen.getAllByText('Inactive');
-
-      expect(activeBadges).toHaveLength(2);
-      expect(inactiveBadges).toHaveLength(1);
     });
 
     it('displays empty state when no tags', () => {
