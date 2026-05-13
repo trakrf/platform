@@ -1328,28 +1328,25 @@ var nullableFields = map[string][]string{
 	// --- write schemas (request payloads) — TRA-614 / BB19 §S1 ---
 	// Mirror the read-view asymmetry: anything nullable above is nullable
 	// here too where writable. valid_to was already correct via the
-	// ClearValidTo sentinel; the rest are added by TRA-614.
+	// ClearValidTo sentinel; description was added by TRA-614.
 	//
-	// valid_from is nullable on Create only: a caller passing `null` is
-	// asking the server to substitute the current timestamp ("null-as-now"
-	// — the documented contract integrators reach for from ETL/migration
-	// code that emits `null` rather than omitting JSON keys). PATCH keeps
-	// valid_from non-nullable: there is no "use server default" semantic on
-	// update — `null` there would be a request to reset the row's temporal
-	// start, which the handler rejects with invalid_value (TRA-675).
-	// PATCH update bodies: is_active is NOT nullable — the handler treats
-	// `is_active: null` as a 400 (omit the field to leave unchanged). metadata
-	// also not nullable on update — null is ambiguous with "no change."
+	// TRA-705 (BB32 §C6): valid_from, is_active, and metadata are NOT
+	// nullable on either Create or Update. Omission already serves "use
+	// server default" on these fields; accepting null on Create only
+	// (the previous TRA-675 "null-as-now" carve-out) muddied the
+	// semantics and forced a documented Date Fields asymmetry note that
+	// integrators tripped on. Both sides now reject `null` with
+	// invalid_value.
 	// TRA-681: location_external_key / parent_external_key dropped from
 	// UpdateXxxRequest — the natural-key form is read-only on PATCH and is
 	// stripped from the body before validation. The struct fields no longer
 	// exist; the corresponding spec entries go too.
 	"asset.UpdateAssetRequest":               {"description", "location_id", "valid_to"},
-	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_from", "valid_to", "metadata", "is_active"},
-	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_from", "valid_to", "tags", "metadata", "is_active"},
+	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
+	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_to", "tags"},
 	"location.UpdateLocationRequest":         {"description", "parent_id", "valid_to"},
-	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_from", "valid_to", "is_active"},
-	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_from", "valid_to", "tags", "is_active"},
+	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
+	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_to", "tags"},
 
 	// shared.TagRequest.tag_type is optional and defaults to "rfid" server-side
 	// when null or omitted (TRA-678). The spec marks it nullable to match the

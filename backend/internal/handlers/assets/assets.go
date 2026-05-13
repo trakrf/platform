@@ -147,6 +147,28 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TRA-705 (BB32 §C6): valid_from, is_active, and metadata are
+	// non-nullable on both Create and Update. Omission already means "use
+	// server default" — accepting null on Create only (the prior TRA-675
+	// "null-as-now" carve-out) muddied the semantics and forced an
+	// asymmetry doc note that integrators tripped on. Reject explicit
+	// null with invalid_value; accumulate every violation so the
+	// integrator sees the full picture (BB32 §D3 pattern).
+	var nullViolations []modelerrors.FieldError
+	for _, f := range []string{"valid_from", "is_active", "metadata"} {
+		if _, ok := explicitNulls[f]; ok {
+			nullViolations = append(nullViolations, modelerrors.FieldError{
+				Field:   f,
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("%s cannot be null; omit the field to use the server default, or provide a value", f),
+			})
+		}
+	}
+	if len(nullViolations) > 0 {
+		httputil.WriteValidationError(w, r, requestID, nullViolations)
+		return
+	}
+
 	// Apply API-consumer defaults for fields the UI always sends explicitly
 	// but API consumers commonly omit. Absence is distinguishable from zero
 	// because these fields are pointer-typed.

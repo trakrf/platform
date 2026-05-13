@@ -1103,12 +1103,12 @@ func TestPostAsset_MissingNameEmitsTooShort(t *testing.T) {
 	_ = pool
 }
 
-// TRA-675 / Schemathesis Class D: POST with explicit `valid_from: null`
-// is accepted as "use server default" — the spec marks valid_from
-// nullable:true on Create schemas. Integrators emitting null rather than
-// omitting the key (common from JSON serializers in ETL pipelines) reach
-// the same null-as-now default as omitting valid_from entirely.
-func TestPostAsset_NullValidFrom_AcceptedAsNow(t *testing.T) {
+// TRA-705 (BB32 §C6): POST with explicit `valid_from: null` is rejected
+// with 400 validation_error. Supersedes TRA-675: the prior carve-out
+// (nullable on Create only, "null-as-now" alias for omission) created a
+// documented Create/Update asymmetry that integrators tripped on. Pre-
+// launch we tighten — omit valid_from to use the server default.
+func TestPostAsset_NullValidFrom_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -1128,18 +1128,144 @@ func TestPostAsset_NullValidFrom_AcceptedAsNow(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusCreated, rec.Code, "valid_from null must be accepted as now: %s", rec.Body.String())
+	require.Equal(t, http.StatusBadRequest, rec.Code, "POST valid_from null must be 400: %s", rec.Body.String())
 
 	var resp struct {
-		Data struct {
-			ValidFrom time.Time `json:"valid_from"`
-		} `json:"data"`
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.False(t, resp.Data.ValidFrom.IsZero(), "valid_from must be populated")
-	assert.WithinDuration(t, time.Now().UTC(), resp.Data.ValidFrom, 5*time.Minute)
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "valid_from", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
 
 	_ = pool
+}
+
+// TRA-705 (BB32 §C6): POST with explicit `is_active: null` is rejected
+// with 400 validation_error — omit is_active to use the server default
+// (true), or send a boolean.
+func TestPostAsset_NullIsActive_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body := []byte(`{"external_key":"ASSET-NULL-IA","name":"n","is_active":null}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "POST is_active null must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "is_active", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+}
+
+// TRA-705 (BB32 §C6): POST with explicit `metadata: null` is rejected
+// with 400 validation_error — omit metadata to use the server default
+// (no metadata), or send an object.
+func TestPostAsset_NullMetadata_Rejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body := []byte(`{"external_key":"ASSET-NULL-MD","name":"n","metadata":null}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, "POST metadata null must be 400: %s", rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "metadata", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+}
+
+// TRA-705 (BB32 §C6 / D3): multiple null-on-non-nullable violations on
+// the same POST body must all be reported in one round trip.
+func TestPostAsset_NullMultiField_AllReported(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	body := []byte(`{"name":"n","valid_from":null,"is_active":null,"metadata":null}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Detail string `json:"detail"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 3)
+	for _, f := range resp.Error.Fields {
+		assert.Equal(t, "invalid_value", f.Code)
+	}
+	assert.Contains(t, resp.Error.Detail, "(and 2 more validation errors)",
+		"detail must carry the multi-field suffix")
 }
 
 // TRA-675: PATCH keeps rejecting valid_from null. On update there is no

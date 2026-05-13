@@ -269,7 +269,6 @@ components:
                     type: string
                 is_active:
                     example: true
-                    nullable: true
                     type: boolean
                 location_external_key:
                     example: WHS-01
@@ -287,7 +286,6 @@ components:
                     type: integer
                 metadata:
                     additionalProperties: {}
-                    nullable: true
                     type: object
                 name:
                     maxLength: 255
@@ -302,7 +300,6 @@ components:
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
                     format: date-time
-                    nullable: true
                     type: string
                 valid_to:
                     example: "2026-01-01T00:00:00Z"
@@ -345,7 +342,6 @@ components:
                     type: string
                 is_active:
                     example: true
-                    nullable: true
                     type: boolean
                 name:
                     example: Warehouse 1
@@ -375,7 +371,6 @@ components:
                 valid_from:
                     example: "2025-12-14T00:00:00Z"
                     format: date-time
-                    nullable: true
                     type: string
                 valid_to:
                     example: "2026-12-14T00:00:00Z"
