@@ -189,13 +189,10 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	_, hasLocID := presentKeys["location_id"]
 	_, hasLocExt := presentKeys["location_external_key"]
 	if hasLocID && hasLocExt {
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			"location_id and location_external_key are mutually exclusive; supply exactly one",
-			requestID,
-			[]modelerrors.FieldError{
-				{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-				{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-			})
+		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{
+			{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+			{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+		})
 		return
 	}
 
@@ -219,9 +216,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		// reserved for true state-conflict cases like the non-leaf-location-
 		// delete pattern. The typed code stays so generated clients can
 		// branch precisely.
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			fErr.Message, requestID,
-			[]modelerrors.FieldError{*fErr})
+		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{*fErr})
 
 		return
 	}
@@ -310,18 +305,23 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	// valid_from / name are non-nullable on the read view; an explicit null
 	// in the PATCH body is a validation error, not a clear-request.
+	//
+	// TRA-702 / BB32 D3: accumulate every null-on-non-nullable violation
+	// before responding — the loop pre-TRA-702 short-circuited on the first
+	// match, hiding subsequent ones until the integrator re-tried.
+	var nullViolations []modelerrors.FieldError
 	for _, f := range []string{"valid_from", "name", "is_active", "metadata"} {
 		if _, ok := explicitNulls[f]; ok {
-			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-				"validation failed", reqID,
-				[]modelerrors.FieldError{{
-					Field:   f,
-					Code:    "invalid_value",
-					Message: fmt.Sprintf("%s cannot be null; omit the field to leave unchanged, or provide a value", f),
-				}})
-
-			return
+			nullViolations = append(nullViolations, modelerrors.FieldError{
+				Field:   f,
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("%s cannot be null; omit the field to leave unchanged, or provide a value", f),
+			})
 		}
+	}
+	if len(nullViolations) > 0 {
+		httputil.WriteValidationError(w, req, reqID, nullViolations)
+		return
 	}
 	if _, ok := explicitNulls["valid_to"]; ok {
 		request.ClearValidTo = true
@@ -391,8 +391,10 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		}
 	}
 	if len(echoViolations) > 0 {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"validation failed", reqID, echoViolations)
+		// TRA-702 / BB32 D2: detail must echo fields[0].Message — the inline
+		// literal "validation failed" buried the redirect-to-/rename message
+		// inside fields[0] where AI integrators were less likely to read it.
+		httputil.WriteValidationError(w, req, reqID, echoViolations)
 		return
 	}
 	// Echo passed (or fields absent). Strip the natural-key fields so they
@@ -639,13 +641,10 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	_, hasLocID := params.Filters["location_id"]
 	_, hasLocExt := params.Filters["location_external_key"]
 	if hasLocID && hasLocExt {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"location_id and location_external_key are mutually exclusive; supply exactly one",
-			reqID,
-			[]modelerrors.FieldError{
-				{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-				{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-			})
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{
+			{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+			{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+		})
 		return
 	}
 	f := asset.ListFilter{
@@ -659,13 +658,11 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		for _, s := range vs {
 			n, err := strconv.Atoi(s)
 			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
-				httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-					"invalid location_id", reqID,
-					[]modelerrors.FieldError{{
-						Field:   "location_id",
-						Code:    "invalid_value",
-						Message: fmt.Sprintf("location_id %q must be a positive int32", s),
-					}})
+				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{{
+					Field:   "location_id",
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("location_id %q must be a positive int32", s),
+				}})
 
 				return
 			}

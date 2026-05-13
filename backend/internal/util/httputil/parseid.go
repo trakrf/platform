@@ -91,8 +91,9 @@ func ParseSurrogateID(field, raw string) (int, error) {
 func RespondPathParamError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
 	var fpe *FieldParamError
 	if errors.As(err, &fpe) {
-		WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-			fpe.Message, requestID, []apierrors.FieldError{fpe.FieldError})
+		// TRA-702: route through WriteValidationError so detail derives from
+		// fields[0].Message uniformly with the rest of validation_error sites.
+		WriteValidationError(w, r, requestID, []apierrors.FieldError{fpe.FieldError})
 		return
 	}
 	msg := "invalid path parameter"

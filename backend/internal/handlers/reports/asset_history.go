@@ -21,13 +21,11 @@ const (
 // offending query parameter.
 func respondInvalidTimestamp(w http.ResponseWriter, r *http.Request, field, reqID string) {
 	msg := fmt.Sprintf("Invalid '%s' timestamp; expected RFC 3339, e.g. 2026-04-21T00:00:00Z", field)
-	httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-		msg, reqID,
-		[]modelerrors.FieldError{{
-			Field:   field,
-			Code:    "invalid_value",
-			Message: msg,
-		}})
+	httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{{
+		Field:   field,
+		Code:    "invalid_value",
+		Message: msg,
+	}})
 
 }
 

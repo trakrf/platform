@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,6 +27,107 @@ func (e *JSONDecodeError) Error() string {
 }
 
 func (e *JSONDecodeError) Unwrap() error { return e.Cause }
+
+// JSONUnknownFieldsError carries every unknown top-level key found in a
+// strict-decode request body. encoding/json's DisallowUnknownFields stops at
+// the first unknown field, but the public API's docs commit to one fields[]
+// entry per invalid field (TRA-702 / BB32 D3) — so the strict-decode
+// helpers do the enumeration up-front via reflection on the destination
+// struct and surface every offending key here.
+//
+// Fields is sorted lexically so test assertions and client-side branching
+// see a deterministic order.
+type JSONUnknownFieldsError struct {
+	Fields []string
+}
+
+func (e *JSONUnknownFieldsError) Error() string {
+	if len(e.Fields) == 1 {
+		return fmt.Sprintf("json: unknown field %q", e.Fields[0])
+	}
+	return fmt.Sprintf("json: unknown fields %v", e.Fields)
+}
+
+// knownJSONTags returns the set of top-level JSON tag names declared on the
+// destination struct (or *struct). Embedded anonymous structs are walked
+// because encoding/json promotes their fields to the parent level. Unexported
+// fields and json:"-" tags are skipped. Returns an empty map when dst is not
+// a struct kind — callers treat that as "no precheck possible" and let the
+// downstream strict decoder fail naturally.
+func knownJSONTags(dst any) map[string]struct{} {
+	out := map[string]struct{}{}
+	t := reflect.TypeOf(dst)
+	for t != nil && t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t == nil || t.Kind() != reflect.Struct {
+		return out
+	}
+	collectKnownJSONTags(t, out)
+	return out
+}
+
+func collectKnownJSONTags(t reflect.Type, out map[string]struct{}) {
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() && !f.Anonymous {
+			continue
+		}
+		if f.Anonymous {
+			inner := f.Type
+			for inner.Kind() == reflect.Ptr {
+				inner = inner.Elem()
+			}
+			if inner.Kind() == reflect.Struct {
+				collectKnownJSONTags(inner, out)
+				continue
+			}
+		}
+		tag := f.Tag.Get("json")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		name := strings.SplitN(tag, ",", 2)[0]
+		if name != "" && name != "-" {
+			out[name] = struct{}{}
+		}
+	}
+}
+
+// precheckUnknownFields enumerates every top-level key in raw that does not
+// map to a json tag on dst, ignoring keys named in skip (the PATCH drop set
+// for round-trip-safe read-only fields). Returns a *JSONUnknownFieldsError
+// when one or more unknowns are present; nil otherwise. The strict decoder
+// would catch one of them, but only one, hence the explicit precheck. TRA-702
+// / BB32 D3.
+func precheckUnknownFields(raw map[string]json.RawMessage, dst any, skip []string) *JSONUnknownFieldsError {
+	if len(raw) == 0 {
+		return nil
+	}
+	known := knownJSONTags(dst)
+	if len(known) == 0 {
+		return nil
+	}
+	skipSet := map[string]struct{}{}
+	for _, s := range skip {
+		skipSet[s] = struct{}{}
+	}
+	var unknowns []string
+	for k := range raw {
+		if _, ok := known[k]; ok {
+			continue
+		}
+		if _, ok := skipSet[k]; ok {
+			continue
+		}
+		unknowns = append(unknowns, k)
+	}
+	if len(unknowns) == 0 {
+		return nil
+	}
+	sort.Strings(unknowns)
+	return &JSONUnknownFieldsError{Fields: unknowns}
+}
 
 // DecodeJSON decodes the request body into dst. Wraps any decode failure
 // in *JSONDecodeError so the caller does not surface encoding/json
@@ -47,6 +149,11 @@ func DecodeJSON(r *http.Request, dst any) error {
 // DecodeJSONStrict is DecodeJSON with DisallowUnknownFields. Use on
 // public API endpoints where unrecognised body fields should produce a
 // 400 rather than being silently ignored.
+//
+// TRA-702 / BB32 D3: a body with multiple unknown top-level keys returns a
+// *JSONUnknownFieldsError carrying every offending key (sorted), so the
+// caller can render one fields[] entry per invalid field. The strict
+// decoder only reports the first unknown key on its own.
 func DecodeJSONStrict(r *http.Request, dst any) error {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -54,6 +161,12 @@ func DecodeJSONStrict(r *http.Request, dst any) error {
 	}
 	if err := rejectNULByteBody(body); err != nil {
 		return err
+	}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(body, &raw) == nil {
+		if ufe := precheckUnknownFields(raw, dst, nil); ufe != nil {
+			return ufe
+		}
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
@@ -96,9 +209,13 @@ func DecodeJSONStrictWithPresence(r *http.Request, dst any) (map[string]struct{}
 	}
 	present := map[string]struct{}{}
 	var raw map[string]json.RawMessage
-	if json.Unmarshal(body, &raw) == nil {
+	objectBody := json.Unmarshal(body, &raw) == nil
+	if objectBody {
 		for k := range raw {
 			present[k] = struct{}{}
+		}
+		if ufe := precheckUnknownFields(raw, dst, nil); ufe != nil {
+			return present, ufe
 		}
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -214,11 +331,12 @@ func RejectFields(w http.ResponseWriter, r *http.Request, requestID string, poli
 		return false
 	}
 
-	// Detail: take the first violation's message. Most callers only ever
-	// hit one rejected field per resource, and even when several appear,
-	// branching happens on fields[].code, not the detail string.
-	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-		violations[0].Message, requestID, violations)
+	// TRA-702 / BB32 D2+D3: route through the central validation_error
+	// helper so detail echoes violations[0].Message and gains the
+	// "(and N more validation errors)" suffix when more than one field
+	// rejected. Detail computation is identical to every other
+	// validation_error emit-site.
+	WriteValidationError(w, r, requestID, violations)
 	return true
 }
 
@@ -271,6 +389,12 @@ func decodeStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map
 		for k := range raw {
 			present[k] = struct{}{}
 		}
+		// TRA-702 / BB32 D3: surface every unknown top-level key, not just
+		// the first one the strict decoder would catch. The drop set is
+		// already applied above so dropped keys never look unknown.
+		if ufe := precheckUnknownFields(raw, dst, nil); ufe != nil {
+			return explicitNulls, present, ufe
+		}
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -287,19 +411,40 @@ func decodeStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map
 // clients can branch on type+fields[].code like any other body failure.
 // Other decode failures (syntax, truncated input) stay as bad_request
 // because there is no field name to attach.
+//
+// TRA-702 / BB32 D3: a *JSONUnknownFieldsError carrying multiple keys
+// produces one fields[] entry per offending key with detail computed by
+// WriteValidationError (echoes fields[0].Message + "(and N more ...)" suffix).
 func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
 	if err != nil {
+		var ufe *JSONUnknownFieldsError
+		if errors.As(err, &ufe) && len(ufe.Fields) > 0 {
+			fields := make([]apierrors.FieldError, 0, len(ufe.Fields))
+			for _, name := range ufe.Fields {
+				fields = append(fields, apierrors.FieldError{
+					Field:   name,
+					Code:    "unknown_field",
+					Message: fmt.Sprintf("unknown field %q in request body", name),
+				})
+			}
+			WriteValidationError(w, r, requestID, fields)
+			return
+		}
+
+		// Defensive fallback: if a *JSONDecodeError arrives carrying the raw
+		// encoding/json "unknown field" string (e.g. a code path that
+		// bypasses the strict-decode precheck), still surface a
+		// validation_error keyed on that single field. Pre-TRA-702 this was
+		// the only emit path.
 		re := regexp.MustCompile(`unknown field "([^"]+)"`)
 		if matches := re.FindStringSubmatch(err.Error()); len(matches) > 1 {
 			fieldName := matches[1]
 			msg := fmt.Sprintf("unknown field %q in request body", fieldName)
-			WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-				msg, requestID,
-				[]apierrors.FieldError{{
-					Field:   fieldName,
-					Code:    "unknown_field",
-					Message: msg,
-				}})
+			WriteValidationError(w, r, requestID, []apierrors.FieldError{{
+				Field:   fieldName,
+				Code:    "unknown_field",
+				Message: msg,
+			}})
 			return
 		}
 
@@ -330,13 +475,11 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 					field = "(body)"
 				}
 				msg := fmt.Sprintf("%s must be an RFC 3339 timestamp", field)
-				WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-					msg, requestID,
-					[]apierrors.FieldError{{
-						Field:   field,
-						Code:    "invalid_value",
-						Message: msg,
-					}})
+				WriteValidationError(w, r, requestID, []apierrors.FieldError{{
+					Field:   field,
+					Code:    "invalid_value",
+					Message: msg,
+				}})
 				return
 			}
 			detail := typeMismatchDetail(typeErr)

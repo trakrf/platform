@@ -102,13 +102,11 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 	if loc == nil {
 		msg := fmt.Sprintf("location_identifier %q not found", *request.LocationIdentifier)
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			msg, requestID,
-			[]modelerrors.FieldError{{
-				Field:   "location_identifier",
-				Code:    "invalid_value",
-				Message: msg,
-			}})
+		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{{
+			Field:   "location_identifier",
+			Code:    "invalid_value",
+			Message: msg,
+		}})
 
 		return
 	}
@@ -130,7 +128,6 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(missing) > 0 {
-		msg := fmt.Sprintf("asset_identifier(s) not found: %s", strings.Join(missing, ", "))
 		fields := make([]modelerrors.FieldError, 0, len(missing))
 		for _, m := range missing {
 			fields = append(fields, modelerrors.FieldError{
@@ -139,8 +136,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 				Message: fmt.Sprintf("asset_identifier %q not found", m),
 			})
 		}
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			msg, requestID, fields)
+		httputil.WriteValidationError(w, r, requestID, fields)
 
 		return
 	}

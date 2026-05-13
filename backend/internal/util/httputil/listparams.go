@@ -237,8 +237,9 @@ func toSet(ss []string) map[string]struct{} {
 func RespondListParamError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
 	var lpe *ListParamError
 	if errors.As(err, &lpe) {
-		WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
-			lpe.Error(), requestID, lpe.Fields)
+		// TRA-702: route through WriteValidationError so detail follows the
+		// fields[0].Message + "(and N more …)" contract uniformly.
+		WriteValidationError(w, r, requestID, lpe.Fields)
 		return
 	}
 	msg := "invalid list parameters"
