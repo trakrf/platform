@@ -13,12 +13,32 @@ import (
 // once accepted multiple loose formats — slashes, date-only, European
 // punctuation), but TRA-649 / BB23 F2 reduced the surface to RFC 3339 to
 // match both the OpenAPI declaration (`format: date-time`) and the strict
-// query-param validator on /api/v1/assets/{asset_id}/history. Empty string
-// and the Go zero time (`0001-01-01T00:00:00Z`) are rejected so that a
-// missing value cannot silently become a server-substituted default at the
-// handler seam.
+// query-param validator on /api/v1/assets/{asset_id}/history. Empty string,
+// the Go zero time (`0001-01-01T00:00:00Z`), and the Unix epoch
+// (`1970-01-01T00:00:00Z`) are rejected so that a missing value cannot
+// silently become a server-substituted default at the handler seam — both
+// are programming-language default-value markers that almost always mean an
+// upstream ETL forgot to map "unset" to null (TRA-704 / BB32 C4).
 type FlexibleDate struct {
 	time.Time
+}
+
+// unixEpochUTC is the second rejected sentinel (1970-01-01T00:00:00Z).
+// The Go zero time is detected via time.IsZero() — there is no equivalent
+// helper for Unix epoch, so the comparison is explicit.
+var unixEpochUTC = time.Unix(0, 0).UTC()
+
+// IsSentinelTimestamp reports whether t is one of the two rejected
+// default-value markers: the Go zero time or the Unix epoch. Exported so
+// httputil.RespondDecodeError can branch on the original parsed value and
+// surface the sentinel-specific guidance instead of the generic
+// "must be RFC 3339" message (TRA-704 / BB32 C4).
+func IsSentinelTimestamp(s string) bool {
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return false
+	}
+	return t.IsZero() || t.Equal(unixEpochUTC)
 }
 
 // UnmarshalJSON implements strict RFC 3339 JSON unmarshaling.
@@ -27,7 +47,8 @@ type FlexibleDate struct {
 // "field omitted" — the surrounding pointer remains nil so handlers can
 // distinguish absence from an explicit value).
 //
-// Rejects: empty string, the Go zero time, and any other format. All
+// Rejects: empty string, the two sentinel default-value timestamps (Go
+// zero time and Unix epoch — TRA-704 / BB32 C4), and any other format. All
 // rejections surface as *json.UnmarshalTypeError with Type == time.Time so
 // httputil.RespondDecodeError can render them as a validation_error keyed
 // on the offending field path (TRA-641 / BB21 §2.1).
@@ -39,7 +60,7 @@ func (fd *FlexibleDate) UnmarshalJSON(b []byte) error {
 	}
 
 	if s != "" {
-		if t, err := time.Parse(time.RFC3339Nano, s); err == nil && !t.IsZero() {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil && !t.IsZero() && !t.Equal(unixEpochUTC) {
 			fd.Time = t
 			return nil
 		}

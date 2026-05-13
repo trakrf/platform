@@ -14,6 +14,7 @@ import (
 	"time"
 
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
 // JSONDecodeError wraps any encoding/json decode failure so callers can
@@ -475,6 +476,17 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 					field = "(body)"
 				}
 				msg := fmt.Sprintf("%s must be an RFC 3339 timestamp", field)
+				// TRA-704 / BB32 C4: the two default-value sentinels (Go
+				// zero time, Unix epoch) reach this branch via the same
+				// *json.UnmarshalTypeError path as any other format failure,
+				// but the per-field guidance differs — the integrator did
+				// produce a valid RFC 3339 string, they just supplied a
+				// language-default marker where they meant "unset". Point
+				// them at JSON null explicitly so the next request is
+				// correct instead of swapping one sentinel for the other.
+				if raw := strings.Trim(typeErr.Value, "\""); shared.IsSentinelTimestamp(raw) {
+					msg = fmt.Sprintf("%s must not be a default-value sentinel (%s); use JSON null to leave the field unset", field, raw)
+				}
 				WriteValidationError(w, r, requestID, []apierrors.FieldError{{
 					Field:   field,
 					Code:    "invalid_value",

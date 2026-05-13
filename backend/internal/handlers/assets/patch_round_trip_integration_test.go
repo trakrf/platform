@@ -802,10 +802,12 @@ func TestPostAsset_LooseDateForms_Rejected400(t *testing.T) {
 		{"valid_from ISO slashes", "valid_from", `"2026/05/10"`},
 		{"valid_from empty string", "valid_from", `""`},
 		{"valid_from Go zero-time", "valid_from", `"0001-01-01T00:00:00Z"`},
+		{"valid_from Unix epoch", "valid_from", `"1970-01-01T00:00:00Z"`},
 		{"valid_to date-only", "valid_to", `"2027-05-10"`},
 		{"valid_to slashes", "valid_to", `"2027/05/10"`},
 		{"valid_to empty string", "valid_to", `""`},
 		{"valid_to Go zero-time", "valid_to", `"0001-01-01T00:00:00Z"`},
+		{"valid_to Unix epoch", "valid_to", `"1970-01-01T00:00:00Z"`},
 	}
 
 	for _, tc := range cases {
@@ -865,10 +867,12 @@ func TestPutAsset_LooseDateForms_Rejected400(t *testing.T) {
 		{"valid_from slashes", "valid_from", `"2026/05/10"`},
 		{"valid_from empty string", "valid_from", `""`},
 		{"valid_from Go zero-time", "valid_from", `"0001-01-01T00:00:00Z"`},
+		{"valid_from Unix epoch", "valid_from", `"1970-01-01T00:00:00Z"`},
 		{"valid_to date-only", "valid_to", `"2027-05-10"`},
 		{"valid_to slashes", "valid_to", `"2027/05/10"`},
 		{"valid_to empty string", "valid_to", `""`},
 		{"valid_to Go zero-time", "valid_to", `"0001-01-01T00:00:00Z"`},
+		{"valid_to Unix epoch", "valid_to", `"1970-01-01T00:00:00Z"`},
 	}
 
 	for _, tc := range cases {
