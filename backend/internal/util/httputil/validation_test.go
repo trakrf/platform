@@ -303,6 +303,115 @@ func TestRespondValidationError_AbsentRequiredLengthFieldEmitsTooShort(t *testin
 	assert.EqualValues(t, 1, f.Params["min_length"])
 }
 
+// TRA-702 / BB32 D2: every emit-site that writes validation_error must echo
+// fields[0].Message verbatim in detail, regardless of code. The earlier
+// regression where the read_only path wrote the literal "validation failed"
+// snuck past because the helper hadn't been centralized — exercise the
+// helper directly with a synthetic FieldError to lock the contract.
+func TestWriteValidationError_EchoesSingleFieldMessageInDetail(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("PATCH", "/api/v1/assets/1", nil)
+	httputil.WriteValidationError(w, r, "req-1", []apierrors.FieldError{{
+		Field:   "external_key",
+		Code:    "read_only",
+		Message: "external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename to change it",
+	}})
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, string(apierrors.ErrValidation), resp.Error.Type)
+	assert.Equal(t,
+		"external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename to change it",
+		resp.Error.Detail,
+		"detail must echo fields[0].message verbatim")
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+}
+
+// TRA-702 / BB32 D3: multi-field validation_error responses must surface
+// every offending field in fields[] AND append the "(and N more validation
+// errors)" suffix to detail, computed from fields[0].Message. Singular vs
+// plural wording depends on N.
+func TestWriteValidationError_MultiFieldAppendsSuffixAndKeepsEcho(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("PATCH", "/api/v1/assets/1", nil)
+	httputil.WriteValidationError(w, r, "req-1", []apierrors.FieldError{
+		{Field: "external_key", Code: "read_only", Message: "first message"},
+		{Field: "location_id", Code: "read_only", Message: "second message"},
+		{Field: "location_external_key", Code: "read_only", Message: "third message"},
+	})
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "first message (and 2 more validation errors)", resp.Error.Detail,
+		"detail must echo first field's message plus '(and N more validation errors)' suffix")
+	assert.Len(t, resp.Error.Fields, 3, "fields[] must contain one entry per invalid field")
+}
+
+func TestWriteValidationError_TwoFields_UsesSingularSuffix(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("PATCH", "/api/v1/assets/1", nil)
+	httputil.WriteValidationError(w, r, "req-1", []apierrors.FieldError{
+		{Field: "external_key", Code: "read_only", Message: "first message"},
+		{Field: "location_id", Code: "read_only", Message: "second message"},
+	})
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "first message (and 1 more validation error)", resp.Error.Detail,
+		"N=1 must use singular 'error'")
+}
+
+// Empty fields slice is an internal usage error but must not crash; emit a
+// generic detail and keep the response shape valid.
+func TestWriteValidationError_EmptyFields_FallsBackToGenericDetail(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	httputil.WriteValidationError(w, r, "req-1", nil)
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.NotEqual(t, "validation failed", resp.Error.Detail,
+		"must not echo the literal 'validation failed' that BB32 D2 caught")
+}
+
+// TRA-702 / BB32 D3: a struct-validator failure on two fields must produce
+// a multi-entry response with the suffix on detail. This existing pathway
+// already accumulates inside the validator, but the detail-computation
+// contract must match the new helper's output exactly.
+func TestRespondValidationError_TwoFieldStructFailureUsesSuffix(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+
+	type s struct {
+		Name string `json:"name"  validate:"min=5"`
+		Code string `json:"code"  validate:"max=2"`
+	}
+	err := v.Struct(s{Name: "hi", Code: "long"}) // both fail
+	require.Error(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", nil)
+	httputil.RespondValidationError(w, r, err, "req-1")
+
+	var resp apierrors.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 2)
+	// detail must begin with fields[0].Message and end with the singular suffix.
+	assert.Equal(t, resp.Error.Fields[0].Message+" (and 1 more validation error)",
+		resp.Error.Detail,
+		"detail must echo fields[0].message plus singular '(and 1 more validation error)' suffix")
+}
+
 func TestRespondValidationError_UnknownTagFallsBackToInvalidValue(t *testing.T) {
 	v := validator.New()
 	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)

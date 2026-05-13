@@ -334,19 +334,34 @@ func respondValidationErrorCore(w http.ResponseWriter, r *http.Request, err erro
 			Params:  paramsForFieldWithCode(fe, code),
 		})
 	}
-	// TRA-685 F13: surface the first field message in `detail` rather than
-	// the generic "Request did not pass validation". Documented contract
-	// already directs branching to `error.type` / `error.title`; `detail`
-	// is human-readable cause-of-this-particular-failure, and the field-
-	// level message is exactly that. Suffix with "(and N more)" so the
-	// summary stays honest when multiple fields fail.
+	WriteValidationError(w, r, requestID, fields)
+}
+
+// WriteValidationError writes a 400 validation_error envelope with the
+// supplied per-field violations. The `detail` string is derived from
+// fields[0].Message — verbatim when len==1, and suffixed with
+// "(and N more validation errors)" when N>0 — per the Errors-page contract
+// (TRA-685 F13, TRA-702 D2+D3).
+//
+// Every emit-site that produces a validation_error must route through this
+// helper rather than calling WriteJSONErrorWithFields directly: the helper
+// owns the detail-echo + suffix rules so every code path honors them
+// uniformly. BB32 D2 (read_only) caught the inline handler sites that had
+// drifted to a literal "validation failed" detail; centralizing the
+// computation here is the regression guard.
+//
+// When fields is empty (zero violations) detail falls back to a generic
+// "Request did not pass validation" — that case shouldn't occur in normal
+// use, but a usable response is better than a panic.
+func WriteValidationError(w http.ResponseWriter, r *http.Request, requestID string, fields []apierrors.FieldError) {
 	detail := "Request did not pass validation"
 	if len(fields) == 1 {
 		detail = fields[0].Message
 	} else if len(fields) > 1 {
+		n := len(fields) - 1
 		detail = fmt.Sprintf("%s (and %d more validation %s)",
-			fields[0].Message, len(fields)-1,
-			pluralizeForCount(strconv.Itoa(len(fields)-1), "error", "errors"))
+			fields[0].Message, n,
+			pluralizeForCount(strconv.Itoa(n), "error", "errors"))
 	}
 	WriteJSONErrorWithFields(w, r, http.StatusBadRequest, apierrors.ErrValidation,
 		detail, requestID, fields)

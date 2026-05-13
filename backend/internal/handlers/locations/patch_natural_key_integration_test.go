@@ -61,6 +61,7 @@ func seedLocationWithOptionalParent(t *testing.T, pool *pgxpool.Pool, orgID int,
 type locPatchErrorResp struct {
 	Error struct {
 		Type   string `json:"type"`
+		Detail string `json:"detail"`
 		Fields []struct {
 			Field   string `json:"field"`
 			Code    string `json:"code"`
@@ -210,6 +211,93 @@ func TestPatchLocation_NaturalKey_ParentIDStillWritable(t *testing.T) {
 		`SELECT parent_location_id FROM trakrf.locations WHERE id = $1`, id).Scan(&dbParent))
 	require.NotNil(t, dbParent)
 	assert.Equal(t, destParent, *dbParent)
+}
+
+// TRA-702 / BB32 D2: a single differing read_only field must echo
+// fields[0].message verbatim in detail. Pre-TRA-702 the inline emit-site
+// wrote the literal "validation failed", which buried the redirect-to-/rename
+// message inside fields[0] where AI integrators were less likely to read it.
+func TestPatchLocation_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-D2-ECHO", "D2Echo", "")
+	router := setupLocationRoundTripRouter(NewHandler(store))
+
+	rec := patchLoc(t, router, orgID, id, `{"external_key":"LOC-DIFFERENT"}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp locPatchErrorResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, resp.Error.Fields[0].Message, resp.Error.Detail,
+		"detail must echo fields[0].message verbatim (BB32 D2)")
+	assert.Contains(t, resp.Error.Detail, "/rename",
+		"detail must name the rename endpoint")
+}
+
+// TRA-702 / BB32 D3: a PATCH body with multiple differing read_only fields
+// must surface one entry per field in fields[] AND a "(and N more
+// validation errors)" suffix in detail.
+func TestPatchLocation_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-D3-MULTI", "D3Multi", "LOC-D3-PARENT")
+	router := setupLocationRoundTripRouter(NewHandler(store))
+
+	// Both natural-key fields differ from current resource state.
+	rec := patchLoc(t, router, orgID, id,
+		`{"external_key":"LOC-OTHER","parent_external_key":"LOC-OTHER-PARENT"}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp locPatchErrorResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 2, "both differing read_only fields must surface")
+
+	fields := map[string]string{}
+	for _, f := range resp.Error.Fields {
+		fields[f.Field] = f.Code
+	}
+	assert.Equal(t, "read_only", fields["external_key"])
+	assert.Equal(t, "read_only", fields["parent_external_key"])
+
+	assert.Contains(t, resp.Error.Detail, "(and 1 more validation error)",
+		"detail must include the singular multi-field suffix when N=1")
+	assert.Equal(t, resp.Error.Fields[0].Message+" (and 1 more validation error)",
+		resp.Error.Detail,
+		"detail must echo fields[0].message + suffix verbatim")
+}
+
+// TRA-702 / BB32 D3: a PATCH with multiple explicit-null violations on
+// non-nullable fields must report every offending field, not just the first.
+func TestPatchLocation_ExplicitNullOnNonNullable_MultiField_AllReported(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-NULL-MULTI", "NullMulti", "")
+	router := setupLocationRoundTripRouter(NewHandler(store))
+
+	rec := patchLoc(t, router, orgID, id, `{"valid_from":null,"name":null,"is_active":null}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp locPatchErrorResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 3, "every null-on-non-nullable violation must surface")
+	for _, f := range resp.Error.Fields {
+		assert.Equal(t, "invalid_value", f.Code)
+	}
+	assert.Contains(t, resp.Error.Detail, "(and 2 more validation errors)",
+		"detail must carry the multi-field suffix")
 }
 
 // TRA-699 §2.G: full GET → PATCH round-trip with both natural-key fields

@@ -252,9 +252,15 @@ func TestDecodeJSONStrict_RejectsUnknownField(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected strict decode to reject unknown field, got nil")
 	}
-	var decErr *httputil.JSONDecodeError
-	if !errors.As(err, &decErr) {
-		t.Fatalf("expected *httputil.JSONDecodeError, got %T", err)
+	// TRA-702: strict-decode helpers pre-detect every unknown top-level key
+	// via reflection and return *JSONUnknownFieldsError so RespondDecodeError
+	// can render one fields[] entry per unknown.
+	var ufe *httputil.JSONUnknownFieldsError
+	if !errors.As(err, &ufe) {
+		t.Fatalf("expected *httputil.JSONUnknownFieldsError, got %T", err)
+	}
+	if len(ufe.Fields) != 1 || ufe.Fields[0] != "extra" {
+		t.Fatalf("Fields = %v, want [extra]", ufe.Fields)
 	}
 }
 
@@ -335,6 +341,68 @@ func TestDecodeJSONStrictWithNullsTolerant_NullSemanticsOnKeptVsStripped(t *test
 	}
 	if _, ok := nulls["updated_at"]; ok {
 		t.Fatalf("updated_at null should be suppressed (stripped field)")
+	}
+}
+
+// TRA-702 / BB32 D3: a request body with multiple unknown top-level fields
+// must surface every offending key in fields[]. encoding/json's
+// DisallowUnknownFields stops at the first one, so the decoder helpers do
+// the enumeration up-front via reflection on the destination struct.
+func TestDecodeJSONStrict_MultipleUnknownFields_AllReported(t *testing.T) {
+	type target struct {
+		Name string `json:"name"`
+	}
+	var got target
+	body := `{"name":"x","foo":1,"bar":2}`
+	r := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
+	err := httputil.DecodeJSONStrict(r, &got)
+
+	if err == nil {
+		t.Fatalf("expected strict decode to reject unknown fields, got nil")
+	}
+	var ufe *httputil.JSONUnknownFieldsError
+	if !errors.As(err, &ufe) {
+		t.Fatalf("expected *JSONUnknownFieldsError, got %T (%v)", err, err)
+	}
+	// Both unknown fields must be reported, in deterministic order.
+	got2 := append([]string(nil), ufe.Fields...)
+	if len(got2) != 2 || got2[0] != "bar" || got2[1] != "foo" {
+		t.Fatalf("Fields = %v, want [bar foo] in sorted order", got2)
+	}
+}
+
+// RespondDecodeError must translate a *JSONUnknownFieldsError into a
+// multi-entry validation_error envelope, one fields[] entry per unknown key,
+// with detail echoing the first field's message + the multi-field suffix.
+func TestRespondDecodeError_MultipleUnknownFields_MultiEntryAndEchoesDetail(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	httputil.RespondDecodeError(w, r, &httputil.JSONUnknownFieldsError{Fields: []string{"bar", "foo"}}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+
+	if resp.Error.Type != string(apierrors.ErrValidation) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrValidation)
+	}
+	if len(resp.Error.Fields) != 2 {
+		t.Fatalf("fields = %d, want 2", len(resp.Error.Fields))
+	}
+	if resp.Error.Fields[0].Field != "bar" || resp.Error.Fields[0].Code != "unknown_field" {
+		t.Fatalf("fields[0] = %+v, want field=bar code=unknown_field", resp.Error.Fields[0])
+	}
+	if resp.Error.Fields[1].Field != "foo" || resp.Error.Fields[1].Code != "unknown_field" {
+		t.Fatalf("fields[1] = %+v, want field=foo code=unknown_field", resp.Error.Fields[1])
+	}
+	// detail must echo fields[0].Message plus '(and 1 more validation error)' suffix.
+	wantDetail := resp.Error.Fields[0].Message + " (and 1 more validation error)"
+	if resp.Error.Detail != wantDetail {
+		t.Fatalf("detail = %q, want %q", resp.Error.Detail, wantDetail)
 	}
 }
 

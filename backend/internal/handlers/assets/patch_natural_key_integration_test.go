@@ -73,6 +73,7 @@ func seedNaturalKeyAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, na
 type patchErrorResp struct {
 	Error struct {
 		Type   string `json:"type"`
+		Detail string `json:"detail"`
 		Fields []struct {
 			Field   string `json:"field"`
 			Code    string `json:"code"`
@@ -284,6 +285,96 @@ func TestPatchAsset_NaturalKey_LocationID_NullVsNonNullDiffers400(t *testing.T) 
 		`SELECT current_location_id FROM trakrf.assets WHERE id = $1`, id).Scan(&curLoc))
 	require.NotNil(t, curLoc)
 	assert.Equal(t, locID, *curLoc)
+}
+
+// TRA-702 / BB32 D2: a single differing read_only field must echo
+// fields[0].message verbatim in detail — pre-TRA-702 the inline emit-site
+// wrote the literal "validation failed", burying the redirect-to-/rename
+// message in fields[0].
+func TestPatchAsset_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-D2-ECHO", "D2Echo", "")
+	router := setupRoundTripRouter(NewHandler(store))
+
+	rec := patch(t, router, orgID, id, `{"external_key":"ASSET-DIFFERENT"}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp patchErrorResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 1)
+	assert.Equal(t, resp.Error.Fields[0].Message, resp.Error.Detail,
+		"detail must echo fields[0].message verbatim (BB32 D2)")
+	assert.Contains(t, resp.Error.Detail, "/rename",
+		"detail must name the rename endpoint so AI integrators can self-redirect")
+}
+
+// TRA-702 / BB32 D3: a PATCH body with multiple differing read_only fields
+// must surface one entry per field in fields[] AND a "(and N more
+// validation errors)" suffix in detail — not just the first violation.
+func TestPatchAsset_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-D3-MULTI", "D3Multi", "WHS-OWNED")
+	router := setupRoundTripRouter(NewHandler(store))
+
+	// All three natural-key fields differ from the current resource state.
+	rec := patch(t, router, orgID, id,
+		`{"external_key":"ASSET-OTHER","location_external_key":"WHS-OTHER","location_id":99999}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp patchErrorResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 3, "all three differing read_only fields must surface")
+
+	fields := map[string]string{}
+	for _, f := range resp.Error.Fields {
+		fields[f.Field] = f.Code
+	}
+	assert.Equal(t, "read_only", fields["external_key"])
+	assert.Equal(t, "read_only", fields["location_external_key"])
+	assert.Equal(t, "read_only", fields["location_id"])
+
+	assert.Contains(t, resp.Error.Detail, "(and 2 more validation errors)",
+		"detail must include the plural multi-field suffix")
+	assert.Equal(t, resp.Error.Fields[0].Message+" (and 2 more validation errors)",
+		resp.Error.Detail,
+		"detail must echo fields[0].message + suffix verbatim")
+}
+
+// TRA-702 / BB32 D3: a PATCH with multiple explicit-null violations on
+// non-nullable fields must report every offending field, not just the first.
+// Pre-TRA-702 the loop short-circuited on the first match.
+func TestPatchAsset_ExplicitNullOnNonNullable_MultiField_AllReported(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-NULL-MULTI", "NullMulti", "")
+	router := setupRoundTripRouter(NewHandler(store))
+
+	// Two non-nullable PATCH fields set to null in the same body.
+	rec := patch(t, router, orgID, id, `{"valid_from":null,"name":null,"is_active":null}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp patchErrorResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 3, "every null-on-non-nullable violation must surface")
+	for _, f := range resp.Error.Fields {
+		assert.Equal(t, "invalid_value", f.Code, "code stays invalid_value for null-on-non-nullable")
+	}
+	assert.Contains(t, resp.Error.Detail, "(and 2 more validation errors)",
+		"detail must carry the multi-field suffix")
 }
 
 // TRA-699 §1.I: full GET → PATCH back round-trip with all three natural-key

@@ -167,13 +167,10 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	_, hasParentID := presentKeys["parent_id"]
 	_, hasParentExt := presentKeys["parent_external_key"]
 	if hasParentID && hasParentExt {
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			"parent_id and parent_external_key are mutually exclusive; supply exactly one",
-			requestID,
-			[]modelerrors.FieldError{
-				{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
-				{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
-			})
+		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{
+			{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+			{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+		})
 		return
 	}
 
@@ -192,9 +189,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		// TRA-681: fk_not_found is 400 validation_error (was 409 conflict
 		// under TRA-678). See assets.Create for rationale.
-		httputil.WriteJSONErrorWithFields(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			fErr.Message, requestID,
-			[]modelerrors.FieldError{*fErr})
+		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{*fErr})
 
 		return
 	}
@@ -290,18 +285,24 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	// valid_from / name are non-nullable on the read view; an explicit null
 	// in the PATCH body is a validation error, not a clear-request.
+	//
+	// TRA-702 / BB32 D3: accumulate every null-on-non-nullable violation
+	// before responding so the integrator sees the full picture in one round
+	// trip instead of replaying the request as they peel off one violation
+	// per response.
+	var nullViolations []modelerrors.FieldError
 	for _, f := range []string{"valid_from", "name", "is_active"} {
 		if _, ok := explicitNulls[f]; ok {
-			httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-				"validation failed", reqID,
-				[]modelerrors.FieldError{{
-					Field:   f,
-					Code:    "invalid_value",
-					Message: fmt.Sprintf("%s cannot be null; omit the field to leave unchanged, or provide a value", f),
-				}})
-
-			return
+			nullViolations = append(nullViolations, modelerrors.FieldError{
+				Field:   f,
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("%s cannot be null; omit the field to leave unchanged, or provide a value", f),
+			})
 		}
+	}
+	if len(nullViolations) > 0 {
+		httputil.WriteValidationError(w, req, reqID, nullViolations)
+		return
 	}
 	if _, ok := explicitNulls["valid_to"]; ok {
 		request.ClearValidTo = true
@@ -362,8 +363,11 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		}
 	}
 	if len(echoViolations) > 0 {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"validation failed", reqID, echoViolations)
+		// TRA-702 / BB32 D2: detail must echo fields[0].Message — pre-TRA-702
+		// the inline literal "validation failed" buried the redirect-to-/rename
+		// message inside fields[0] where AI integrators were less likely to
+		// read it. WriteValidationError owns the echo + suffix contract.
+		httputil.WriteValidationError(w, req, reqID, echoViolations)
 		return
 	}
 	request.ExternalKey = nil
@@ -388,9 +392,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		}
 		// TRA-681: fk_not_found is 400 validation_error (was 409 conflict
 		// under TRA-678). See assets.Create for rationale.
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			fErr.Message, reqID,
-			[]modelerrors.FieldError{*fErr})
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fErr})
 
 		return
 	}
@@ -671,13 +673,10 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 	_, hasParentID := params.Filters["parent_id"]
 	_, hasParentExt := params.Filters["parent_external_key"]
 	if hasParentID && hasParentExt {
-		httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-			"parent_id and parent_external_key are mutually exclusive; supply exactly one",
-			reqID,
-			[]modelerrors.FieldError{
-				{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
-				{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
-			})
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{
+			{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+			{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
+		})
 		return
 	}
 
@@ -692,13 +691,11 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		for _, s := range vs {
 			n, err := strconv.Atoi(s)
 			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
-				httputil.WriteJSONErrorWithFields(w, req, http.StatusBadRequest, modelerrors.ErrValidation,
-					"invalid parent_id", reqID,
-					[]modelerrors.FieldError{{
-						Field:   "parent_id",
-						Code:    "invalid_value",
-						Message: fmt.Sprintf("parent_id %q must be a positive int32", s),
-					}})
+				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{{
+					Field:   "parent_id",
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("parent_id %q must be a positive int32", s),
+				}})
 				return
 			}
 			f.ParentIDs = append(f.ParentIDs, n)
