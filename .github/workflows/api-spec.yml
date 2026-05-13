@@ -5,6 +5,8 @@ on:
     paths:
       - 'backend/**'
       - 'docs/api/**'
+      - '.spectral.yaml'
+      - 'functions/**'
       - '.github/workflows/api-spec.yml'
   push:
     branches: [main]
