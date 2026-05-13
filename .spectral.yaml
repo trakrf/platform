@@ -19,6 +19,12 @@ extends:
   - spectral:oas
   - "@baloise/spectral-rules/zalando.yml"
 
+# Custom JS functions live in ./functions/, the Spectral default location
+# relative to the ruleset. Each entry below names a file at
+# `./functions/<name>.js` whose default export is a Spectral function.
+functions:
+  - readonly-not-in-write-required
+
 rules:
   # ─────────────────────────────────────────────────────────────
   # Inherited Zalando disables (intentional architectural choices)
@@ -269,14 +275,63 @@ rules:
       Every 405 response must declare an `Allow` response header (RFC 7231
       §6.5.5) listing the supported HTTP methods on the resource. Service
       already emits the header; spec must declare it for consumers. Origin:
-      BB16 W6, BB27 S4 — declared on only 1 of 22 operations.
-    message: "405 response missing Allow header — RFC 7231 §6.5.5 (BB16 W6, BB27 S4)"
+      BB16 W6, BB27 S4, BB30 §1.3 — declared on only 1 of 22 operations
+      pre-cleanup; rule re-affirmed under TRA-690 after the BB30 sweep
+      found the spec still missing entries despite the service emitting
+      Allow on every 405.
+    message: "405 response missing Allow header — RFC 7231 §6.5.5 (BB16 W6, BB27 S4, BB30 §1.3)"
     severity: error
     given:
       - "$.paths.*.*.responses['405']"
     then:
       - field: headers.Allow
         function: truthy
+
+  trakrf-no-control-bytes-in-pattern:
+    description: >
+      `pattern` values must not contain literal control bytes (0x00–0x1F or
+      0x7F) after YAML/JSON parsing. Control-character classes in regex
+      patterns must be encoded as escape sequences (e.g. `\xNN`) so the
+      source bytes survive serialization into codegen-target language
+      sources. Origin: BB29 F6 / BB30 §1.1 / TRA-687 — when the constant
+      carried literal control bytes the YAML emitter wrote YAML escapes
+      that a YAML parser round-tripped back into control bytes;
+      `openapi-generator-cli generate -g python` then emitted those bytes
+      into a Python raw-string literal in `openapi_client/models/tag.py`
+      and Python's parser rejected the file with
+      `SyntaxError: source code string cannot contain null bytes`,
+      making the entire generated client unimportable. Go codegen fails
+      analogously with `invalid NUL character`. TypeScript codegen happens
+      to succeed because openapi-typescript emits type-only declarations
+      and does not embed the regex at runtime, which is why this class
+      slipped through the TS-only codegen smoke test.
+    message: "pattern contains literal control byte — encode as \\xNN escape (BB29 F6 / TRA-687)"
+    severity: error
+    given:
+      - "$..pattern"
+    then:
+      - function: pattern
+        functionOptions:
+          notMatch: "[\\x00-\\x1F\\x7F]"
+
+  trakrf-readonly-not-in-write-required:
+    description: >
+      For each `Create.+Request` / `Update.+Request` / `Rename.+Request`
+      schema, the `required[]` array must not list any field that is
+      `readOnly: true` on the paired `*View` schema. Server-assigned and
+      derived fields (id, created_at, updated_at, *_deleted_at, etc.)
+      should never be required on the write side — that makes
+      GET → mutate → POST/PATCH round-trips a strict subset operation
+      instead of a clean re-submit. Origin: BB29 F11 — read/write
+      asymmetry. Pairs naturally with
+      `trakrf-readonly-derived-fields`, which enforces that the same
+      fields are `readOnly: true` on the View side.
+    message: "{{error}}"
+    severity: error
+    given:
+      - "$.components.schemas"
+    then:
+      - function: readonly-not-in-write-required
 
   trakrf-patch-merge-patch-ct-only:
     description: >
