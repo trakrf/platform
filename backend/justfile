@@ -171,6 +171,23 @@ test-contract:
         exit 1
     fi
 
+    # 7a. Install Python deps for the TRA-692 deterministic FieldError-code
+    # case runner + coverage gate. The .venv is gitignored alongside the
+    # Schemathesis report artifacts.
+    echo "🧪 Installing contract-test Python deps..."
+    python3 -m venv "$REPO_ROOT/backend/contract-tests/.venv" >/dev/null
+    PY="$REPO_ROOT/backend/contract-tests/.venv/bin/python"
+    "$REPO_ROOT/backend/contract-tests/.venv/bin/pip" install -q -r "$REPO_ROOT/backend/contract-tests/requirements.txt"
+
+    # 7b. Run deterministic FieldError-code cases against the server. Output:
+    # backend/contract-tests/observed_codes.jsonl. The coverage gate at the
+    # end of the recipe consumes this file. TRA-692.
+    echo "🧪 Running deterministic FieldError-code cases (TRA-692)..."
+    BASE_URL="http://localhost:8081" \
+    API_KEY="$KEY" \
+    OUT_DIR="$REPO_ROOT/backend/contract-tests" \
+        "$PY" "$REPO_ROOT/backend/contract-tests/explicit_error_cases.py"
+
     # 8. Run Schemathesis (docker, v4 CLI)
     #
     # The image runs as a non-root user; with a host bind mount the container
@@ -291,6 +308,18 @@ test-contract:
         exit 1
     fi
     echo "✅ schemathesis: 0 failures, 0 errors (JUnit: $JUNIT)"
+
+    # 10. FieldErrorCode enum coverage gate (TRA-692).
+    # Asserts every value declared in components.schemas.FieldErrorCode.enum
+    # was observed at least once during the explicit-cases run. Failure here
+    # means the spec declares a code that no public surface emits (the BB30
+    # §1.2 class-wide failure mode) — fix is either to wire emission, drop
+    # the code from the enum, or add an explicit-cases probe if a probe was
+    # missing.
+    echo "🧪 Checking FieldErrorCode enum coverage (TRA-692)..."
+    "$PY" "$REPO_ROOT/backend/contract-tests/check_field_error_coverage.py" \
+        --spec "$REPO_ROOT/docs/api/openapi.public.yaml" \
+        --observed "$REPO_ROOT/backend/contract-tests/observed_codes.jsonl"
 
 # Run tests with race detection
 test-race:

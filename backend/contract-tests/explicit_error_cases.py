@@ -33,14 +33,19 @@ SEED_LOCATION_EXTERNAL_KEY = "WHS-01"
 SEED_ASSET_EXTERNAL_KEY = "ASSET-0001"
 
 
-def call(method: str, path: str, body: Any | None = None) -> tuple[int, dict | None]:
+def call(
+    method: str,
+    path: str,
+    body: Any | None = None,
+    content_type: str = "application/json",
+) -> tuple[int, dict | None]:
     url = f"{BASE_URL}{path}"
     data = None
     if body is not None:
         data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {API_KEY}")
-    req.add_header("Content-Type", "application/json")
+    req.add_header("Content-Type", content_type)
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return resp.status, _safe_json(resp.read())
@@ -167,12 +172,15 @@ def main() -> int:
     record(observed, "POST /assets unknown body field → unknown_field", status, body)
 
     # --- read_only: PATCH attempting to mutate external_key directly ---
+    # PATCH requires application/merge-patch+json per the public spec; sending
+    # plain application/json returns 415 with no fields[], which fails coverage.
     aid = resolve_seed_asset_id()
     if aid is not None:
         status, body = call(
             "PATCH",
             f"/api/v1/assets/{aid}",
             body={"external_key": "TRA-692-blocked"},
+            content_type="application/merge-patch+json",
         )
         record(
             observed,
