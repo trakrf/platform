@@ -210,6 +210,67 @@ func TestRespondDecodeError_BadRFC3339_EmbeddedStruct_StripsStructPrefix(t *test
 	}
 }
 
+// TRA-704 / BB32 C4: when a request supplies one of the two default-value
+// sentinels (Go zero, Unix epoch) on a timestamp field, the rejection
+// message must point the integrator at JSON null rather than read as a
+// generic format failure. Both sentinels share the same UnmarshalTypeError
+// path as any other bad RFC 3339 string, so the per-field message is the
+// only place the distinction can surface.
+func TestRespondDecodeError_SentinelTimestamps_PointAtNull(t *testing.T) {
+	type target struct {
+		ValidTo shared.FlexibleDate `json:"valid_to"`
+	}
+	cases := []struct {
+		name     string
+		body     string
+		sentinel string
+	}{
+		{"Go zero-time", `{"valid_to":"0001-01-01T00:00:00Z"}`, "0001-01-01T00:00:00Z"},
+		{"Unix epoch", `{"valid_to":"1970-01-01T00:00:00Z"}`, "1970-01-01T00:00:00Z"},
+		{"Unix epoch with offset", `{"valid_to":"1970-01-01T00:00:00+00:00"}`, "1970-01-01T00:00:00+00:00"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var dst target
+			decErr := json.Unmarshal([]byte(tc.body), &dst)
+			if decErr == nil {
+				t.Fatalf("expected json.Unmarshal to return an error, got nil")
+			}
+
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+			httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+			if w.Code != 400 {
+				t.Fatalf("status = %d, want 400", w.Code)
+			}
+			var resp apierrors.ErrorResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode resp: %v", err)
+			}
+			if resp.Error.Type != string(apierrors.ErrValidation) {
+				t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrValidation)
+			}
+			if len(resp.Error.Fields) != 1 {
+				t.Fatalf("fields = %d, want 1", len(resp.Error.Fields))
+			}
+			if resp.Error.Fields[0].Field != "valid_to" {
+				t.Fatalf("fields[0].field = %q, want %q", resp.Error.Fields[0].Field, "valid_to")
+			}
+			if resp.Error.Fields[0].Code != "invalid_value" {
+				t.Fatalf("fields[0].code = %q, want %q", resp.Error.Fields[0].Code, "invalid_value")
+			}
+			msg := resp.Error.Fields[0].Message
+			if !strings.Contains(msg, tc.sentinel) {
+				t.Fatalf("fields[0].message %q must echo offending sentinel %q", msg, tc.sentinel)
+			}
+			if !strings.Contains(msg, "null") {
+				t.Fatalf("fields[0].message %q must point integrator at JSON null", msg)
+			}
+		})
+	}
+}
+
 // Top-level type mismatch (no field name available) must still avoid the
 // misleading "not valid JSON" wording.
 func TestRespondDecodeError_TypeMismatch_TopLevel_GenericWording(t *testing.T) {

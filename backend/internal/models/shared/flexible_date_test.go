@@ -88,6 +88,28 @@ func TestFlexibleDate_UnmarshalJSON(t *testing.T) {
 			input:       `"0001-01-01T00:00:00Z"`,
 			expectError: true,
 		},
+		// TRA-704 / BB32 C4: Unix epoch is a second default-value sentinel —
+		// silent acceptance produces rows that drop out of effective-time
+		// scope at read time. Reject it at the same seam as Go zero-time.
+		{
+			name:        "Unix epoch — rejected",
+			input:       `"1970-01-01T00:00:00Z"`,
+			expectError: true,
+		},
+		{
+			name:        "Unix epoch with offset — rejected",
+			input:       `"1970-01-01T00:00:00+00:00"`,
+			expectError: true,
+		},
+		{
+			name:        "one second past Unix epoch — accepted",
+			input:       `"1970-01-01T00:00:01Z"`,
+			expectError: false,
+			checkFunc: func(t *testing.T, fd FlexibleDate) {
+				assert.Equal(t, 1970, fd.Year())
+				assert.Equal(t, int64(1), fd.Unix())
+			},
+		},
 		{
 			name:        "null value still permitted",
 			input:       `null`,
@@ -161,6 +183,33 @@ func TestFlexibleDatePointer_FieldShapes(t *testing.T) {
 		require.NotNil(t, ts.ValidTo)
 		assert.False(t, ts.ValidTo.IsZero())
 	})
+}
+
+// TestIsSentinelTimestamp pins the two rejected default-value markers and
+// keeps the rejection list documentable — anything outside these two strings
+// is a real timestamp (TRA-704 / BB32 C4).
+func TestIsSentinelTimestamp(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"Go zero-time UTC", "0001-01-01T00:00:00Z", true},
+		{"Go zero-time with explicit offset", "0001-01-01T00:00:00+00:00", true},
+		{"Unix epoch UTC", "1970-01-01T00:00:00Z", true},
+		{"Unix epoch with explicit offset", "1970-01-01T00:00:00+00:00", true},
+		{"Unix epoch in non-UTC zone", "1970-01-01T05:00:00+05:00", true},
+		{"one second past Unix epoch — real value", "1970-01-01T00:00:01Z", false},
+		{"one second before Unix epoch — real value", "1969-12-31T23:59:59Z", false},
+		{"present-day timestamp", "2025-12-14T10:30:00Z", false},
+		{"not a date", "hello", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsSentinelTimestamp(tt.input))
+		})
+	}
 }
 
 func TestFlexibleDate_MarshalJSON(t *testing.T) {
