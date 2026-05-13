@@ -54,11 +54,23 @@ func setupRouter(
 		httputil.Respond405(w, req, allowed, middleware.GetRequestID(req.Context()))
 	})
 
+	// Per-key rate limiter for API-key-authenticated requests (TRA-395).
+	// Limiter lives for the process lifetime; its sweeper runs in a goroutine.
+	//
+	// Constructed up-front so APIv1DefaultRateLimitHeaders (a global, path-
+	// scoped middleware) can stamp X-RateLimit-* on every /api/v1/* response
+	// before ContentType has a chance to reject with 415 (TRA-703 / BB32 C1).
+	// Per-group DefaultRateLimitHeaders wraps each /api/v1/* group below to
+	// keep a clean reset point for RateLimit (TRA-518); RateLimit then
+	// overwrites the defaults with real per-key bucket values.
+	rl := ratelimit.NewLimiter(ratelimit.DefaultConfig())
+
 	r.Use(middleware.RequestID)
 	r.Use(logger.Middleware)
 	r.Use(sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle)
 	r.Use(middleware.Recovery)
 	r.Use(middleware.CORS)
+	r.Use(middleware.APIv1DefaultRateLimitHeaders(rl))
 	r.Use(middleware.ContentType)
 	r.Use(chimiddleware.GetHead)
 
@@ -119,15 +131,6 @@ func setupRouter(
 			httpSwagger.URL("/swagger/openapi.internal.json"),
 		))
 	})
-
-	// Per-key rate limiter for API-key-authenticated requests (TRA-395).
-	// Limiter lives for the process lifetime; its sweeper runs in a goroutine.
-	//
-	// TRA-518: every /api/v1/* group is wrapped with DefaultRateLimitHeaders
-	// so X-RateLimit-* headers appear on every response — including auth-failure
-	// 401s and 404s where no principal is known. RateLimit (where present)
-	// overwrites the static defaults with real bucket values for API-key calls.
-	rl := ratelimit.NewLimiter(ratelimit.DefaultConfig())
 
 	// TRA-677: the test-handler-minted schemathesis key bypasses rate limiting
 	// when APP_ENV != "production". Same gate used to mount the test handler

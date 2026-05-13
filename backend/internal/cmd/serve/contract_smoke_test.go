@@ -7,12 +7,14 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/trakrf/platform/backend/internal/middleware"
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/ratelimit"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
@@ -272,6 +274,94 @@ func TestContract_UnsupportedMediaType_EnvelopeAndType(t *testing.T) {
 	require.Equal(t, 415, resp.Error.Status)
 	require.NotContains(t, resp.Error.Detail, "multipart",
 		"public 415 detail must not name multipart per TRA-541 POLS resolution")
+}
+
+// TestContract_UnsupportedMediaType_CarriesRateLimitHeaders covers TRA-703
+// / BB32 C1: 415 responses on the public API surface must include the three
+// X-RateLimit-* headers the Rate Limits docs commit to. The chain shape
+// mirrors setupRouter: APIv1DefaultRateLimitHeaders runs as a global before
+// ContentType, so the 415 rejection carries headers from the upstream stamp.
+func TestContract_UnsupportedMediaType_CarriesRateLimitHeaders(t *testing.T) {
+	clock := ratelimit.NewFakeClock(time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC))
+	lim := ratelimit.NewLimiter(ratelimit.Config{
+		RatePerMinute: 60,
+		Burst:         120,
+		IdleTTL:       time.Hour,
+		SweepInterval: 24 * time.Hour,
+		Clock:         clock,
+	})
+	defer lim.Close()
+
+	mux := chi.NewRouter()
+	mux.Use(middleware.RequestID)
+	mux.Use(middleware.APIv1DefaultRateLimitHeaders(lim))
+	mux.Use(middleware.ContentType)
+	mux.Post("/api/v1/assets", func(w http.ResponseWriter, req *http.Request) {
+		t.Fatal("handler must not run on 415 rejection")
+	})
+
+	// Tests every CT shape ContentType rejects on POST: empty, merge-patch+json,
+	// multipart on a non-bulk path, and an arbitrary foreign type.
+	cases := []struct {
+		name string
+		ct   string
+	}{
+		{"empty CT", ""},
+		{"merge-patch+json on POST", "application/merge-patch+json"},
+		{"multipart on public POST", "multipart/form-data; boundary=----X"},
+		{"text/plain", "text/plain"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/assets", nil)
+			if tc.ct != "" {
+				req.Header.Set("Content-Type", tc.ct)
+			}
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+			require.NotEmpty(t, rec.Header().Get("X-RateLimit-Limit"),
+				"X-RateLimit-Limit must be set on 415 (BB32 C1)")
+			require.NotEmpty(t, rec.Header().Get("X-RateLimit-Remaining"),
+				"X-RateLimit-Remaining must be set on 415 (BB32 C1)")
+			require.NotEmpty(t, rec.Header().Get("X-RateLimit-Reset"),
+				"X-RateLimit-Reset must be set on 415 (BB32 C1)")
+		})
+	}
+}
+
+// TestContract_UnsupportedMediaType_NonAPIPathHasNoRateLimitHeaders pins the
+// path-gated behavior of APIv1DefaultRateLimitHeaders: non-/api/v1/* paths
+// don't carry rate-limit headers, preserving the TRA-518 design choice to
+// scope those headers to the public API surface.
+func TestContract_UnsupportedMediaType_NonAPIPathHasNoRateLimitHeaders(t *testing.T) {
+	clock := ratelimit.NewFakeClock(time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC))
+	lim := ratelimit.NewLimiter(ratelimit.Config{
+		RatePerMinute: 60,
+		Burst:         120,
+		IdleTTL:       time.Hour,
+		SweepInterval: 24 * time.Hour,
+		Clock:         clock,
+	})
+	defer lim.Close()
+
+	mux := chi.NewRouter()
+	mux.Use(middleware.RequestID)
+	mux.Use(middleware.APIv1DefaultRateLimitHeaders(lim))
+	mux.Use(middleware.ContentType)
+	mux.Post("/some-other-path", func(w http.ResponseWriter, req *http.Request) {
+		t.Fatal("handler must not run on 415")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/some-other-path", nil)
+	req.Header.Set("Content-Type", "text/plain")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+	require.Empty(t, rec.Header().Get("X-RateLimit-Limit"),
+		"non-/api/v1 paths must not carry rate-limit headers")
 }
 
 // TestContract_MissingOrgContext_EnvelopeAndType covers TRA-537 follow-up:
