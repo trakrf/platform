@@ -127,9 +127,13 @@ func TestPostAsset_MissingLocationExternalKey_Rejected400(t *testing.T) {
 	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
 }
 
-// PATCH /api/v1/assets/{id} with a surrogate location_id that does not
-// exist returns 400 validation_error / fk_not_found keyed on `location_id`.
-func TestPatchAsset_MissingLocationID_Rejected400(t *testing.T) {
+// PATCH /api/v1/assets/{id} with a `location_id` that differs from the
+// current resource state returns 400 validation_error / read_only — the
+// field is no longer writable via PATCH (TRA-699 supersedes the prior
+// fk_not_found path, which is no longer reachable on PATCH because the
+// FK is never resolved). Existence of the target row is irrelevant; any
+// value that differs from current state is rejected.
+func TestPatchAsset_DifferingLocationID_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -150,7 +154,7 @@ func TestPatchAsset_MissingLocationID_Rejected400(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code,
-		"missing location_id on PATCH must be 400 (got %d): %s", rec.Code, rec.Body.String())
+		"differing location_id on PATCH must be 400 (got %d): %s", rec.Code, rec.Body.String())
 
 	var resp struct {
 		Error struct {
@@ -165,7 +169,7 @@ func TestPatchAsset_MissingLocationID_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "location_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
 }
 
 // POST /api/v1/assets with both location_id and location_external_key
@@ -260,41 +264,8 @@ func TestListAssets_BothLocationForms_Rejected400(t *testing.T) {
 	}
 }
 
-// PATCH /api/v1/assets/{id} with location_external_key in the body is
-// silently stripped. The body can disagree with the surrogate (or have no
-// surrogate at all) and the request still succeeds. TRA-681: natural-key
-// form is read-only on PATCH.
-func TestPatchAsset_LocationExternalKey_StrippedSilently(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	id := seedRoundTripAsset(t, pool, orgID, "ASSET-STRIP-EXTFK", "strip-extfk")
-
-	handler := NewHandler(store)
-	router := setupRoundTripRouter(handler)
-
-	// A nonexistent natural-key alongside a name update: if the strip is
-	// in place the request succeeds, name updates, and the nonexistent
-	// natural-key is silently ignored. If the strip is missing the handler
-	// either resolves it (success) or rejects fk_not_found (fail). The
-	// test asserts the stripped path: 200 + nothing happened to the FK.
-	body := []byte(`{"name":"renamed-with-stale-extkey","location_external_key":"DOES-NOT-EXIST"}`)
-	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = withRoundTripOrgContext(req, orgID)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code,
-		"PATCH with stale natural-key must succeed via strip (got %d): %s", rec.Code, rec.Body.String())
-
-	var resp struct {
-		Data map[string]any `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "renamed-with-stale-extkey", resp.Data["name"])
-}
+// TRA-699 supersedes the prior silent-strip behavior for
+// location_external_key on PATCH. A *differing* natural key is now 400
+// read_only; a *matching* echo (or null/null) is 200 with the field
+// stripped from the update. See patch_natural_key_integration_test.go
+// for the new accept-if-matches / reject-if-differs coverage.

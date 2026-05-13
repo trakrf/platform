@@ -201,9 +201,13 @@ func TestGetAsset_OptionalFieldsAlwaysEmittedNullWhenUnset(t *testing.T) {
 	assert.Nil(t, vtRaw, "valid_to must be JSON null when nil (TRA-610)")
 }
 
-// TRA-614 / BB19 §S1: PUT with explicit `null` on read-side-nullable fields
-// must succeed and clear the column. valid_to was already correct via TRA-468;
-// description, location_id, location_external_key were the new additions.
+// TRA-614 / BB19 §S1 + TRA-699: PATCH with explicit `null` on
+// read-side-nullable fields. `description` and `valid_to` clear the
+// underlying column when sent as null. `location_id` and
+// `location_external_key` are no longer writable on PATCH (TRA-699 supersedes
+// the TRA-614 clear-via-null path for location); a `null` body on those
+// fields is allowed only when the current resource state is already null
+// (matched echo). Mutations to asset location move to the scan-event path.
 func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -212,22 +216,16 @@ func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	// Seed an asset with a populated description and a location, then PUT
-	// every nullable field as null — round-trip should succeed and clear.
-	var locID int
-	err := pool.QueryRow(context.Background(), `
-		INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from, is_active)
-		VALUES ($1, 'LOC-FOR-NULL', 'loc-for-null', '', $2, true) RETURNING id
-	`, orgID, time.Now().UTC()).Scan(&locID)
-	require.NoError(t, err)
-
+	// Seed an asset with a populated description, populated valid_to, and
+	// no location (so the natural-key null/null echo case is exercised
+	// alongside the description / valid_to clear paths).
 	var assetID int
 	vt := time.Now().UTC().Add(24 * time.Hour)
-	err = pool.QueryRow(context.Background(), `
+	err := pool.QueryRow(context.Background(), `
 		INSERT INTO trakrf.assets
-		  (org_id, external_key, name, description, current_location_id, valid_from, valid_to, is_active)
-		VALUES ($1, 'ASSET-NULL-PUT', 'NullPut', 'has description', $2, $3, $4, true) RETURNING id
-	`, orgID, locID, time.Now().UTC(), vt).Scan(&assetID)
+		  (org_id, external_key, name, description, valid_from, valid_to, is_active)
+		VALUES ($1, 'ASSET-NULL-PUT', 'NullPut', 'has description', $2, $3, true) RETURNING id
+	`, orgID, time.Now().UTC(), vt).Scan(&assetID)
 	require.NoError(t, err)
 
 	handler := NewHandler(store)
@@ -245,27 +243,27 @@ func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 	putRec := httptest.NewRecorder()
 	router.ServeHTTP(putRec, patchReq)
 
-	require.Equal(t, http.StatusOK, putRec.Code, "PUT null on nullable fields must succeed: %s", putRec.Body.String())
+	require.Equal(t, http.StatusOK, putRec.Code, "PATCH null on nullable fields must succeed: %s", putRec.Body.String())
 
 	var resp struct {
 		Data map[string]any `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
 	assert.Nil(t, resp.Data["description"], "description cleared")
-	assert.Nil(t, resp.Data["location_id"], "location_id cleared")
-	assert.Nil(t, resp.Data["location_external_key"], "location_external_key cleared")
+	assert.Nil(t, resp.Data["location_id"], "location_id stays null (null/null echo)")
+	assert.Nil(t, resp.Data["location_external_key"], "location_external_key stays null (null/null echo)")
 	assert.Nil(t, resp.Data["valid_to"], "valid_to cleared")
 
-	// Verify storage: current_location_id is NULL, valid_to is NULL,
-	// description is empty (read-side projects "" → null per TRA-610).
-	var dbLoc, dbValidTo *string
+	// Verify storage: valid_to is NULL, description is empty (read-side
+	// projects "" → null per TRA-610). current_location_id was already
+	// null and remains null.
+	var dbValidTo *string
 	var dbDesc string
 	err = pool.QueryRow(context.Background(),
-		`SELECT description, current_location_id::text, valid_to::text FROM trakrf.assets WHERE id = $1`,
-		assetID).Scan(&dbDesc, &dbLoc, &dbValidTo)
+		`SELECT description, valid_to::text FROM trakrf.assets WHERE id = $1`,
+		assetID).Scan(&dbDesc, &dbValidTo)
 	require.NoError(t, err)
 	assert.Equal(t, "", dbDesc)
-	assert.Nil(t, dbLoc)
 	assert.Nil(t, dbValidTo)
 }
 
@@ -319,13 +317,16 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	require.Equal(t, http.StatusOK, putRec.Code, "GET → PUT round-trip with explicit nulls must succeed: %s", putRec.Body.String())
 }
 
-// TRA-681 supersedes TRA-614: the natural-key form is read-only on PATCH
-// and stripped before validation, so a body like
-// `{"location_id": null, "location_external_key": "WHS-99"}` is processed
-// as `{"location_id": null}` — clear the FK. The previous "disagree → 400"
-// rule from BB19 §S1 no longer applies; on PATCH, the only signal the
-// server reads from the pair is the surrogate.
-func TestPutAsset_LocationNullStripsExternalKey_ClearsFK(t *testing.T) {
+// TRA-699 supersedes TRA-681 / TRA-614: location_id and
+// location_external_key are no longer writable on PATCH (record-of-origin
+// posture; mutate via scan events). A body like
+// `{"location_id": null, "location_external_key": "WHS-99"}` on an asset
+// with a current location now returns 400 read_only on BOTH fields:
+// location_id null ≠ non-null current, and location_external_key
+// "WHS-99" ≠ matching current. The FK is not cleared. See
+// patch_natural_key_integration_test.go for the matched-echo 200 path
+// and the differs 400 path.
+func TestPatchAsset_LocationFieldsOnPATCH_NonMatchingDiffers400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -333,8 +334,7 @@ func TestPutAsset_LocationNullStripsExternalKey_ClearsFK(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	// Seed an asset that starts with a real location so the clear is
-	// observable.
+	// Seed an asset that starts with a real location.
 	var locID int
 	err := pool.QueryRow(context.Background(), `
 		INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from, is_active)
@@ -360,13 +360,32 @@ func TestPutAsset_LocationNullStripsExternalKey_ClearsFK(t *testing.T) {
 	putRec := httptest.NewRecorder()
 	router.ServeHTTP(putRec, patchReq)
 
-	require.Equal(t, http.StatusOK, putRec.Code, "PATCH must strip natural-key + clear FK via null id: %s", putRec.Body.String())
+	require.Equal(t, http.StatusBadRequest, putRec.Code,
+		"PATCH with differing location_id+external_key must 400 read_only on both: %s", putRec.Body.String())
 
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
+	require.Len(t, resp.Error.Fields, 2)
+	for _, f := range resp.Error.Fields {
+		assert.Equal(t, "read_only", f.Code, "field %s must carry read_only", f.Field)
+		assert.Contains(t, []string{"location_id", "location_external_key"}, f.Field)
+	}
+
+	// FK unchanged on disk.
 	var dbLoc *int
 	err = pool.QueryRow(context.Background(),
 		`SELECT current_location_id FROM trakrf.assets WHERE id = $1`, assetID).Scan(&dbLoc)
 	require.NoError(t, err)
-	assert.Nil(t, dbLoc, "FK must be cleared (location_id: null wins after strip)")
+	require.NotNil(t, dbLoc)
+	assert.Equal(t, locID, *dbLoc, "FK must not have changed on rejected PATCH")
 }
 
 // TRA-615 / BB19 §S5: external_key with reserved punctuation (space, slash,
