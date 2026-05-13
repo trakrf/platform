@@ -158,6 +158,7 @@ func setupRouter(
 		middleware.DefaultRateLimitHeaders(rl),
 		middleware.APIKeyAuth(store),
 		middleware.RateLimit(rl, allowTestRateLimitBypass),
+		middleware.RejectQueryParams(),
 	).Get("/api/v1/orgs/me", orgsHandler.GetOrgMe)
 
 	// TRA-466 API-key management — accepts session admin OR api-key with keys:admin scope.
@@ -179,10 +180,10 @@ func setupRouter(
 		r.Use(middleware.SentryContext)
 
 		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets", assetsHandler.ListAssets)
-		r.With(middleware.RequireScope("assets:read")).Get("/api/v1/assets/{asset_id}", assetsHandler.GetAsset)
+		r.With(middleware.RequireScope("assets:read"), middleware.RejectQueryParams()).Get("/api/v1/assets/{asset_id}", assetsHandler.GetAsset)
 
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations", locationsHandler.ListLocations)
-		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}", locationsHandler.GetLocation)
+		r.With(middleware.RequireScope("locations:read"), middleware.RejectQueryParams()).Get("/api/v1/locations/{location_id}", locationsHandler.GetLocation)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/ancestors", locationsHandler.GetAncestors)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/children", locationsHandler.GetChildren)
 		r.With(middleware.RequireScope("locations:read")).Get("/api/v1/locations/{location_id}/descendants", locationsHandler.GetDescendants)
@@ -209,23 +210,23 @@ func setupRouter(
 		r.Use(middleware.ContentType)
 
 		// Assets
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets", assetsHandler.Create)
-		r.With(middleware.RequireScope("assets:write"), middleware.RequireMergePatchCT).Patch("/api/v1/assets/{asset_id}", assetsHandler.Update)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}", assetsHandler.Delete)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{asset_id}/rename", assetsHandler.Rename)
-		r.With(middleware.RequireScope("assets:write")).Post("/api/v1/assets/{asset_id}/tags", assetsHandler.AddTag)
-		r.With(middleware.RequireScope("assets:write")).Delete("/api/v1/assets/{asset_id}/tags/{tag_id}", assetsHandler.RemoveTag)
+		r.With(middleware.RequireScope("assets:write"), middleware.RejectQueryParams()).Post("/api/v1/assets", assetsHandler.Create)
+		r.With(middleware.RequireScope("assets:write"), middleware.RequireMergePatchCT, middleware.RejectQueryParams()).Patch("/api/v1/assets/{asset_id}", assetsHandler.Update)
+		r.With(middleware.RequireScope("assets:write"), middleware.RejectQueryParams()).Delete("/api/v1/assets/{asset_id}", assetsHandler.Delete)
+		r.With(middleware.RequireScope("assets:write"), middleware.RejectQueryParams()).Post("/api/v1/assets/{asset_id}/rename", assetsHandler.Rename)
+		r.With(middleware.RequireScope("assets:write"), middleware.RejectQueryParams()).Post("/api/v1/assets/{asset_id}/tags", assetsHandler.AddTag)
+		r.With(middleware.RequireScope("assets:write"), middleware.RejectQueryParams()).Delete("/api/v1/assets/{asset_id}/tags/{tag_id}", assetsHandler.RemoveTag)
 
 		// Locations
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations", locationsHandler.Create)
-		r.With(middleware.RequireScope("locations:write"), middleware.RequireMergePatchCT).Patch("/api/v1/locations/{location_id}", locationsHandler.Update)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}", locationsHandler.Delete)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{location_id}/rename", locationsHandler.Rename)
-		r.With(middleware.RequireScope("locations:write")).Post("/api/v1/locations/{location_id}/tags", locationsHandler.AddTag)
-		r.With(middleware.RequireScope("locations:write")).Delete("/api/v1/locations/{location_id}/tags/{tag_id}", locationsHandler.RemoveTag)
+		r.With(middleware.RequireScope("locations:write"), middleware.RejectQueryParams()).Post("/api/v1/locations", locationsHandler.Create)
+		r.With(middleware.RequireScope("locations:write"), middleware.RequireMergePatchCT, middleware.RejectQueryParams()).Patch("/api/v1/locations/{location_id}", locationsHandler.Update)
+		r.With(middleware.RequireScope("locations:write"), middleware.RejectQueryParams()).Delete("/api/v1/locations/{location_id}", locationsHandler.Delete)
+		r.With(middleware.RequireScope("locations:write"), middleware.RejectQueryParams()).Post("/api/v1/locations/{location_id}/rename", locationsHandler.Rename)
+		r.With(middleware.RequireScope("locations:write"), middleware.RejectQueryParams()).Post("/api/v1/locations/{location_id}/tags", locationsHandler.AddTag)
+		r.With(middleware.RequireScope("locations:write"), middleware.RejectQueryParams()).Delete("/api/v1/locations/{location_id}/tags/{tag_id}", locationsHandler.RemoveTag)
 
 		// Inventory (scan writes)
-		r.With(middleware.RequireScope("scans:write")).Post("/api/v1/inventory/save", inventoryHandler.Save)
+		r.With(middleware.RequireScope("scans:write"), middleware.RejectQueryParams()).Post("/api/v1/inventory/save", inventoryHandler.Save)
 	})
 
 	// TRA-555 / TRA-554: Internal /by-id/ families removed. Public

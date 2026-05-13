@@ -467,6 +467,86 @@ func TestRespondDecodeError_MultipleUnknownFields_MultiEntryAndEchoesDetail(t *t
 	}
 }
 
+// TRA-707 / BB32 D6: a type-mismatch on a field declared via an embedded
+// struct surfaces from encoding/json as "OuterType.field". The wire-facing
+// detail string must show the JSON-tag leaf only — integrators see bare
+// keys in their request body, not Go-struct-qualified names. Mirrors the
+// embedded-struct stripping already applied on the time-target branch in
+// TestRespondDecodeError_BadRFC3339_EmbeddedStruct_StripsStructPrefix.
+func TestRespondDecodeError_TypeMismatch_EmbeddedStruct_StripsStructPrefix(t *testing.T) {
+	type inner struct {
+		Count int `json:"count"`
+	}
+	type target struct {
+		inner
+	}
+	var dst target
+	decErr := json.Unmarshal([]byte(`{"count":"not a number"}`), &dst)
+	if decErr == nil {
+		t.Fatalf("expected json.Unmarshal to return an UnmarshalTypeError, got nil")
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+	if !strings.Contains(resp.Error.Detail, `"count"`) {
+		t.Fatalf("detail = %q, should name the offending field 'count'", resp.Error.Detail)
+	}
+	if strings.Contains(resp.Error.Detail, ".") {
+		t.Fatalf("detail = %q, should not contain a struct-qualified field name", resp.Error.Detail)
+	}
+}
+
+// TRA-707 / BB32 C3: a literal `null` request body is structurally valid
+// JSON (RFC 7396 defines it as a merge-patch directive that empties the
+// target object), so the rejection wording must name RFC 7396 rather than
+// fall through to "Request body is not valid JSON" — that wording
+// misdiagnoses the failure and sends integrators chasing a JSON syntax
+// error that does not exist.
+func TestRespondDecodeError_NullBody_NamesRFC7396(t *testing.T) {
+	type target struct {
+		Name *string `json:"name"`
+	}
+	var got target
+	r := httptest.NewRequest("PATCH", "/", bytes.NewBufferString(`null`))
+	_, err := httputil.DecodeJSONStrictWithNullsTolerant(r, &got, nil)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	var nbe *httputil.JSONNullBodyError
+	if !errors.As(err, &nbe) {
+		t.Fatalf("expected *httputil.JSONNullBodyError, got %T (%v)", err, err)
+	}
+
+	w := httptest.NewRecorder()
+	httputil.RespondDecodeError(w, r, err, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if jerr := json.Unmarshal(w.Body.Bytes(), &resp); jerr != nil {
+		t.Fatalf("decode resp: %v", jerr)
+	}
+	if resp.Error.Type != string(apierrors.ErrBadRequest) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrBadRequest)
+	}
+	if !strings.Contains(resp.Error.Detail, "RFC 7396") {
+		t.Fatalf("detail = %q, must name RFC 7396 so the integrator knows the rejection is about merge-patch shape, not JSON syntax", resp.Error.Detail)
+	}
+	if strings.Contains(resp.Error.Detail, "not valid JSON") {
+		t.Fatalf("detail = %q, must not claim the body is invalid JSON — `null` is structurally valid", resp.Error.Detail)
+	}
+}
+
 // Empty drop list reduces to plain DecodeJSONStrictWithNulls behavior.
 func TestDecodeJSONStrictWithNullsTolerant_EmptyDropListEquivalent(t *testing.T) {
 	type target struct {

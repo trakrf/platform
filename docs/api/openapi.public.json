@@ -3129,6 +3129,12 @@
             },
             "description": "tag attached",
             "headers": {
+              "Location": {
+                "description": "Canonical URL of the created tag",
+                "schema": {
+                  "type": "string"
+                }
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },
@@ -6098,6 +6104,12 @@
             },
             "description": "tag attached",
             "headers": {
+              "Location": {
+                "description": "Canonical URL of the created tag",
+                "schema": {
+                  "type": "string"
+                }
+              },
               "X-RateLimit-Limit": {
                 "$ref": "#/components/headers/XRateLimitLimit"
               },

@@ -29,6 +29,17 @@ func (e *JSONDecodeError) Error() string {
 
 func (e *JSONDecodeError) Unwrap() error { return e.Cause }
 
+// JSONNullBodyError signals that the request body was the literal JSON
+// `null`. The downstream renderer uses this to produce a wording that
+// names RFC 7396 instead of the generic "not valid JSON" fallback (TRA-707
+// / BB32 C3). `null` is structurally valid JSON; the rejection itself is
+// correct, only the wording misdiagnosed.
+type JSONNullBodyError struct{}
+
+func (e *JSONNullBodyError) Error() string {
+	return "request body must be a JSON object (RFC 7396), not null"
+}
+
 // JSONUnknownFieldsError carries every unknown top-level key found in a
 // strict-decode request body. encoding/json's DisallowUnknownFields stops at
 // the first unknown field, but the public API's docs commit to one fields[]
@@ -356,8 +367,14 @@ func decodeStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map
 	// flags this as "API accepted schema-violating request" on PATCH because
 	// the spec declares the body as type:object (TRA-678). Reject upfront so
 	// the response is a 400 bad_request, not a no-op 200.
+	//
+	// TRA-707 / BB32 C3: surface a typed *JSONNullBodyError so
+	// RespondDecodeError can render the RFC 7396 wording — `null` is
+	// structurally valid JSON (it is a defined merge-patch directive), so
+	// the generic "Request body is not valid JSON" fallback misdiagnoses
+	// the failure.
 	if bytes.Equal(bytes.TrimSpace(body), []byte("null")) {
-		return nil, nil, &JSONDecodeError{Cause: errors.New("request body must be a JSON object, not null")}
+		return nil, nil, &JSONNullBodyError{}
 	}
 
 	explicitNulls := map[string]struct{}{}
@@ -418,6 +435,17 @@ func decodeStrictWithNullsTolerant(r *http.Request, dst any, drop []string) (map
 // WriteValidationError (echoes fields[0].Message + "(and N more ...)" suffix).
 func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, requestID string) {
 	if err != nil {
+		// TRA-707 / BB32 C3: literal `null` body — surface RFC 7396 wording
+		// rather than the generic "not valid JSON" fallback. `null` is
+		// structurally valid JSON, so the parse-error wording misdiagnoses
+		// the failure.
+		var nbe *JSONNullBodyError
+		if errors.As(err, &nbe) {
+			WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
+				"Request body must be a JSON object (RFC 7396)", requestID)
+			return
+		}
+
 		var ufe *JSONUnknownFieldsError
 		if errors.As(err, &ufe) && len(ufe.Fields) > 0 {
 			fields := make([]apierrors.FieldError, 0, len(ufe.Fields))
@@ -508,9 +536,21 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 // failure: the body parsed as JSON, but a value did not fit its destination
 // Go field. Returns a generic message when no field name is available
 // (e.g., the entire body was a JSON array where an object was expected).
+//
+// TRA-707 / BB32 D6: encoding/json prefixes the field path with the Go
+// struct name when an embedded struct is in play (e.g. POST asset bodies
+// land here as "CreateAssetRequest.name" because CreateAssetWithTagsRequest
+// embeds CreateAssetRequest). The wire-facing field is the JSON-tag leaf —
+// strip the struct qualifier so the response matches the request body shape
+// integrators see, mirroring the same handling on the time-target branch
+// in RespondDecodeError.
 func typeMismatchDetail(e *json.UnmarshalTypeError) string {
-	if e.Field != "" {
-		return fmt.Sprintf("Body field %q could not be decoded as the expected type", e.Field)
+	field := e.Field
+	if i := strings.LastIndex(field, "."); i >= 0 {
+		field = field[i+1:]
+	}
+	if field != "" {
+		return fmt.Sprintf("Body field %q could not be decoded as the expected type", field)
 	}
 	return "Request body could not be decoded as the expected type"
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -229,6 +230,47 @@ func toSet(ss []string) map[string]struct{} {
 		m[s] = struct{}{}
 	}
 	return m
+}
+
+// RejectUnknownQueryParams returns a *ListParamError naming every query
+// parameter on r whose key is not in `allowed`. Endpoints that do not run
+// through ParseListParams (single-resource GETs, write endpoints,
+// subresource POST/DELETEs) call this early to honor the docs claim that
+// "unknown query parameters are rejected with validation_error alongside
+// unknown body keys" (TRA-707 / BB32 D5). Pass `nil` (or no values) when
+// the endpoint accepts no query parameters at all.
+//
+// The returned error carries one *FieldError per offending key (sorted
+// lexically for determinism), code=invalid_value, mirroring the per-key
+// shape ParseListParams emits on the list path.
+//
+// Pair with RespondListParamError to render uniformly.
+func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
+	q := r.URL.Query()
+	if len(q) == 0 {
+		return nil
+	}
+	allow := toSet(allowed)
+	var unknowns []string
+	for key := range q {
+		if _, ok := allow[key]; ok {
+			continue
+		}
+		unknowns = append(unknowns, key)
+	}
+	if len(unknowns) == 0 {
+		return nil
+	}
+	sort.Strings(unknowns)
+	fields := make([]apierrors.FieldError, 0, len(unknowns))
+	for _, key := range unknowns {
+		fields = append(fields, apierrors.FieldError{
+			Field:   key,
+			Code:    "invalid_value",
+			Message: fmt.Sprintf("unknown parameter: %s", key),
+		})
+	}
+	return &ListParamError{Fields: fields}
 }
 
 // RespondListParamError writes a 400 validation_error envelope populated from
