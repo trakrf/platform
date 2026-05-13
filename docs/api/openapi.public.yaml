@@ -433,6 +433,7 @@ components:
                 - error
             type: object
         ErrorType:
+            description: Machine-readable error envelope discriminator. Pairs with `title` and `detail` to drive client-side branching on a stable token (per RFC 9457).
             enum:
                 - validation_error
                 - bad_request
@@ -465,6 +466,7 @@ components:
                 - message
             type: object
         FieldErrorCode:
+            description: Machine-readable field-level validation error code. Identifies which constraint a request payload violated; pairs with the field path and human-readable message in a FieldError entry.
             enum:
                 - required
                 - invalid_value

@@ -29,6 +29,12 @@ type inlineEnumExtraction struct {
 	Target string
 	// Sources lists each inline-enum site to lift into Target.
 	Sources []enumSource
+	// Description, when non-empty, overwrites the description on the
+	// hoisted schema. Generators emit this as a docstring on the typed
+	// enum, so every named-enum schema should carry one — leaving a
+	// generated SDK type undocumented is worse than the original inline
+	// string surface that at least let callers see the JSON example.
+	Description string
 }
 
 // enumSource locates an inline enum within a known parent schema by
@@ -51,15 +57,21 @@ var inlineEnumExtractions = []inlineEnumExtraction{
 			{Schema: "shared.Tag", Property: []string{"tag_type"}},
 			{Schema: "shared.TagRequest", Property: []string{"tag_type"}},
 		},
+		// TagType already carries the polymorphism description from
+		// annotateTagPolymorphism, which runs before hoistInlineEnums and
+		// plants it on the inline enum. Leaving Description empty here
+		// keeps that single source of truth.
 	},
 	{
-		Target: "ErrorType",
+		Target:      "ErrorType",
+		Description: "Machine-readable error envelope discriminator. Pairs with `title` and `detail` to drive client-side branching on a stable token (per RFC 9457).",
 		Sources: []enumSource{
 			{Schema: "errors.ErrorResponse", Property: []string{"error", "type"}},
 		},
 	},
 	{
-		Target: "FieldErrorCode",
+		Target:      "FieldErrorCode",
+		Description: "Machine-readable field-level validation error code. Identifies which constraint a request payload violated; pairs with the field path and human-readable message in a FieldError entry.",
 		Sources: []enumSource{
 			{Schema: "errors.FieldError", Property: []string{"code"}},
 		},
@@ -138,6 +150,9 @@ func hoistOneEnum(doc *openapi3.T, ext inlineEnumExtraction) error {
 		return fmt.Errorf("apispec: hoistInlineEnums: no sites resolved for target %s", ext.Target)
 	}
 
+	if ext.Description != "" {
+		canonical.Description = ext.Description
+	}
 	doc.Components.Schemas[ext.Target] = &openapi3.SchemaRef{Value: canonical}
 	refPath := "#/components/schemas/" + ext.Target
 
