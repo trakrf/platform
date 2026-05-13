@@ -35,7 +35,7 @@ type ListCurrentLocationsResponse struct {
 // @Summary List current asset locations
 // @Description Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 // @Description
-// @Description Temporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible — matching how soft-deleted locations are projected.
+// @Description Temporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible. Soft-deleted locations are projected the same way here — null on the report row — even though the identifier still lives on the location row; reports endpoints intentionally hide tombstoned anchor points from scan-derived summaries. Use the locations endpoint with `include_deleted=true` to retrieve the underlying identifier.
 // @Tags reports,public
 // @ID reports.asset-locations
 // @Param limit                 query int    false "max 200"   default(50) minimum(1) maximum(200)

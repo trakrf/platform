@@ -219,11 +219,14 @@ func TestGetLocationWithParentByID_SoftDeletedLocationReturnsNil(t *testing.T) {
 	assert.Nil(t, got, "soft-deleted location should surface as nil, not the stale row")
 }
 
-// TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier verifies
-// the LEFT JOIN's `p.deleted_at IS NULL` predicate — a live child pointing at
-// a tombstoned parent should expose nil ParentIdentifier, never the stale
-// identifier.
-func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testing.T) {
+// TestGetLocationWithParentByID_SoftDeletedParentProjectsExternalKey verifies
+// that the projection of `parent_external_key` reflects the parent's
+// `external_key` even when the parent is soft-deleted. The value is still on
+// the parent row; suppressing it dropped a useful link between
+// soft-deleted-but-readable children and their (likewise readable) ancestor
+// (TRA-693 / BB30 §2.6). The LEFT JOIN no longer filters
+// `p.deleted_at IS NULL`, so the projection is stable across tombstone state.
+func TestGetLocationWithParentByID_SoftDeletedParentProjectsExternalKey(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -231,19 +234,19 @@ func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testi
 	orgID := testutil.CreateTestAccount(t, pool)
 
 	parent, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "tra429-parent-tombstone", Name: "ParentTombstone",
+		OrgID: orgID, ExternalKey: "tra693-parent-tombstone", Name: "ParentTombstone",
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
 	child, err := store.CreateLocation(context.Background(), location.Location{
-		OrgID: orgID, ExternalKey: "tra429-stale-child", Name: "StaleChild",
+		OrgID: orgID, ExternalKey: "tra693-stale-child", Name: "StaleChild",
 		ParentID:  &parent.ID,
 		ValidFrom: time.Now(), IsActive: true,
 	})
 	require.NoError(t, err)
 
-	// Soft-delete the parent location, leaving the FK dangling.
+	// Soft-delete the parent location.
 	deleted, err := store.DeleteLocation(context.Background(), orgID, parent.ID)
 	require.NoError(t, err)
 	require.True(t, deleted)
@@ -251,8 +254,9 @@ func TestGetLocationWithParentByID_SoftDeletedParentYieldsNilIdentifier(t *testi
 	got, err := store.GetLocationWithParentByIDForTest(context.Background(), orgID, child.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Nil(t, got.ParentExternalKey,
-		"LEFT JOIN's deleted_at IS NULL predicate must suppress the stale parent identifier")
+	require.NotNil(t, got.ParentExternalKey,
+		"parent_external_key must reflect the parent's external_key even when the parent is soft-deleted (TRA-693 / BB30 §2.6)")
+	assert.Equal(t, "tra693-parent-tombstone", *got.ParentExternalKey)
 }
 
 // TestGetLocationWithParentByID_UnknownIDReturnsNil verifies the (nil, nil)

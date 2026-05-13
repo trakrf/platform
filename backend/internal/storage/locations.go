@@ -497,7 +497,7 @@ func (s *Storage) GetAncestors(ctx context.Context, orgID, id int) ([]location.L
 		FROM ancestors a
 		JOIN trakrf.locations l ON l.id = a.id
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.id != $2
 		ORDER BY a.rdepth ASC
 	`
@@ -516,7 +516,7 @@ func (s *Storage) ListAncestorsPaginated(ctx context.Context, orgID, id, limit, 
 		FROM ancestors a
 		JOIN trakrf.locations l ON l.id = a.id
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.id != $2
 		ORDER BY a.rdepth ASC, l.id ASC
 		LIMIT $3 OFFSET $4
@@ -571,7 +571,7 @@ func (s *Storage) GetDescendants(ctx context.Context, orgID, id int) ([]location
 		FROM subtree s
 		JOIN trakrf.locations l ON l.id = s.id
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.id != $2
 		ORDER BY s.sort_path ASC
 	`
@@ -589,7 +589,7 @@ func (s *Storage) ListDescendantsPaginated(ctx context.Context, orgID, id, limit
 		FROM subtree s
 		JOIN trakrf.locations l ON l.id = s.id
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.id != $2
 		ORDER BY s.sort_path ASC, l.id ASC
 		LIMIT $3 OFFSET $4
@@ -623,7 +623,7 @@ func (s *Storage) GetChildren(ctx context.Context, orgID, id int) ([]location.Lo
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.org_id = $1
 		  AND l.parent_location_id = $2
 		  AND l.deleted_at IS NULL
@@ -642,7 +642,7 @@ func (s *Storage) ListChildrenPaginated(ctx context.Context, orgID, id, limit, o
 		       p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.org_id = $1
 		  AND l.parent_location_id = $2
 		  AND l.deleted_at IS NULL
@@ -827,7 +827,7 @@ func (s *Storage) getLocationWithParentByID(ctx context.Context, orgID, id int) 
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
 			p.external_key
 		FROM trakrf.locations l
-		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.id = $1 AND l.org_id = $2 AND l.deleted_at IS NULL
 		LIMIT 1
 	`
@@ -933,7 +933,7 @@ func (s *Storage) GetLocationByExternalKey(
 			l.is_active, l.created_at, l.updated_at, l.deleted_at,
 			p.external_key
 		FROM trakrf.locations l
-		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+		LEFT JOIN trakrf.locations p ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE l.org_id = $1 AND l.external_key = $2 AND l.deleted_at IS NULL
 		LIMIT 1
 	`
@@ -987,7 +987,7 @@ func (s *Storage) ListLocationsFiltered(
 			p.external_key
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE %s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
@@ -1059,7 +1059,7 @@ func (s *Storage) CountLocationsFiltered(
 		SELECT COUNT(*)
 		FROM trakrf.locations l
 		LEFT JOIN trakrf.locations p
-			ON p.id = l.parent_location_id AND p.org_id = l.org_id AND p.deleted_at IS NULL
+			ON p.id = l.parent_location_id AND p.org_id = l.org_id
 		WHERE %s
 	`, where)
 
