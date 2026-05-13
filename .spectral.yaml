@@ -260,12 +260,16 @@ rules:
 
   trakrf-4xx-coverage-write-methods-415:
     description: >
-      Write methods (POST, PUT, PATCH, DELETE) must also declare a 415
-      response (Unsupported Media Type). Origin: BB18 §2.1/2.2.
+      Body-carrying write methods (POST, PUT, PATCH) must declare a 415
+      response (Unsupported Media Type). DELETE is excluded: TrakRF DELETEs
+      do not accept a request body and the service never enforces
+      Content-Type on DELETE, so a 415 declaration would advertise behaviour
+      the server doesn't exhibit. Origin: BB18 §2.1/2.2; DELETE carved out
+      under BB30 §1.5.
     message: "Write method missing 415 response (Unsupported Media Type) — BB18 §2.1/2.2"
     severity: error
     given:
-      - "$.paths.*[?(@property == 'post' || @property == 'put' || @property == 'patch' || @property == 'delete')].responses"
+      - "$.paths.*[?(@property == 'post' || @property == 'put' || @property == 'patch')].responses"
     then:
       - field: "415"
         function: truthy
