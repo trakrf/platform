@@ -75,6 +75,11 @@ func TestHoistInlineEnums_LiftsDuplicateSiblingEnum(t *testing.T) {
 	assert.Equal(t, "#/components/schemas/TagType", reqSite.Value.AllOf[0].Ref)
 	assert.True(t, reqSite.Value.Nullable, "nullable must survive on the allOf wrapper")
 	assert.Equal(t, "rfid", reqSite.Value.Default, "default must survive on the allOf wrapper")
+	// OAS 3.0 requires `type` alongside `nullable`; openapi-typescript's
+	// redocly validator enforces this. The wrapper must echo the underlying
+	// type from the hoisted schema.
+	require.NotNil(t, reqSite.Value.Type, "wrapper must carry type alongside nullable for OAS 3.0 compliance")
+	assert.True(t, reqSite.Value.Type.Is(openapi3.TypeString))
 }
 
 // TestHoistInlineEnums_NestedPath walks into nested property paths

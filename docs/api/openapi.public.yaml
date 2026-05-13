@@ -780,6 +780,7 @@ components:
                         - $ref: '#/components/schemas/TagType'
                     default: rfid
                     nullable: true
+                    type: string
                 value:
                     maxLength: 255
                     minLength: 1

@@ -1029,7 +1029,8 @@
               }
             ],
             "default": "rfid",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "value": {
             "maxLength": 255,

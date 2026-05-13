@@ -145,7 +145,13 @@ func hoistOneEnum(doc *openapi3.T, ext inlineEnumExtraction) error {
 		old := s.ref.Value
 		needsWrapper := old.Nullable || old.Default != nil
 		if needsWrapper {
+			// OpenAPI 3.0 requires `type` to be present alongside `nullable`
+			// (openapi-typescript's redocly validator enforces this strictly;
+			// other generators do not, but they don't reject the redundancy
+			// either). Copy the underlying type onto the wrapper so the spec
+			// validates cleanly across all three codegen targets.
 			wrapped := &openapi3.Schema{
+				Type:     canonical.Type,
 				AllOf:    openapi3.SchemaRefs{{Ref: refPath}},
 				Nullable: old.Nullable,
 				Default:  old.Default,
