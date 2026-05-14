@@ -965,7 +965,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 
 // @Summary      Remove a tag from an asset
 // @Description  Detach a tag from an asset by its tag record id.
-// @Description  First successful removal returns 204; repeated calls return 404 (TRA-719 / BB35 A3) — consistent with top-level resource DELETE semantics. The cross-asset / cross-org case (a tag that exists but is not attached to this asset, or belongs to a different org) also surfaces as 404.
+// @Description  First successful removal returns 204; repeated calls return 404 — consistent with top-level resource DELETE semantics. The cross-asset / cross-org case (a tag that exists but is not attached to this asset, or belongs to a different org) also surfaces as 404.
 // @Tags         assets,public
 // @ID           assets.tags.remove
 // @Accept       json

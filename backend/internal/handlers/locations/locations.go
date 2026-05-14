@@ -245,7 +245,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send EITHER `parent_id` (surrogate) OR `parent_external_key` (natural key); both forms accept `null` to clear the FK, and supplying both in the same body returns 400 `ambiguous_fields` (TRA-719 / BB35 B2 — symmetric with CreateLocationRequest). Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send EITHER `parent_id` (surrogate) OR `parent_external_key` (natural key); both forms accept `null` to clear the FK, and supplying both in the same body returns 400 `ambiguous_fields` (symmetric with CreateLocationRequest). Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -1207,7 +1207,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 
 // @Summary Remove a tag from a location
 // @Description Detach a tag from a location by its tag record id.
-// @Description First successful removal returns 204; repeated calls return 404 (TRA-719 / BB35 A3) — consistent with top-level resource DELETE semantics. The cross-location / cross-org case (a tag that exists but is not attached to this location, or belongs to a different org) also surfaces as 404.
+// @Description First successful removal returns 204; repeated calls return 404 — consistent with top-level resource DELETE semantics. The cross-location / cross-org case (a tag that exists but is not attached to this location, or belongs to a different org) also surfaces as 404.
 // @Tags locations,public
 // @ID locations.tags.remove
 // @Param location_id path int true "Location ID" minimum(1) maximum(2147483647) format(int32)

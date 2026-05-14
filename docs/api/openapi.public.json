@@ -3551,7 +3551,7 @@
     },
     "/api/v1/assets/{asset_id}/tags/{tag_id}": {
       "delete": {
-        "description": "**Required scope:** `assets:write`\n\nDetach a tag from an asset by its tag record id.\nFirst successful removal returns 204; repeated calls return 404 (TRA-719 / BB35 A3) — consistent with top-level resource DELETE semantics. The cross-asset / cross-org case (a tag that exists but is not attached to this asset, or belongs to a different org) also surfaces as 404.",
+        "description": "**Required scope:** `assets:write`\n\nDetach a tag from an asset by its tag record id.\nFirst successful removal returns 204; repeated calls return 404 — consistent with top-level resource DELETE semantics. The cross-asset / cross-org case (a tag that exists but is not attached to this asset, or belongs to a different org) also surfaces as 404.",
         "operationId": "removeAssetTag",
         "parameters": [
           {
@@ -4860,7 +4860,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send EITHER `parent_id` (surrogate) OR `parent_external_key` (natural key); both forms accept `null` to clear the FK, and supplying both in the same body returns 400 `ambiguous_fields` (TRA-719 / BB35 B2 — symmetric with CreateLocationRequest). Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send EITHER `parent_id` (surrogate) OR `parent_external_key` (natural key); both forms accept `null` to clear the FK, and supplying both in the same body returns 400 `ambiguous_fields` (symmetric with CreateLocationRequest). Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
         "operationId": "updateLocation",
         "parameters": [
           {
@@ -6516,7 +6516,7 @@
     },
     "/api/v1/locations/{location_id}/tags/{tag_id}": {
       "delete": {
-        "description": "**Required scope:** `locations:write`\n\nDetach a tag from a location by its tag record id.\nFirst successful removal returns 204; repeated calls return 404 (TRA-719 / BB35 A3) — consistent with top-level resource DELETE semantics. The cross-location / cross-org case (a tag that exists but is not attached to this location, or belongs to a different org) also surfaces as 404.",
+        "description": "**Required scope:** `locations:write`\n\nDetach a tag from a location by its tag record id.\nFirst successful removal returns 204; repeated calls return 404 — consistent with top-level resource DELETE semantics. The cross-location / cross-org case (a tag that exists but is not attached to this location, or belongs to a different org) also surfaces as 404.",
         "operationId": "removeLocationTag",
         "parameters": [
           {
