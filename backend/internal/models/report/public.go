@@ -13,7 +13,7 @@ type PublicCurrentLocationItem struct {
 	AssetExternalKey    *string    `json:"asset_external_key"`
 	LocationID          *int       `json:"location_id"`
 	LocationExternalKey *string    `json:"location_external_key"`
-	LastSeen            time.Time  `json:"last_seen"`
+	AssetLastSeen       time.Time  `json:"asset_last_seen"`
 	AssetDeletedAt      *time.Time `json:"asset_deleted_at"`
 }
 
@@ -25,14 +25,14 @@ func ToPublicCurrentLocationItem(it CurrentLocationItem) PublicCurrentLocationIt
 		AssetExternalKey:    &assetKey,
 		LocationID:          it.LocationID,
 		LocationExternalKey: it.LocationExternalKey,
-		LastSeen:            it.LastSeen,
+		AssetLastSeen:       it.LastSeen,
 		AssetDeletedAt:      it.AssetDeletedAt,
 	}
 }
 
 // PublicAssetHistoryItem is the public shape for asset-history list items.
 type PublicAssetHistoryItem struct {
-	Timestamp           time.Time `json:"timestamp"`
+	EventObservedAt     time.Time `json:"event_observed_at"`
 	LocationID          *int      `json:"location_id"`
 	LocationExternalKey *string   `json:"location_external_key"`
 	DurationSeconds     *int      `json:"duration_seconds"`
@@ -40,7 +40,7 @@ type PublicAssetHistoryItem struct {
 
 func ToPublicAssetHistoryItem(it AssetHistoryItem) PublicAssetHistoryItem {
 	return PublicAssetHistoryItem{
-		Timestamp:           it.Timestamp,
+		EventObservedAt:     it.Timestamp,
 		LocationID:          it.LocationID,
 		LocationExternalKey: it.LocationExternalKey,
 		DurationSeconds:     it.DurationSeconds,

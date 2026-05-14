@@ -9,8 +9,11 @@
 package swaggerspec
 
 import (
+	"bytes"
 	_ "embed"
 	"net/http"
+	"os"
+	"sync"
 )
 
 //go:embed openapi.internal.json
@@ -24,6 +27,44 @@ var publicJSON []byte
 
 //go:embed openapi.public.yaml
 var publicYAML []byte
+
+// canonicalContactURL is the production-canonical info.contact.url emitted
+// by apispec/postprocess.go. The committed spec hard-codes it because the
+// build produces one artifact for every environment; environment-awareness
+// lives at serve time below (TRA-717 / BB34 F4).
+const canonicalContactURL = "https://app.trakrf.id/api"
+
+// previewContactURL is the equivalent on the preview deployment. The two
+// servers entries in info.servers[] already advertise both endpoints; this
+// keeps the contact URL aligned with whichever environment the running
+// backend is serving.
+const previewContactURL = "https://app.preview.trakrf.id/api"
+
+// publicJSONServed / publicYAMLServed are the byte slices returned by the
+// public spec handlers. They equal the embedded bytes in production and on
+// non-preview environments; on preview they carry the preview contact URL.
+// The substitution runs once at init() and the slices are immutable
+// thereafter.
+var (
+	publicSpecOnce   sync.Once
+	publicJSONServed []byte
+	publicYAMLServed []byte
+)
+
+func resolvePublicSpec() {
+	publicJSONServed = publicJSON
+	publicYAMLServed = publicYAML
+	if os.Getenv("APP_ENV") != "preview" {
+		return
+	}
+	// Targeted substitution: canonicalContactURL ("https://app.trakrf.id/api",
+	// trailing /api) appears only on info.contact.url. The servers[] entries
+	// use the bare hostnames without /api, so this does not affect them.
+	publicJSONServed = bytes.ReplaceAll(publicJSON,
+		[]byte(canonicalContactURL), []byte(previewContactURL))
+	publicYAMLServed = bytes.ReplaceAll(publicYAML,
+		[]byte(canonicalContactURL), []byte(previewContactURL))
+}
 
 // ServeJSON writes the embedded internal OpenAPI spec as JSON.
 func ServeJSON(w http.ResponseWriter, _ *http.Request) {
@@ -39,12 +80,14 @@ func ServeYAML(w http.ResponseWriter, _ *http.Request) {
 
 // ServePublicJSON writes the embedded public OpenAPI spec as JSON.
 func ServePublicJSON(w http.ResponseWriter, _ *http.Request) {
+	publicSpecOnce.Do(resolvePublicSpec)
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(publicJSON)
+	_, _ = w.Write(publicJSONServed)
 }
 
 // ServePublicYAML writes the embedded public OpenAPI spec as YAML.
 func ServePublicYAML(w http.ResponseWriter, _ *http.Request) {
+	publicSpecOnce.Do(resolvePublicSpec)
 	w.Header().Set("Content-Type", "application/yaml")
-	_, _ = w.Write(publicYAML)
+	_, _ = w.Write(publicYAMLServed)
 }

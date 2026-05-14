@@ -520,7 +520,7 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 				"duration_seconds":      &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
 				"location_id":           &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
 				"location_external_key": stringProp(""),
-				"timestamp":             stringProp("date-time"), // not on the allowlist
+				"event_observed_at":     stringProp("date-time"), // not on the allowlist
 			},
 		}},
 		"report.PublicCurrentLocationItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
@@ -530,7 +530,7 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 				"asset_external_key":    stringProp(""),
 				"location_id":           &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
 				"location_external_key": stringProp(""),
-				"last_seen":             stringProp("date-time"), // not on the allowlist
+				"asset_last_seen":       stringProp("date-time"), // not on the allowlist
 			},
 		}},
 	})
@@ -562,11 +562,11 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["name"].Value.Nullable,
 		"name is not nullable")
 	assert.False(t,
-		doc.Components.Schemas["report.PublicAssetHistoryItem"].Value.Properties["timestamp"].Value.Nullable,
-		"timestamp is not nullable")
+		doc.Components.Schemas["report.PublicAssetHistoryItem"].Value.Properties["event_observed_at"].Value.Nullable,
+		"event_observed_at is not nullable")
 	assert.False(t,
-		doc.Components.Schemas["report.PublicCurrentLocationItem"].Value.Properties["last_seen"].Value.Nullable,
-		"last_seen is not nullable")
+		doc.Components.Schemas["report.PublicCurrentLocationItem"].Value.Properties["asset_last_seen"].Value.Nullable,
+		"asset_last_seen is not nullable")
 }
 
 func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
@@ -575,23 +575,23 @@ func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
 		"Asset": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
-				"valid_from":   stringProp(""),
-				"valid_to":     stringProp(""),
-				"created_at":   stringProp(""),
-				"updated_at":   stringProp(""),
-				"expires_at":   stringProp(""),
-				"last_used_at": stringProp(""),
-				"timestamp":    stringProp(""),
-				"last_seen":    stringProp(""),
-				"name":         stringProp(""),     // not a timestamp — must be left alone
-				"birth_date":   stringProp("date"), // non-matching name + existing format
+				"valid_from":        stringProp(""),
+				"valid_to":          stringProp(""),
+				"created_at":        stringProp(""),
+				"updated_at":        stringProp(""),
+				"expires_at":        stringProp(""),
+				"last_used_at":      stringProp(""),
+				"event_observed_at": stringProp(""),
+				"asset_last_seen":   stringProp(""),
+				"name":              stringProp(""),     // not a timestamp — must be left alone
+				"birth_date":        stringProp("date"), // non-matching name + existing format
 			},
 		}},
 	})
 	postprocessPublic(doc)
 
 	props := doc.Components.Schemas["Asset"].Value.Properties
-	for _, name := range []string{"valid_from", "valid_to", "created_at", "updated_at", "expires_at", "last_used_at", "timestamp", "last_seen"} {
+	for _, name := range []string{"valid_from", "valid_to", "created_at", "updated_at", "expires_at", "last_used_at", "event_observed_at", "asset_last_seen"} {
 		assert.Equal(t, "date-time", props[name].Value.Format, "%s should gain format: date-time", name)
 	}
 	assert.Equal(t, "", props["name"].Value.Format, "non-timestamp fields must stay formatless")
@@ -620,7 +620,7 @@ func TestPostprocess_DoesNotSetPatternOnDateTimeFields(t *testing.T) {
 		"AssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
-				"timestamp": stringProp("date-time"),
+				"event_observed_at": stringProp("date-time"),
 			},
 		}},
 	})
@@ -648,8 +648,8 @@ func TestPostprocess_DoesNotSetPatternOnDateTimeFields(t *testing.T) {
 		"AssetView.created_at must not declare a pattern (BB31 §1.4)")
 	assert.Equal(t, "", doc.Components.Schemas["AssetView"].Value.Properties["updated_at"].Value.Pattern,
 		"AssetView.updated_at must not declare a pattern (BB31 §1.4)")
-	assert.Equal(t, "", doc.Components.Schemas["AssetHistoryItem"].Value.Properties["timestamp"].Value.Pattern,
-		"AssetHistoryItem.timestamp must not declare a pattern (BB31 §1.4)")
+	assert.Equal(t, "", doc.Components.Schemas["AssetHistoryItem"].Value.Properties["event_observed_at"].Value.Pattern,
+		"AssetHistoryItem.event_observed_at must not declare a pattern (BB31 §1.4)")
 
 	fromParam := doc.Paths.Find("/api/v1/assets/{asset_id}/history").Get.Parameters[0]
 	assert.Equal(t, "", fromParam.Value.Schema.Value.Pattern,
@@ -1564,4 +1564,96 @@ func withEmptyRequiredFields(t *testing.T) {
 		publicTagDescriptions = savedTagDescriptions
 		inlineEnumExtractions = savedInlineEnumExtractions
 	})
+}
+
+// TRA-717 / BB34 F5 (+ BB33 F5 carry-over): list-endpoint filters named
+// `*external_key` declare the strict identifier pattern (^[A-Za-z0-9-]+$),
+// not the loose printable-string pattern. A generated client validating
+// against the spec must reject `?external_key=abc/def` at the client
+// boundary instead of letting it through and surfacing a server-side 400
+// the client believes "shouldn't happen." `q` keeps the printable pattern
+// because it really is free-form substring search.
+func TestMarkQueryStringPatterns_ExternalKeyFiltersUseStrictPattern(t *testing.T) {
+	doc := &openapi3.T{
+		OpenAPI: "3.0.0",
+		Info:    &openapi3.Info{Title: "T", Version: "v"},
+		Paths:   openapi3.NewPaths(),
+	}
+	arrayParam := func(name string) *openapi3.ParameterRef {
+		return &openapi3.ParameterRef{Value: &openapi3.Parameter{
+			Name: name,
+			In:   "query",
+			Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{
+				Type: &openapi3.Types{openapi3.TypeArray},
+				Items: &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeString},
+				}},
+			}},
+		}}
+	}
+	stringParam := func(name string) *openapi3.ParameterRef {
+		return &openapi3.ParameterRef{Value: &openapi3.Parameter{
+			Name: name,
+			In:   "query",
+			Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{
+				Type: &openapi3.Types{openapi3.TypeString},
+			}},
+		}}
+	}
+	doc.Paths.Set("/api/v1/assets", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Parameters: openapi3.Parameters{
+				arrayParam("external_key"),
+				arrayParam("location_external_key"),
+				stringParam("q"),
+			},
+		},
+	})
+	doc.Paths.Set("/api/v1/locations", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Parameters: openapi3.Parameters{
+				arrayParam("external_key"),
+				arrayParam("parent_external_key"),
+			},
+		},
+	})
+	doc.Paths.Set("/api/v1/reports/asset-locations", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Parameters: openapi3.Parameters{
+				arrayParam("location_external_key"),
+			},
+		},
+	})
+
+	markQueryStringPatterns(doc)
+
+	itemsPattern := func(path, name string) string {
+		for _, p := range doc.Paths.Find(path).Get.Parameters {
+			if p.Value.Name == name {
+				if p.Value.Schema.Value.Items != nil {
+					return p.Value.Schema.Value.Items.Value.Pattern
+				}
+				return p.Value.Schema.Value.Pattern
+			}
+		}
+		return ""
+	}
+
+	strict := externalKeyPattern
+	for _, c := range []struct {
+		path, name string
+	}{
+		{"/api/v1/assets", "external_key"},
+		{"/api/v1/assets", "location_external_key"},
+		{"/api/v1/locations", "external_key"},
+		{"/api/v1/locations", "parent_external_key"},
+		{"/api/v1/reports/asset-locations", "location_external_key"},
+	} {
+		assert.Equal(t, strict, itemsPattern(c.path, c.name),
+			"%s ?%s items.pattern must be the strict external_key pattern (TRA-717 F5)", c.path, c.name)
+	}
+
+	// q is free-form substring search — keeps the printable-string pattern
+	assert.Equal(t, printableStringRegex, itemsPattern("/api/v1/assets", "q"),
+		"q must keep printable-string pattern (control chars rejected, slashes allowed)")
 }

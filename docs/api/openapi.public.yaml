@@ -72,6 +72,10 @@ components:
                     format: int32
                     nullable: true
                     type: integer
+                event_observed_at:
+                    example: "2025-04-29T12:34:56Z"
+                    format: date-time
+                    type: string
                 location_external_key:
                     nullable: true
                     type: string
@@ -79,12 +83,8 @@ components:
                     format: int32
                     nullable: true
                     type: integer
-                timestamp:
-                    example: "2025-04-29T12:34:56Z"
-                    format: date-time
-                    type: string
             required:
-                - timestamp
+                - event_observed_at
                 - location_id
                 - location_external_key
                 - duration_seconds
@@ -128,7 +128,7 @@ components:
                     format: int32
                     nullable: true
                     type: integer
-                last_seen:
+                asset_last_seen:
                     example: "2025-04-29T12:34:56Z"
                     format: date-time
                     type: string
@@ -144,7 +144,7 @@ components:
                 - asset_external_key
                 - location_id
                 - location_external_key
-                - last_seen
+                - asset_last_seen
                 - asset_deleted_at
             type: object
         AssetLocationsResponse:
@@ -1021,7 +1021,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                        pattern: ^[A-Za-z0-9-]+$
                         type: string
                     type: array
                   style: form
@@ -1032,7 +1032,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                        pattern: ^[A-Za-z0-9-]+$
                         type: string
                     type: array
                   style: form
@@ -1912,7 +1912,7 @@ paths:
                   name: sort
                   schema:
                     default: ""
-                    pattern: ^(|(?:timestamp|-timestamp)(?:,(?:timestamp|-timestamp))*)$
+                    pattern: ^(|(?:event_observed_at|-event_observed_at)(?:,(?:event_observed_at|-event_observed_at))*)$
                     type: string
                   style: form
             responses:
@@ -2636,7 +2636,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                        pattern: ^[A-Za-z0-9-]+$
                         type: string
                     type: array
                   style: form
@@ -2647,7 +2647,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                        pattern: ^[A-Za-z0-9-]+$
                         type: string
                     type: array
                   style: form
@@ -4724,7 +4724,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                        pattern: ^[A-Za-z0-9-]+$
                         type: string
                     type: array
                   style: form
@@ -4746,7 +4746,7 @@ paths:
                   name: sort
                   schema:
                     default: ""
-                    pattern: ^(|(?:last_seen|-last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key)(?:,(?:last_seen|-last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key))*)$
+                    pattern: ^(|(?:asset_last_seen|-asset_last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key)(?:,(?:asset_last_seen|-asset_last_seen|asset_external_key|-asset_external_key|location_external_key|-location_external_key))*)$
                     type: string
                   style: form
             responses:

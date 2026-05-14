@@ -132,6 +132,12 @@ func postprocessPublic(doc *openapi3.T) error {
 		doc.Info.Contact.Email = "support@trakrf.id"
 	}
 	if doc.Info.Contact.URL == "" {
+		// Production canonical. The build emits a single artifact for every
+		// environment, so the committed spec must pin one value. The backend
+		// swaps this to the preview equivalent at serve time when
+		// APP_ENV=preview — see swaggerspec.resolvePublicSpec (TRA-717 / BB34
+		// F4). Keep the bare-hostname servers[] entries below untouched so
+		// the substitution remains targeted to contact.url alone.
 		doc.Info.Contact.URL = "https://app.trakrf.id/api"
 	}
 	doc.Servers = openapi3.Servers{
@@ -1009,11 +1015,24 @@ func closeWriteSchemasToUnknownFields(doc *openapi3.T, schemas []string) error {
 	return nil
 }
 
-// markQueryStringPatterns applies the printable-string pattern to
-// free-form text query filters (q, *_external_key). Mirrors the body-side
-// no_control_chars validator at the query boundary so Schemathesis-
-// generated control-char fuzz is schema-violating (negative_data_rejection)
-// rather than schema-compliant (positive_data_acceptance). TRA-678.
+// markQueryStringPatterns applies the right pattern to free-form text
+// query filters. Two pattern classes:
+//
+//   - `q` (substring search): printable-string — control chars rejected,
+//     everything else accepted. Mirrors the body-side no_control_chars
+//     validator. TRA-678.
+//   - `*external_key` (identifier filter): strict external_key pattern
+//     (`^[A-Za-z0-9-]+$`) — matches the server-side validator applied at
+//     POST/PATCH time and at filter parse time via
+//     ValidateExternalKeyFilterValues. Without this, a generated client
+//     validating against the spec would accept `?external_key=abc/def`
+//     locally and then surface a server-side 400 the client believes
+//     "shouldn't happen." TRA-713 / TRA-717 / BB33 F5 + BB34 F5.
+//
+// Schemathesis sees the right shape for each: control-char fuzz on `q`
+// is negative_data_rejection (positive on q would be wrong); slash/hash
+// fuzz on `*external_key` is negative_data_rejection (positive would
+// silently 200-with-empty pre-TRA-713, 400 post-TRA-713).
 func markQueryStringPatterns(doc *openapi3.T) {
 	if doc.Paths == nil {
 		return
@@ -1023,18 +1042,24 @@ func markQueryStringPatterns(doc *openapi3.T) {
 			return
 		}
 		s := p.Schema.Value
-		if p.Name != "q" && !strings.HasSuffix(p.Name, "external_key") {
+		var pattern string
+		switch {
+		case p.Name == "q":
+			pattern = printableStringRegex
+		case strings.HasSuffix(p.Name, "external_key"):
+			pattern = externalKeyPattern
+		default:
 			return
 		}
 		if s.Type.Is(openapi3.TypeArray) && s.Items != nil && s.Items.Value != nil {
 			items := s.Items.Value
 			if items.Type.Is(openapi3.TypeString) && items.Pattern == "" {
-				items.Pattern = printableStringRegex
+				items.Pattern = pattern
 			}
 			return
 		}
 		if s.Type.Is(openapi3.TypeString) && s.Pattern == "" {
-			s.Pattern = printableStringRegex
+			s.Pattern = pattern
 		}
 	}
 	for _, item := range doc.Paths.Map() {
@@ -1413,8 +1438,8 @@ var requiredFields = map[string][]string{
 	"location.PublicLocationView": {"id", "external_key", "name", "description", "parent_id", "parent_external_key", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},
 
 	// report
-	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "last_seen", "asset_deleted_at"},
-	"report.PublicAssetHistoryItem":    {"timestamp", "location_id", "location_external_key", "duration_seconds"},
+	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "asset_last_seen", "asset_deleted_at"},
+	"report.PublicAssetHistoryItem":    {"event_observed_at", "location_id", "location_external_key", "duration_seconds"},
 
 	// org (post namespace consolidation — TRA-602)
 	"org.OrgMeView": {"id", "name"},
@@ -1704,7 +1729,11 @@ func fixExtensibleEnumBool(s *openapi3.Schema) {
 	}
 }
 
-var timestampFieldNames = regexp.MustCompile(`^(valid_from|valid_to|timestamp|last_seen|.*_at)$`)
+// asset_last_seen is the wire-level rename of the legacy last_seen field
+// (TRA-717 / BB34 F2). Listed explicitly because it does not match the
+// `_at` suffix, while event_observed_at (the wire-level rename of the
+// legacy timestamp field) does.
+var timestampFieldNames = regexp.MustCompile(`^(valid_from|valid_to|asset_last_seen|.*_at)$`)
 
 func isTimestampField(name string) bool {
 	return timestampFieldNames.MatchString(name)
