@@ -46,22 +46,16 @@ type enumSource struct {
 }
 
 // inlineEnumExtractions enumerates every inline enum currently emitted
-// by swag. Audit (2026-05-13) found only these four sites; a top-level
-// audit on every spec regeneration is unnecessary as long as
-// hoistInlineEnums errors when a configured Source does not contain an
-// enum.
+// by swag that needs hoisting to a named top-level schema. shared.Tag
+// and shared.TagRequest used to surface their tag_type enum here, but
+// splitTagPolymorphism (TRA-714) runs first and rewrites each parent
+// into a discriminated union; the post-split subtypes (RfidTag /
+// BleTag / BarcodeTag and the request equivalents) each carry their
+// own single-value tag_type enum inline, which is the idiomatic
+// discriminator shape and produces distinct generated constant names
+// per subtype so the Go-codegen sibling collision that drove the
+// original hoist (TRA-691) does not apply.
 var inlineEnumExtractions = []inlineEnumExtraction{
-	{
-		Target: "TagType",
-		Sources: []enumSource{
-			{Schema: "shared.Tag", Property: []string{"tag_type"}},
-			{Schema: "shared.TagRequest", Property: []string{"tag_type"}},
-		},
-		// TagType already carries the polymorphism description from
-		// annotateTagPolymorphism, which runs before hoistInlineEnums and
-		// plants it on the inline enum. Leaving Description empty here
-		// keeps that single source of truth.
-	},
 	{
 		Target:      "ErrorType",
 		Description: "Machine-readable error envelope discriminator. Pairs with `title` and `detail` to drive client-side branching on a stable token (per RFC 9457).",

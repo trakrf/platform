@@ -424,12 +424,12 @@ func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
 	)
 }
 
-// TestPostprocess_AnnotatesTagPolymorphism locks in TRA-666 BB26 C1:
-// the Tag and TagRequest schemas must carry a schema-level description
-// that names the polymorphism and the tag_type discriminator. The
-// description propagates into generated client class docstrings, which
-// is where an AI ingestor reads the schema. Names are pre-rename
-// (shared.Tag / shared.TagRequest) because the annotation runs before
+// TestPostprocess_AnnotatesTagPolymorphism locks in TRA-666 BB26 C1 and
+// TRA-714 BB33 C1: the Tag and TagRequest union schemas carry the
+// polymorphism description; splitTagPolymorphism then rewrites each into
+// a oneOf over RfidTag/BleTag/BarcodeTag subtypes, and each subtype's
+// tag_type carries the discriminator-role field description. Names are
+// pre-rename (shared.*) because annotation and split both run before
 // renamePublicSpec.
 func TestPostprocess_AnnotatesTagPolymorphism(t *testing.T) {
 	withEmptyRequiredFields(t)
@@ -473,11 +473,22 @@ func TestPostprocess_AnnotatesTagPolymorphism(t *testing.T) {
 		assert.Contains(t, ref.Value.Description, "ble", "%s description must list ble", name)
 		assert.Contains(t, ref.Value.Description, "barcode", "%s description must list barcode", name)
 
-		tt := ref.Value.Properties["tag_type"]
-		require.NotNil(t, tt, "%s.tag_type must survive postprocess", name)
-		require.NotNil(t, tt.Value, "%s.tag_type value must not be nil", name)
-		assert.NotEmpty(t, tt.Value.Description, "%s.tag_type must carry a field-level description", name)
-		assert.Contains(t, tt.Value.Description, "iscriminator", "%s.tag_type description must call out its discriminator role", name)
+		require.Len(t, ref.Value.OneOf, 3, "%s must be split into a oneOf union", name)
+		require.NotNil(t, ref.Value.Discriminator, "%s must carry a discriminator", name)
+		assert.Equal(t, "tag_type", ref.Value.Discriminator.PropertyName,
+			"%s discriminator property must be tag_type", name)
+	}
+
+	for _, subName := range []string{"shared.RfidTag", "shared.BleTag", "shared.BarcodeTag", "shared.RfidTagRequest", "shared.BleTagRequest", "shared.BarcodeTagRequest"} {
+		sub := doc.Components.Schemas[subName]
+		require.NotNil(t, sub, "subtype %s must be present after the split", subName)
+		require.NotNil(t, sub.Value, "subtype %s value must not be nil", subName)
+		tt := sub.Value.Properties["tag_type"]
+		require.NotNil(t, tt, "%s.tag_type must be present", subName)
+		require.NotNil(t, tt.Value, "%s.tag_type value must not be nil", subName)
+		assert.NotEmpty(t, tt.Value.Description, "%s.tag_type must carry a field-level description", subName)
+		assert.Contains(t, tt.Value.Description, "iscriminator",
+			"%s.tag_type description must call out its discriminator role", subName)
 	}
 }
 
