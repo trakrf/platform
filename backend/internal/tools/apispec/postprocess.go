@@ -107,6 +107,9 @@ func postprocessPublic(doc *openapi3.T) error {
 	rewriteMergePatchContentType(doc)
 	annotateReadOnlyTags(doc)
 	annotateTagPolymorphism(doc)
+	if err := splitTagPolymorphism(doc); err != nil {
+		return fmt.Errorf("split tag polymorphism: %w", err)
+	}
 	if err := hoistInlineEnums(doc); err != nil {
 		return fmt.Errorf("hoist inline enums: %w", err)
 	}
@@ -318,6 +321,18 @@ func rewriteSchemaRefs(doc *openapi3.T, renames map[string]string) {
 		}
 	}
 
+	rewriteMappingRef := func(name string) (string, bool) {
+		stripped, ok := strings.CutPrefix(name, schemaRefPrefix)
+		if !ok {
+			return "", false
+		}
+		newName, found := renames[stripped]
+		if !found {
+			return "", false
+		}
+		return schemaRefPrefix + newName, true
+	}
+
 	visited := map[*openapi3.Schema]bool{}
 	var walk func(ref *openapi3.SchemaRef)
 	walk = func(ref *openapi3.SchemaRef) {
@@ -347,6 +362,18 @@ func rewriteSchemaRefs(doc *openapi3.T, renames map[string]string) {
 			walk(r)
 		}
 		walk(s.Not)
+		// Discriminator mapping refs are plain strings (MappingRef
+		// serialises as text, not as a $ref object) so the SchemaRef
+		// walk above does not reach them. Rewrite them explicitly so
+		// the union's mapping survives publicSchemaRenames.
+		if s.Discriminator != nil {
+			for k, mr := range s.Discriminator.Mapping {
+				if newRef, ok := rewriteMappingRef(mr.Ref); ok {
+					mr.Ref = newRef
+					s.Discriminator.Mapping[k] = mr
+				}
+			}
+		}
 	}
 
 	if doc.Components != nil {

@@ -242,6 +242,86 @@ components:
                 - deleted_at
                 - tags
             type: object
+        BarcodeTag:
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            properties:
+                id:
+                    format: int32
+                    readOnly: true
+                    type: integer
+                tag_type:
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
+                    enum:
+                        - barcode
+                    type: string
+                value:
+                    maxLength: 255
+                    minLength: 1
+                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    type: string
+            required:
+                - id
+                - tag_type
+                - value
+            type: object
+        BarcodeTagRequest:
+            additionalProperties: false
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            properties:
+                tag_type:
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
+                    enum:
+                        - barcode
+                    type: string
+                value:
+                    maxLength: 255
+                    minLength: 1
+                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    type: string
+            required:
+                - tag_type
+                - value
+            type: object
+        BleTag:
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            properties:
+                id:
+                    format: int32
+                    readOnly: true
+                    type: integer
+                tag_type:
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
+                    enum:
+                        - ble
+                    type: string
+                value:
+                    maxLength: 255
+                    minLength: 1
+                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    type: string
+            required:
+                - id
+                - tag_type
+                - value
+            type: object
+        BleTagRequest:
+            additionalProperties: false
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            properties:
+                tag_type:
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
+                    enum:
+                        - ble
+                    type: string
+                value:
+                    maxLength: 255
+                    minLength: 1
+                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    type: string
+            required:
+                - tag_type
+                - value
+            type: object
         CreateAssetResponse:
             properties:
                 data:
@@ -729,7 +809,7 @@ components:
                 - data
                 - descendant_count_affected
             type: object
-        Tag:
+        RfidTag:
             description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
             properties:
                 id:
@@ -737,7 +817,10 @@ components:
                     readOnly: true
                     type: integer
                 tag_type:
-                    $ref: '#/components/schemas/TagType'
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
+                    enum:
+                        - rfid
+                    type: string
                 value:
                     maxLength: 255
                     minLength: 1
@@ -748,31 +831,48 @@ components:
                 - tag_type
                 - value
             type: object
-        TagRequest:
+        RfidTagRequest:
             additionalProperties: false
             description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
             properties:
                 tag_type:
-                    $ref: '#/components/schemas/TagType'
+                    description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
+                    enum:
+                        - rfid
+                    type: string
                 value:
                     maxLength: 255
                     minLength: 1
                     pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
                     type: string
             required:
+                - tag_type
                 - value
             type: object
-        TagType:
-            default: rfid
-            description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
-            enum:
-                - rfid
-                - ble
-                - barcode
-            example: rfid
-            nullable: true
-            type: string
-            x-extensible-enum: true
+        Tag:
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            discriminator:
+                mapping:
+                    barcode: '#/components/schemas/BarcodeTag'
+                    ble: '#/components/schemas/BleTag'
+                    rfid: '#/components/schemas/RfidTag'
+                propertyName: tag_type
+            oneOf:
+                - $ref: '#/components/schemas/RfidTag'
+                - $ref: '#/components/schemas/BleTag'
+                - $ref: '#/components/schemas/BarcodeTag'
+        TagRequest:
+            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            discriminator:
+                mapping:
+                    barcode: '#/components/schemas/BarcodeTagRequest'
+                    ble: '#/components/schemas/BleTagRequest'
+                    rfid: '#/components/schemas/RfidTagRequest'
+                propertyName: tag_type
+            oneOf:
+                - $ref: '#/components/schemas/RfidTagRequest'
+                - $ref: '#/components/schemas/BleTagRequest'
+                - $ref: '#/components/schemas/BarcodeTagRequest'
         UpdateAssetRequest:
             additionalProperties: false
             properties:
