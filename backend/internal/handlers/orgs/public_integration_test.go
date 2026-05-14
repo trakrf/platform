@@ -62,6 +62,15 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	assert.Equal(t, "Test Organization", data["name"])
 	assert.NotContains(t, body, "id", "bare-object shape must be gone")
 	assert.NotContains(t, body, "name", "bare-object shape must be gone")
+
+	// TRA-719 / BB35 A5: scopes and api_key_id surface on the response so
+	// integrators can self-inspect their bearer without decoding the JWT.
+	scopes, ok := data["scopes"].([]any)
+	require.True(t, ok, "scopes must be a JSON array, got %v", data["scopes"])
+	require.Len(t, scopes, 1)
+	assert.Equal(t, "assets:read", scopes[0])
+	assert.Equal(t, key.JTI, data["api_key_id"],
+		"api_key_id must equal the api_keys row's jti (the JWT sub claim)")
 }
 
 func TestGetOrgMe_SessionTokenRejected(t *testing.T) {

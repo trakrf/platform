@@ -103,7 +103,7 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 				httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{{
 					Field:   "location_id",
 					Code:    "invalid_value",
-					Message: fmt.Sprintf("location_id %q must be a positive int32", s),
+					Message: fmt.Sprintf("location_id %q must be a positive integer ≤ %d", s, httputil.SurrogateIDMax),
 				}})
 
 				return

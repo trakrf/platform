@@ -59,19 +59,29 @@ func ParsePathInt(field, raw string, min, max int64) (int, error) {
 	return int(n), nil
 }
 
-// SurrogateIDMax is the upper bound declared on every numeric public path
-// param. Set to 2^31-1 (math.MaxInt32) to match the underlying Postgres
-// int4 surrogate column. Values above this cannot encode into int4 and
-// previously surfaced as 500 with a pgx driver string in error.detail
-// (TRA-668 / BB27 F1, Schemathesis Class A in TRA-671). Rejecting at the
-// parser converts the bug class to 400 validation_error / too_large with
-// params.max = 2147483647, matching the spec-side bounds set in TRA-672.
+// SurrogateIDMax is the runtime upper bound the parser enforces on every
+// numeric public path param. Set to 2^31-1 (math.MaxInt32) to match the
+// underlying Postgres int4 surrogate column. Values above this cannot
+// encode into int4 and previously surfaced as 500 with a pgx driver
+// string in error.detail (TRA-668 / BB27 F1, Schemathesis Class A in
+// TRA-671). Rejecting at the parser converts the bug class to 400
+// validation_error / too_large with params.max = 2147483647.
 //
-// History: TRA-657 / BB25 B3 widened this to 2^53-1 so generated SDKs
-// that pass through out-of-int32 values would land on 404 not_found
-// instead of 400. TRA-673 reverses that decision — the wider bound was
-// the proximate cause of the pgx int4-encoding 500, so the correct
-// behavior is to fail the request at the parser with a clean envelope.
+// BB35 B7 split the wire and storage contracts: the spec now declares
+// `format: int64` on every surrogate ID so SDK consumers don't have to
+// absorb a future int32→int64 type break, but the service stays within
+// int32 during v1 and the runtime constraint (this constant) is what
+// enforces that. The spec-side `maximum` declaration was stripped in
+// BB35 B7; the wire contract is "int64, runtime may reject above 2^31-1".
+//
+// History:
+//   - BB25 B3 widened to 2^53-1 so out-of-int32 values landed on 404
+//     not_found instead of 400.
+//   - TRA-673 reversed that — the wider bound was the proximate cause of
+//     the pgx int4-encoding 500, so the parser must fail with a clean
+//     envelope.
+//   - BB35 B7 widened the *spec* width to int64 while leaving the parser
+//     bound unchanged. The two layers now intentionally differ.
 const SurrogateIDMax = int64(math.MaxInt32)
 
 // ParseSurrogateID parses a path param into an int suitable for a Postgres

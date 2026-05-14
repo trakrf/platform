@@ -80,7 +80,7 @@ components:
                     nullable: true
                     type: string
                 location_id:
-                    format: int32
+                    format: int64
                     nullable: true
                     type: integer
             required:
@@ -125,7 +125,7 @@ components:
                     nullable: true
                     type: string
                 asset_id:
-                    format: int32
+                    format: int64
                     nullable: true
                     type: integer
                 asset_last_seen:
@@ -136,7 +136,7 @@ components:
                     nullable: true
                     type: string
                 location_id:
-                    format: int32
+                    format: int64
                     nullable: true
                     type: integer
             required:
@@ -190,7 +190,7 @@ components:
                 external_key:
                     type: string
                 id:
-                    format: int32
+                    format: int64
                     readOnly: true
                     type: integer
                 is_active:
@@ -199,7 +199,7 @@ components:
                     nullable: true
                     type: string
                 location_id:
-                    format: int32
+                    format: int64
                     nullable: true
                     type: integer
                 metadata:
@@ -243,10 +243,10 @@ components:
                 - tags
             type: object
         BarcodeTag:
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             properties:
                 id:
-                    format: int32
+                    format: int64
                     readOnly: true
                     type: integer
                 tag_type:
@@ -266,7 +266,7 @@ components:
             type: object
         BarcodeTagRequest:
             additionalProperties: false
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             properties:
                 tag_type:
                     description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
@@ -283,10 +283,10 @@ components:
                 - value
             type: object
         BleTag:
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             properties:
                 id:
-                    format: int32
+                    format: int64
                     readOnly: true
                     type: integer
                 tag_type:
@@ -306,7 +306,7 @@ components:
             type: object
         BleTagRequest:
             additionalProperties: false
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             properties:
                 tag_type:
                     description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
@@ -359,8 +359,7 @@ components:
                     type: string
                 location_id:
                     example: 42
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     nullable: true
                     type: integer
@@ -438,8 +437,7 @@ components:
                     type: string
                 parent_id:
                     example: 42
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     nullable: true
                     type: integer
@@ -704,7 +702,7 @@ components:
                 external_key:
                     type: string
                 id:
-                    format: int32
+                    format: int64
                     readOnly: true
                     type: integer
                 is_active:
@@ -715,7 +713,7 @@ components:
                     nullable: true
                     type: string
                 parent_id:
-                    format: int32
+                    format: int64
                     nullable: true
                     type: integer
                 tags:
@@ -754,17 +752,29 @@ components:
             type: object
         OrgView:
             properties:
+                api_key_id:
+                    example: 550e8400-e29b-41d4-a716-446655440000
+                    type: string
                 id:
                     example: 42
-                    format: int32
+                    format: int64
                     readOnly: true
                     type: integer
                 name:
                     example: Acme Logistics
                     type: string
+                scopes:
+                    example:
+                        - assets:read
+                        - assets:write
+                    items:
+                        type: string
+                    type: array
             required:
                 - id
                 - name
+                - scopes
+                - api_key_id
             type: object
         RenameAssetRequest:
             additionalProperties: false
@@ -782,8 +792,13 @@ components:
             properties:
                 data:
                     $ref: '#/components/schemas/AssetView'
+                descendant_count_affected:
+                    example: 0
+                    format: int32
+                    type: integer
             required:
                 - data
+                - descendant_count_affected
             type: object
         RenameLocationRequest:
             additionalProperties: false
@@ -810,10 +825,10 @@ components:
                 - descendant_count_affected
             type: object
         RfidTag:
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             properties:
                 id:
-                    format: int32
+                    format: int64
                     readOnly: true
                     type: integer
                 tag_type:
@@ -833,7 +848,7 @@ components:
             type: object
         RfidTagRequest:
             additionalProperties: false
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             properties:
                 tag_type:
                     description: Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.
@@ -850,7 +865,7 @@ components:
                 - value
             type: object
         Tag:
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             discriminator:
                 mapping:
                     barcode: '#/components/schemas/BarcodeTag'
@@ -862,7 +877,7 @@ components:
                 - $ref: '#/components/schemas/BleTag'
                 - $ref: '#/components/schemas/BarcodeTag'
         TagRequest:
-            description: 'Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).'
+            description: "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
             discriminator:
                 mapping:
                     barcode: '#/components/schemas/BarcodeTagRequest'
@@ -874,7 +889,6 @@ components:
                 - $ref: '#/components/schemas/BleTagRequest'
                 - $ref: '#/components/schemas/BarcodeTagRequest'
         UpdateAssetRequest:
-            additionalProperties: false
             properties:
                 description:
                     maxLength: 1024
@@ -910,7 +924,6 @@ components:
                 - data
             type: object
         UpdateLocationRequest:
-            additionalProperties: false
             properties:
                 description:
                     example: Updated description
@@ -928,10 +941,16 @@ components:
                     minLength: 1
                     pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
                     type: string
+                parent_external_key:
+                    example: wh1
+                    maxLength: 255
+                    minLength: 1
+                    nullable: true
+                    pattern: ^[A-Za-z0-9-]+$
+                    type: string
                 parent_id:
                     example: 42
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     nullable: true
                     type: integer
@@ -969,6 +988,8 @@ info:
         Spec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).
 
         HTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage
+
+        Surrogate ID width: declared `format: int64` on the wire so SDK regeneration does not break when the ID namespace eventually outgrows int32. Service-side ID generation stays within int32 (2^31-1) during v1; values above that bound are rejected with 400 validation_error / `too_large`. The wider wire type is a long-horizon contract, not a claim that current values exceed int32.
     license:
         name: Business Source License 1.1
         url: https://github.com/trakrf/platform/blob/main/LICENSE
@@ -1009,7 +1030,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        maximum: 2147483647
+                        format: int64
                         minimum: 1
                         type: integer
                     type: array
@@ -1398,8 +1419,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             responses:
@@ -1546,8 +1566,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             responses:
@@ -1681,8 +1700,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             requestBody:
@@ -1872,8 +1890,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -2057,6 +2074,8 @@ paths:
                 Mutate the asset's `external_key` (natural / join key). This operation is **destructive to downstream joins**: any external system that has cached or indexed records on the old `external_key` will silently disconnect. Prefer a coordinated cutover with downstream consumers.
 
                 `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).
+
+                The response includes `descendant_count_affected` for shape uniformity with the location rename verb. Assets have no hierarchy, so this value is always 0; it is emitted to save typed-client consumers from branching on rename verb.
             operationId: renameAsset
             parameters:
                 - description: Asset id (canonical)
@@ -2064,8 +2083,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             requestBody:
@@ -2254,8 +2272,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             requestBody:
@@ -2440,7 +2457,7 @@ paths:
                 **Required scope:** `assets:write`
 
                 Detach a tag from an asset by its tag record id.
-                Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
+                First successful removal returns 204; repeated calls return 404 — consistent with top-level resource DELETE semantics. The cross-asset / cross-org case (a tag that exists but is not attached to this asset, or belongs to a different org) also surfaces as 404.
             operationId: removeAssetTag
             parameters:
                 - description: Asset id (canonical)
@@ -2448,8 +2465,7 @@ paths:
                   name: asset_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
                 - description: Tag id
@@ -2457,8 +2473,7 @@ paths:
                   name: tag_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             responses:
@@ -2624,7 +2639,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        maximum: 2147483647
+                        format: int64
                         minimum: 1
                         type: integer
                     type: array
@@ -3012,8 +3027,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             responses:
@@ -3175,8 +3189,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             responses:
@@ -3302,7 +3315,7 @@ paths:
             description: |-
                 **Required scope:** `locations:write`
 
-                Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `parent_external_key`). To re-parent send `parent_id` (surrogate; `null` clears the FK) — `parent_external_key` is read-only via PATCH and the /rename endpoint cannot re-parent. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+                Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send EITHER `parent_id` (surrogate) OR `parent_external_key` (natural key); both forms accept `null` to clear the FK, and supplying both in the same body returns 400 `ambiguous_fields` (symmetric with CreateLocationRequest). Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
             operationId: updateLocation
             parameters:
                 - description: Location ID
@@ -3310,8 +3323,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             requestBody:
@@ -3499,8 +3511,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -3666,8 +3677,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -3833,8 +3843,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -4002,8 +4011,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             requestBody:
@@ -4188,8 +4196,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             requestBody:
@@ -4374,7 +4381,7 @@ paths:
                 **Required scope:** `locations:write`
 
                 Detach a tag from a location by its tag record id.
-                Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
+                First successful removal returns 204; repeated calls return 404 — consistent with top-level resource DELETE semantics. The cross-location / cross-org case (a tag that exists but is not attached to this location, or belongs to a different org) also surfaces as 404.
             operationId: removeLocationTag
             parameters:
                 - description: Location ID
@@ -4382,8 +4389,7 @@ paths:
                   name: location_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
                 - description: Tag ID
@@ -4391,8 +4397,7 @@ paths:
                   name: tag_id
                   required: true
                   schema:
-                    format: int32
-                    maximum: 2147483647
+                    format: int64
                     minimum: 1
                     type: integer
             responses:
@@ -4712,7 +4717,7 @@ paths:
                   schema:
                     default: []
                     items:
-                        maximum: 2147483647
+                        format: int64
                         minimum: 1
                         type: integer
                     type: array

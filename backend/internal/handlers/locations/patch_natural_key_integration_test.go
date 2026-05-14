@@ -1,15 +1,16 @@
 //go:build integration
 // +build integration
 
-// TRA-699 (BB31 §2): natural-key reference fields on PATCH follow the
-// accept-if-matches, reject-if-differs rule. This file covers PATCH
-// /locations:
+// TRA-699 (BB31 §2): natural-key reference fields on PATCH originally
+// followed the accept-if-matches, reject-if-differs rule. TRA-719 / BB35
+// B2 restored writability to parent_external_key for symmetry with
+// CreateLocationRequest. This file covers PATCH /locations:
 //
-//   - external_key         (own natural key, managed-via-rename)
-//   - parent_external_key  (parent reference, managed-via-rename on parent)
-//
-// parent_id is NOT in scope — it remains writable (PATCH may re-parent via
-// surrogate). Only the natural-key form locks down to accept-if-matches.
+//   - external_key         (own natural key — managed via /rename only;
+//                           PATCH retains accept-if-matches)
+//   - parent_external_key  (parent reference — WRITABLE on PATCH, resolved
+//                           through the FK lookup; mutually exclusive with
+//                           parent_id; null clears the FK)
 //
 // Pre-TRA-699: both fields were pre-decode 400 rejected under TRA-686.
 
@@ -161,8 +162,10 @@ func TestPatchLocation_NaturalKey_ParentExternalKey_NullNullMatches200(t *testin
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
 
-// TRA-699 §2.E: parent_external_key differing → 400 read_only.
-func TestPatchLocation_NaturalKey_ParentExternalKey_Differs400(t *testing.T) {
+// TRA-719 / BB35 B2 — supersedes TRA-699 §2.E read-only behavior.
+// parent_external_key is now WRITABLE on PATCH: a differing value
+// resolves through the FK lookup and re-parents the row.
+func TestPatchLocation_NaturalKey_ParentExternalKey_ReParents200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
@@ -172,20 +175,95 @@ func TestPatchLocation_NaturalKey_ParentExternalKey_Differs400(t *testing.T) {
 	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-PEK-DIFF", "PekDiff", "LOC-PARENT-DIFF")
 	router := setupLocationRoundTripRouter(NewHandler(store))
 
+	// Seed a second candidate parent the natural-key form must resolve to.
+	var destParent int
+	require.NoError(t, pool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from, is_active)
+		VALUES ($1, 'LOC-OTHER-PARENT', 'other', '', $2, true) RETURNING id
+	`, orgID, time.Now().UTC()).Scan(&destParent))
+
 	rec := patchLoc(t, router, orgID, id, `{"parent_external_key":"LOC-OTHER-PARENT"}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var dbParent *int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT parent_location_id FROM trakrf.locations WHERE id = $1`, id).Scan(&dbParent))
+	require.NotNil(t, dbParent, "parent_external_key dispatch must update parent_location_id")
+	assert.Equal(t, destParent, *dbParent)
+}
+
+// TRA-719 / BB35 B2: parent_external_key referencing a non-existent
+// location → 400 validation_error with code=fk_not_found, keyed on the
+// natural-key field (same envelope shape as the create-time check —
+// TRA-674 / BB27 F2 / TRA-681).
+func TestPatchLocation_NaturalKey_ParentExternalKey_NotFound400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-PEK-NF", "PekNF", "LOC-PARENT-NF")
+	router := setupLocationRoundTripRouter(NewHandler(store))
+
+	rec := patchLoc(t, router, orgID, id, `{"parent_external_key":"LOC-DOES-NOT-EXIST"}`)
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 
 	var resp locPatchErrorResp
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "parent_external_key", resp.Error.Fields[0].Field)
-	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
-	// TRA-713 / BB33 F3: hint must direct integrators at parent_id (the
-	// surrogate that actually re-parents); /rename only renames external_key.
-	assert.NotContains(t, resp.Error.Fields[0].Message, "/rename",
-		"hint must not point at /rename — that endpoint can't re-parent")
-	assert.Contains(t, resp.Error.Fields[0].Message, "parent_id",
-		"hint must name parent_id (the surrogate that re-parents)")
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+}
+
+// TRA-719 / BB35 B2: explicit null on parent_external_key clears the FK,
+// same semantic as parent_id:null. Verifies clear-from-non-null state.
+func TestPatchLocation_NaturalKey_ParentExternalKey_NullClears200(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-PEK-CLEAR", "PekClear", "LOC-PARENT-CLEAR")
+	router := setupLocationRoundTripRouter(NewHandler(store))
+
+	rec := patchLoc(t, router, orgID, id, `{"parent_external_key":null}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var dbParent *int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT parent_location_id FROM trakrf.locations WHERE id = $1`, id).Scan(&dbParent))
+	assert.Nil(t, dbParent, "parent_external_key:null must clear parent_location_id")
+}
+
+// TRA-719 / BB35 B2: both parent_id and parent_external_key supplied →
+// 400 ambiguous_fields, mirroring the create-side oneOf rejection.
+func TestPatchLocation_NaturalKey_ParentBoth400_Ambiguous(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-AMB", "Amb", "LOC-AMB-PARENT")
+	router := setupLocationRoundTripRouter(NewHandler(store))
+
+	rec := patchLoc(t, router, orgID, id, `{"parent_id":1,"parent_external_key":"LOC-AMB-PARENT"}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp locPatchErrorResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.GreaterOrEqual(t, len(resp.Error.Fields), 2)
+	codes := map[string]bool{}
+	fields := map[string]bool{}
+	for _, f := range resp.Error.Fields {
+		codes[f.Code] = true
+		fields[f.Field] = true
+	}
+	assert.True(t, codes["ambiguous_fields"], "expected at least one ambiguous_fields code")
+	assert.True(t, fields["parent_id"] && fields["parent_external_key"],
+		"both fields must surface in the error so the client can disambiguate")
 }
 
 // TRA-699 §2.F: parent_id remains writable on PATCH (the natural-key form
@@ -246,6 +324,10 @@ func TestPatchLocation_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T
 // TRA-702 / BB32 D3: a PATCH body with multiple differing read_only fields
 // must surface one entry per field in fields[] AND a "(and N more
 // validation errors)" suffix in detail.
+//
+// TRA-719 / BB35 B2: parent_external_key is no longer read_only — the
+// multi-field case is now external_key (natural key, /rename-only) paired
+// with a server-managed read_only field (id).
 func TestPatchLocation_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -256,9 +338,9 @@ func TestPatchLocation_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *t
 	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-D3-MULTI", "D3Multi", "LOC-D3-PARENT")
 	router := setupLocationRoundTripRouter(NewHandler(store))
 
-	// Both natural-key fields differ from current resource state.
+	// Both read_only fields differ from current resource state.
 	rec := patchLoc(t, router, orgID, id,
-		`{"external_key":"LOC-OTHER","parent_external_key":"LOC-OTHER-PARENT"}`)
+		fmt.Sprintf(`{"external_key":"LOC-OTHER","id":%d}`, id+1))
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 
 	var resp locPatchErrorResp
@@ -270,7 +352,7 @@ func TestPatchLocation_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *t
 		fields[f.Field] = f.Code
 	}
 	assert.Equal(t, "read_only", fields["external_key"])
-	assert.Equal(t, "read_only", fields["parent_external_key"])
+	assert.Equal(t, "read_only", fields["id"])
 
 	assert.Contains(t, resp.Error.Detail, "(and 1 more validation error)",
 		"detail must include the singular multi-field suffix when N=1")

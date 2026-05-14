@@ -259,11 +259,14 @@ func TestListLocations_BothParentForms_Rejected400(t *testing.T) {
 	}
 }
 
-// PATCH /api/v1/locations/{id} with parent_external_key in the body is
-// rejected with 400 read_only pointing at the rename endpoint
-// (TRA-686 / BB29 F8). Replaces the silent-strip behavior from TRA-681 —
-// silent-drop hid bugs in read-modify-write integrations.
-func TestPatchLocation_ParentExternalKey_Rejected400(t *testing.T) {
+// TRA-719 / BB35 B2: PATCH /api/v1/locations/{id} with an unresolvable
+// parent_external_key returns 400 validation_error / fk_not_found —
+// supersedes the TRA-686 read_only behavior (now reflected in
+// TestPatchLocation_NaturalKey_ParentExternalKey_NotFound400 under
+// patch_natural_key_integration_test.go). The natural-key form is now
+// writable on PATCH and dispatches through the same FK resolution as
+// CreateLocationRequest.
+func TestPatchLocation_ParentExternalKey_NotFound400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -284,7 +287,7 @@ func TestPatchLocation_ParentExternalKey_Rejected400(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code,
-		"PATCH with parent_external_key must be 400 read_only (got %d): %s", rec.Code, rec.Body.String())
+		"PATCH with non-existent parent_external_key must be 400 (got %d): %s", rec.Code, rec.Body.String())
 
 	var resp struct {
 		Error struct {
@@ -300,18 +303,7 @@ func TestPatchLocation_ParentExternalKey_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "parent_external_key", resp.Error.Fields[0].Field)
-	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
-
-	// TRA-713 / BB33 F3: the hint must direct integrators at parent_id
-	// (the surrogate that actually re-parents). The /rename endpoint only
-	// renames external_key (RenameLocationRequest carries no parent
-	// field), so a hint mentioning /rename for re-parenting is wrong and
-	// sends integrators down a dead end.
-	msg := resp.Error.Fields[0].Message
-	assert.NotContains(t, msg, "/rename",
-		"parent_external_key hint must not point at /rename — that endpoint can't re-parent")
-	assert.Contains(t, msg, "parent_id",
-		"parent_external_key hint must direct integrators at parent_id")
+	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
 
 	// And the location row remains unchanged.
 	var dbName string

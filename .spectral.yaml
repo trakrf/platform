@@ -107,14 +107,17 @@ rules:
                 type: array
                 minItems: 1
 
-  trakrf-int4-bounded-id-path-params:
+  trakrf-int64-id-path-params:
     description: >
       Path parameters named like `*_id` (or bare `id`) must declare
-      `format: int32` and `maximum: 2147483647`. Origin: BB27 F1/S1 — the
-      spec previously declared int64 bounds on int4-backed columns, which
-      triggered 500s with the raw pgx driver error in the response body.
-      Spec numeric bounds must match int4 storage.
-    message: "*_id path params must declare format:int32 AND maximum:2147483647 — int4 storage overflow (BB27 F1/S1)"
+      `format: int64` and must NOT declare a `maximum` constraint. BB35
+      B7 promoted surrogate IDs to int64 on the wire (service-side ID
+      generation stays within int32 during v1, but the spec width is
+      set pre-launch so SDK consumers don't have to absorb a future
+      int32→int64 type break). The original BB27 F1/S1 motivation (int4
+      storage overflow as 500s with pgx driver text) is now handled at
+      the service handler — the spec contract is int64.
+    message: "*_id path params must declare format:int64 and omit `maximum` — BB35 B7 (supersedes BB27 F1/S1)"
     severity: error
     # NOTE for future rule authors: Spectral uses the nimma JSONPath engine for
     # `given` evaluation. nimma does NOT support `=~` (jsonpath-plus regex
@@ -131,12 +134,11 @@ rules:
             type: object
             properties:
               format:
-                const: int32
-              maximum:
-                const: 2147483647
+                const: int64
             required:
               - format
-              - maximum
+            not:
+              required: ["maximum"]
 
   trakrf-readonly-derived-fields:
     description: >

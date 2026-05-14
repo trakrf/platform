@@ -9,13 +9,15 @@
 // parent_id) so integrators can decide whether to refresh derived
 // natural-key joins.
 //
-// TRA-686 / BB29 F8: PATCH rejects an `external_key` (and on locations,
-// also `parent_external_key`) body field with 400 read_only naming the
-// rename endpoint. Silent-drop under TRA-674 hid bugs in read-modify-write
-// integrations. Runtime reject coverage lives in
-// TestPatchLocation_ExternalKeyRejected400 +
-// TestPatchLocation_ParentExternalKeyRejected400; this file pins the
+// TRA-686 / BB29 F8: PATCH rejects an `external_key` body field with 400
+// read_only naming the rename endpoint — silent-drop under TRA-674 hid
+// bugs in read-modify-write integrations. Runtime reject coverage lives
+// in TestPatchLocation_ExternalKeyRejected400; this file pins the
 // happy-path rename endpoint behavior.
+//
+// TRA-719 / BB35 B2: parent_external_key, originally also rejected, is
+// now writable on PATCH; see patch_natural_key_integration_test.go for
+// dispatch coverage.
 
 package locations
 
