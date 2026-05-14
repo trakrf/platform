@@ -988,6 +988,8 @@ info:
         Spec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).
 
         HTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage
+
+        Surrogate ID width: declared `format: int64` on the wire so SDK regeneration does not break when the ID namespace eventually outgrows int32. Service-side ID generation stays within int32 (2^31-1) during v1; values above that bound are rejected with 400 validation_error / `too_large`. The wider wire type is a long-horizon contract, not a claim that current values exceed int32.
     license:
         name: Business Source License 1.1
         url: https://github.com/trakrf/platform/blob/main/LICENSE

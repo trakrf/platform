@@ -777,7 +777,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{{
 					Field:   "location_id",
 					Code:    "invalid_value",
-					Message: fmt.Sprintf("location_id %q must be a positive int32", s),
+					Message: fmt.Sprintf("location_id %q must be a positive integer ≤ %d", s, httputil.SurrogateIDMax),
 				}})
 
 				return
