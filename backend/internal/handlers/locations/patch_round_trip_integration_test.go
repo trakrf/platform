@@ -760,9 +760,11 @@ func TestPatchLocation_ExternalKeyRejected400(t *testing.T) {
 }
 
 // TRA-686 / BB29 F8: `parent_external_key` in a PATCH body is rejected
-// with 400 read_only pointing at the rename endpoint. The natural-key
+// with 400 read_only pointing at the parent_id surrogate. The natural-key
 // form of the parent FK is owned by the parent row — mutating it via
 // this location's PATCH would silently disconnect the join.
+// TRA-713 / BB33 F3: hint corrected from /rename (which can't re-parent)
+// to parent_id (which can).
 func TestPatchLocation_ParentExternalKeyRejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -821,8 +823,10 @@ func TestPatchLocation_ParentExternalKeyRejected400(t *testing.T) {
 				if f.Field == "parent_external_key" {
 					found = true
 					assert.Equal(t, "read_only", f.Code)
-					assert.Contains(t, f.Message,
-						"POST /api/v1/locations/{location_id}/rename")
+					assert.NotContains(t, f.Message, "/rename",
+						"hint must not point at /rename — that endpoint can't re-parent")
+					assert.Contains(t, f.Message, "parent_id",
+						"hint must direct integrators at parent_id (the surrogate that re-parents)")
 				}
 			}
 			assert.True(t, found, "parent_external_key must appear in fields[]")

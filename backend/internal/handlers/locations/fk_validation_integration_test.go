@@ -290,8 +290,9 @@ func TestPatchLocation_ParentExternalKey_Rejected400(t *testing.T) {
 		Error struct {
 			Type   string `json:"type"`
 			Fields []struct {
-				Field string `json:"field"`
-				Code  string `json:"code"`
+				Field   string `json:"field"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
 			} `json:"fields"`
 		} `json:"error"`
 	}
@@ -300,6 +301,17 @@ func TestPatchLocation_ParentExternalKey_Rejected400(t *testing.T) {
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "parent_external_key", resp.Error.Fields[0].Field)
 	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+
+	// TRA-713 / BB33 F3: the hint must direct integrators at parent_id
+	// (the surrogate that actually re-parents). The /rename endpoint only
+	// renames external_key (RenameLocationRequest carries no parent
+	// field), so a hint mentioning /rename for re-parenting is wrong and
+	// sends integrators down a dead end.
+	msg := resp.Error.Fields[0].Message
+	assert.NotContains(t, msg, "/rename",
+		"parent_external_key hint must not point at /rename — that endpoint can't re-parent")
+	assert.Contains(t, msg, "parent_id",
+		"parent_external_key hint must direct integrators at parent_id")
 
 	// And the location row remains unchanged.
 	var dbName string

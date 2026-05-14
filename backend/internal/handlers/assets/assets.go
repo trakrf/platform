@@ -734,6 +734,21 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		})
 		return
 	}
+
+	// TRA-713 / BB33 F5+C2: external_key-style filters must enforce the
+	// same regex the field validators apply on POST/PATCH. Without this,
+	// a slash-containing (or otherwise non-conforming) value silently
+	// returns 200-with-empty rather than 400 invalid_value, masking
+	// integration bugs at the boundary.
+	if fe := httputil.ValidateExternalKeyFilterValues("external_key", params.Filters["external_key"]); fe != nil {
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
+		return
+	}
+	if fe := httputil.ValidateExternalKeyFilterValues("location_external_key", params.Filters["location_external_key"]); fe != nil {
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
+		return
+	}
+
 	f := asset.ListFilter{
 		LocationExternalKeys: params.Filters["location_external_key"],
 		ExternalKeys:         params.Filters["external_key"],
