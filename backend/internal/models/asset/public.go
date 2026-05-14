@@ -1,8 +1,6 @@
 package asset
 
 import (
-	"time"
-
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
@@ -22,20 +20,20 @@ import (
 // prefixed `asset_deleted_at` is retained only in cross-resource report
 // shapes (PublicCurrentLocationItem) where disambiguation matters.
 type PublicAssetView struct {
-	ID                  int          `json:"id"`
-	ExternalKey         string       `json:"external_key"`
-	Name                string       `json:"name"`
-	Description         *string      `json:"description"`
-	LocationID          *int         `json:"location_id"`
-	LocationExternalKey *string      `json:"location_external_key"`
-	Metadata            any          `json:"metadata"`
-	IsActive            bool         `json:"is_active"`
-	ValidFrom           time.Time    `json:"valid_from"`
-	ValidTo             *time.Time   `json:"valid_to"`
-	CreatedAt           time.Time    `json:"created_at"`
-	UpdatedAt           time.Time    `json:"updated_at"`
-	DeletedAt           *time.Time   `json:"deleted_at"`
-	Tags                []shared.Tag `json:"tags"`
+	ID                  int                `json:"id"`
+	ExternalKey         string             `json:"external_key"`
+	Name                string             `json:"name"`
+	Description         *string            `json:"description"`
+	LocationID          *int               `json:"location_id"`
+	LocationExternalKey *string            `json:"location_external_key"`
+	Metadata            any                `json:"metadata"`
+	IsActive            bool               `json:"is_active"`
+	ValidFrom           shared.PublicTime  `json:"valid_from"`
+	ValidTo             *shared.PublicTime `json:"valid_to"`
+	CreatedAt           shared.PublicTime  `json:"created_at"`
+	UpdatedAt           shared.PublicTime  `json:"updated_at"`
+	DeletedAt           *shared.PublicTime `json:"deleted_at"`
+	Tags                []shared.Tag       `json:"tags"`
 }
 
 // ToPublicAssetView projects an AssetWithLocation to the public HTTP shape.
@@ -59,11 +57,11 @@ func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
 		LocationExternalKey: a.LocationExternalKey,
 		Metadata:            metadata,
 		IsActive:            a.IsActive,
-		ValidFrom:           a.ValidFrom,
-		ValidTo:             a.ValidTo,
-		CreatedAt:           a.CreatedAt,
-		UpdatedAt:           a.UpdatedAt,
-		DeletedAt:           a.DeletedAt,
+		ValidFrom:           shared.NewPublicTime(a.ValidFrom),
+		ValidTo:             shared.PublicTimePtr(a.ValidTo),
+		CreatedAt:           shared.NewPublicTime(a.CreatedAt),
+		UpdatedAt:           shared.NewPublicTime(a.UpdatedAt),
+		DeletedAt:           shared.PublicTimePtr(a.DeletedAt),
 		Tags:                a.Tags,
 	}
 }

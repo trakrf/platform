@@ -72,12 +72,17 @@ func (fd *FlexibleDate) UnmarshalJSON(b []byte) error {
 	}
 }
 
-// MarshalJSON emits RFC 3339 (zero time renders as JSON null).
+// MarshalJSON emits the canonical public-surface shape (RFC 3339 with
+// three-digit millisecond fractional precision, UTC; see
+// FormatPublicTime). Zero renders as JSON null so "field not provided"
+// on a request echo stays distinguishable from a real timestamp.
+// Aligned with PublicTime's outbound formatter per TRA-717 / BB34 F3
+// rework so the wire shape is uniform across both types.
 func (fd FlexibleDate) MarshalJSON() ([]byte, error) {
 	if fd.Time.IsZero() {
 		return []byte("null"), nil
 	}
-	return json.Marshal(fd.Time.Format(time.RFC3339))
+	return json.Marshal(FormatPublicTime(fd.Time))
 }
 
 // ToTime converts FlexibleDate to time.Time

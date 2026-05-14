@@ -66,6 +66,7 @@ func markExternalKeyPattern(doc *openapi3.T) {
 func postprocessPublic(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
 	consolidateSchemaNamespaces(doc)
+	inlinePublicTimeRefs(doc)
 	markNullableFields(doc)
 	markExternalKeyPattern(doc)
 	if err := markRequiredFields(doc, requiredFields); err != nil {
@@ -158,6 +159,7 @@ func postprocessPublic(doc *openapi3.T) error {
 func postprocessInternal(doc *openapi3.T) error {
 	rewriteBearerSchemes(doc)
 	consolidateSchemaNamespaces(doc)
+	inlinePublicTimeRefs(doc)
 	markNullableFields(doc)
 	markExternalKeyPattern(doc)
 	if err := markRequiredFields(doc, requiredFields); err != nil {
@@ -1250,7 +1252,11 @@ func setIntegerFormatRecursive(s *openapi3.Schema) {
 // requires the example so codegen-generated docs and tests round-trip a
 // recognizable payload (TRA-672).
 const (
-	dateTimeExample = "2025-04-29T12:34:56Z"
+	// dateTimeExample carries the canonical outbound wire shape (RFC 3339
+	// with three-digit millisecond fractional precision, UTC) per
+	// TRA-717 / BB34 F3 rework so spec examples match what the server
+	// actually emits.
+	dateTimeExample = "2025-04-29T12:34:56.000Z"
 	dateExample     = "2025-04-29"
 )
 
@@ -1737,6 +1743,116 @@ var timestampFieldNames = regexp.MustCompile(`^(valid_from|valid_to|asset_last_s
 
 func isTimestampField(name string) bool {
 	return timestampFieldNames.MatchString(name)
+}
+
+// publicTimeRefName matches the swag-emitted $ref for the
+// shared.PublicTime wrapper type in either the original namespace
+// (`shared.PublicTime`) or the post-consolidation form (`PublicTime`)
+// per consolidateSchemaNamespaces (TRA-660 / BB25 C1).
+var publicTimeRefName = regexp.MustCompile(`/(shared\.PublicTime|PublicTime)$`)
+
+// inlinePublicTimeRefs rewrites every property that $refs the
+// shared.PublicTime wrapper as an inline `type: string, format: date-time`
+// schema, then drops the wrapper component itself. swag emits the
+// wrapper as a structured component with an embedded `time.Time`
+// pseudo-property because PublicTime is a struct that wraps time.Time;
+// the inline form is what consumers expect for an outbound timestamp
+// (TRA-717 / BB34 F3 rework).
+//
+// Runs after consolidateSchemaNamespaces so the post-consolidation
+// component name is matched too. Existing `nullable` set on the
+// referencing property by markNullableFields is preserved.
+func inlinePublicTimeRefs(doc *openapi3.T) {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		return
+	}
+	for _, ref := range doc.Components.Schemas {
+		rewritePublicTimeRefsInSchema(ref)
+	}
+	if doc.Paths != nil {
+		for _, item := range doc.Paths.Map() {
+			if item == nil {
+				continue
+			}
+			for _, p := range item.Parameters {
+				if p != nil && p.Value != nil && p.Value.Schema != nil {
+					rewritePublicTimeRefsInSchema(p.Value.Schema)
+				}
+			}
+			for _, op := range item.Operations() {
+				if op == nil {
+					continue
+				}
+				for _, p := range op.Parameters {
+					if p != nil && p.Value != nil && p.Value.Schema != nil {
+						rewritePublicTimeRefsInSchema(p.Value.Schema)
+					}
+				}
+				if op.RequestBody != nil && op.RequestBody.Value != nil {
+					for _, mt := range op.RequestBody.Value.Content {
+						if mt != nil && mt.Schema != nil {
+							rewritePublicTimeRefsInSchema(mt.Schema)
+						}
+					}
+				}
+				for _, resp := range op.Responses.Map() {
+					if resp == nil || resp.Value == nil {
+						continue
+					}
+					for _, mt := range resp.Value.Content {
+						if mt != nil && mt.Schema != nil {
+							rewritePublicTimeRefsInSchema(mt.Schema)
+						}
+					}
+				}
+			}
+		}
+	}
+	for name := range doc.Components.Schemas {
+		if publicTimeRefName.MatchString("/" + name) {
+			delete(doc.Components.Schemas, name)
+		}
+	}
+}
+
+func rewritePublicTimeRefsInSchema(ref *openapi3.SchemaRef) {
+	if ref == nil {
+		return
+	}
+	if ref.Ref != "" && publicTimeRefName.MatchString(ref.Ref) {
+		nullable := false
+		if ref.Value != nil {
+			nullable = ref.Value.Nullable
+		}
+		ref.Ref = ""
+		ref.Value = &openapi3.Schema{
+			Type:     &openapi3.Types{openapi3.TypeString},
+			Format:   "date-time",
+			Nullable: nullable,
+		}
+		return
+	}
+	if ref.Value == nil {
+		return
+	}
+	for _, prop := range ref.Value.Properties {
+		rewritePublicTimeRefsInSchema(prop)
+	}
+	if ref.Value.Items != nil {
+		rewritePublicTimeRefsInSchema(ref.Value.Items)
+	}
+	if ref.Value.AdditionalProperties.Schema != nil {
+		rewritePublicTimeRefsInSchema(ref.Value.AdditionalProperties.Schema)
+	}
+	for _, s := range ref.Value.AllOf {
+		rewritePublicTimeRefsInSchema(s)
+	}
+	for _, s := range ref.Value.OneOf {
+		rewritePublicTimeRefsInSchema(s)
+	}
+	for _, s := range ref.Value.AnyOf {
+		rewritePublicTimeRefsInSchema(s)
+	}
 }
 
 // flattenSortQueryToString rewrites every `sort` query parameter from

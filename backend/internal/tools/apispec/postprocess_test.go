@@ -1657,3 +1657,78 @@ func TestMarkQueryStringPatterns_ExternalKeyFiltersUseStrictPattern(t *testing.T
 	assert.Equal(t, printableStringRegex, itemsPattern("/api/v1/assets", "q"),
 		"q must keep printable-string pattern (control chars rejected, slashes allowed)")
 }
+
+// TestInlinePublicTimeRefs covers TRA-717 / BB34 F3 rework: any property
+// $ref'ing the shared.PublicTime wrapper (in either the original or
+// post-consolidation namespace) is rewritten as an inline
+// `type: string, format: date-time` schema and the wrapper component is
+// dropped. Existing nullable on the referencing property is preserved.
+func TestInlinePublicTimeRefs(t *testing.T) {
+	doc := &openapi3.T{
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"shared.PublicTime": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type:       &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{"time.Time": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}}},
+				}},
+				"AssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{
+						"created_at": {Ref: "#/components/schemas/shared.PublicTime"},
+						"deleted_at": {Ref: "#/components/schemas/shared.PublicTime", Value: &openapi3.Schema{Nullable: true}},
+					},
+				}},
+			},
+		},
+		Paths: openapi3.NewPaths(),
+	}
+
+	inlinePublicTimeRefs(doc)
+
+	_, kept := doc.Components.Schemas["shared.PublicTime"]
+	assert.False(t, kept, "shared.PublicTime component must be deleted")
+
+	av := doc.Components.Schemas["AssetView"].Value
+	created := av.Properties["created_at"]
+	require.NotNil(t, created)
+	assert.Equal(t, "", created.Ref, "created_at must be inlined, not $ref")
+	require.NotNil(t, created.Value)
+	assert.True(t, created.Value.Type.Is(openapi3.TypeString))
+	assert.Equal(t, "date-time", created.Value.Format)
+	assert.False(t, created.Value.Nullable, "non-nullable property stays non-nullable")
+
+	deleted := av.Properties["deleted_at"]
+	require.NotNil(t, deleted)
+	assert.Equal(t, "", deleted.Ref)
+	require.NotNil(t, deleted.Value)
+	assert.True(t, deleted.Value.Type.Is(openapi3.TypeString))
+	assert.Equal(t, "date-time", deleted.Value.Format)
+	assert.True(t, deleted.Value.Nullable, "nullable on the referencing property must be preserved across the rewrite")
+}
+
+// Post-consolidateSchemaNamespaces, the component name is bare
+// `PublicTime` (no `shared.` prefix). The rewrite must match that form
+// too.
+func TestInlinePublicTimeRefs_PostConsolidationName(t *testing.T) {
+	doc := &openapi3.T{
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"PublicTime": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeObject}}},
+				"AssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Properties: openapi3.Schemas{
+						"valid_from": {Ref: "#/components/schemas/PublicTime"},
+					},
+				}},
+			},
+		},
+		Paths: openapi3.NewPaths(),
+	}
+
+	inlinePublicTimeRefs(doc)
+
+	_, kept := doc.Components.Schemas["PublicTime"]
+	assert.False(t, kept)
+	vf := doc.Components.Schemas["AssetView"].Value.Properties["valid_from"]
+	assert.Equal(t, "", vf.Ref)
+	assert.Equal(t, "date-time", vf.Value.Format)
+}

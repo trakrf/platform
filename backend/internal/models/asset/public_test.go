@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
 // AC10: POST /assets and GET /assets must agree on the metadata shape.
@@ -111,7 +113,7 @@ func TestPublicAssetView_ValidToAlwaysEmittedNullWhenNil(t *testing.T) {
 }
 
 func TestPublicAssetView_ValidToEmittedWhenPopulated(t *testing.T) {
-	when := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	when := shared.NewPublicTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	v := PublicAssetView{ExternalKey: "A1", Name: "n", ValidTo: &when}
 
 	data, err := json.Marshal(v)
@@ -120,5 +122,5 @@ func TestPublicAssetView_ValidToEmittedWhenPopulated(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(data, &parsed))
 
-	assert.Equal(t, "2026-01-01T00:00:00Z", parsed["valid_to"])
+	assert.Equal(t, "2026-01-01T00:00:00.000Z", parsed["valid_to"])
 }

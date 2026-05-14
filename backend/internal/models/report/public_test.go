@@ -146,11 +146,11 @@ func TestToPublicCurrentLocationItem_DeletedAsset(t *testing.T) {
 	got := ToPublicCurrentLocationItem(in)
 
 	require.NotNil(t, got.AssetDeletedAt)
-	assert.Equal(t, deletedAt, *got.AssetDeletedAt)
+	assert.True(t, got.AssetDeletedAt.Time.Equal(deletedAt))
 
 	data, err := json.Marshal(got)
 	require.NoError(t, err)
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(data, &parsed))
-	assert.Equal(t, "2026-04-20T14:00:00Z", parsed["asset_deleted_at"])
+	assert.Equal(t, "2026-04-20T14:00:00.000Z", parsed["asset_deleted_at"])
 }

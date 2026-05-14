@@ -80,8 +80,8 @@ func TestPublicLocationView_OptionalFieldsEmittedWhenPopulated(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &parsed))
 
 	assert.Equal(t, "the description", parsed["description"])
-	assert.Equal(t, "2026-01-01T00:00:00Z", parsed["valid_to"])
-	assert.Equal(t, "2026-01-01T00:00:00Z", parsed["updated_at"])
+	assert.Equal(t, "2026-01-01T00:00:00.000Z", parsed["valid_to"])
+	assert.Equal(t, "2026-01-01T00:00:00.000Z", parsed["updated_at"])
 }
 
 // TRA-554: PublicLocationView.parent_id and parent_external_key are nullable

@@ -73,7 +73,7 @@ components:
                     nullable: true
                     type: integer
                 event_observed_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     type: string
                 location_external_key:
@@ -116,7 +116,7 @@ components:
         AssetLocationItem:
             properties:
                 asset_deleted_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     nullable: true
                     readOnly: true
@@ -129,7 +129,7 @@ components:
                     nullable: true
                     type: integer
                 asset_last_seen:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     type: string
                 location_external_key:
@@ -174,12 +174,12 @@ components:
         AssetView:
             properties:
                 created_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     readOnly: true
                     type: string
                 deleted_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     nullable: true
                     readOnly: true
@@ -213,16 +213,16 @@ components:
                         $ref: '#/components/schemas/Tag'
                     type: array
                 updated_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     readOnly: true
                     type: string
                 valid_from:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     type: string
                 valid_to:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     nullable: true
                     type: string
@@ -688,12 +688,12 @@ components:
         LocationView:
             properties:
                 created_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     readOnly: true
                     type: string
                 deleted_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     nullable: true
                     readOnly: true
@@ -724,16 +724,16 @@ components:
                         $ref: '#/components/schemas/Tag'
                     type: array
                 updated_at:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     readOnly: true
                     type: string
                 valid_from:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     type: string
                 valid_to:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     nullable: true
                     type: string
@@ -1896,14 +1896,14 @@ paths:
                   in: query
                   name: from
                   schema:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     type: string
                 - description: RFC 3339 end timestamp
                   in: query
                   name: to
                   schema:
-                    example: "2025-04-29T12:34:56Z"
+                    example: "2025-04-29T12:34:56.000Z"
                     format: date-time
                     type: string
                 - description: comma-separated; prefix '-' for DESC
