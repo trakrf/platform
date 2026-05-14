@@ -400,8 +400,13 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			})
 		}
 	}
+	// TRA-721: read-only datetime echo checks use instant equality, not
+	// byte equality — so a verbatim GET → typed-deserialize → PATCH
+	// round-trip from a generated client (Go time.Time, Pydantic, etc.)
+	// succeeds even when the re-serialized wire form differs from the
+	// server's emit shape (e.g., "+00:00" vs "Z", microsecond fractional).
 	if v, present := rawReadOnly["created_at"]; present {
-		if !httputil.SameJSON(v, currentView.CreatedAt) {
+		if !httputil.SameJSONInstant(v, currentView.CreatedAt) {
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "created_at",
 				Code:    "read_only",
@@ -410,7 +415,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		}
 	}
 	if v, present := rawReadOnly["updated_at"]; present {
-		if !httputil.SameJSON(v, currentView.UpdatedAt) {
+		if !httputil.SameJSONInstant(v, currentView.UpdatedAt) {
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "updated_at",
 				Code:    "read_only",
@@ -419,7 +424,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		}
 	}
 	if v, present := rawReadOnly["deleted_at"]; present {
-		if !httputil.SameJSON(v, currentView.DeletedAt) {
+		if !httputil.SameJSONInstant(v, currentView.DeletedAt) {
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "deleted_at",
 				Code:    "read_only",

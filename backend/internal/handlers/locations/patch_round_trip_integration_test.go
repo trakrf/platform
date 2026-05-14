@@ -584,6 +584,77 @@ func TestPatchLocation_ServerManagedReadOnly_Differs400(t *testing.T) {
 	}
 }
 
+// TRA-721: read-only datetime fields (created_at, updated_at, deleted_at)
+// must accept any RFC 3339 wire form of the current instant, not just a
+// byte-equal echo. Mirrors TestPatchAsset_DatetimeEncodingVariants — the
+// fix lives in the shared httputil comparator so both resources are
+// exercised end-to-end.
+func TestPatchLocation_DatetimeEncodingVariants_InstantEquality_200(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-RO-INST", "ReadOnlyInstant")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/locations/%d", id), nil)
+	getReq = withLocationRoundTripOrgContext(getReq, orgID)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+	var current struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+
+	parseWireTime := func(s string) time.Time {
+		t.Helper()
+		v, err := time.Parse(time.RFC3339Nano, s)
+		require.NoError(t, err)
+		return v
+	}
+	createdAt := parseWireTime(current.Data["created_at"].(string))
+	updatedAt := parseWireTime(current.Data["updated_at"].(string))
+
+	variants := func(label string, t0 time.Time) []struct {
+		name, value string
+	} {
+		return []struct{ name, value string }{
+			{label + " literal Z (millis)", t0.UTC().Format("2006-01-02T15:04:05.000Z")},
+			{label + " +00:00 offset form", t0.UTC().Format("2006-01-02T15:04:05.000-07:00")},
+			{label + " microsecond +00:00", t0.UTC().Format("2006-01-02T15:04:05.000000-07:00")},
+		}
+	}
+
+	cases := []struct {
+		field    string
+		variants []struct{ name, value string }
+	}{
+		{"created_at", variants("created_at", createdAt)},
+		{"updated_at", variants("updated_at", updatedAt)},
+	}
+	for _, c := range cases {
+		for _, v := range c.variants {
+			t.Run(v.name, func(t *testing.T) {
+				body := fmt.Sprintf(`{%q:%q}`, c.field, v.value)
+				patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(body)))
+				patchReq.Header.Set("Content-Type", "application/json")
+				patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, patchReq)
+				require.Equal(t, http.StatusOK, rec.Code,
+					"%s = %s must be 200 (same instant as server state): %s",
+					c.field, v.value, rec.Body.String())
+			})
+		}
+	}
+}
+
 // TRA-710 (BB33 F2): `tags` follows the uniform accept-if-matches /
 // reject-if-differs rule on locations. Pre-TRA-710 any `tags` presence
 // was rejected with 400 invalid_value regardless of value.
