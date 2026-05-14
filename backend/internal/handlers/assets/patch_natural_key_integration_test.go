@@ -401,8 +401,9 @@ func TestPatchAsset_NaturalKey_FullGETRoundTrip_200(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &getResp))
 	getResp.Data["name"] = "renamed via round-trip"
-	// `tags` remains pre-decode rejected (out of scope for TRA-699).
-	delete(getResp.Data, "tags")
+	// TRA-710 brought `tags` under the same echo-or-reject rule, so it can
+	// stay on the body — the verbatim GET echo of `[]` (or any current
+	// shape) is normalized out.
 
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)

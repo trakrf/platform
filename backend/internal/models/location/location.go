@@ -48,16 +48,19 @@ type CreateLocationRequest struct {
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicLocationView that the
-// PATCH handler silently strips from the request body before strict
-// decoding so a verbatim GET → PATCH round-trip succeeds (TRA-608 / BB18
-// §1.7). Only the round-trip-safe, server-owned timestamps and surrogate
-// IDs are on this list.
+// PATCH handler drops from the request body before strict decoding so the
+// strict-decode unknown-field check does not trip on them.
+//
+// TRA-710 (BB33 F2): the four server-managed fields (id, created_at,
+// updated_at, deleted_at) are policed by the post-decode echo check in
+// the PATCH handler — verbatim GET → PATCH matches and is normalized out
+// (silent strip), while a value differing from current state returns 400
+// with code=read_only. `tags` also moved onto the echo check under the
+// same rule (off PublicRejectPatchFields).
 //
 // TRA-699 (BB31 §2): `external_key` and `parent_external_key` are NOT on
-// this list. They are policed by the post-decode natural-key echo check
-// in the PATCH handler under the uniform accept-if-matches,
-// reject-if-differs rule. The previous TRA-686 F7+F8 pre-decode rejects
-// are superseded by that rule.
+// this list. They are policed by the same post-decode echo check via
+// dedicated decode targets.
 //
 // `parent_id` (the surrogate form of the parent reference) remains fully
 // writable on PATCH — only the natural-key form is locked down.
@@ -68,11 +71,11 @@ type CreateLocationRequest struct {
 var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at"}
 
 // UpdateLocationRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
-// DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
-// PublicLocationView's round-trip-safe read-only fields (id, created_at,
-// updated_at, deleted_at) are silently stripped on a verbatim GET → PATCH
-// round-trip. `tags` is pre-decode rejected with 400 invalid_value
-// (managed via /locations/{id}/tags) — see PublicRejectPatchFields.
+// DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields. TRA-710
+// (BB33 F2): `id`, `created_at`, `updated_at`, `deleted_at`, and `tags`
+// are dropped from the decode and policed by the post-decode echo check —
+// matching the current resource value is silently normalized out, a
+// differing value returns 400 with code=read_only.
 //
 // description, parent_id, and valid_to all accept JSON null on the wire
 // and clear the field server-side (TRA-614 / BB19 §S1). Each null surfaces
@@ -109,19 +112,16 @@ type UpdateLocationRequest struct {
 // PublicRejectPatchFields names the JSON keys that PATCH
 // /api/v1/locations/{id} rejects pre-decode with 400 validation_error.
 //
-//   - `tags` → invalid_value, points at POST/DELETE
-//     /locations/{location_id}/tags (TRA-686 / BB29 F7).
+// TRA-710 (BB33 F2): `tags` moved off this map. It is now policed by the
+// post-decode echo check in the PATCH handler under the uniform
+// accept-if-matches, reject-if-differs rule.
 //
 // TRA-699 (BB31 §2): `external_key` and `parent_external_key` moved off
-// this map. Both are now policed by the post-decode natural-key echo
-// check in the PATCH handler under the uniform accept-if-matches,
-// reject-if-differs rule.
-var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{
-	"tags": {
-		Code:    "invalid_value",
-		Message: "tags are managed via POST /api/v1/locations/{location_id}/tags and DELETE /api/v1/locations/{location_id}/tags/{tag_id}",
-	},
-}
+// this map under the same rule.
+//
+// Kept exported as a (currently empty) map so the handler call site
+// remains compile-stable.
+var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{}
 
 // RenameLocationRequest is the body of POST /api/v1/locations/{location_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation
