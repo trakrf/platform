@@ -159,6 +159,30 @@ func ContentType(next http.Handler) http.Handler {
 	})
 }
 
+// RejectQueryParams returns a per-route middleware that rejects requests
+// carrying any query parameter whose key is not in `allowed`. Attach to
+// endpoints that do not run through httputil.ParseListParams (single-resource
+// GETs, write endpoints, subresource POST/DELETEs) so unknown query keys
+// surface as 400 validation_error instead of being silently ignored —
+// honoring the docs claim that "unknown query parameters are rejected with
+// validation_error alongside unknown body keys" (TRA-707 / BB32 D5).
+//
+// Pass no arguments when the endpoint accepts no query parameters at all.
+// The list endpoints already enforce this through ParseListParams and must
+// NOT be wrapped, otherwise their legitimate filter/sort/limit/offset keys
+// would be rejected.
+func RejectQueryParams(allowed ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := httputil.RejectUnknownQueryParams(r, allowed...); err != nil {
+				httputil.RespondListParamError(w, r, err, GetRequestID(r.Context()))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequireMergePatchCT is a per-route middleware that enforces the
 // PATCH-strict content-type. Attach to PATCH handlers so the public spec's
 // declared `application/merge-patch+json` is the only accepted CT on those

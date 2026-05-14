@@ -800,6 +800,7 @@ type AddTagResponse struct {
 // @Param        asset_id path  int                true  "Asset id (canonical)" minimum(1) maximum(2147483647) format(int32)
 // @Param        request  body  shared.TagRequest  true  "Tag to attach"
 // @Success      201  {object}  assets.AddTagResponse         "tag attached"
+// @Header       201  {string}  Location                      "Canonical URL of the created tag"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -861,6 +862,10 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 		return
 	}
 
+	// TRA-707 / BB32 C2: emit Location pointing at the newly created tag
+	// subresource (RFC 7231 §7.1.2). Matches the canonical-URL pattern on
+	// POST /api/v1/assets.
+	w.Header().Set("Location", fmt.Sprintf("/api/v1/assets/%d/tags/%d", assetID, tag.ID))
 	httputil.WriteJSON(w, http.StatusCreated, AddTagResponse{Data: *tag})
 }
 

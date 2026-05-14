@@ -2176,6 +2176,10 @@ paths:
                                 $ref: '#/components/schemas/AddAssetTagResponse'
                     description: tag attached
                     headers:
+                        Location:
+                            description: Canonical URL of the created tag
+                            schema:
+                                type: string
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4106,6 +4110,10 @@ paths:
                                 $ref: '#/components/schemas/AddLocationTagResponse'
                     description: tag attached
                     headers:
+                        Location:
+                            description: Canonical URL of the created tag
+                            schema:
+                                type: string
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
