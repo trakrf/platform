@@ -51,6 +51,14 @@ components:
                     description: Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5).
                     schema:
                         type: string
+                X-RateLimit-Limit:
+                    $ref: '#/components/headers/XRateLimitLimit'
+                X-RateLimit-Remaining:
+                    $ref: '#/components/headers/XRateLimitRemaining'
+                X-RateLimit-Reset:
+                    $ref: '#/components/headers/XRateLimitReset'
+                X-Request-Id:
+                    $ref: '#/components/headers/XRequestId'
     schemas:
         AddAssetTagResponse:
             properties:
@@ -4598,24 +4606,7 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorResponse'
-                    description: Method not allowed
-                    headers:
-                        Allow:
-                            description: Allowed methods
-                            schema:
-                                type: string
-                        X-RateLimit-Limit:
-                            $ref: '#/components/headers/XRateLimitLimit'
-                        X-RateLimit-Remaining:
-                            $ref: '#/components/headers/XRateLimitRemaining'
-                        X-RateLimit-Reset:
-                            $ref: '#/components/headers/XRateLimitReset'
-                        X-Request-Id:
-                            $ref: '#/components/headers/XRequestId'
+                    $ref: '#/components/responses/MethodNotAllowed'
                 "422":
                     content:
                         application/json:

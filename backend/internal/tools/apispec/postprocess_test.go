@@ -44,6 +44,24 @@ func TestPostprocess_InjectsMethodNotAllowedResponse(t *testing.T) {
 	require.NotNil(t, media.Schema)
 	assert.Equal(t, "#/components/schemas/errors.ErrorResponse", media.Schema.Ref,
 		"content schema must reference the canonical error envelope")
+
+	// TRA-723 / BB36 F3: the service emits the standard rate-limit and
+	// request-id headers on every 405 response. The shared component must
+	// declare them so every operation that $refs it inherits the full
+	// header set — otherwise codegen targets miss four headers on 21 of
+	// 22 operations (the only inline 405 was getCurrentOrg's, which has
+	// since been removed in favor of the shared $ref).
+	expectedHeaderRefs := map[string]string{
+		"X-RateLimit-Limit":     "#/components/headers/XRateLimitLimit",
+		"X-RateLimit-Remaining": "#/components/headers/XRateLimitRemaining",
+		"X-RateLimit-Reset":     "#/components/headers/XRateLimitReset",
+		"X-Request-Id":          "#/components/headers/XRequestId",
+	}
+	for name, ref := range expectedHeaderRefs {
+		h := respRef.Value.Headers[name]
+		require.NotNil(t, h, "MethodNotAllowed must declare %s header", name)
+		assert.Equal(t, ref, h.Ref, "%s must $ref %s", name, ref)
+	}
 }
 
 // TestPostprocess_InjectMethodNotAllowed_Idempotent verifies running the

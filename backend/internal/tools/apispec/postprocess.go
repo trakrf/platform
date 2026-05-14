@@ -713,11 +713,14 @@ func appendIDWidthPolicyDescription(doc *openapi3.T) {
 
 // injectMethodNotAllowedResponse adds a reusable 405 response under
 // components.responses.MethodNotAllowed. The response declares the Allow
-// header (RFC 7231 §6.5.5) so an operation that references this component
-// documents the header without each operation re-declaring it. The
-// companion attachMethodNotAllowedToOperations pass bulk-references this
-// component from every operation so codegens can model 405 as a possible
-// response on every endpoint (TRA-646 / BB22 S1).
+// header (RFC 7231 §6.5.5) alongside the rate-limit and request-id headers
+// the service emits on every response, so an operation that references
+// this component documents the full header set without each operation
+// re-declaring them. The companion attachMethodNotAllowedToOperations
+// pass bulk-references this component from every operation so codegens
+// can model 405 as a possible response on every endpoint (TRA-646 /
+// BB22 S1; TRA-723 / BB36 F3 added the rate-limit + request-id headers
+// to match what the service actually emits).
 func injectMethodNotAllowedResponse(doc *openapi3.T) {
 	if doc.Components == nil {
 		doc.Components = &openapi3.Components{}
@@ -745,7 +748,11 @@ func injectMethodNotAllowedResponse(doc *openapi3.T) {
 	resp := &openapi3.Response{
 		Description: &desc,
 		Headers: openapi3.Headers{
-			"Allow": allowHeader,
+			"Allow":                 allowHeader,
+			"X-RateLimit-Limit":     {Ref: "#/components/headers/XRateLimitLimit"},
+			"X-RateLimit-Remaining": {Ref: "#/components/headers/XRateLimitRemaining"},
+			"X-RateLimit-Reset":     {Ref: "#/components/headers/XRateLimitReset"},
+			"X-Request-Id":          {Ref: "#/components/headers/XRequestId"},
 		},
 		Content: openapi3.Content{
 			"application/json": &openapi3.MediaType{
