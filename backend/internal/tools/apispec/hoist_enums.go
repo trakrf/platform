@@ -80,9 +80,19 @@ var inlineEnumExtractions = []inlineEnumExtraction{
 
 // hoistInlineEnums lifts every site listed in inlineEnumExtractions
 // into a named top-level schema and replaces the inline definitions
-// with $ref. When a source carries `nullable` or `default` (which
-// cannot live next to a bare $ref in OpenAPI 3.0), the replacement is
-// wrapped in an allOf so the constraint is preserved on the property.
+// with bare $ref. `nullable` and `default` from any source are merged
+// onto the canonical (hoisted) schema rather than left as siblings of
+// the $ref — siblings of $ref/allOf trip OpenAPI 3.0 strict readers
+// (Pydantic-strict Python codegen emits a serialization warning on
+// every model use; TRA-712 / BB33 F6).
+//
+// Tradeoff: nullable/default declared on the shared schema applies to
+// every site that refs it. For TagType this means Tag.tag_type — which
+// the server never returns null and treats as required — admits null
+// per the spec. Documentation looseness is acceptable pre-launch; the
+// alternative is a separate per-site schema, which re-introduces the
+// enum-constant collision in Go codegen that the hoist exists to
+// prevent (TRA-691).
 //
 // Must run before renamePublicSpec so the source schema names (which
 // still carry their dotted Go-package prefix) resolve.
@@ -140,6 +150,15 @@ func hoistOneEnum(doc *openapi3.T, ext inlineEnumExtraction) error {
 				} else if !enumValuesEqual(canonical.Enum, next.Value.Enum) {
 					return fmt.Errorf("apispec: hoistInlineEnums: enum values diverge across sources for target %s", ext.Target)
 				}
+				// Merge nullable/default from this source onto canonical so
+				// the constraint lives inside the referenced schema instead
+				// of becoming a $ref sibling at the call site.
+				if next.Value.Nullable {
+					canonical.Nullable = true
+				}
+				if next.Value.Default != nil && canonical.Default == nil {
+					canonical.Default = next.Value.Default
+				}
 				break
 			}
 			curRef = next
@@ -157,24 +176,7 @@ func hoistOneEnum(doc *openapi3.T, ext inlineEnumExtraction) error {
 	refPath := "#/components/schemas/" + ext.Target
 
 	for _, s := range sites {
-		old := s.ref.Value
-		needsWrapper := old.Nullable || old.Default != nil
-		if needsWrapper {
-			// OpenAPI 3.0 requires `type` to be present alongside `nullable`
-			// (openapi-typescript's redocly validator enforces this strictly;
-			// other generators do not, but they don't reject the redundancy
-			// either). Copy the underlying type onto the wrapper so the spec
-			// validates cleanly across all three codegen targets.
-			wrapped := &openapi3.Schema{
-				Type:     canonical.Type,
-				AllOf:    openapi3.SchemaRefs{{Ref: refPath}},
-				Nullable: old.Nullable,
-				Default:  old.Default,
-			}
-			s.owner.Properties[s.key] = &openapi3.SchemaRef{Value: wrapped}
-		} else {
-			s.owner.Properties[s.key] = &openapi3.SchemaRef{Ref: refPath}
-		}
+		s.owner.Properties[s.key] = &openapi3.SchemaRef{Ref: refPath}
 	}
 	return nil
 }

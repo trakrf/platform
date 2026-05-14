@@ -1015,9 +1015,13 @@ func TestPostprocess_StripsBearerScopeArrays_Idempotent(t *testing.T) {
 		"second invocation must not double-prepend the scope marker")
 }
 
-// TestPostprocess_StripsBearerScopeArrays_NoOpWithoutScopes verifies an op
-// with an already-empty scope array is left untouched.
-func TestPostprocess_StripsBearerScopeArrays_NoOpWithoutScopes(t *testing.T) {
+// TestPostprocess_StripsBearerScopeArrays_EmitsEmptyForScopelessBearer locks
+// in the TRA-712 BB33 F7 acceptance: an op with bearer auth but no declared
+// scopes still gets an x-required-scopes extension, set to an empty array.
+// Absence would be ambiguous about whether scopes were considered;
+// empty array clearly signals "any authenticated key works" to codegen
+// ingestors trying to mint minimal-scope keys (e.g. /api/v1/orgs/me).
+func TestPostprocess_StripsBearerScopeArrays_EmitsEmptyForScopelessBearer(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	op := doc.Paths.Find("/assets").Get
@@ -1029,8 +1033,10 @@ func TestPostprocess_StripsBearerScopeArrays_NoOpWithoutScopes(t *testing.T) {
 	require.NoError(t, postprocessPublic(doc))
 	assert.Equal(t, "Paginated list of assets.", op.Description,
 		"no scopes => no marker injected")
-	_, hasExt := op.Extensions["x-required-scopes"]
-	assert.False(t, hasExt, "no scopes => no x-required-scopes extension")
+	require.NotNil(t, op.Extensions, "extensions must be populated")
+	got, ok := op.Extensions["x-required-scopes"]
+	require.True(t, ok, "x-required-scopes must be present on bearer-gated ops, even scopeless")
+	assert.Equal(t, []string{}, got, "scopeless bearer op gets empty array")
 }
 
 // TestPostprocess_StripsBearerScopeArrays_EmitsExtension locks in TRA-685 F4.

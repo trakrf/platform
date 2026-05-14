@@ -999,14 +999,7 @@
         "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
         "properties": {
           "tag_type": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/TagType"
-              }
-            ],
-            "default": "rfid",
-            "nullable": true,
-            "type": "string"
+            "$ref": "#/components/schemas/TagType"
           },
           "value": {
             "maxLength": 255,
@@ -1021,6 +1014,7 @@
         "type": "object"
       },
       "TagType": {
+        "default": "rfid",
         "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
         "enum": [
           "rfid",
@@ -1028,6 +1022,7 @@
           "barcode"
         ],
         "example": "rfid",
+        "nullable": true,
         "type": "string",
         "x-extensible-enum": true
       },
@@ -6846,7 +6841,8 @@
         "summary": "Get the org associated with the authenticated API key",
         "tags": [
           "orgs"
-        ]
+        ],
+        "x-required-scopes": []
       }
     },
     "/api/v1/reports/asset-locations": {
