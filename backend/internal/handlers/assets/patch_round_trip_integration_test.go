@@ -1055,14 +1055,17 @@ func TestPostAsset_EmptyDescription_Rejected400(t *testing.T) {
 	_ = pool
 }
 
-// TRA-675 / BB27 F5: POST with no body (and thus no `name`) must report
-// the length-bearing required field as code=too_short with min_length,
-// not code=required. errors.mdx is authoritative: missing length-bearing
-// fields are too_short whether sent as empty or omitted. This fixes the
-// previously inconsistent envelope where /assets POST emitted `required`
-// but /assets/{id}/tags POST and /assets/{id}/rename POST emitted
-// `too_short` for the same condition.
-func TestPostAsset_MissingNameEmitsTooShort(t *testing.T) {
+// TRA-692 §1.2: POST with no body (and thus no `name`) must report the
+// missing length-bearing field as code=required (no min_length param),
+// not too_short. The presence overlay promotes the validator's collapsed
+// too_short back to `required` when the JSON key was absent from the
+// body — the absent case is presence-class, not length-class. Empty
+// strings on the same field stay as too_short; that case is covered
+// separately.
+//
+// Supersedes TRA-675's "always too_short" framing — the docs (errors.md)
+// were updated under TRA-692 to match the presence-aware split.
+func TestPostAsset_MissingNameEmitsRequired(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -1096,9 +1099,10 @@ func TestPostAsset_MissingNameEmitsTooShort(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "name", resp.Error.Fields[0].Field)
-	assert.Equal(t, "too_short", resp.Error.Fields[0].Code,
-		"length-bearing required field missing from body must be too_short, not required")
-	assert.EqualValues(t, 1, resp.Error.Fields[0].Params["min_length"])
+	assert.Equal(t, "required", resp.Error.Fields[0].Code,
+		"omitted length-bearing required field must be `required`, not `too_short` (TRA-692 §1.2)")
+	assert.Nil(t, resp.Error.Fields[0].Params,
+		"promoted `required` carries no params — min_length applies only when the value was present and short")
 
 	_ = pool
 }
