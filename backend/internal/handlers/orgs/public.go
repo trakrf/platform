@@ -10,10 +10,13 @@ import (
 
 // OrgMeView is the minimal org identity returned by GET /api/v1/orgs/me.
 // Customer-facing: just the fields integrators need to confirm the key is
-// bound to the right org.
+// bound to the right org, plus the bearer's effective scopes and api_key_id
+// so they can debug 403s without decoding the JWT locally (TRA-719 / BB35 A5).
 type OrgMeView struct {
-	ID   int    `json:"id"   example:"42"`
-	Name string `json:"name" example:"Acme Logistics"`
+	ID       int      `json:"id"          example:"42"`
+	Name     string   `json:"name"        example:"Acme Logistics"`
+	Scopes   []string `json:"scopes"      example:"assets:read,assets:write"`
+	APIKeyID string   `json:"api_key_id"  example:"550e8400-e29b-41d4-a716-446655440000"`
 }
 
 // GetOrgMeResponse is the typed envelope returned by GET /api/v1/orgs/me.
@@ -65,10 +68,21 @@ func (h *Handler) GetOrgMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TRA-719 / BB35 A5: include scopes and api_key_id so integrators can
+	// inspect their bearer's effective grant without decoding the JWT.
+	// api_key_id mirrors the JWT `sub` claim (the api_keys row's jti UUID).
+	// scopes is always a JSON array — empty slice rather than null so typed
+	// clients can iterate without a nil check.
+	scopes := principal.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
-			"id":   org.ID,
-			"name": org.Name,
+			"id":         org.ID,
+			"name":       org.Name,
+			"scopes":     scopes,
+			"api_key_id": principal.JTI,
 		},
 	})
 }

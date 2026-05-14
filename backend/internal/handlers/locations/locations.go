@@ -36,11 +36,11 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 // resolveParent reconciles the parent_id (canonical surrogate) and
-// parent_external_key (natural-key alternate) inputs on Create. Exactly
-// one is expected to be set (TRA-681 oneOf constraint enforced upstream
-// in the Create handler via the ambiguous_fields pre-check). PATCH never
-// supplies the natural-key form — it is stripped before this function
-// runs (see location.PublicReadOnlyFields).
+// parent_external_key (natural-key alternate) inputs on Create and PATCH.
+// Exactly one is expected to be set on Create (TRA-681 oneOf constraint
+// enforced upstream via the ambiguous_fields pre-check). TRA-719 / BB35
+// B2: PATCH now also dispatches the natural-key form here — the PATCH
+// handler runs its own ambiguous_fields pre-check before this call.
 //
 // Both nil → nil (no parent). When parent_id is set it is used; otherwise
 // parent_external_key is resolved via lookup.
@@ -245,7 +245,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `parent_external_key`). To re-parent send `parent_id` (surrogate; `null` clears the FK) — `parent_external_key` is read-only via PATCH and the /rename endpoint cannot re-parent. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send EITHER `parent_id` (surrogate) OR `parent_external_key` (natural key); both forms accept `null` to clear the FK, and supplying both in the same body returns 400 `ambiguous_fields` (TRA-719 / BB35 B2 — symmetric with CreateLocationRequest). Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -343,20 +343,29 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		request.ClearDescription = true
 	}
 	// TRA-614 / BB19 §S1: explicit `null` on parent_id clears the FK.
-	// TRA-699 (BB31 §2): parent_external_key follows the new echo check
-	// (see below); only parent_id signals a clear via the surrogate.
+	// TRA-719 / BB35 B2: parent_external_key is now writable on PATCH and
+	// follows the same null-clears-FK semantic as parent_id. Both forms
+	// signal a clear; the post-decode reconciliation below collapses them
+	// into a single ClearParentID.
 	if _, ok := explicitNulls["parent_id"]; ok {
 		request.ClearParentID = true
 		request.ParentID = nil
 	}
+	if _, ok := explicitNulls["parent_external_key"]; ok {
+		request.ClearParentID = true
+		request.ParentExternalKey = nil
+	}
 
-	// TRA-699 (BB31 §2): natural-key echo check. Two fields are read-only
-	// on PATCH but accept a verbatim echo of the current value as a silent
-	// no-op so a GET → PATCH round-trip without an explicit strip succeeds.
-	// A differing value is 400 read_only naming POST /locations/{id}/rename.
+	// TRA-699 (BB31 §2): natural-key echo check. `external_key` is
+	// read-only on PATCH but accepts a verbatim echo of the current value
+	// as a silent no-op so a GET → PATCH round-trip without an explicit
+	// strip succeeds. A differing value is 400 read_only naming POST
+	// /locations/{location_id}/rename.
 	//
-	//   external_key         → mutates own natural key via /rename
-	//   parent_external_key  → re-parent via /rename, or send parent_id
+	// TRA-719 / BB35 B2: `parent_external_key` is now writable on PATCH,
+	// symmetric with CreateLocationRequest. Its value is reconciled with
+	// `parent_id` below — they form a oneOf (ambiguous_fields if both
+	// supplied), and the natural-key form resolves via resolveParent.
 	//
 	// TRA-710 (BB33 F2): the same accept-if-matches / reject-if-differs
 	// rule covers the server-managed surrogate id and timestamps (id,
@@ -433,22 +442,6 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			})
 		}
 	}
-	if _, present := presentKeys["parent_external_key"]; present {
-		_, bodyNull := explicitNulls["parent_external_key"]
-		curNull := current.ParentExternalKey == nil
-		matched := bodyNull && curNull
-		if !bodyNull && !curNull && request.ParentExternalKey != nil && current.ParentExternalKey != nil &&
-			*request.ParentExternalKey == *current.ParentExternalKey {
-			matched = true
-		}
-		if !matched {
-			echoViolations = append(echoViolations, modelerrors.FieldError{
-				Field:   "parent_external_key",
-				Code:    "read_only",
-				Message: "parent reference is immutable via PATCH on parent_external_key; send `parent_id` to change the parent via surrogate",
-			})
-		}
-	}
 	if len(echoViolations) > 0 {
 		// TRA-702 / BB32 D2: detail must echo fields[0].Message — pre-TRA-702
 		// the inline literal "validation failed" buried the redirect-to-/rename
@@ -458,18 +451,68 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 	request.ExternalKey = nil
-	request.ParentExternalKey = nil
 	delete(presentKeys, "external_key")
-	delete(presentKeys, "parent_external_key")
 	delete(explicitNulls, "external_key")
-	delete(explicitNulls, "parent_external_key")
+
+	// TRA-719 / BB35 B2: reconcile parent_id and parent_external_key when
+	// both supplied. The BB33 F2 accept-if-matches rule still applies —
+	// a verbatim GET → PATCH round-trip carries both fields and must
+	// succeed when they describe the same parent. Disagreement (or mixed
+	// "one clear, one set" intent) is ambiguous_fields.
+	_, hasParentID := presentKeys["parent_id"]
+	_, hasParentExt := presentKeys["parent_external_key"]
+	if hasParentID && hasParentExt {
+		_, idNull := explicitNulls["parent_id"]
+		_, extNull := explicitNulls["parent_external_key"]
+		switch {
+		case idNull && extNull:
+			// Both clear — ClearParentID is already set above via the
+			// per-field null branches. Drop the natural-key form so
+			// resolveParent below sees a single intent.
+			request.ParentExternalKey = nil
+		case !idNull && !extNull:
+			// Both non-null: resolve the natural key and check it
+			// matches the supplied surrogate. resolveParent returns
+			// fk_not_found if the natural key doesn't exist.
+			extResolved, fErr := handler.resolveParent(req, orgID, nil, request.ParentExternalKey)
+			if fErr != nil {
+				if fErr.Code == "internal_error" {
+					httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal, fErr.Message, reqID)
+					return
+				}
+				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fErr})
+				return
+			}
+			if extResolved == nil || request.ParentID == nil || *extResolved != *request.ParentID {
+				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{
+					{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key both supplied and disagree; supply exactly one or supply consistent values"},
+					{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key both supplied and disagree; supply exactly one or supply consistent values"},
+				})
+				return
+			}
+			// Consistent — drop the natural-key form and proceed with
+			// the surrogate. ClearParentID remains false.
+			request.ParentExternalKey = nil
+		default:
+			// Mixed intent (one null, one non-null): ambiguous.
+			httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{
+				{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive when one is null and the other is set; supply exactly one"},
+				{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive when one is null and the other is set; supply exactly one"},
+			})
+			return
+		}
+	}
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
 		return
 	}
 
-	resolved, fErr := handler.resolveParent(req, orgID, request.ParentID, nil)
+	// TRA-719 / BB35 B2: dispatch parent_external_key through the same FK
+	// resolution used at create time. resolveParent returns the resolved
+	// surrogate id (or a fk_not_found field error if the natural key has
+	// no matching live row).
+	resolved, fErr := handler.resolveParent(req, orgID, request.ParentID, request.ParentExternalKey)
 	if fErr != nil {
 		if fErr.Code == "internal_error" {
 			httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -1164,7 +1207,7 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 
 // @Summary Remove a tag from a location
 // @Description Detach a tag from a location by its tag record id.
-// @Description Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
+// @Description First successful removal returns 204; repeated calls return 404 (TRA-719 / BB35 A3) — consistent with top-level resource DELETE semantics. The cross-location / cross-org case (a tag that exists but is not attached to this location, or belongs to a different org) also surfaces as 404.
 // @Tags locations,public
 // @ID locations.tags.remove
 // @Param location_id path int true "Location ID" minimum(1) maximum(2147483647) format(int32)
@@ -1217,9 +1260,17 @@ func (handler *Handler) doRemoveLocationTag(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_, err = handler.storage.RemoveLocationTag(r.Context(), orgID, locationID, tagID)
+	removed, err := handler.storage.RemoveLocationTag(r.Context(), orgID, locationID, tagID)
 	if err != nil {
 		httputil.RespondStorageError(w, r, err, requestID)
+		return
+	}
+	// TRA-719 / BB35 A3: align tag subresource DELETE with top-level
+	// DELETE semantics — second call returns 404, not 204. The cross-
+	// location and cross-org cases also fall here (storage guard returns
+	// removed=false rather than an error).
+	if !removed {
+		httputil.Respond404(w, r, "Tag not found on this location", requestID)
 		return
 	}
 

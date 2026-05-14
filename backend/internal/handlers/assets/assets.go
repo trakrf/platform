@@ -597,8 +597,15 @@ type UpdateAssetResponse struct {
 
 // RenameAssetResponse is the typed envelope returned by POST /api/v1/assets/{asset_id}/rename.
 // TRA-664.
+//
+// TRA-719 / BB35 B3: includes `descendant_count_affected` for shape
+// uniformity with RenameLocationResponse. Assets have no hierarchy, so
+// the value is always 0; surfacing the field saves typed-client consumers
+// from branching on rename-verb when they emit a "subtree may need
+// refresh" hint.
 type RenameAssetResponse struct {
-	Data asset.PublicAssetView `json:"data"`
+	Data                    asset.PublicAssetView `json:"data"`
+	DescendantCountAffected int                   `json:"descendant_count_affected" example:"0"`
 }
 
 // @Summary      Rename an asset (mutate external_key)
@@ -607,6 +614,8 @@ type RenameAssetResponse struct {
 // @Description  Mutate the asset's `external_key` (natural / join key). This operation is **destructive to downstream joins**: any external system that has cached or indexed records on the old `external_key` will silently disconnect. Prefer a coordinated cutover with downstream consumers.
 // @Description
 // @Description  `external_key` is immutable via PATCH; this operation is the only way to change it. Distinct from a regular PATCH in audit logs (different URL surface).
+// @Description
+// @Description  The response includes `descendant_count_affected` for shape uniformity with the location rename verb. Assets have no hierarchy, so this value is always 0; it is emitted to save typed-client consumers from branching on rename verb.
 // @Tags         assets,public
 // @ID           assets.rename
 // @Accept       json
@@ -668,7 +677,12 @@ func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": asset.ToPublicAssetView(*result)})
+	// TRA-719 / BB35 B3: emit descendant_count_affected=0 for shape
+	// uniformity with RenameLocationResponse. Assets have no hierarchy.
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"data":                      asset.ToPublicAssetView(*result),
+		"descendant_count_affected": 0,
+	})
 }
 
 // @Summary List assets
@@ -951,7 +965,7 @@ func (handler *Handler) doAddAssetTag(w http.ResponseWriter, r *http.Request, or
 
 // @Summary      Remove a tag from an asset
 // @Description  Detach a tag from an asset by its tag record id.
-// @Description  Idempotent: returns 204 whether or not the tag was associated. Repeated calls are safe.
+// @Description  First successful removal returns 204; repeated calls return 404 (TRA-719 / BB35 A3) — consistent with top-level resource DELETE semantics. The cross-asset / cross-org case (a tag that exists but is not attached to this asset, or belongs to a different org) also surfaces as 404.
 // @Tags         assets,public
 // @ID           assets.tags.remove
 // @Accept       json
@@ -1010,9 +1024,17 @@ func (handler *Handler) doRemoveAssetTag(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	_, err = handler.storage.RemoveAssetTag(r.Context(), orgID, assetID, tagID)
+	removed, err := handler.storage.RemoveAssetTag(r.Context(), orgID, assetID, tagID)
 	if err != nil {
 		httputil.RespondStorageError(w, r, err, requestID)
+		return
+	}
+	// TRA-719 / BB35 A3: align tag subresource DELETE with top-level
+	// DELETE semantics — second call returns 404, not 204. The cross-
+	// asset and cross-org cases also fall here (storage guard returns
+	// removed=false rather than an error).
+	if !removed {
+		httputil.Respond404(w, r, "Tag not found on this asset", requestID)
 		return
 	}
 

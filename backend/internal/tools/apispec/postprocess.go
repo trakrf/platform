@@ -24,7 +24,10 @@ var externalKeyPatternFields = map[string][]string{
 	"asset.RenameAssetRequest":               {"external_key"},
 	"location.CreateLocationRequest":         {"external_key", "parent_external_key"},
 	"location.CreateLocationWithTagsRequest": {"external_key", "parent_external_key"},
-	"location.RenameLocationRequest":         {"external_key"},
+	// TRA-719 / BB35 B2: parent_external_key is now writable on PATCH and
+	// must carry the same pattern declaration as Create.
+	"location.UpdateLocationRequest": {"parent_external_key"},
+	"location.RenameLocationRequest": {"external_key"},
 }
 
 // markExternalKeyPattern walks doc.Components.Schemas and sets the
@@ -96,6 +99,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	}
 	markIntegerFormats(doc)
 	markQueryIntegerBounds(doc)
+	markSurrogateIDsInt64(doc)
 	markQueryStringPatterns(doc)
 	flattenSortQueryToString(doc)
 	markDateTimeExamples(doc)
@@ -889,12 +893,20 @@ var publicResponseSchemas = []string{
 // Read schemas are NOT in this list — additive evolution requires
 // generated clients to ignore unknown fields on responses. Internal-only
 // request bodies are excluded; only the public surface is gated.
+//
+// TRA-719 / BB35 B1: UpdateAssetRequest and UpdateLocationRequest are
+// intentionally omitted. TRA-710 (BB33 F2) made the service uniformly
+// accept-if-matches for read-only fields, so a verbatim GET → PATCH
+// round-trip is valid. Strict client-side generators (Pydantic
+// `extra="forbid"`, Java/Kotlin strict mode) would reject the round-trip
+// at the schema level if `additionalProperties: false` were advertised.
+// The server-side `unknown_field` rejection still fires for genuinely
+// unrecognized properties — the contract lives at the validator, not at
+// the schema declaration.
 var publicWriteSchemas = []string{
 	"asset.CreateAssetWithTagsRequest",
-	"asset.UpdateAssetRequest",
 	"asset.RenameAssetRequest",
 	"location.CreateLocationWithTagsRequest",
-	"location.UpdateLocationRequest",
 	"location.RenameLocationRequest",
 	"shared.TagRequest",
 }
@@ -1245,6 +1257,134 @@ func setIntegerFormatRecursive(s *openapi3.Schema) {
 	}
 }
 
+// isSurrogateIDName reports whether `name` denotes a surrogate primary or
+// foreign key — `id` exactly, or any field ending in `_id` (snake). Used
+// to gate the int64 width promotion in markSurrogateIDsInt64 (TRA-719 /
+// BB35 B7). The public spec uses snake-case throughout; camelCase
+// path-param variants (`userId`, `inviteId`, `jobId`) live on the
+// internal surface only, so a snake-only check covers the customer
+// contract without false positives on unrelated camel names.
+func isSurrogateIDName(name string) bool {
+	return name == "id" || strings.HasSuffix(name, "_id")
+}
+
+// markSurrogateIDsInt64 promotes every integer surrogate PK/FK to
+// `format: int64` and removes the `maximum: 2147483647` upper bound that
+// markIntegerFormats / markQueryIntegerBounds installed by default
+// (TRA-719 / BB35 B7).
+//
+// IDs across the public surface are randomly distributed across the int32
+// namespace. Service-side ID generation stays within int32 for v1 — this
+// is a wire-type declaration only — but pinning the spec width at int64
+// pre-launch avoids the breaking-client change when the namespace
+// eventually outgrows int32 (Java/Kotlin Integer→Long, OpenAPI codegen
+// targets that distinguish int32/int64 in their wrappers).
+//
+// Walks both Components.Schemas properties and operation parameters; runs
+// AFTER markIntegerFormats and markQueryIntegerBounds so it sees the
+// post-default state and can confidently drop the int32 ceiling.
+// Idempotent: re-running on already-promoted fields is a no-op.
+func markSurrogateIDsInt64(doc *openapi3.T) {
+	promote := func(s *openapi3.Schema) {
+		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
+			return
+		}
+		s.Format = "int64"
+		// Drop the int32 ceiling — the wire type already bounds the value
+		// and a literal Max keeps strict generators rejecting valid int64
+		// payloads. Min is left intact (1 for FKs, retains the no-zero-FK
+		// invariant).
+		if s.Max != nil && *s.Max == float64(2147483647) {
+			s.Max = nil
+		}
+	}
+
+	if doc.Components != nil && doc.Components.Schemas != nil {
+		var walk func(s *openapi3.Schema)
+		visited := map[*openapi3.Schema]bool{}
+		walk = func(s *openapi3.Schema) {
+			if s == nil || visited[s] {
+				return
+			}
+			visited[s] = true
+			for propName, propRef := range s.Properties {
+				if propRef == nil || propRef.Value == nil {
+					continue
+				}
+				if isSurrogateIDName(propName) {
+					promote(propRef.Value)
+					// Array-typed FK collections (rare today, but cheap to
+					// cover) carry the integer in Items.
+					if propRef.Value.Items != nil && propRef.Value.Items.Value != nil {
+						promote(propRef.Value.Items.Value)
+					}
+				}
+				walk(propRef.Value)
+			}
+			if s.Items != nil && s.Items.Value != nil {
+				walk(s.Items.Value)
+			}
+			for _, r := range s.AllOf {
+				if r != nil {
+					walk(r.Value)
+				}
+			}
+			for _, r := range s.OneOf {
+				if r != nil {
+					walk(r.Value)
+				}
+			}
+			for _, r := range s.AnyOf {
+				if r != nil {
+					walk(r.Value)
+				}
+			}
+		}
+		for _, ref := range doc.Components.Schemas {
+			if ref != nil {
+				walk(ref.Value)
+			}
+		}
+	}
+
+	if doc.Paths != nil {
+		walkParam := func(p *openapi3.Parameter) {
+			if p == nil || p.Schema == nil || p.Schema.Value == nil {
+				return
+			}
+			if !isSurrogateIDName(p.Name) {
+				return
+			}
+			s := p.Schema.Value
+			if s.Type != nil && s.Type.Is(openapi3.TypeArray) && s.Items != nil && s.Items.Value != nil {
+				promote(s.Items.Value)
+			} else {
+				promote(s)
+			}
+		}
+		for _, item := range doc.Paths.Map() {
+			if item == nil {
+				continue
+			}
+			for _, pRef := range item.Parameters {
+				if pRef != nil {
+					walkParam(pRef.Value)
+				}
+			}
+			for _, op := range item.Operations() {
+				if op == nil {
+					continue
+				}
+				for _, pRef := range op.Parameters {
+					if pRef != nil {
+						walkParam(pRef.Value)
+					}
+				}
+			}
+		}
+	}
+}
+
 // dateTimeExample / dateExample are the RFC 3339 stand-in values inserted
 // onto schema properties whose `format` is `date-time` / `date` and which
 // lack an `example`. Zalando's
@@ -1395,14 +1535,15 @@ var nullableFields = map[string][]string{
 	// semantics and forced a documented Date Fields asymmetry note that
 	// integrators tripped on. Both sides now reject `null` with
 	// invalid_value.
-	// TRA-681: location_external_key / parent_external_key dropped from
-	// UpdateXxxRequest — the natural-key form is read-only on PATCH and is
-	// stripped from the body before validation. The struct fields no longer
-	// exist; the corresponding spec entries go too.
+	// TRA-681: location_external_key dropped from UpdateAssetRequest — the
+	// asset-side natural-key form is read-only on PATCH.
+	// TRA-719 / BB35 B2: parent_external_key restored to
+	// UpdateLocationRequest now that PATCH dispatches it through the same
+	// FK-resolution path as Create.
 	"asset.UpdateAssetRequest":               {"description", "location_id", "valid_to"},
 	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
 	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_to", "tags"},
-	"location.UpdateLocationRequest":         {"description", "parent_id", "valid_to"},
+	"location.UpdateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
 	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
 	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_to", "tags"},
 
@@ -1448,14 +1589,16 @@ var requiredFields = map[string][]string{
 	"report.PublicAssetHistoryItem":    {"event_observed_at", "location_id", "location_external_key", "duration_seconds"},
 
 	// org (post namespace consolidation — TRA-602)
-	"org.OrgMeView": {"id", "name"},
+	// TRA-719 / BB35 A5: scopes + api_key_id are required so integrators
+	// have a stable, typed surface for self-inspection.
+	"org.OrgMeView": {"id", "name", "scopes", "api_key_id"},
 
 	// asset envelopes (post namespace consolidation — TRA-602)
 	"asset.AddTagResponse":      {"data"},
 	"asset.CreateAssetResponse": {"data"},
 	"asset.GetAssetResponse":    {"data"},
 	"asset.ListAssetsResponse":  {"data", "limit", "offset", "total_count"},
-	"asset.RenameAssetResponse": {"data"},
+	"asset.RenameAssetResponse": {"data", "descendant_count_affected"},
 	"asset.UpdateAssetResponse": {"data"},
 
 	// location envelopes (post namespace consolidation — TRA-602)
@@ -2188,11 +2331,20 @@ func annotateReadOnlyTags(doc *openapi3.T) {
 // flat surfaces like DB columns, query params, and logs), so the fix
 // lives in the description where generated client class docstrings carry
 // it forward.
-const tagSchemaDescription = "Polymorphic identifier attached to an asset or location. " +
-	"The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), " +
-	"`ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). " +
-	"The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; " +
-	"`tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds)."
+// TRA-719 / BB35 B6: surface the discriminator semantics, the open-set
+// versioning policy, and the codegen artifact in the schema-level
+// description so generated SDK class docstrings carry the contract to
+// integrators reading them directly.
+const tagSchemaDescription = "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: " +
+	"`RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). " +
+	"The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; " +
+	"`tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). " +
+	"\n\n" +
+	"`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. " +
+	"Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. " +
+	"\n\n" +
+	"**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. " +
+	"That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
 
 const tagTypeFieldDescription = "Discriminator for the polymorphic Tag resource. " +
 	"`rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, " +

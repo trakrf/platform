@@ -77,29 +77,36 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // matching the current resource value is silently normalized out, a
 // differing value returns 400 with code=read_only.
 //
-// description, parent_id, and valid_to all accept JSON null on the wire
+// description, parent_id, parent_external_key, and valid_to all accept JSON null on the wire
 // and clear the field server-side (TRA-614 / BB19 §S1). Each null surfaces
 // here as a Clear* sentinel set by the handler; the underlying pointer
 // remains nil because Go's json decoder treats `null` and "omitted" the
 // same on pointer fields.
 //
-// TRA-699 (BB31 §2): `external_key` and `parent_external_key` are decoded
-// into dedicated pointers but policed by the post-decode echo check in
-// the PATCH handler — accept the value if it matches the current resource
-// state (silent no-op); reject if it differs (400 read_only naming POST
-// /locations/{id}/rename). Neither field carries validation tags because
-// the value is never written by PATCH; the handler nils them out after
-// the echo check passes. `parent_id` remains fully writable.
+// TRA-699 (BB31 §2): `external_key` is decoded into a dedicated pointer
+// but policed by the post-decode echo check in the PATCH handler — accept
+// the value if it matches the current resource state (silent no-op);
+// reject if it differs (400 read_only naming POST /locations/{id}/rename).
+// It carries no validation tag because the value is never written by
+// PATCH; the handler nils it out after the echo check passes.
+//
+// TRA-719 / BB35 B2: `parent_external_key` is now WRITABLE on PATCH,
+// symmetric with CreateLocationRequest. The handler dispatches it through
+// the same FK resolution logic used at create time (resolveParent), so a
+// re-parent via the natural key works without requiring integrators to
+// resolve the surrogate first. `parent_id` and `parent_external_key` are
+// mutually exclusive on a single PATCH; supplying both yields 400
+// ambiguous_fields.
 type UpdateLocationRequest struct {
 	Name        *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,no_control_chars" example:"Warehouse 1"`
 	ParentID    *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
-	// TRA-699 natural-key echo fields. Decoded so the handler can compare
+	// TRA-699 external_key echo field — decoded so the handler can compare
 	// against current state, then nilled before storage update.
 	ExternalKey       *string `json:"external_key" swaggerignore:"true"`
-	ParentExternalKey *string `json:"parent_external_key" swaggerignore:"true"`
+	ParentExternalKey *string `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	// Set by the PATCH handler when the body had an explicit `null` for the
 	// corresponding read-side-nullable field, to request a column-clear
 	// (TRA-614 / TRA-468). Not decoded from JSON directly.

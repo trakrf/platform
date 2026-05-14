@@ -208,10 +208,11 @@ func TestPutLocation_NullClearsReadSideNullableFields(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
 
-	// TRA-686: parent_external_key is no longer a clear-on-null
-	// surrogate — clearing the parent FK is expressed exclusively via
-	// `parent_id: null`. parent_external_key in a PATCH body now returns
-	// 400 read_only (see TestPatchLocation_ParentExternalKeyRejected400).
+	// TRA-686: parent FK clears originally only landed via `parent_id: null`.
+	// TRA-719 / BB35 B2 restored writability to parent_external_key, so
+	// either form now clears the FK (see TestPatchLocation_NaturalKey_*
+	// in patch_natural_key_integration_test.go for the natural-key path).
+	// This test pins the surrogate form's null-clear behavior.
 	body := []byte(`{
 		"description": null,
 		"parent_id": null,
@@ -759,87 +760,14 @@ func TestPatchLocation_ExternalKeyRejected400(t *testing.T) {
 	}
 }
 
-// TRA-686 / BB29 F8: `parent_external_key` in a PATCH body is rejected
-// with 400 read_only pointing at the parent_id surrogate. The natural-key
-// form of the parent FK is owned by the parent row — mutating it via
-// this location's PATCH would silently disconnect the join.
-// TRA-713 / BB33 F3: hint corrected from /rename (which can't re-parent)
-// to parent_id (which can).
-func TestPatchLocation_ParentExternalKeyRejected400(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	parentID := seedLocationRoundTrip(t, pool, orgID, "PARENT-PEK-REJ", "parent")
-	var childID int
-	err := pool.QueryRow(context.Background(), `
-		INSERT INTO trakrf.locations
-		  (org_id, external_key, name, description, parent_location_id, valid_from, is_active)
-		VALUES ($1, 'CHILD-PEK-REJ', 'child-pek-rej', '', $2, $3, true) RETURNING id
-	`, orgID, parentID, time.Now().UTC()).Scan(&childID)
-	require.NoError(t, err)
-
-	handler := NewHandler(store)
-	router := setupLocationRoundTripRouter(handler)
-
-	cases := []struct {
-		name string
-		body string
-	}{
-		{"only parent_external_key", `{"parent_external_key":"OTHER-PARENT"}`},
-		{"parent_external_key null", `{"parent_external_key":null}`},
-		{"parent_id null + parent_external_key set", `{"parent_id":null,"parent_external_key":"OTHER-PARENT"}`},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", childID), bytes.NewReader([]byte(tc.body)))
-			patchReq.Header.Set("Content-Type", "application/json")
-			patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, patchReq)
-
-			require.Equal(t, http.StatusBadRequest, rec.Code,
-				"parent_external_key in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
-
-			var resp struct {
-				Error struct {
-					Type   string `json:"type"`
-					Fields []struct {
-						Field   string `json:"field"`
-						Code    string `json:"code"`
-						Message string `json:"message"`
-					} `json:"fields"`
-				} `json:"error"`
-			}
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Equal(t, "validation_error", resp.Error.Type)
-			require.NotEmpty(t, resp.Error.Fields)
-			// parent_external_key must be among the rejected fields.
-			var found bool
-			for _, f := range resp.Error.Fields {
-				if f.Field == "parent_external_key" {
-					found = true
-					assert.Equal(t, "read_only", f.Code)
-					assert.NotContains(t, f.Message, "/rename",
-						"hint must not point at /rename — that endpoint can't re-parent")
-					assert.Contains(t, f.Message, "parent_id",
-						"hint must direct integrators at parent_id (the surrogate that re-parents)")
-				}
-			}
-			assert.True(t, found, "parent_external_key must appear in fields[]")
-
-			// FK must not have been cleared by a co-rejected parent_id null.
-			var dbParent *int
-			require.NoError(t, pool.QueryRow(context.Background(),
-				`SELECT parent_location_id FROM trakrf.locations WHERE id = $1`, childID).Scan(&dbParent))
-			require.NotNil(t, dbParent, "rejected PATCH must not have cleared parent FK")
-			assert.Equal(t, parentID, *dbParent)
-		})
-	}
-}
+// TRA-719 / BB35 B2: parent_external_key is writable on PATCH —
+// superseding the TRA-686 / TRA-713 read-only behavior tested here
+// previously. New surface lives in patch_natural_key_integration_test.go:
+//
+//   - TestPatchLocation_NaturalKey_ParentExternalKey_ReParents200
+//   - TestPatchLocation_NaturalKey_ParentExternalKey_NotFound400
+//   - TestPatchLocation_NaturalKey_ParentExternalKey_NullClears200
+//   - TestPatchLocation_NaturalKey_ParentBoth400_Ambiguous
 
 // TRA-649 / BB23 F2 (locations parallel surface): POST /api/v1/locations
 // must reject loose date forms on valid_from / valid_to. assets and
