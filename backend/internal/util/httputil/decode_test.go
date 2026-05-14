@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/shared"
@@ -572,6 +573,50 @@ func TestSameJSON(t *testing.T) {
 			got := httputil.SameJSON(json.RawMessage(tc.submitted), tc.expected)
 			if got != tc.want {
 				t.Fatalf("SameJSON(%s, %v) = %v, want %v", tc.submitted, tc.expected, got, tc.want)
+			}
+		})
+	}
+}
+
+// TRA-721: SameJSONInstant compares a peeked datetime JSON value against
+// an expected time.Time / shared.PublicTime as instants, so byte-different
+// RFC 3339 representations of the same moment compare equal. The four
+// BB35 cycle 2 cases (literal Z, +00:00 offset, microsecond fractional,
+// differing instant) ground the test.
+func TestSameJSONInstant(t *testing.T) {
+	instant := shared.NewPublicTime(time.Date(2026, 5, 14, 19, 42, 5, 121000000, time.UTC))
+	cases := []struct {
+		name      string
+		submitted string
+		expected  any
+		want      bool
+	}{
+		// Wire shape the server emits today (PublicTime millisecond Z).
+		{"emit shape literal Z matches", `"2026-05-14T19:42:05.121Z"`, instant, true},
+		// Same instant, +00:00 offset form (Go time.Time MarshalJSON default).
+		{"plus-offset matches", `"2026-05-14T19:42:05.121+00:00"`, instant, true},
+		// Same instant, microsecond fractional (Pydantic-default).
+		{"microsecond fractional matches", `"2026-05-14T19:42:05.121000+00:00"`, instant, true},
+		// Same instant via a non-UTC offset.
+		{"non-utc offset same instant matches", `"2026-05-14T14:42:05.121-05:00"`, instant, true},
+		// Different instant — must still reject.
+		{"different instant differs", `"2026-05-14T19:42:05.122Z"`, instant, false},
+		// Malformed datetime → mismatch (handler escalates to read_only).
+		{"unparseable submitted differs", `"not-a-date"`, instant, false},
+		// Nullable case: nil *PublicTime vs JSON null → match.
+		{"null matches nil PublicTime", `null`, (*shared.PublicTime)(nil), true},
+		// Nullable case: nil *PublicTime vs JSON value → mismatch.
+		{"value vs nil PublicTime differs", `"2026-05-14T19:42:05.121Z"`, (*shared.PublicTime)(nil), false},
+		// Nullable case: non-nil *PublicTime vs JSON null → mismatch.
+		{"null vs non-nil PublicTime differs", `null`, &instant, false},
+		// Nullable case: non-nil *PublicTime vs same instant in alt form → match.
+		{"alt form matches non-nil PublicTime", `"2026-05-14T19:42:05.121000+00:00"`, &instant, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := httputil.SameJSONInstant(json.RawMessage(tc.submitted), tc.expected)
+			if got != tc.want {
+				t.Fatalf("SameJSONInstant(%s, %v) = %v, want %v", tc.submitted, tc.expected, got, tc.want)
 			}
 		})
 	}

@@ -346,6 +346,58 @@ func SameJSON(submitted json.RawMessage, expected any) bool {
 	return bytes.Equal(a, b)
 }
 
+// SameJSONInstant reports whether a peeked raw JSON datetime value
+// represents the same wall-clock instant as expected. Both sides are
+// parsed as RFC 3339 datetimes (any fractional precision, any offset
+// form) before comparison, so byte-different but semantically
+// equivalent representations — "Z" vs "+00:00", three vs six fractional
+// digits — compare equal. JSON null on the submitted side matches an
+// expected that marshals to null (e.g., a nil *PublicTime); a value vs
+// null mix is a mismatch.
+//
+// Used by the PATCH read-only echo check on server-managed datetime
+// fields (TRA-721) so the verbatim GET → PATCH round-trip succeeds for
+// generated clients (openapi-generator Python, openapi-typescript +
+// Date, Go time.Time, etc.) whose typed datetime re-serialization
+// differs byte-for-byte from the server's emit shape but represents the
+// same instant.
+func SameJSONInstant(submitted json.RawMessage, expected any) bool {
+	if submitted == nil {
+		return false
+	}
+	submittedTime, submittedNull, ok := parseInstantJSON(submitted)
+	if !ok {
+		return false
+	}
+	expectedBytes, err := json.Marshal(expected)
+	if err != nil {
+		return false
+	}
+	expectedTime, expectedNull, ok := parseInstantJSON(expectedBytes)
+	if !ok {
+		return false
+	}
+	if submittedNull || expectedNull {
+		return submittedNull && expectedNull
+	}
+	return submittedTime.Equal(expectedTime)
+}
+
+func parseInstantJSON(raw []byte) (t time.Time, isNull bool, ok bool) {
+	var s *string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return time.Time{}, false, false
+	}
+	if s == nil {
+		return time.Time{}, true, true
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, *s)
+	if err != nil {
+		return time.Time{}, false, false
+	}
+	return parsed, false, true
+}
+
 // FieldRejectPolicy is the per-field rule used by RejectFields: if the
 // field is present in the PATCH body, emit a 400 validation_error with
 // the configured code and message.

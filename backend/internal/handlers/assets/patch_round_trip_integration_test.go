@@ -652,6 +652,86 @@ func TestPatchAsset_ServerManagedReadOnly_Differs400(t *testing.T) {
 	}
 }
 
+// TRA-721: read-only datetime fields (created_at, updated_at, deleted_at)
+// must accept any RFC 3339 wire form of the current instant, not just a
+// byte-equal echo. A typed client (Go time.Time, Python Pydantic, etc.)
+// deserializes the GET response into a datetime and re-serializes via the
+// language's default representation; that default rarely matches the
+// server's millisecond-Z emit shape. Pre-TRA-721 those bodies were
+// rejected with 400 read_only, breaking the GET → typed deserialize →
+// PATCH round-trip the operation description promises.
+func TestPatchAsset_DatetimeEncodingVariants_InstantEquality_200(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-RO-INST", "ReadOnlyInstant")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	// GET to pick up the server's current created_at / updated_at on the
+	// wire (millisecond-Z PublicTime shape).
+	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
+	getReq = withRoundTripOrgContext(getReq, orgID)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+	var current struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+
+	parseWireTime := func(s string) time.Time {
+		t.Helper()
+		v, err := time.Parse(time.RFC3339Nano, s)
+		require.NoError(t, err)
+		return v
+	}
+	createdAt := parseWireTime(current.Data["created_at"].(string))
+	updatedAt := parseWireTime(current.Data["updated_at"].(string))
+
+	// Three variants per field: literal Z (server emit shape — control),
+	// "+00:00" UTC offset form (Go time.Time MarshalJSON default), and
+	// microsecond-fractional "+00:00" (Pydantic v2 model_dump default).
+	// All three represent the same instant and must round-trip as 200.
+	variants := func(label string, t0 time.Time) []struct {
+		name, value string
+	} {
+		return []struct{ name, value string }{
+			{label + " literal Z (millis)", t0.UTC().Format("2006-01-02T15:04:05.000Z")},
+			{label + " +00:00 offset form", t0.UTC().Format("2006-01-02T15:04:05.000-07:00")},
+			{label + " microsecond +00:00", t0.UTC().Format("2006-01-02T15:04:05.000000-07:00")},
+		}
+	}
+
+	cases := []struct {
+		field    string
+		variants []struct{ name, value string }
+	}{
+		{"created_at", variants("created_at", createdAt)},
+		{"updated_at", variants("updated_at", updatedAt)},
+	}
+	for _, c := range cases {
+		for _, v := range c.variants {
+			t.Run(v.name, func(t *testing.T) {
+				body := fmt.Sprintf(`{%q:%q}`, c.field, v.value)
+				patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(body)))
+				patchReq.Header.Set("Content-Type", "application/json")
+				patchReq = withRoundTripOrgContext(patchReq, orgID)
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, patchReq)
+				require.Equal(t, http.StatusOK, rec.Code,
+					"%s = %s must be 200 (same instant as server state): %s",
+					c.field, v.value, rec.Body.String())
+			})
+		}
+	}
+}
+
 // TRA-710 (BB33 F2): `tags` follows the uniform accept-if-matches /
 // reject-if-differs rule. A submitted `tags` value that does not match
 // the asset's current tag set is rejected with 400 read_only (pointing at
