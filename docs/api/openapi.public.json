@@ -112,7 +112,7 @@
             "type": "integer"
           },
           "event_observed_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "type": "string"
           },
@@ -169,7 +169,7 @@
       "AssetLocationItem": {
         "properties": {
           "asset_deleted_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "nullable": true,
             "readOnly": true,
@@ -185,7 +185,7 @@
             "type": "integer"
           },
           "asset_last_seen": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "type": "string"
           },
@@ -244,13 +244,13 @@
       "AssetView": {
         "properties": {
           "created_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
           },
           "deleted_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "nullable": true,
             "readOnly": true,
@@ -295,18 +295,18 @@
             "type": "array"
           },
           "updated_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "type": "string"
           },
           "valid_to": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -915,13 +915,13 @@
       "LocationView": {
         "properties": {
           "created_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
           },
           "deleted_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "nullable": true,
             "readOnly": true,
@@ -962,18 +962,18 @@
             "type": "array"
           },
           "updated_at": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "readOnly": true,
             "type": "string"
           },
           "valid_from": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "type": "string"
           },
           "valid_to": {
-            "example": "2025-04-29T12:34:56Z",
+            "example": "2025-04-29T12:34:56.000Z",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -2689,7 +2689,7 @@
             "in": "query",
             "name": "from",
             "schema": {
-              "example": "2025-04-29T12:34:56Z",
+              "example": "2025-04-29T12:34:56.000Z",
               "format": "date-time",
               "type": "string"
             }
@@ -2699,7 +2699,7 @@
             "in": "query",
             "name": "to",
             "schema": {
-              "example": "2025-04-29T12:34:56Z",
+              "example": "2025-04-29T12:34:56.000Z",
               "format": "date-time",
               "type": "string"
             }

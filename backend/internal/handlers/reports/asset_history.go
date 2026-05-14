@@ -20,7 +20,7 @@ const (
 // respondInvalidTimestamp writes a 400 validation_error envelope naming the
 // offending query parameter.
 func respondInvalidTimestamp(w http.ResponseWriter, r *http.Request, field, reqID string) {
-	msg := fmt.Sprintf("Invalid '%s' timestamp; expected RFC 3339, e.g. 2026-04-21T00:00:00Z", field)
+	msg := fmt.Sprintf("Invalid '%s' timestamp; expected RFC 3339, e.g. 2026-04-21T00:00:00.000Z", field)
 	httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{{
 		Field:   field,
 		Code:    "invalid_value",
@@ -102,7 +102,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 
 	filter := report.AssetHistoryFilter{Limit: params.Limit, Offset: params.Offset}
 	if vs, ok := params.Filters["from"]; ok && len(vs) > 0 {
-		t, err := time.Parse(time.RFC3339, vs[0])
+		t, err := time.Parse(time.RFC3339Nano, vs[0])
 		if err != nil {
 			respondInvalidTimestamp(w, r, "from", reqID)
 			return
@@ -110,7 +110,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		filter.From = &t
 	}
 	if vs, ok := params.Filters["to"]; ok && len(vs) > 0 {
-		t, err := time.Parse(time.RFC3339, vs[0])
+		t, err := time.Parse(time.RFC3339Nano, vs[0])
 		if err != nil {
 			respondInvalidTimestamp(w, r, "to", reqID)
 			return

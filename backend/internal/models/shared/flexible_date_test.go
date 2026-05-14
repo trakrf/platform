@@ -221,7 +221,7 @@ func TestFlexibleDate_MarshalJSON(t *testing.T) {
 		{
 			name:     "valid date",
 			date:     FlexibleDate{Time: time.Date(2025, 12, 14, 10, 30, 0, 0, time.UTC)},
-			expected: `"2025-12-14T10:30:00Z"`,
+			expected: `"2025-12-14T10:30:00.000Z"`,
 		},
 		{
 			name:     "zero date",

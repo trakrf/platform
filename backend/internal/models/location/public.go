@@ -28,19 +28,19 @@ import (
 // prefixed `asset_deleted_at` is retained only in cross-resource report
 // shapes (PublicCurrentLocationItem) where disambiguation matters.
 type PublicLocationView struct {
-	ID                int          `json:"id"`
-	ExternalKey       string       `json:"external_key"`
-	Name              string       `json:"name"`
-	Description       *string      `json:"description"`
-	ParentID          *int         `json:"parent_id"`
-	ParentExternalKey *string      `json:"parent_external_key"`
-	IsActive          bool         `json:"is_active"`
-	ValidFrom         time.Time    `json:"valid_from"`
-	ValidTo           *time.Time   `json:"valid_to"`
-	CreatedAt         time.Time    `json:"created_at"`
-	UpdatedAt         time.Time    `json:"updated_at"`
-	DeletedAt         *time.Time   `json:"deleted_at"`
-	Tags              []shared.Tag `json:"tags"`
+	ID                int                `json:"id"`
+	ExternalKey       string             `json:"external_key"`
+	Name              string             `json:"name"`
+	Description       *string            `json:"description"`
+	ParentID          *int               `json:"parent_id"`
+	ParentExternalKey *string            `json:"parent_external_key"`
+	IsActive          bool               `json:"is_active"`
+	ValidFrom         shared.PublicTime  `json:"valid_from"`
+	ValidTo           *shared.PublicTime `json:"valid_to"`
+	CreatedAt         shared.PublicTime  `json:"created_at"`
+	UpdatedAt         shared.PublicTime  `json:"updated_at"`
+	DeletedAt         *shared.PublicTime `json:"deleted_at"`
+	Tags              []shared.Tag       `json:"tags"`
 }
 
 func ToPublicLocationView(l LocationWithParent) PublicLocationView {
@@ -61,11 +61,11 @@ func ToPublicLocationView(l LocationWithParent) PublicLocationView {
 		ParentID:          l.ParentID,
 		ParentExternalKey: l.ParentExternalKey,
 		IsActive:          l.IsActive,
-		ValidFrom:         l.ValidFrom,
-		ValidTo:           l.ValidTo,
-		CreatedAt:         l.CreatedAt,
-		UpdatedAt:         updatedAt,
-		DeletedAt:         l.DeletedAt,
+		ValidFrom:         shared.NewPublicTime(l.ValidFrom),
+		ValidTo:           shared.PublicTimePtr(l.ValidTo),
+		CreatedAt:         shared.NewPublicTime(l.CreatedAt),
+		UpdatedAt:         shared.NewPublicTime(updatedAt),
+		DeletedAt:         shared.PublicTimePtr(l.DeletedAt),
 		Tags:              l.Tags,
 	}
 }
