@@ -43,6 +43,13 @@ func TestToPublicCurrentLocationItem_LiveAsset(t *testing.T) {
 	raw, present := parsed["asset_deleted_at"]
 	assert.True(t, present, "asset_deleted_at must always be present (TRA-610)")
 	assert.Nil(t, raw, "asset_deleted_at must be JSON null for live assets (TRA-610)")
+
+	// TRA-717 / BB34 F2: asset-locations rows emit `asset_last_seen`
+	// (qualifier-prefix matches asset_deleted_at convention).
+	_, alsOk := parsed["asset_last_seen"]
+	assert.True(t, alsOk, "asset_last_seen must be present on asset-locations rows")
+	_, oldOk := parsed["last_seen"]
+	assert.False(t, oldOk, "old `last_seen` field must not be emitted after TRA-717 rename")
 }
 
 // AC11: open dwell period (most recent scan, no later scan) must serialize
@@ -69,6 +76,13 @@ func TestToPublicAssetHistoryItem_OpenPeriodEmitsNullDuration(t *testing.T) {
 	raw, present := parsed["duration_seconds"]
 	assert.True(t, present, "duration_seconds must be present in JSON, not omitted")
 	assert.Nil(t, raw, "duration_seconds must serialize as null on open period")
+
+	// TRA-717 / BB34 F2: history rows emit `event_observed_at`
+	// (qualifier-prefix harmonization across same-primitive endpoints).
+	_, evOk := parsed["event_observed_at"]
+	assert.True(t, evOk, "event_observed_at must be present on history rows")
+	_, oldOk := parsed["timestamp"]
+	assert.False(t, oldOk, "old `timestamp` field must not be emitted after TRA-717 rename")
 }
 
 func TestToPublicAssetHistoryItem_ClosedPeriodEmitsDuration(t *testing.T) {

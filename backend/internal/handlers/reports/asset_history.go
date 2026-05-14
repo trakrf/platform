@@ -50,7 +50,7 @@ type AssetHistoryResponse struct {
 // @Param offset query int false "min 0"    default(0) minimum(0)
 // @Param from query string false "RFC 3339 start timestamp" format(date-time)
 // @Param to query string false "RFC 3339 end timestamp" format(date-time)
-// @Param sort query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(timestamp, -timestamp)
+// @Param sort query []string false "comma-separated; prefix '-' for DESC" collectionFormat(csv) Enums(event_observed_at, -event_observed_at)
 // @Success 200 {object} reports.AssetHistoryResponse
 // @Header  200 {integer} X-RateLimit-Limit     "Steady-state requests/min for this API key"
 // @Header  200 {integer} X-RateLimit-Remaining "Requests remaining before throttling; bounded by X-RateLimit-Limit"
@@ -93,7 +93,7 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 
 	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
 		Filters: []string{"from", "to"},
-		Sorts:   []string{"timestamp"},
+		Sorts:   []string{"event_observed_at"},
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, r, err, reqID)

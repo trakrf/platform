@@ -135,12 +135,15 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 }
 
 // buildCurrentLocationsOrderBy resolves the documented sort enum
-// (last_seen, asset_external_key, location_external_key) into the SQL
+// (asset_last_seen, asset_external_key, location_external_key) into the SQL
 // ORDER BY fragment used by both query strategies. Default order — when
 // no sort is supplied — is most-recent-first by last_seen, with a stable
 // tiebreaker on asset id so pagination is deterministic across pages.
 //
-// "no prefix means ASC" per the public API convention (TRA-641 / BB21 §2.6).
+// The wire-level sort key is `asset_last_seen` per TRA-717 / BB34 F2; the
+// underlying storage column is still `last_seen` on the latest-scan
+// materialization (TRA-641 / BB21 §2.6 carried over). "no prefix means
+// ASC" per the public API convention.
 func buildCurrentLocationsOrderBy(sorts []report.CurrentLocationSort) string {
 	if len(sorts) == 0 {
 		return "ls.last_seen DESC, a.id ASC"
@@ -149,7 +152,7 @@ func buildCurrentLocationsOrderBy(sorts []report.CurrentLocationSort) string {
 	for _, s := range sorts {
 		var col string
 		switch s.Field {
-		case "last_seen":
+		case "asset_last_seen":
 			col = "ls.last_seen"
 		case "asset_external_key":
 			col = "a.external_key"
