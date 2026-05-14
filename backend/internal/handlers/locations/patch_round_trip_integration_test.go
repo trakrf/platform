@@ -993,9 +993,13 @@ func TestPostLocation_EmptyDescription_Rejected400(t *testing.T) {
 	_ = pool
 }
 
-// TRA-675 / BB27 F5: POST with empty body must report missing `name` as
-// code=too_short with min_length, not code=required (errors.mdx contract).
-func TestPostLocation_MissingNameEmitsTooShort(t *testing.T) {
+// TRA-692 §1.2: POST with empty body must report missing `name` as
+// code=required (no min_length param). Length-bearing required fields
+// that are absent from the body are presence-class violations, not
+// length-class — the presence overlay promotes the validator's collapsed
+// too_short back to `required`. Empty strings on the same field stay as
+// too_short. Supersedes TRA-675's "always too_short" framing.
+func TestPostLocation_MissingNameEmitsRequired(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -1029,9 +1033,10 @@ func TestPostLocation_MissingNameEmitsTooShort(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "name", resp.Error.Fields[0].Field)
-	assert.Equal(t, "too_short", resp.Error.Fields[0].Code,
-		"length-bearing required field missing from body must be too_short, not required")
-	assert.EqualValues(t, 1, resp.Error.Fields[0].Params["min_length"])
+	assert.Equal(t, "required", resp.Error.Fields[0].Code,
+		"omitted length-bearing required field must be `required`, not `too_short` (TRA-692 §1.2)")
+	assert.Nil(t, resp.Error.Fields[0].Params,
+		"promoted `required` carries no params")
 
 	_ = pool
 }

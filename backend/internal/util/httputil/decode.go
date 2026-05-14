@@ -555,6 +555,30 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 			// scalar-type-mismatch case (e.g. {"count":"x"} when count is int)
 			// stays as bad_request because no per-field validation pass would
 			// have caught it either.
+			//
+			// A free-form object field (Go `map[...]any`, e.g. `metadata`) is
+			// declared `type: object` in the public spec, so a non-object
+			// value is a schema violation rather than a parse error. Surface
+			// it as validation_error / invalid_value with the JSON-leaf field
+			// name — same shape as the date-format branch below. Without this
+			// the TRA-678 tightening of `Metadata` from `*any` to
+			// `*map[string]any` would route schema-violating bodies through
+			// the generic bad_request fallback and lose `fields[]`.
+			if isMapTarget(typeErr.Type) {
+				field := typeErr.Field
+				if i := strings.LastIndex(field, "."); i >= 0 {
+					field = field[i+1:]
+				}
+				if field == "" {
+					field = "(body)"
+				}
+				WriteValidationError(w, r, requestID, []apierrors.FieldError{{
+					Field:   field,
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("%s must be a JSON object", field),
+				}})
+				return
+			}
 			if isTimeTarget(typeErr.Type) {
 				field := typeErr.Field
 				// encoding/json prefixes the field path with the struct
@@ -636,4 +660,17 @@ func isTimeTarget(t reflect.Type) bool {
 		t = t.Elem()
 	}
 	return t == reflect.TypeOf(time.Time{})
+}
+
+// isMapTarget reports whether t resolves to a Go map (the destination type
+// for spec-declared `type: object` free-form fields like `metadata`).
+// Pointer wrappers (`*map[...]any`) are unwrapped first.
+func isMapTarget(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t.Kind() == reflect.Map
 }
