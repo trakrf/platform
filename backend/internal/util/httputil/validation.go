@@ -32,6 +32,29 @@ func JSONTagNameFunc(f reflect.StructField) string {
 // tree_path but is kept for URL-safety and predictability.)
 var ExternalKeyPattern = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
 
+// ValidateExternalKeyFilterValues enforces ExternalKeyPattern on each
+// caller-supplied value of an external_key-style list filter (e.g.
+// `?external_key=…`, `?location_external_key=…`,
+// `?parent_external_key=…`). Returns the first violating value as a
+// FieldError so list handlers can surface 400 invalid_value at the
+// boundary instead of returning a silent 200-with-empty-data when the
+// caller passes a value that can never match (TRA-713 / BB33 F5+C2).
+//
+// Returns nil if every value satisfies the pattern. The slice may be
+// empty (no filter supplied), which is a no-op success.
+func ValidateExternalKeyFilterValues(field string, values []string) *apierrors.FieldError {
+	for _, v := range values {
+		if !ExternalKeyPattern.MatchString(v) {
+			return &apierrors.FieldError{
+				Field:   field,
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("%s %q must match %s", field, v, ExternalKeyPattern.String()),
+			}
+		}
+	}
+	return nil
+}
+
 // RegisterCustomValidations registers the cross-handler custom tags used by
 // public input schemas. Call after RegisterTagNameFunc so messages emit the
 // JSON field name. Idempotent; cheap enough to run once per handler factory.

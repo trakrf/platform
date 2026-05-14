@@ -107,6 +107,9 @@ func postprocessPublic(doc *openapi3.T) error {
 	rewriteMergePatchContentType(doc)
 	annotateReadOnlyTags(doc)
 	annotateTagPolymorphism(doc)
+	if err := splitTagPolymorphism(doc); err != nil {
+		return fmt.Errorf("split tag polymorphism: %w", err)
+	}
 	if err := hoistInlineEnums(doc); err != nil {
 		return fmt.Errorf("hoist inline enums: %w", err)
 	}
@@ -318,6 +321,18 @@ func rewriteSchemaRefs(doc *openapi3.T, renames map[string]string) {
 		}
 	}
 
+	rewriteMappingRef := func(name string) (string, bool) {
+		stripped, ok := strings.CutPrefix(name, schemaRefPrefix)
+		if !ok {
+			return "", false
+		}
+		newName, found := renames[stripped]
+		if !found {
+			return "", false
+		}
+		return schemaRefPrefix + newName, true
+	}
+
 	visited := map[*openapi3.Schema]bool{}
 	var walk func(ref *openapi3.SchemaRef)
 	walk = func(ref *openapi3.SchemaRef) {
@@ -347,6 +362,18 @@ func rewriteSchemaRefs(doc *openapi3.T, renames map[string]string) {
 			walk(r)
 		}
 		walk(s.Not)
+		// Discriminator mapping refs are plain strings (MappingRef
+		// serialises as text, not as a $ref object) so the SchemaRef
+		// walk above does not reach them. Rewrite them explicitly so
+		// the union's mapping survives publicSchemaRenames.
+		if s.Discriminator != nil {
+			for k, mr := range s.Discriminator.Mapping {
+				if newRef, ok := rewriteMappingRef(mr.Ref); ok {
+					mr.Ref = newRef
+					s.Discriminator.Mapping[k] = mr
+				}
+			}
+		}
 	}
 
 	if doc.Components != nil {
@@ -1830,8 +1857,13 @@ func normalizeArrayQueryParams(doc *openapi3.T) {
 //  1. captured scopes are injected into the operation's description as a
 //     "**Required scope:** `<scope>`" markdown line (human readers).
 //  2. captured scopes are emitted as `x-required-scopes: [<scope>, ...]`
-//     on the operation (machine-readable; TRA-685 F4). Standard codegen
-//     won't auto-surface this, but scope-aware partners can read it.
+//     on the operation (machine-readable; TRA-685 F4 / TRA-712 BB33 F7).
+//     Operations gated by bearer auth but without specific scopes get an
+//     empty array, signalling "any authenticated key works" to codegen
+//     ingestors trying to mint minimal-scope keys — versus absent, which
+//     would be ambiguous about whether scopes were ever considered.
+//     Standard codegen won't auto-surface this, but scope-aware partners
+//     can read it.
 //
 // The pass is idempotent — repeated runs do not double-prepend the marker
 // nor double-write the extension.
@@ -1850,15 +1882,17 @@ func stripBearerScopeArrays(doc *openapi3.T) {
 			if op == nil || op.Security == nil {
 				continue
 			}
-			scopes := stripScopesFromRequirements(op.Security, doc.Components.SecuritySchemes)
-			if len(scopes) == 0 {
+			scopes, hasBearer := stripScopesFromRequirements(op.Security, doc.Components.SecuritySchemes)
+			if !hasBearer {
 				continue
 			}
-			op.Description = injectScopeMarker(op.Description, scopes)
+			if len(scopes) > 0 {
+				op.Description = injectScopeMarker(op.Description, scopes)
+			}
 			if op.Extensions == nil {
 				op.Extensions = map[string]any{}
 			}
-			op.Extensions["x-required-scopes"] = append([]string(nil), scopes...)
+			op.Extensions["x-required-scopes"] = append([]string{}, scopes...)
 		}
 	}
 }
@@ -1866,18 +1900,22 @@ func stripBearerScopeArrays(doc *openapi3.T) {
 // stripScopesFromRequirements walks every SecurityRequirement in the slice,
 // finds entries whose scheme is http or apiKey, captures and zeroes their
 // scope arrays. Returns the captured scope names in declaration order with
-// duplicates removed.
-func stripScopesFromRequirements(reqs *openapi3.SecurityRequirements, schemes openapi3.SecuritySchemes) []string {
+// duplicates removed, plus a flag indicating whether any bearer-like
+// requirement was present at all (regardless of scopes) so callers can
+// emit an empty x-required-scopes for scopeless bearer ops.
+func stripScopesFromRequirements(reqs *openapi3.SecurityRequirements, schemes openapi3.SecuritySchemes) ([]string, bool) {
 	if reqs == nil {
-		return nil
+		return nil, false
 	}
 	var captured []string
 	seen := map[string]bool{}
+	hasBearer := false
 	for _, req := range *reqs {
 		for name, arr := range req {
 			if !isBearerLikeScheme(schemes, name) {
 				continue
 			}
+			hasBearer = true
 			if len(arr) == 0 {
 				continue
 			}
@@ -1890,7 +1928,7 @@ func stripScopesFromRequirements(reqs *openapi3.SecurityRequirements, schemes op
 			req[name] = []string{}
 		}
 	}
-	return captured
+	return captured, hasBearer
 }
 
 // isBearerLikeScheme returns true if the named scheme is one of the OpenAPI

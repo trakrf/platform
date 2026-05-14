@@ -279,6 +279,73 @@ func DecodeJSONStrictWithNullsTolerantAndPresence(r *http.Request, dst any, drop
 	return decodeStrictWithNullsTolerant(r, dst, drop)
 }
 
+// PeekJSONFields reads the request body once, restores r.Body so downstream
+// decoders can re-consume it, and returns the raw json values of any
+// top-level keys named in `fields` that appeared in the body. Keys absent
+// from the body are absent from the result.
+//
+// A non-object body or read failure returns a nil map and no error — the
+// downstream decoder will surface the structural failure. Use this when a
+// handler needs to compare submitted values against current resource state
+// before the decoder strips read-only fields (TRA-710 / BB33 F2).
+func PeekJSONFields(r *http.Request, fields []string) map[string]json.RawMessage {
+	if len(fields) == 0 {
+		return nil
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(body, &raw) != nil {
+		return nil
+	}
+	out := map[string]json.RawMessage{}
+	for _, f := range fields {
+		if v, ok := raw[f]; ok {
+			out[f] = v
+		}
+	}
+	return out
+}
+
+// SameJSON reports whether a peeked raw JSON value matches the JSON
+// serialization of an expected value. Both sides are normalized through
+// unmarshal/marshal so whitespace and map-key order do not produce
+// spurious mismatches. Array element order is preserved — the caller must
+// canonicalize order on fields where element order is not semantically
+// significant.
+//
+// Used by the PATCH read-only echo check (TRA-710 / BB33 F2) to compare a
+// submitted read-only field against the current resource value: matched →
+// silent strip; differed → 400 read_only.
+func SameJSON(submitted json.RawMessage, expected any) bool {
+	if submitted == nil {
+		return false
+	}
+	canonicalize := func(b []byte) ([]byte, error) {
+		var v any
+		if err := json.Unmarshal(b, &v); err != nil {
+			return nil, err
+		}
+		return json.Marshal(v)
+	}
+	expectedBytes, err := json.Marshal(expected)
+	if err != nil {
+		return false
+	}
+	a, err := canonicalize(submitted)
+	if err != nil {
+		return false
+	}
+	b, err := canonicalize(expectedBytes)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(a, b)
+}
+
 // FieldRejectPolicy is the per-field rule used by RejectFields: if the
 // field is present in the PATCH body, emit a 400 validation_error with
 // the configured code and message.
@@ -306,10 +373,11 @@ type FieldRejectPolicy struct {
 // map is a no-op.
 //
 // TRA-664 / BB26 D7 introduced the pre-decode reject for external_key;
-// TRA-686 / BB29 F7+F8 generalized it so PATCH validators can reject
-// `tags` (managed via subresource → invalid_value) alongside
-// `external_key` / `parent_external_key` (managed via rename → read_only)
-// without falling back to the strip-and-silently-ignore default.
+// TRA-686 / BB29 F7+F8 generalized it. TRA-699 (natural-keys) and TRA-710
+// (server-managed read-onlys + tags) subsequently moved fields off this
+// map onto the post-decode echo check, so the policy map is intended for
+// fields whose mere presence is invalid regardless of value. The exported
+// asset/location PublicRejectPatchFields maps are currently empty.
 func RejectFields(w http.ResponseWriter, r *http.Request, requestID string, policies map[string]FieldRejectPolicy) bool {
 	if len(policies) == 0 {
 		return false

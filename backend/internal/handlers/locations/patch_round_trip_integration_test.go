@@ -4,11 +4,12 @@
 // TRA-608 / BB18 §1.7 + TRA-610 / BB18 §1.8: locations counterpart to the
 // assets PATCH round-trip + always-emit tests.
 //
-// TRA-686 / BB29 F7+F8: `tags`, `external_key`, and `parent_external_key`
-// are pre-decode rejected with 400 — `tags` as invalid_value pointing at
-// /locations/{id}/tags, the two natural-key forms as read_only pointing
-// at /locations/{id}/rename. The strip-on-PATCH default (TRA-674 /
-// TRA-681) was reversed because silent-drop hid read-modify-write bugs.
+// TRA-710 (BB33 F2): all read-only fields on PATCH follow the uniform
+// accept-if-matches / reject-if-differs rule — server-managed (id,
+// created_at, updated_at, deleted_at), tags, and the natural-key
+// references (external_key, parent_external_key). Pre-TRA-710 the four
+// timestamps+id were silent-stripped regardless of value (TRA-608) and
+// tags was pre-decode rejected as invalid_value (TRA-686).
 
 package locations
 
@@ -88,14 +89,11 @@ func TestPutLocation_GETBodyRoundTrip_Succeeds(t *testing.T) {
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
-	// Mutate name and PATCH back. tags, external_key, and
-	// parent_external_key are pre-decode rejected (TRA-686) and must be
-	// stripped client-side before re-sending. The round-trip-safe
-	// read-only fields stay on the body to exercise the silent-drop list.
+	// Mutate name and PATCH back with the entire GET body intact — TRA-710
+	// normalizes matching read-only fields out (tags, external_key,
+	// parent_external_key, id, created_at, updated_at, deleted_at), no
+	// client-side scrub required.
 	getResp.Data["name"] = "Warehouse 1 (renamed)"
-	delete(getResp.Data, "tags")
-	delete(getResp.Data, "external_key")
-	delete(getResp.Data, "parent_external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -467,11 +465,12 @@ func TestPostLocation_GoodExternalKeyPattern_Accepted(t *testing.T) {
 	_ = pool
 }
 
-// TRA-619 finding 1 (locations parallel surface): a PUT body that contains
-// only read-only fields decodes to an empty UpdateLocationRequest after the
-// readOnly drop. Previous behavior was a "no fields to update" error
-// surfaced as 500 internal_error. Expected: 200 with the unchanged record.
-func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
+// TRA-619 finding 1 / TRA-710 (BB33 F2): a PATCH body that contains only
+// read-only fields whose values match the current resource must succeed
+// with 200. Pre-TRA-710 the four server-managed timestamps + surrogate id
+// were silent-stripped regardless of value; now they follow the
+// accept-if-matches, reject-if-differs rule.
+func TestPutLocation_OnlyReadOnlyFields_MatchingCurrent_Returns200NoOp(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -484,13 +483,28 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
 
+	// GET the current resource so we can echo back its server-managed
+	// timestamps verbatim — the matching path requires real values.
+	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/locations/%d", id), nil)
+	getReq = withLocationRoundTripOrgContext(getReq, orgID)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+	var current struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+	cur := current.Data
+
 	cases := []struct {
 		name string
 		body string
 	}{
-		{"only id", `{"id":999}`},
-		{"only created_at", `{"created_at":"2020-01-01T00:00:00Z"}`},
-		{"only updated_at", `{"updated_at":"2020-01-01T00:00:00Z"}`},
+		{"only id matches", fmt.Sprintf(`{"id":%d}`, id)},
+		{"only created_at matches", fmt.Sprintf(`{"created_at":%q}`, cur["created_at"])},
+		{"only updated_at matches", fmt.Sprintf(`{"updated_at":%q}`, cur["updated_at"])},
+		{"only deleted_at matches", `{"deleted_at":null}`},
+		{"only tags matches (empty)", `{"tags":[]}`},
 		{"empty object", `{}`},
 	}
 	for _, tc := range cases {
@@ -502,7 +516,7 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 			router.ServeHTTP(putRec, patchReq)
 
 			require.Equal(t, http.StatusOK, putRec.Code,
-				"empty effective body must be no-op 200 (got %d): %s", putRec.Code, putRec.Body.String())
+				"matching read-only body must be 200 (got %d): %s", putRec.Code, putRec.Body.String())
 
 			var resp struct {
 				Data map[string]any `json:"data"`
@@ -514,10 +528,65 @@ func TestPutLocation_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}
 }
 
-// TRA-686 / BB29 F7: `tags` in a PATCH body is rejected with 400
-// invalid_value pointing at /locations/{id}/tags. Silent-drop hid bugs in
-// read-modify-write integrations.
-func TestPatchLocation_TagsRejected400(t *testing.T) {
+// TRA-710 (BB33 F2): differing values for the server-managed read-only
+// fields (id, created_at, updated_at, deleted_at) return 400 read_only.
+// Pre-TRA-710 all four were silent-stripped regardless of value.
+func TestPatchLocation_ServerManagedReadOnly_Differs400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-RO-DIFF", "ReadOnlyDiff")
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	cases := []struct {
+		name  string
+		body  string
+		field string
+	}{
+		{"id differs", fmt.Sprintf(`{"id":%d}`, id+99999), "id"},
+		{"created_at differs", `{"created_at":"2020-01-01T00:00:00Z"}`, "created_at"},
+		{"updated_at differs", `{"updated_at":"2020-01-01T00:00:00Z"}`, "updated_at"},
+		{"deleted_at differs (non-null vs null current)", `{"deleted_at":"2020-01-01T00:00:00Z"}`, "deleted_at"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(tc.body)))
+			patchReq.Header.Set("Content-Type", "application/json")
+			patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, patchReq)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"differing read-only field must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+		})
+	}
+}
+
+// TRA-710 (BB33 F2): `tags` follows the uniform accept-if-matches /
+// reject-if-differs rule on locations. Pre-TRA-710 any `tags` presence
+// was rejected with 400 invalid_value regardless of value.
+func TestPatchLocation_TagsDiffersFromCurrent_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -534,10 +603,9 @@ func TestPatchLocation_TagsRejected400(t *testing.T) {
 		name string
 		body string
 	}{
-		{"empty array", `{"tags":[]}`},
-		{"tags with values", `{"tags":[{"key":"foo","value":"bar"}]}`},
-		{"tags alongside name", `{"name":"TagsRej renamed","tags":[]}`},
-		{"tags null", `{"tags":null}`},
+		{"tags null vs current []", `{"tags":null}`},
+		{"tags with values vs current []", `{"tags":[{"tag_type":"rfid","value":"bar"}]}`},
+		{"tags with values alongside name", `{"name":"TagsRej renamed","tags":[{"tag_type":"rfid","value":"bar"}]}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -548,7 +616,7 @@ func TestPatchLocation_TagsRejected400(t *testing.T) {
 			router.ServeHTTP(rec, patchReq)
 
 			require.Equal(t, http.StatusBadRequest, rec.Code,
-				"tags in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
+				"differing tags in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
 
 			var resp struct {
 				Error struct {
@@ -564,7 +632,7 @@ func TestPatchLocation_TagsRejected400(t *testing.T) {
 			assert.Equal(t, "validation_error", resp.Error.Type)
 			require.Len(t, resp.Error.Fields, 1)
 			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
 			assert.Contains(t, resp.Error.Fields[0].Message,
 				"POST /api/v1/locations/{location_id}/tags")
 
@@ -574,6 +642,61 @@ func TestPatchLocation_TagsRejected400(t *testing.T) {
 			assert.Equal(t, 0, tagCount, "rejected PATCH must not have mutated tags")
 		})
 	}
+}
+
+// TRA-710 (BB33 F2): matching tags echo silently strips and returns 200.
+// Mirrors TestPatchAsset_TagsMatchesCurrent_200.
+func TestPatchLocation_TagsMatchesCurrent_200(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	t.Run("empty-tags echo", func(t *testing.T) {
+		id := seedLocationRoundTrip(t, pool, orgID, "LOC-TAGS-MATCH-EMPTY", "TagsMatchEmpty")
+		patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(`{"tags":[]}`)))
+		patchReq.Header.Set("Content-Type", "application/json")
+		patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, patchReq)
+		require.Equal(t, http.StatusOK, rec.Code,
+			"matching empty tags must be 200: %s", rec.Body.String())
+	})
+
+	t.Run("populated-tags echo", func(t *testing.T) {
+		id := seedLocationRoundTrip(t, pool, orgID, "LOC-TAGS-MATCH-FULL", "TagsMatchFull")
+		var tagID int
+		require.NoError(t, pool.QueryRow(context.Background(), `
+			INSERT INTO trakrf.tags (org_id, type, value, location_id, is_active)
+			VALUES ($1, 'rfid', 'V-LOC-MATCH', $2, true) RETURNING id
+		`, orgID, id).Scan(&tagID))
+
+		getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/locations/%d", id), nil)
+		getReq = withLocationRoundTripOrgContext(getReq, orgID)
+		getRec := httptest.NewRecorder()
+		router.ServeHTTP(getRec, getReq)
+		require.Equal(t, http.StatusOK, getRec.Code)
+		var getResp struct {
+			Data map[string]any `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &getResp))
+		tagsRaw, err := json.Marshal(getResp.Data["tags"])
+		require.NoError(t, err)
+
+		patchBody := []byte(fmt.Sprintf(`{"tags":%s}`, string(tagsRaw)))
+		patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(patchBody))
+		patchReq.Header.Set("Content-Type", "application/json")
+		patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, patchReq)
+		require.Equal(t, http.StatusOK, rec.Code,
+			"verbatim GET tags echo must be 200: %s", rec.Body.String())
+	})
 }
 
 // TRA-686 / BB29 F8: `external_key` in a PATCH body is rejected with 400
@@ -637,9 +760,11 @@ func TestPatchLocation_ExternalKeyRejected400(t *testing.T) {
 }
 
 // TRA-686 / BB29 F8: `parent_external_key` in a PATCH body is rejected
-// with 400 read_only pointing at the rename endpoint. The natural-key
+// with 400 read_only pointing at the parent_id surrogate. The natural-key
 // form of the parent FK is owned by the parent row — mutating it via
 // this location's PATCH would silently disconnect the join.
+// TRA-713 / BB33 F3: hint corrected from /rename (which can't re-parent)
+// to parent_id (which can).
 func TestPatchLocation_ParentExternalKeyRejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -698,8 +823,10 @@ func TestPatchLocation_ParentExternalKeyRejected400(t *testing.T) {
 				if f.Field == "parent_external_key" {
 					found = true
 					assert.Equal(t, "read_only", f.Code)
-					assert.Contains(t, f.Message,
-						"POST /api/v1/locations/{location_id}/rename")
+					assert.NotContains(t, f.Message, "/rename",
+						"hint must not point at /rename — that endpoint can't re-parent")
+					assert.Contains(t, f.Message, "parent_id",
+						"hint must direct integrators at parent_id (the surrogate that re-parents)")
 				}
 			}
 			assert.True(t, found, "parent_external_key must appear in fields[]")

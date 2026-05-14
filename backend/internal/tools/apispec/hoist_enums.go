@@ -46,22 +46,16 @@ type enumSource struct {
 }
 
 // inlineEnumExtractions enumerates every inline enum currently emitted
-// by swag. Audit (2026-05-13) found only these four sites; a top-level
-// audit on every spec regeneration is unnecessary as long as
-// hoistInlineEnums errors when a configured Source does not contain an
-// enum.
+// by swag that needs hoisting to a named top-level schema. shared.Tag
+// and shared.TagRequest used to surface their tag_type enum here, but
+// splitTagPolymorphism (TRA-714) runs first and rewrites each parent
+// into a discriminated union; the post-split subtypes (RfidTag /
+// BleTag / BarcodeTag and the request equivalents) each carry their
+// own single-value tag_type enum inline, which is the idiomatic
+// discriminator shape and produces distinct generated constant names
+// per subtype so the Go-codegen sibling collision that drove the
+// original hoist (TRA-691) does not apply.
 var inlineEnumExtractions = []inlineEnumExtraction{
-	{
-		Target: "TagType",
-		Sources: []enumSource{
-			{Schema: "shared.Tag", Property: []string{"tag_type"}},
-			{Schema: "shared.TagRequest", Property: []string{"tag_type"}},
-		},
-		// TagType already carries the polymorphism description from
-		// annotateTagPolymorphism, which runs before hoistInlineEnums and
-		// plants it on the inline enum. Leaving Description empty here
-		// keeps that single source of truth.
-	},
 	{
 		Target:      "ErrorType",
 		Description: "Machine-readable error envelope discriminator. Pairs with `title` and `detail` to drive client-side branching on a stable token (per RFC 9457).",
@@ -80,9 +74,19 @@ var inlineEnumExtractions = []inlineEnumExtraction{
 
 // hoistInlineEnums lifts every site listed in inlineEnumExtractions
 // into a named top-level schema and replaces the inline definitions
-// with $ref. When a source carries `nullable` or `default` (which
-// cannot live next to a bare $ref in OpenAPI 3.0), the replacement is
-// wrapped in an allOf so the constraint is preserved on the property.
+// with bare $ref. `nullable` and `default` from any source are merged
+// onto the canonical (hoisted) schema rather than left as siblings of
+// the $ref — siblings of $ref/allOf trip OpenAPI 3.0 strict readers
+// (Pydantic-strict Python codegen emits a serialization warning on
+// every model use; TRA-712 / BB33 F6).
+//
+// Tradeoff: nullable/default declared on the shared schema applies to
+// every site that refs it. For TagType this means Tag.tag_type — which
+// the server never returns null and treats as required — admits null
+// per the spec. Documentation looseness is acceptable pre-launch; the
+// alternative is a separate per-site schema, which re-introduces the
+// enum-constant collision in Go codegen that the hoist exists to
+// prevent (TRA-691).
 //
 // Must run before renamePublicSpec so the source schema names (which
 // still carry their dotted Go-package prefix) resolve.
@@ -140,6 +144,15 @@ func hoistOneEnum(doc *openapi3.T, ext inlineEnumExtraction) error {
 				} else if !enumValuesEqual(canonical.Enum, next.Value.Enum) {
 					return fmt.Errorf("apispec: hoistInlineEnums: enum values diverge across sources for target %s", ext.Target)
 				}
+				// Merge nullable/default from this source onto canonical so
+				// the constraint lives inside the referenced schema instead
+				// of becoming a $ref sibling at the call site.
+				if next.Value.Nullable {
+					canonical.Nullable = true
+				}
+				if next.Value.Default != nil && canonical.Default == nil {
+					canonical.Default = next.Value.Default
+				}
 				break
 			}
 			curRef = next
@@ -157,24 +170,7 @@ func hoistOneEnum(doc *openapi3.T, ext inlineEnumExtraction) error {
 	refPath := "#/components/schemas/" + ext.Target
 
 	for _, s := range sites {
-		old := s.ref.Value
-		needsWrapper := old.Nullable || old.Default != nil
-		if needsWrapper {
-			// OpenAPI 3.0 requires `type` to be present alongside `nullable`
-			// (openapi-typescript's redocly validator enforces this strictly;
-			// other generators do not, but they don't reject the redundancy
-			// either). Copy the underlying type onto the wrapper so the spec
-			// validates cleanly across all three codegen targets.
-			wrapped := &openapi3.Schema{
-				Type:     canonical.Type,
-				AllOf:    openapi3.SchemaRefs{{Ref: refPath}},
-				Nullable: old.Nullable,
-				Default:  old.Default,
-			}
-			s.owner.Properties[s.key] = &openapi3.SchemaRef{Value: wrapped}
-		} else {
-			s.owner.Properties[s.key] = &openapi3.SchemaRef{Ref: refPath}
-		}
+		s.owner.Properties[s.key] = &openapi3.SchemaRef{Ref: refPath}
 	}
 	return nil
 }

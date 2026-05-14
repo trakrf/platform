@@ -330,6 +330,112 @@
         ],
         "type": "object"
       },
+      "BarcodeTag": {
+        "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
+        "properties": {
+          "id": {
+            "format": "int32",
+            "readOnly": true,
+            "type": "integer"
+          },
+          "tag_type": {
+            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
+            "enum": [
+              "barcode"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tag_type",
+          "value"
+        ],
+        "type": "object"
+      },
+      "BarcodeTagRequest": {
+        "additionalProperties": false,
+        "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
+        "properties": {
+          "tag_type": {
+            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
+            "enum": [
+              "barcode"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag_type",
+          "value"
+        ],
+        "type": "object"
+      },
+      "BleTag": {
+        "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
+        "properties": {
+          "id": {
+            "format": "int32",
+            "readOnly": true,
+            "type": "integer"
+          },
+          "tag_type": {
+            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
+            "enum": [
+              "ble"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tag_type",
+          "value"
+        ],
+        "type": "object"
+      },
+      "BleTagRequest": {
+        "additionalProperties": false,
+        "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
+        "properties": {
+          "tag_type": {
+            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
+            "enum": [
+              "ble"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag_type",
+          "value"
+        ],
+        "type": "object"
+      },
       "CreateAssetResponse": {
         "properties": {
           "data": {
@@ -969,7 +1075,7 @@
         ],
         "type": "object"
       },
-      "Tag": {
+      "RfidTag": {
         "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
         "properties": {
           "id": {
@@ -978,7 +1084,11 @@
             "type": "integer"
           },
           "tag_type": {
-            "$ref": "#/components/schemas/TagType"
+            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
+            "enum": [
+              "rfid"
+            ],
+            "type": "string"
           },
           "value": {
             "maxLength": 255,
@@ -994,18 +1104,15 @@
         ],
         "type": "object"
       },
-      "TagRequest": {
+      "RfidTagRequest": {
         "additionalProperties": false,
         "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
         "properties": {
           "tag_type": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/TagType"
-              }
+            "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
+            "enum": [
+              "rfid"
             ],
-            "default": "rfid",
-            "nullable": true,
             "type": "string"
           },
           "value": {
@@ -1016,20 +1123,54 @@
           }
         },
         "required": [
+          "tag_type",
           "value"
         ],
         "type": "object"
       },
-      "TagType": {
-        "description": "Discriminator for the polymorphic Tag resource. `rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, and `barcode` denotes a 1D/2D barcode. Together with `value`, this forms the natural key — the same `value` may exist under different `tag_type`s without conflict.",
-        "enum": [
-          "rfid",
-          "ble",
-          "barcode"
-        ],
-        "example": "rfid",
-        "type": "string",
-        "x-extensible-enum": true
+      "Tag": {
+        "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
+        "discriminator": {
+          "mapping": {
+            "barcode": "#/components/schemas/BarcodeTag",
+            "ble": "#/components/schemas/BleTag",
+            "rfid": "#/components/schemas/RfidTag"
+          },
+          "propertyName": "tag_type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RfidTag"
+          },
+          {
+            "$ref": "#/components/schemas/BleTag"
+          },
+          {
+            "$ref": "#/components/schemas/BarcodeTag"
+          }
+        ]
+      },
+      "TagRequest": {
+        "description": "Polymorphic identifier attached to an asset or location. The `tag_type` discriminator selects one of three kinds: `rfid` (RFID transponder), `ble` (Bluetooth Low Energy beacon), or `barcode` (1D/2D barcode). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three kinds; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds).",
+        "discriminator": {
+          "mapping": {
+            "barcode": "#/components/schemas/BarcodeTagRequest",
+            "ble": "#/components/schemas/BleTagRequest",
+            "rfid": "#/components/schemas/RfidTagRequest"
+          },
+          "propertyName": "tag_type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RfidTagRequest"
+          },
+          {
+            "$ref": "#/components/schemas/BleTagRequest"
+          },
+          {
+            "$ref": "#/components/schemas/BarcodeTagRequest"
+          }
+        ]
       },
       "UpdateAssetRequest": {
         "additionalProperties": false,
@@ -2211,7 +2352,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Round-trip-safe server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`) are silently stripped from the body. The natural-key reference fields `external_key`, `location_id`, and `location_external_key` are read-only on PATCH: a value matching the current resource state is silently stripped (so a verbatim GET → PATCH round-trip succeeds), and a differing value returns 400 with `code: read_only` naming the correct write path. Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `location_id`, `location_external_key`). Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
         "operationId": "updateAsset",
         "parameters": [
           {
@@ -4704,7 +4845,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Round-trip-safe server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`) are silently stripped from the body. The natural-key reference fields `external_key` and `parent_external_key` are read-only on PATCH: a value matching the current resource state is silently stripped (so a verbatim GET → PATCH round-trip succeeds), and a differing value returns 400 with `code: read_only` naming the correct write path. To re-parent via PATCH send `parent_id` (surrogate; `null` clears the FK); to re-parent via natural key use POST /locations/{location_id}/rename. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `parent_external_key`). To re-parent send `parent_id` (surrogate; `null` clears the FK) — `parent_external_key` is read-only via PATCH and the /rename endpoint cannot re-parent. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
         "operationId": "updateLocation",
         "parameters": [
           {
@@ -6846,7 +6987,8 @@
         "summary": "Get the org associated with the authenticated API key",
         "tags": [
           "orgs"
-        ]
+        ],
+        "x-required-scopes": []
       }
     },
     "/api/v1/reports/asset-locations": {

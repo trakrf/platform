@@ -21,8 +21,11 @@ func stringSchema(enum []any, nullable bool, deflt any) *openapi3.SchemaRef {
 // TestHoistInlineEnums_LiftsDuplicateSiblingEnum is the TRA-691 regression
 // guard: two sibling schemas declare an inline enum on the same property
 // name, which makes openapi-generator's Go target emit a collision
-// compile error. After hoisting, both sites become $ref to a single
-// named component.
+// compile error. After hoisting, every site becomes a bare $ref to the
+// named component; nullable/default carried by any source are merged
+// onto the canonical schema (TRA-712 / BB33 F6 — keeping them as
+// siblings of $ref/allOf produces the OAS-3.0 allOf-with-siblings form
+// that Pydantic-strict Python codegen rejects).
 func TestHoistInlineEnums_LiftsDuplicateSiblingEnum(t *testing.T) {
 	doc := &openapi3.T{
 		OpenAPI: "3.0.0",
@@ -63,23 +66,18 @@ func TestHoistInlineEnums_LiftsDuplicateSiblingEnum(t *testing.T) {
 	require.NotNil(t, tagType.Value)
 	assert.True(t, tagType.Value.Type.Is(openapi3.TypeString))
 	assert.Equal(t, []any{"rfid", "ble", "barcode"}, tagType.Value.Enum)
+	// nullable/default from the TagRequest source are merged onto the
+	// canonical so the call sites stay sibling-free.
+	assert.True(t, tagType.Value.Nullable, "canonical inherits nullable from any source")
+	assert.Equal(t, "rfid", tagType.Value.Default, "canonical inherits default from any source")
 
 	tagSite := doc.Components.Schemas["shared.Tag"].Value.Properties["tag_type"]
-	assert.Equal(t, "#/components/schemas/TagType", tagSite.Ref,
-		"sources without nullable/default get a bare $ref")
+	assert.Equal(t, "#/components/schemas/TagType", tagSite.Ref, "bare $ref at the call site")
 	assert.Nil(t, tagSite.Value, "bare $ref must not carry an inline value")
 
 	reqSite := doc.Components.Schemas["shared.TagRequest"].Value.Properties["tag_type"]
-	require.NotNil(t, reqSite.Value, "nullable/default site must be wrapped in allOf so the extras survive")
-	require.Len(t, reqSite.Value.AllOf, 1)
-	assert.Equal(t, "#/components/schemas/TagType", reqSite.Value.AllOf[0].Ref)
-	assert.True(t, reqSite.Value.Nullable, "nullable must survive on the allOf wrapper")
-	assert.Equal(t, "rfid", reqSite.Value.Default, "default must survive on the allOf wrapper")
-	// OAS 3.0 requires `type` alongside `nullable`; openapi-typescript's
-	// redocly validator enforces this. The wrapper must echo the underlying
-	// type from the hoisted schema.
-	require.NotNil(t, reqSite.Value.Type, "wrapper must carry type alongside nullable for OAS 3.0 compliance")
-	assert.True(t, reqSite.Value.Type.Is(openapi3.TypeString))
+	assert.Equal(t, "#/components/schemas/TagType", reqSite.Ref, "bare $ref at the call site")
+	assert.Nil(t, reqSite.Value, "bare $ref must not carry sibling nullable/default/type")
 }
 
 // TestHoistInlineEnums_NestedPath walks into nested property paths

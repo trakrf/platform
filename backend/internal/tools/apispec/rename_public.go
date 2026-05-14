@@ -74,9 +74,17 @@ var publicSchemaRenames = map[string]string{
 	"errors.ErrorResponse": "ErrorResponse",
 	"errors.FieldError":    "FieldError",
 
-	// shared
-	"shared.Tag":        "Tag",
-	"shared.TagRequest": "TagRequest",
+	// shared — Tag and TagRequest are discriminated unions after
+	// splitTagPolymorphism (TRA-714); the subtype renames track the
+	// post-split components.
+	"shared.Tag":               "Tag",
+	"shared.RfidTag":           "RfidTag",
+	"shared.BleTag":            "BleTag",
+	"shared.BarcodeTag":        "BarcodeTag",
+	"shared.TagRequest":        "TagRequest",
+	"shared.RfidTagRequest":    "RfidTagRequest",
+	"shared.BleTagRequest":     "BleTagRequest",
+	"shared.BarcodeTagRequest": "BarcodeTagRequest",
 }
 
 // publicOperationIdRenames maps the dotted operationIds swag emits

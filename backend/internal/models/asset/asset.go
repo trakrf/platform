@@ -39,20 +39,30 @@ type CreateAssetRequest struct {
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicAssetView that the PATCH
-// handler silently strips from the request body before strict decoding so a
-// verbatim GET → PATCH round-trip succeeds (TRA-608 / BB18 §1.7). Only the
-// round-trip-safe, server-owned timestamps and surrogate IDs are on this
-// list. Fields not listed here (typos, write-only fields off this resource)
-// still produce a 400.
+// handler drops from the request body before strict decoding so the
+// strict-decode unknown-field check does not trip on them.
+//
+// TRA-710 (BB33 F2): the four server-managed fields on this list (id,
+// created_at, updated_at, deleted_at) are policed by the post-decode echo
+// check in the PATCH handler under the uniform accept-if-matches,
+// reject-if-differs rule. Same shape as the natural-key reference fields
+// (TRA-699): a verbatim GET → PATCH round-trip succeeds (the submitted
+// value matches current; the field is normalized out), while a value
+// differing from the current resource state returns 400 with code=read_only.
+// Pre-TRA-710 these four were silent-stripped regardless of value, which
+// hid bugs where integrators tried to mutate id / created_at by setting
+// it explicitly. The strip-from-decode step remains because the wire
+// fields are not decoded into UpdateAssetRequest at all (no Go destination
+// for them); the echo check fires in addition, against the raw body.
 //
 // TRA-699 (BB31 §2): `external_key`, `location_external_key`, and
-// `location_id` are NOT on this list. They are policed by the post-decode
-// natural-key echo check in the PATCH handler — accept the value if it
-// matches the current resource state (silent no-op); reject if it differs
-// (400 read_only naming the proper write path). The previous behaviors
-// (TRA-686 F7+F8 pre-decode reject on external_key, TRA-681 silent strip
-// on location_external_key, TRA-614 writable location_id with null-clear)
-// are all superseded by the uniform rule.
+// `location_id` are NOT on this list. They are policed by the same
+// post-decode echo check via dedicated decode targets.
+//
+// TRA-710 also moved `tags` off PublicRejectPatchFields onto the echo
+// check (same rule). `tags` is not in this list because it is decoded
+// directly into PublicAssetView.Tags-style structures on the read path
+// only; the handler captures the raw body value separately.
 //
 // Source of truth for the corresponding spec annotations:
 // internal/tools/apispec/postprocess.go readOnlyFields["asset.PublicAssetView"]
@@ -60,11 +70,11 @@ type CreateAssetRequest struct {
 var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_at"}
 
 // UpdateAssetRequest is the PATCH body (RFC 7396 JSON Merge Patch). The handler decodes it via
-// DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields, so
-// PublicAssetView's round-trip-safe read-only fields (id, created_at,
-// updated_at, deleted_at) are silently stripped on a verbatim GET → PATCH
-// round-trip. `tags` is pre-decode rejected with 400 invalid_value
-// (managed via /assets/{id}/tags) — see PublicRejectPatchFields.
+// DecodeJSONStrictWithNullsTolerant against PublicReadOnlyFields. TRA-710
+// (BB33 F2): `id`, `created_at`, `updated_at`, `deleted_at`, and `tags`
+// are dropped from the decode and policed by the post-decode echo check —
+// matching the current resource value is silently normalized out, a
+// differing value returns 400 with code=read_only.
 //
 // description and valid_to accept JSON null on the wire and clear the
 // field server-side (TRA-614 / BB19 §S1). Each null surfaces here as a
@@ -106,25 +116,22 @@ type UpdateAssetRequest struct {
 // PublicRejectPatchFields names the JSON keys that PATCH /api/v1/assets/{id}
 // rejects pre-decode with 400 validation_error.
 //
-//   - `tags` is managed via the dedicated /assets/{asset_id}/tags
-//     subresource (POST + DELETE). On PATCH a `tags` body field is rejected
-//     with code=invalid_value pointing at the subresource endpoints. The
-//     silent-drop alternative hid bugs in read-modify-write integrations
-//     where callers reused the GET body shape — the asset's tag set looked
-//     unchanged, the server quietly ignored the write (TRA-686 / BB29 F7).
+// TRA-710 (BB33 F2): `tags` moved off this map. It is now policed by the
+// post-decode echo check in the PATCH handler under the uniform
+// accept-if-matches, reject-if-differs rule (same as the natural-key
+// reference fields). Same end-state for a caller who tries to mutate
+// (400 with read_only naming the subresource); the new shape additionally
+// accepts a verbatim GET → PATCH echo as a silent no-op rather than
+// 400-ing it.
 //
-// TRA-699 (BB31 §2): `external_key` moved off this map. It is now policed
-// by the post-decode natural-key echo check in the PATCH handler under the
-// uniform accept-if-matches, reject-if-differs rule. Same end-state for a
-// caller who tries to mutate (400 with read_only naming /rename); the new
-// shape additionally accepts a verbatim GET → PATCH echo as a silent
-// no-op rather than 400-ing it.
-var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{
-	"tags": {
-		Code:    "invalid_value",
-		Message: "tags are managed via POST /api/v1/assets/{asset_id}/tags and DELETE /api/v1/assets/{asset_id}/tags/{tag_id}",
-	},
-}
+// TRA-699 (BB31 §2): `external_key` moved off this map under the same
+// rule.
+//
+// Kept exported as a (currently empty) map so existing handler call sites
+// remain compile-stable; future fields that need pre-decode reject (i.e.
+// fields whose mere presence is invalid regardless of value) can be added
+// here.
+var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{}
 
 // RenameAssetRequest is the body of POST /api/v1/assets/{asset_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation
