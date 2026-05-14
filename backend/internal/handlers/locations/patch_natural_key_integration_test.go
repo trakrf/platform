@@ -180,8 +180,12 @@ func TestPatchLocation_NaturalKey_ParentExternalKey_Differs400(t *testing.T) {
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "parent_external_key", resp.Error.Fields[0].Field)
 	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
-	assert.Contains(t, resp.Error.Fields[0].Message, "/rename",
-		"detail must name the rename endpoint (re-parent path)")
+	// TRA-713 / BB33 F3: hint must direct integrators at parent_id (the
+	// surrogate that actually re-parents); /rename only renames external_key.
+	assert.NotContains(t, resp.Error.Fields[0].Message, "/rename",
+		"hint must not point at /rename — that endpoint can't re-parent")
+	assert.Contains(t, resp.Error.Fields[0].Message, "parent_id",
+		"hint must name parent_id (the surrogate that re-parents)")
 }
 
 // TRA-699 §2.F: parent_id remains writable on PATCH (the natural-key form

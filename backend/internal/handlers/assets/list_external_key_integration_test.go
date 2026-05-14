@@ -178,3 +178,73 @@ func TestListAssets_ExternalKey_RepeatedValues_AnyOf(t *testing.T) {
 	assert.Contains(t, keys, "C")
 	assert.Equal(t, 2, resp.TotalCount)
 }
+
+// TRA-713 / BB33 F5+C2: an external_key filter value that contains a
+// slash (or any char outside the strict external_key_pattern) can never
+// match a real row, because POST/PATCH reject the same input on the
+// write side. The list filter must enforce the same regex at the
+// boundary so the violation surfaces as 400 invalid_value rather than a
+// silent 200 with empty data.
+func TestListAssets_ExternalKey_SlashRejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	router := setupExternalKeyListRouter(NewHandler(store))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?external_key=abc%2Fdef", nil)
+	req = withExternalKeyOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.NotEmpty(t, resp.Error.Fields)
+	assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+}
+
+// Sibling check for the location_external_key filter — same regex, same
+// boundary rule.
+func TestListAssets_LocationExternalKey_SlashRejected400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	router := setupExternalKeyListRouter(NewHandler(store))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location_external_key=abc%2Fdef", nil)
+	req = withExternalKeyOrgContext(req, orgID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	var resp struct {
+		Error struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "validation_error", resp.Error.Type)
+	require.NotEmpty(t, resp.Error.Fields)
+	assert.Equal(t, "location_external_key", resp.Error.Fields[0].Field)
+	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+}

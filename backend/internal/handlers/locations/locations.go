@@ -245,7 +245,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `parent_external_key`). To re-parent via PATCH send `parent_id` (surrogate; `null` clears the FK); to re-parent via natural key use POST /locations/{location_id}/rename. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `parent_external_key`). To re-parent send `parent_id` (surrogate; `null` clears the FK) — `parent_external_key` is read-only via PATCH and the /rename endpoint cannot re-parent. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -445,7 +445,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "parent_external_key",
 				Code:    "read_only",
-				Message: "parent reference is immutable via PATCH; use POST /api/v1/locations/{location_id}/rename to re-parent, or send `parent_id` to change the parent via surrogate",
+				Message: "parent reference is immutable via PATCH on parent_external_key; send `parent_id` to change the parent via surrogate",
 			})
 		}
 	}
@@ -764,6 +764,20 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 			{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
 			{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
 		})
+		return
+	}
+
+	// TRA-713 / BB33 F5+C2: external_key-style filters must enforce the
+	// same regex the field validators apply on POST/PATCH. Without this,
+	// a slash-containing (or otherwise non-conforming) value silently
+	// returns 200-with-empty rather than 400 invalid_value, masking
+	// integration bugs at the boundary.
+	if fe := httputil.ValidateExternalKeyFilterValues("external_key", params.Filters["external_key"]); fe != nil {
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
+		return
+	}
+	if fe := httputil.ValidateExternalKeyFilterValues("parent_external_key", params.Filters["parent_external_key"]); fe != nil {
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
 		return
 	}
 
