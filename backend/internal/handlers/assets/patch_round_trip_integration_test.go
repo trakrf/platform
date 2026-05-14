@@ -64,11 +64,13 @@ func seedRoundTripAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, nam
 	return id
 }
 
-// TRA-608 / TRA-686 acceptance: GET /api/v1/assets/{id} → strip the
-// pre-decode-rejected fields (`tags`, `external_key`) → mutate one field
-// → PATCH succeeds with 200. The round-trip-safe read-only fields
-// (id, created_at, updated_at, deleted_at, location_external_key) remain
-// on the body to exercise the silent-strip drop list.
+// TRA-608 / TRA-710 acceptance: GET /api/v1/assets/{id} → mutate one
+// field → PATCH succeeds with 200. Under TRA-710 every read-only field —
+// including `tags`, `external_key`, `id`, `created_at`, `updated_at`,
+// `deleted_at`, and the location natural-key references — is accepted on
+// the body when echoed verbatim from the GET (silent strip on the
+// matching path). Integrators no longer need to manually scrub any
+// field; full-document PATCH-back is the supported flow.
 func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -99,13 +101,10 @@ func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 		assert.True(t, present, "GET response must include %q (TRA-608/610)", field)
 	}
 
-	// Mutate name and PATCH back. `tags` and `external_key` are
-	// pre-decode rejected (TRA-686) and must be stripped client-side
-	// before re-sending. The round-trip-safe read-only fields stay on
-	// the body to exercise the silent-drop list.
+	// Mutate name and PATCH back with the entire GET body intact —
+	// TRA-710 normalizes matching read-only fields out, no client-side
+	// scrub required.
 	getResp.Data["name"] = "Forklift 7 (renamed)"
-	delete(getResp.Data, "tags")
-	delete(getResp.Data, "external_key")
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -300,11 +299,8 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	assert.Nil(t, getResp.Data["valid_to"])
 
 	// PATCH-back of the GET body — the connector flow from §S2.
-	// TRA-686 / BB29 F7+F8: tags and external_key are pre-decode
-	// rejected with 400, so a verbatim PATCH-back requires stripping
-	// them client-side first.
-	delete(getResp.Data, "tags")
-	delete(getResp.Data, "external_key")
+	// TRA-710: tags and external_key now follow the echo-or-reject rule;
+	// the verbatim GET → PATCH succeeds without any client-side scrub.
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
@@ -535,15 +531,15 @@ func TestPostAsset_OmittedExternalKey_AutoMints(t *testing.T) {
 	_ = pool
 }
 
-// TRA-619 finding 1: a PUT body that contains only read-only fields decodes
-// to an empty UpdateAssetRequest after the readOnly drop. The previous
-// behavior was a "no fields to update" error surfaced as 500 internal_error.
-// Expected behavior: 200 with the unchanged record (no-op write), matching
-// the GET → PUT round-trip ergonomic.
-//
-// TRA-674: tags and external_key are now in the strip set too — see
-// TestPutAsset_TagsStripped200 and TestPatchAsset_ExternalKey_Stripped200.
-func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
+// TRA-619 finding 1 / TRA-710 (BB33 F2): a PATCH body that contains only
+// read-only fields whose values match the current resource must succeed
+// with 200 (no-op write), preserving the GET → PATCH round-trip ergonomic.
+// Pre-TRA-710 the four server-managed timestamps + surrogate id were
+// silent-stripped regardless of value; now they follow the
+// accept-if-matches, reject-if-differs rule alongside the natural-key
+// fields. A body whose read-only fields differ from current is exercised
+// in TestPatchAsset_ServerManagedReadOnly_Differs400.
+func TestPutAsset_OnlyReadOnlyFields_MatchingCurrent_Returns200NoOp(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -556,13 +552,28 @@ func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	handler := NewHandler(store)
 	router := setupRoundTripRouter(handler)
 
+	// GET the current resource so we can echo back its server-managed
+	// timestamps verbatim — the matching path now requires real values.
+	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
+	getReq = withRoundTripOrgContext(getReq, orgID)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+	var current struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+	cur := current.Data
+
 	cases := []struct {
 		name string
 		body string
 	}{
-		{"only id", `{"id":999}`},
-		{"only created_at", `{"created_at":"2020-01-01T00:00:00Z"}`},
-		{"only updated_at", `{"updated_at":"2020-01-01T00:00:00Z"}`},
+		{"only id matches", fmt.Sprintf(`{"id":%d}`, id)},
+		{"only created_at matches", fmt.Sprintf(`{"created_at":%q}`, cur["created_at"])},
+		{"only updated_at matches", fmt.Sprintf(`{"updated_at":%q}`, cur["updated_at"])},
+		{"only deleted_at matches", `{"deleted_at":null}`},
+		{"only tags matches (empty)", `{"tags":[]}`},
 		{"empty object", `{}`},
 	}
 	for _, tc := range cases {
@@ -574,7 +585,7 @@ func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 			router.ServeHTTP(putRec, patchReq)
 
 			require.Equal(t, http.StatusOK, putRec.Code,
-				"empty effective body must be no-op 200 (got %d): %s", putRec.Code, putRec.Body.String())
+				"matching read-only body must be 200 (got %d): %s", putRec.Code, putRec.Body.String())
 
 			var resp struct {
 				Data map[string]any `json:"data"`
@@ -586,11 +597,72 @@ func TestPutAsset_OnlyReadOnlyFields_Returns200NoOp(t *testing.T) {
 	}
 }
 
-// TRA-686 / BB29 F7: `tags` in a PATCH body is rejected with 400
-// invalid_value pointing at the /assets/{id}/tags subresource. The
-// silent-drop default (TRA-674) hid bugs in read-modify-write integrations
-// where the caller believed the tag write took effect.
-func TestPatchAsset_TagsRejected400(t *testing.T) {
+// TRA-710 (BB33 F2): differing values for the server-managed read-only
+// fields (id, created_at, updated_at, deleted_at) return 400 read_only.
+// Pre-TRA-710 all four were silent-stripped regardless of value.
+func TestPatchAsset_ServerManagedReadOnly_Differs400(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-RO-DIFF", "ReadOnlyDiff")
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	cases := []struct {
+		name  string
+		body  string
+		field string
+	}{
+		{"id differs", fmt.Sprintf(`{"id":%d}`, id+99999), "id"},
+		{"created_at differs", `{"created_at":"2020-01-01T00:00:00Z"}`, "created_at"},
+		{"updated_at differs", `{"updated_at":"2020-01-01T00:00:00Z"}`, "updated_at"},
+		{"deleted_at differs (non-null vs null current)", `{"deleted_at":"2020-01-01T00:00:00Z"}`, "deleted_at"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+			patchReq.Header.Set("Content-Type", "application/json")
+			patchReq = withRoundTripOrgContext(patchReq, orgID)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, patchReq)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code,
+				"differing read-only field must be 400 (got %d): %s", rec.Code, rec.Body.String())
+
+			var resp struct {
+				Error struct {
+					Type   string `json:"type"`
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "validation_error", resp.Error.Type)
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+		})
+	}
+}
+
+// TRA-710 (BB33 F2): `tags` follows the uniform accept-if-matches /
+// reject-if-differs rule. A submitted `tags` value that does not match
+// the asset's current tag set is rejected with 400 read_only (pointing at
+// the /assets/{id}/tags subresource). A submitted `tags` matching current
+// state is silently stripped (round-trip ergonomic — see
+// TestPatchAsset_TagsMatchesCurrent_200).
+//
+// Pre-TRA-710 behavior (TRA-686 / BB29 F7): any `tags` presence was
+// rejected with 400 invalid_value regardless of value, including the
+// verbatim GET → PATCH echo of `[]` against an empty current tag set.
+func TestPatchAsset_TagsDiffersFromCurrent_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -607,10 +679,10 @@ func TestPatchAsset_TagsRejected400(t *testing.T) {
 		name string
 		body string
 	}{
-		{"empty array", `{"tags":[]}`},
-		{"tags with values", `{"tags":[{"key":"foo","value":"bar"}]}`},
-		{"tags alongside name", `{"name":"TagsRej renamed","tags":[]}`},
-		{"tags null", `{"tags":null}`},
+		// current tag set is []; null differs from [].
+		{"tags null vs current []", `{"tags":null}`},
+		{"tags with values vs current []", `{"tags":[{"tag_type":"rfid","value":"bar"}]}`},
+		{"tags with values alongside name", `{"name":"TagsRej renamed","tags":[{"tag_type":"rfid","value":"bar"}]}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -621,7 +693,7 @@ func TestPatchAsset_TagsRejected400(t *testing.T) {
 			router.ServeHTTP(rec, patchReq)
 
 			require.Equal(t, http.StatusBadRequest, rec.Code,
-				"tags in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
+				"differing tags in PATCH body must be 400 (got %d): %s", rec.Code, rec.Body.String())
 
 			var resp struct {
 				Error struct {
@@ -637,7 +709,7 @@ func TestPatchAsset_TagsRejected400(t *testing.T) {
 			assert.Equal(t, "validation_error", resp.Error.Type)
 			require.Len(t, resp.Error.Fields, 1)
 			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-			assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
+			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
 			assert.Contains(t, resp.Error.Fields[0].Message,
 				"POST /api/v1/assets/{asset_id}/tags",
 				"message must name the subresource endpoint")
@@ -649,6 +721,65 @@ func TestPatchAsset_TagsRejected400(t *testing.T) {
 			assert.Equal(t, 0, tagCount, "rejected PATCH must not have mutated tags")
 		})
 	}
+}
+
+// TRA-710 (BB33 F2): a PATCH submitting `tags` whose value matches the
+// asset's current tag set is silently normalized out — 200 with no mutation.
+// Two scenarios: an asset with no tags (echo `[]`) and an asset with one
+// tag (echo the full tag object including server-assigned id).
+func TestPatchAsset_TagsMatchesCurrent_200(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	t.Run("empty-tags echo", func(t *testing.T) {
+		id := seedRoundTripAsset(t, pool, orgID, "ASSET-TAGS-MATCH-EMPTY", "TagsMatchEmpty")
+		patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(`{"tags":[]}`)))
+		patchReq.Header.Set("Content-Type", "application/json")
+		patchReq = withRoundTripOrgContext(patchReq, orgID)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, patchReq)
+		require.Equal(t, http.StatusOK, rec.Code,
+			"matching empty tags must be 200: %s", rec.Body.String())
+	})
+
+	t.Run("populated-tags echo", func(t *testing.T) {
+		id := seedRoundTripAsset(t, pool, orgID, "ASSET-TAGS-MATCH-FULL", "TagsMatchFull")
+		// Seed one tag via SQL.
+		var tagID int
+		require.NoError(t, pool.QueryRow(context.Background(), `
+			INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
+			VALUES ($1, 'rfid', 'V-MATCH', $2, true) RETURNING id
+		`, orgID, id).Scan(&tagID))
+
+		// GET the asset to capture the exact wire shape of `tags`.
+		getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
+		getReq = withRoundTripOrgContext(getReq, orgID)
+		getRec := httptest.NewRecorder()
+		router.ServeHTTP(getRec, getReq)
+		require.Equal(t, http.StatusOK, getRec.Code)
+		var getResp struct {
+			Data map[string]any `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &getResp))
+		tagsRaw, err := json.Marshal(getResp.Data["tags"])
+		require.NoError(t, err)
+
+		patchBody := []byte(fmt.Sprintf(`{"tags":%s}`, string(tagsRaw)))
+		patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(patchBody))
+		patchReq.Header.Set("Content-Type", "application/json")
+		patchReq = withRoundTripOrgContext(patchReq, orgID)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, patchReq)
+		require.Equal(t, http.StatusOK, rec.Code,
+			"verbatim GET tags echo must be 200: %s", rec.Body.String())
+	})
 }
 
 // TRA-686 / BB29 F8: `external_key` in a PATCH body is rejected with 400

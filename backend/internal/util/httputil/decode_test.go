@@ -547,6 +547,65 @@ func TestRespondDecodeError_NullBody_NamesRFC7396(t *testing.T) {
 	}
 }
 
+// TRA-710 (BB33 F2): SameJSON compares a peeked raw body value against an
+// expected current resource value. Used by the PATCH read-only echo check
+// to silently strip matching values and reject differing ones.
+func TestSameJSON(t *testing.T) {
+	cases := []struct {
+		name      string
+		submitted string
+		expected  any
+		want      bool
+	}{
+		{"int matches", `42`, 42, true},
+		{"int differs", `42`, 43, false},
+		{"string matches", `"2026-05-14T16:51:02Z"`, "2026-05-14T16:51:02Z", true},
+		{"null matches nil pointer", `null`, (*string)(nil), true},
+		{"non-null vs nil pointer", `"x"`, (*string)(nil), false},
+		{"empty array matches empty slice", `[]`, []int{}, true},
+		{"empty array vs nil slice", `[]`, []int(nil), false},
+		{"different whitespace canonical match", `[ 1 , 2 ]`, []int{1, 2}, true},
+		{"object key order canonical match", `{"b":1,"a":2}`, map[string]int{"a": 2, "b": 1}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := httputil.SameJSON(json.RawMessage(tc.submitted), tc.expected)
+			if got != tc.want {
+				t.Fatalf("SameJSON(%s, %v) = %v, want %v", tc.submitted, tc.expected, got, tc.want)
+			}
+		})
+	}
+}
+
+// TRA-710 (BB33 F2): PeekJSONFields returns raw values for the requested
+// top-level keys without consuming the request body — downstream decoders
+// see the same byte stream.
+func TestPeekJSONFields_ReturnsRawValuesAndRestoresBody(t *testing.T) {
+	r := httptest.NewRequest("PATCH", "/",
+		bytes.NewBufferString(`{"id":42,"name":"abc","tags":[{"t":"x"}]}`))
+	got := httputil.PeekJSONFields(r, []string{"id", "tags", "missing"})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 peeked keys, got %d (%v)", len(got), got)
+	}
+	if string(got["id"]) != "42" {
+		t.Fatalf("id = %q, want 42", string(got["id"]))
+	}
+	if string(got["tags"]) != `[{"t":"x"}]` {
+		t.Fatalf("tags = %q", string(got["tags"]))
+	}
+
+	// Body must still be readable for a downstream decoder.
+	var rest struct {
+		Name string `json:"name"`
+	}
+	if err := httputil.DecodeJSON(r, &rest); err != nil {
+		t.Fatalf("downstream decode after peek failed: %v", err)
+	}
+	if rest.Name != "abc" {
+		t.Fatalf("name = %q, want abc", rest.Name)
+	}
+}
+
 // Empty drop list reduces to plain DecodeJSONStrictWithNulls behavior.
 func TestDecodeJSONStrictWithNullsTolerant_EmptyDropListEquivalent(t *testing.T) {
 	type target struct {

@@ -263,7 +263,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Round-trip-safe server-owned fields (`id`, `created_at`, `updated_at`, `deleted_at`) are silently stripped from the body. The natural-key reference fields `external_key`, `location_id`, and `location_external_key` are read-only on PATCH: a value matching the current resource state is silently stripped (so a verbatim GET → PATCH round-trip succeeds), and a differing value returns 400 with `code: read_only` naming the correct write path. Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `location_id`, `location_external_key`). Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
@@ -301,14 +301,19 @@ func (handler *Handler) Update(w http.ResponseWriter, req *http.Request) {
 func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID, id int) {
 	reqID := middleware.GetRequestID(req.Context())
 
-	// TRA-686 / BB29 F7: reject `tags` pre-decode with 400 invalid_value —
-	// tags are managed via the /assets/{id}/tags subresource. The
-	// silent-drop default hid bugs in read-modify-write integrations.
-	//
-	// TRA-699 (BB31 §2): `external_key`, `location_id`, and
-	// `location_external_key` are no longer on this reject list. They
-	// follow the uniform accept-if-matches, reject-if-differs rule
-	// implemented below after decode.
+	// TRA-710 (BB33 F2): server-managed read-only fields (id, created_at,
+	// updated_at, deleted_at, tags) follow the accept-if-matches /
+	// reject-if-differs rule. Peek raw body values before strict decode
+	// strips id/created_at/updated_at/deleted_at and before the
+	// UpdateAssetRequest decode silently ignores tags. Compared against
+	// current resource state below.
+	rawReadOnly := httputil.PeekJSONFields(req, []string{
+		"id", "created_at", "updated_at", "deleted_at", "tags",
+	})
+
+	// PublicRejectPatchFields is currently empty (tags moved to the echo
+	// check under TRA-710); kept as the call site for future fields whose
+	// mere presence is invalid regardless of value.
 	if httputil.RejectFields(w, req, reqID, asset.PublicRejectPatchFields) {
 		return
 	}
@@ -319,7 +324,12 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	// code=required for the omitted/null cases. UpdateAssetRequest has no
 	// `required` tags today, but threading presence here keeps the pattern
 	// consistent with POST.
-	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, asset.PublicReadOnlyFields)
+	//
+	// TRA-710: `tags` is added to the drop list alongside PublicReadOnlyFields
+	// because UpdateAssetRequest has no `tags` field to decode into; the echo
+	// check above already captured its raw value.
+	dropFields := append([]string{"tags"}, asset.PublicReadOnlyFields...)
+	explicitNulls, presentKeys, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(req, &request, dropFields)
 	if err != nil {
 		httputil.RespondDecodeError(w, req, err, reqID)
 		return
@@ -360,6 +370,12 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	//   external_key            → POST /assets/{asset_id}/rename
 	//   location_id             → record a scan event (record-of-origin posture; TRA-411)
 	//   location_external_key   → record a scan event
+	//
+	// TRA-710 (BB33 F2): the same accept-if-matches / reject-if-differs
+	// rule covers the server-managed surrogate id and timestamps (id,
+	// created_at, updated_at, deleted_at) and the `tags` collection. Their
+	// raw body values were peeked above (rawReadOnly) so the comparison
+	// here runs against the current resource state.
 	current, err := handler.storage.GetAssetWithLocationByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -371,6 +387,55 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		return
 	}
 	var echoViolations []modelerrors.FieldError
+	// TRA-710: server-managed read-only echo checks. The current view is
+	// projected through ToPublicAssetView so the wire shape we compare
+	// against matches the wire shape an integrator GETs.
+	currentView := asset.ToPublicAssetView(*current)
+	if v, present := rawReadOnly["id"]; present {
+		if !httputil.SameJSON(v, currentView.ID) {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "id",
+				Code:    "read_only",
+				Message: "id is server-assigned and immutable; submit the resource's current id or omit the field",
+			})
+		}
+	}
+	if v, present := rawReadOnly["created_at"]; present {
+		if !httputil.SameJSON(v, currentView.CreatedAt) {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "created_at",
+				Code:    "read_only",
+				Message: "created_at is server-managed and immutable; submit the resource's current created_at or omit the field",
+			})
+		}
+	}
+	if v, present := rawReadOnly["updated_at"]; present {
+		if !httputil.SameJSON(v, currentView.UpdatedAt) {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "updated_at",
+				Code:    "read_only",
+				Message: "updated_at is server-managed; PATCH advances it implicitly. Submit the resource's current updated_at or omit the field",
+			})
+		}
+	}
+	if v, present := rawReadOnly["deleted_at"]; present {
+		if !httputil.SameJSON(v, currentView.DeletedAt) {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "deleted_at",
+				Code:    "read_only",
+				Message: "deleted_at is server-managed; use DELETE /api/v1/assets/{asset_id} to soft-delete. Submit the resource's current deleted_at or omit the field",
+			})
+		}
+	}
+	if v, present := rawReadOnly["tags"]; present {
+		if !httputil.SameJSON(v, currentView.Tags) {
+			echoViolations = append(echoViolations, modelerrors.FieldError{
+				Field:   "tags",
+				Code:    "read_only",
+				Message: "tags are managed via POST /api/v1/assets/{asset_id}/tags and DELETE /api/v1/assets/{asset_id}/tags/{tag_id}",
+			})
+		}
+	}
 	if _, present := presentKeys["external_key"]; present {
 		matched := request.ExternalKey != nil && *request.ExternalKey == current.ExternalKey
 		if !matched {
