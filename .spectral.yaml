@@ -110,14 +110,19 @@ rules:
   trakrf-int64-id-path-params:
     description: >
       Path parameters named like `*_id` (or bare `id`) must declare
-      `format: int64` and must NOT declare a `maximum` constraint. BB35
-      B7 promoted surrogate IDs to int64 on the wire (service-side ID
-      generation stays within int32 during v1, but the spec width is
-      set pre-launch so SDK consumers don't have to absorb a future
-      int32→int64 type break). The original BB27 F1/S1 motivation (int4
-      storage overflow as 500s with pgx driver text) is now handled at
-      the service handler — the spec contract is int64.
-    message: "*_id path params must declare format:int64 and omit `maximum` — BB35 B7 (supersedes BB27 F1/S1)"
+      `format: int64` AND `maximum: 2147483647`. BB35 B7 / TRA-719
+      promoted surrogate IDs to int64 on the wire (so SDK consumers
+      don't have to absorb a future int32→int64 type break);
+      BB37 F2 / TRA-726 re-encodes the int32 runtime cap on
+      *request inputs* so typed clients surface the
+      `400 validation_error / too_large` boundary at compile time
+      instead of via runtime rejection. Response schema id/FK fields
+      stay unconstrained int64 (descriptive of what the server emits),
+      which is why this rule scopes to path params only. The
+      `maximum: 2147483647` constraint lifts when TRA-720 (bigint
+      storage migration) lands; remove it from this rule and from
+      `markSurrogateIDsInt64`'s `promoteInput` branch in the same PR.
+    message: "*_id path params must declare format:int64 and maximum:2147483647 — BB37 F2 / TRA-726 (lifts with TRA-720)"
     severity: error
     # NOTE for future rule authors: Spectral uses the nimma JSONPath engine for
     # `given` evaluation. nimma does NOT support `=~` (jsonpath-plus regex
@@ -135,10 +140,11 @@ rules:
             properties:
               format:
                 const: int64
+              maximum:
+                const: 2147483647
             required:
               - format
-            not:
-              required: ["maximum"]
+              - maximum
 
   trakrf-readonly-derived-fields:
     description: >

@@ -998,6 +998,8 @@ info:
         HTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage
 
         Surrogate ID width: declared `format: int64` on the wire so SDK regeneration does not break when the ID namespace eventually outgrows int32. Service-side ID generation stays within int32 (2^31-1) during v1; values above that bound are rejected with 400 validation_error / `too_large`. The wider wire type is a long-horizon contract, not a claim that current values exceed int32.
+
+        Nullable field interpretation: OpenAPI 3.0's `nullable: true` keyword is interpreted differently across codegen targets. Verified-working: `openapi-typescript@7.x` emits `string | null` correctly, and the `openapi-generator-cli` python target emits `Optional[StrictStr]` correctly — both round-trip CRUD against null-bearing responses unmodified. Known-broken: `datamodel-codegen@0.57.0` emits `nullable: true` read-shape fields as non-Optional required fields, so Pydantic validation fails on every nullable field that is actually null. Integrators using `datamodel-codegen` should either switch to the `openapi-generator-cli` python target or apply `--use-annotated --use-union-operator` with a custom post-processing pass.
     license:
         name: Business Source License 1.1
         url: https://github.com/trakrf/platform/blob/main/LICENSE
@@ -1039,6 +1041,7 @@ paths:
                     default: []
                     items:
                         format: int64
+                        maximum: 2147483647
                         minimum: 1
                         type: integer
                     type: array
@@ -1428,6 +1431,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             responses:
@@ -1575,6 +1579,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             responses:
@@ -1709,6 +1714,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             requestBody:
@@ -1899,6 +1905,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -2092,6 +2099,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             requestBody:
@@ -2281,6 +2289,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             requestBody:
@@ -2474,6 +2483,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                 - description: Tag id
@@ -2482,6 +2492,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             responses:
@@ -2648,6 +2659,7 @@ paths:
                     default: []
                     items:
                         format: int64
+                        maximum: 2147483647
                         minimum: 1
                         type: integer
                     type: array
@@ -3036,6 +3048,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             responses:
@@ -3198,6 +3211,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             responses:
@@ -3332,6 +3346,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             requestBody:
@@ -3520,6 +3535,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -3686,6 +3702,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -3852,6 +3869,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                 - description: max 200
@@ -4020,6 +4038,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             requestBody:
@@ -4205,6 +4224,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             requestBody:
@@ -4398,6 +4418,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                 - description: Tag ID
@@ -4406,6 +4427,7 @@ paths:
                   required: true
                   schema:
                     format: int64
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
             responses:
@@ -4709,6 +4731,7 @@ paths:
                     default: []
                     items:
                         format: int64
+                        maximum: 2147483647
                         minimum: 1
                         type: integer
                     type: array

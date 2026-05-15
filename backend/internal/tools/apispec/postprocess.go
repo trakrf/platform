@@ -110,6 +110,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	appendSpecVariantsDescription(doc)
 	appendMethodPolicyDescription(doc)
 	appendIDWidthPolicyDescription(doc)
+	appendNullableCodegenPolicyDescription(doc)
 	rewriteMergePatchContentType(doc)
 	annotateReadOnlyTags(doc)
 	annotateTagPolymorphism(doc)
@@ -672,6 +673,40 @@ func appendMethodPolicyDescription(doc *openapi3.T) {
 	}
 	policy := "HTTP method coverage (HEAD, OPTIONS, 405 / Allow): " +
 		"/api/http-method-coverage"
+	if doc.Info.Description == "" {
+		doc.Info.Description = policy
+	} else {
+		doc.Info.Description = doc.Info.Description + "\n\n" + policy
+	}
+}
+
+// appendNullableCodegenPolicyDescription documents the OpenAPI 3.0
+// `nullable: true` interpretation split across codegen targets so
+// integrators reading the Redoc page know which generators round-trip
+// nullable fields correctly and which materialize them as non-Optional
+// required fields (TRA-726 / BB37 F5). Follows the existing Tag
+// discriminator Codegen note precedent (TRA-721 / BB35 B6): document
+// generator-specific quirks where they materially affect SDK shape,
+// without rewriting the spec to OpenAPI 3.1 type-union syntax (a
+// post-v1 question that breaks generators not caught up to 3.1).
+func appendNullableCodegenPolicyDescription(doc *openapi3.T) {
+	const marker = "Nullable field interpretation"
+	if strings.Contains(doc.Info.Description, marker) {
+		return
+	}
+	policy := "Nullable field interpretation: OpenAPI 3.0's `nullable: true` " +
+		"keyword is interpreted differently across codegen targets. " +
+		"Verified-working: `openapi-typescript@7.x` emits `string | null` " +
+		"correctly, and the `openapi-generator-cli` python target emits " +
+		"`Optional[StrictStr]` correctly — both round-trip CRUD against " +
+		"null-bearing responses unmodified. Known-broken: " +
+		"`datamodel-codegen@0.57.0` emits `nullable: true` read-shape " +
+		"fields as non-Optional required fields, so Pydantic validation " +
+		"fails on every nullable field that is actually null. Integrators " +
+		"using `datamodel-codegen` should either switch to the " +
+		"`openapi-generator-cli` python target or apply " +
+		"`--use-annotated --use-union-operator` with a custom " +
+		"post-processing pass."
 	if doc.Info.Description == "" {
 		doc.Info.Description = policy
 	} else {
@@ -1324,7 +1359,19 @@ func isSurrogateIDName(name string) bool {
 // AFTER markIntegerFormats and markQueryIntegerBounds so it sees the
 // post-default state and can confidently drop the int32 ceiling.
 // Idempotent: re-running on already-promoted fields is a no-op.
+//
+// Inputs vs. responses (TRA-726 / BB37 F2): the int32 ceiling is dropped
+// only on response schema properties — those are descriptive of what the
+// server emits, so a hard cap would lock the wire forward unnecessarily.
+// On request-shape surfaces — path and query parameters — the runtime
+// cap is real (server returns `400 validation_error / too_large` above
+// int32 max while storage stays int32) and must remain encoded so typed
+// clients surface the boundary instead of discovering it via runtime 400.
+// This temporary cap on inputs lifts when TRA-720 (bigint storage
+// migration) lands; both call sites are flagged so the removal is a
+// single coordinated edit.
 func markSurrogateIDsInt64(doc *openapi3.T) {
+	intMax := float64(2147483647)
 	promote := func(s *openapi3.Schema) {
 		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
 			return
@@ -1336,6 +1383,21 @@ func markSurrogateIDsInt64(doc *openapi3.T) {
 		// invariant).
 		if s.Max != nil && *s.Max == float64(2147483647) {
 			s.Max = nil
+		}
+	}
+	// promoteInput is the request-shape variant: format goes to int64 (so
+	// the wire type matches the response side), but the int32 maximum is
+	// preserved (or re-applied) because the server actually enforces it
+	// at runtime. TRA-720 / BB37 F2: remove this cap when storage moves
+	// to bigint.
+	promoteInput := func(s *openapi3.Schema) {
+		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
+			return
+		}
+		s.Format = "int64"
+		if s.Max == nil {
+			max := intMax
+			s.Max = &max
 		}
 	}
 
@@ -1395,11 +1457,18 @@ func markSurrogateIDsInt64(doc *openapi3.T) {
 			if !isSurrogateIDName(p.Name) {
 				return
 			}
+			// Path and query carry request inputs subject to the int32
+			// runtime cap; header/cookie surrogate IDs (none today) would
+			// fall through to the response-style promote.
+			fn := promote
+			if p.In == "path" || p.In == "query" {
+				fn = promoteInput
+			}
 			s := p.Schema.Value
 			if s.Type != nil && s.Type.Is(openapi3.TypeArray) && s.Items != nil && s.Items.Value != nil {
-				promote(s.Items.Value)
+				fn(s.Items.Value)
 			} else {
-				promote(s)
+				fn(s)
 			}
 		}
 		for _, item := range doc.Paths.Map() {
