@@ -200,7 +200,9 @@ func TestRenameLocation_Duplicate_Conflict409(t *testing.T) {
 }
 
 // POST /rename with the same value: idempotent, returns descendant_count_affected=0
-// without firing the trigger.
+// without firing the trigger AND without advancing updated_at. TRA-731 / BB39 F3
+// pins the updated_at-stable contract for locations as part of the audit sweep
+// alongside the asset-side fix.
 func TestRenameLocation_SameValue_NoOp200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -211,6 +213,10 @@ func TestRenameLocation_SameValue_NoOp200(t *testing.T) {
 
 	root := seedLocationRoundTripWithParent(t, pool, orgID, "ROOT-SAME", "Root", nil)
 	_ = seedLocationRoundTripWithParent(t, pool, orgID, "CHILD-SAME", "Child", &root)
+
+	var beforeUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, root).Scan(&beforeUpdatedAt))
 
 	handler := NewHandler(store)
 	r := setupRenameLocationRouter(handler)
@@ -231,4 +237,11 @@ func TestRenameLocation_SameValue_NoOp200(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, 0, resp.DescendantCountAffected,
 		"same-value rename reports 0 affected descendants even when descendants exist")
+
+	var afterUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, root).Scan(&afterUpdatedAt))
+	assert.True(t, afterUpdatedAt.Equal(beforeUpdatedAt),
+		"same-value rename must not advance updated_at (before=%s after=%s)",
+		beforeUpdatedAt, afterUpdatedAt)
 }

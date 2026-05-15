@@ -150,16 +150,31 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 // "already exists" so the handler can map them to 409 conflict, matching
 // CreateAsset's behavior.
 func (s *Storage) RenameAsset(ctx context.Context, orgID, id int, newExternalKey string) (*asset.AssetWithLocation, error) {
-	query := `
-		UPDATE trakrf.assets
-		SET external_key = $3, updated_at = NOW()
-		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-		RETURNING id
-	`
-
 	var updatedID int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, id, orgID, newExternalKey).Scan(&updatedID)
+		var currentKey string
+		err := tx.QueryRow(ctx, `
+			SELECT external_key FROM trakrf.assets
+			WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+		`, id, orgID).Scan(&currentKey)
+		if err != nil {
+			return err
+		}
+
+		// TRA-731 / BB39 F3: same-value rename does not observably mutate
+		// the resource. Skip the UPDATE so updated_at stays stable for
+		// integrators following the cached-body PATCH pattern.
+		if currentKey == newExternalKey {
+			updatedID = id
+			return nil
+		}
+
+		return tx.QueryRow(ctx, `
+			UPDATE trakrf.assets
+			SET external_key = $3, updated_at = NOW()
+			WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+			RETURNING id
+		`, id, orgID, newExternalKey).Scan(&updatedID)
 	})
 
 	if err != nil {
