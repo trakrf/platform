@@ -544,13 +544,17 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 		description = *request.Description
 	}
 
+	// TRA-734 (BB40 F3): asset location is scan/operational data, not
+	// settable on Create. The CreateAssetRequest struct no longer carries
+	// LocationID; we pass nil to the SQL function so new assets always
+	// start without a current_location_id.
 	err = s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			request.OrgID,
 			request.ExternalKey,
 			request.Name,
 			description,
-			request.LocationID,
+			(*int)(nil),
 			validFrom,
 			validTo,
 			isActive,
