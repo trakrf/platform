@@ -130,11 +130,9 @@ components:
                     readOnly: true
                     type: string
                 asset_external_key:
-                    nullable: true
                     type: string
                 asset_id:
                     format: int64
-                    nullable: true
                     type: integer
                 asset_last_seen:
                     example: "2025-04-29T12:34:56.000Z"

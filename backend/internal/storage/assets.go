@@ -88,7 +88,8 @@ func GenerateAssetExternalKey(seq int) string {
 }
 
 func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.AssetWithLocation, error) {
-	updates := []string{}
+	setClauses := []string{}
+	distinctClauses := []string{}
 	args := []any{id, orgID}
 	argPos := 3
 	fields, err := mapReqToFields(request)
@@ -98,8 +99,12 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 	}
 
 	// Nil entries (only from ClearValidTo) pass through as SQL NULL.
+	// TRA-732 R1: each settable column also gets an IS DISTINCT FROM clause so
+	// the UPDATE only fires when at least one field actually changes — preserves
+	// updated_at across a value-match PATCH (cached-body PATCH safety).
 	for key, value := range fields {
-		updates = append(updates, fmt.Sprintf("%s = $%d", key, argPos))
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", key, argPos))
+		distinctClauses = append(distinctClauses, fmt.Sprintf("%s IS DISTINCT FROM $%d", key, argPos))
 		args = append(args, value)
 		argPos++
 	}
@@ -108,7 +113,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 	// after the read-only drop in TRA-608, or a `{}` body) is a no-op success:
 	// return the unchanged record so a verbatim GET → PATCH round-trip with only
 	// read-only fields succeeds. TRA-619.
-	if len(updates) == 0 {
+	if len(setClauses) == 0 {
 		return s.getAssetWithLocationByID(ctx, orgID, id)
 	}
 
@@ -116,12 +121,33 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		update trakrf.assets
 		set %s, updated_at = now()
 		where id = $1 and org_id = $2 and deleted_at is null
+		  and (%s)
 		returning id
-	`, strings.Join(updates, ", "))
+	`, strings.Join(setClauses, ", "), strings.Join(distinctClauses, " OR "))
 
 	var updatedID int
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, args...).Scan(&updatedID)
+		qerr := tx.QueryRow(ctx, query, args...).Scan(&updatedID)
+		if qerr == pgx.ErrNoRows {
+			// Either the row doesn't exist (genuine 404) or every field
+			// matched current (same-value no-op). Disambiguate without
+			// firing an UPDATE — keeps updated_at stable on the no-op path.
+			var exists bool
+			if cerr := tx.QueryRow(ctx, `
+				select exists(
+					select 1 from trakrf.assets
+					where id = $1 and org_id = $2 and deleted_at is null
+				)
+			`, id, orgID).Scan(&exists); cerr != nil {
+				return cerr
+			}
+			if !exists {
+				return pgx.ErrNoRows
+			}
+			updatedID = id
+			return nil
+		}
+		return qerr
 	})
 
 	if err != nil {

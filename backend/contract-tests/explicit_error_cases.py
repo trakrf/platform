@@ -104,9 +104,12 @@ def main() -> int:
     status, body = call("POST", "/api/v1/assets", body={})
     record(observed, "POST /assets {} → required on name", status, body)
 
-    # --- required (variant): explicit null on non-nullable `name` ---
+    # --- invalid_value (variant): explicit null on non-nullable `name`.
+    #     TRA-732 R2: null on a non-nullable field is `invalid_value`; the
+    #     `required` code is reserved for the absent-key case (covered by
+    #     the POST /assets {} probe above). ---
     status, body = call("POST", "/api/v1/assets", body={"name": None})
-    record(observed, "POST /assets name=null → required on name", status, body)
+    record(observed, "POST /assets name=null → invalid_value on name", status, body)
 
     # --- too_short: empty-string on min_length 1 ---
     status, body = call("POST", "/api/v1/assets", body={"name": ""})

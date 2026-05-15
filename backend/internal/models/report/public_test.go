@@ -23,10 +23,9 @@ func TestToPublicCurrentLocationItem_LiveAsset(t *testing.T) {
 
 	got := ToPublicCurrentLocationItem(in)
 
-	require.NotNil(t, got.AssetID)
-	assert.Equal(t, 7, *got.AssetID)
-	require.NotNil(t, got.AssetExternalKey)
-	assert.Equal(t, "FORK-007", *got.AssetExternalKey)
+	// TRA-732 R4: asset_id and asset_external_key are non-nullable.
+	assert.Equal(t, 7, got.AssetID)
+	assert.Equal(t, "FORK-007", got.AssetExternalKey)
 	require.NotNil(t, got.LocationID)
 	assert.Equal(t, 42, *got.LocationID)
 	require.NotNil(t, got.LocationExternalKey)
@@ -111,13 +110,11 @@ func TestToPublicAssetHistoryItem_ClosedPeriodEmitsDuration(t *testing.T) {
 // always emitted (null for live assets). Supersedes the TRA-547 §2.3
 // omit-when-nil behavior.
 func TestPublicCurrentLocationItem_AssetDeletedAtAlwaysEmittedNullWhenNil(t *testing.T) {
-	id := 1
-	key := "A1"
 	locID := 9
 	locKey := "L1"
 	it := PublicCurrentLocationItem{
-		AssetID:             &id,
-		AssetExternalKey:    &key,
+		AssetID:             1,
+		AssetExternalKey:    "A1",
 		LocationID:          &locID,
 		LocationExternalKey: &locKey,
 	}

@@ -114,9 +114,7 @@ func TestListCurrentLocations_TemporalValidity_FiltersAssetsAndLocations(t *test
 
 	byKey := make(map[string]report.PublicCurrentLocationItem)
 	for _, item := range resp.Data {
-		if item.AssetExternalKey != nil {
-			byKey[*item.AssetExternalKey] = item
-		}
+		byKey[item.AssetExternalKey] = item
 	}
 
 	assert.Contains(t, byKey, "CL-A-EFF", "effective asset with effective location must appear")
