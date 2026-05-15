@@ -33,15 +33,17 @@ type ListCurrentLocationsResponse struct {
 }
 
 // @Summary List current asset locations
-// @Description Snapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
+// @Description Snapshot of each asset's most recent location, filterable by either side of the join. Filter by location (`location_id` / `location_external_key`) to retrieve everything currently at a place; filter by asset (`asset_id` / `asset_external_key`, repeatable) to resolve a batch of assets from a master system to their current locations in one round-trip. Within each pair the surrogate and natural-key forms are mutually exclusive (400 `ambiguous_fields` if both are supplied); the asset and location filter pairs are independent and intersect when combined. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.
 // @Description
 // @Description Temporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible. Soft-deleted locations are projected the same way here — null on the report row — even though the identifier still lives on the location row; reports endpoints intentionally hide tombstoned anchor points from scan-derived summaries. Use the locations endpoint with `include_deleted=true` to retrieve the underlying identifier.
 // @Tags reports,public
 // @ID reports.asset-locations
 // @Param limit                 query int    false "max 200"   default(50) minimum(1) maximum(200)
 // @Param offset                query int    false "min 0"    default(0) minimum(0)
-// @Param location_id           query []int    false "filter by location id (canonical, may repeat)" collectionFormat(multi)
-// @Param location_external_key query []string false "filter by location external_key (may repeat)" collectionFormat(multi)
+// @Param location_id           query []int    false "filter by location id (canonical, may repeat); mutually exclusive with location_external_key (400 ambiguous_fields if both supplied)" collectionFormat(multi)
+// @Param location_external_key query []string false "filter by location external_key (may repeat); mutually exclusive with location_id (400 ambiguous_fields if both supplied)" collectionFormat(multi)
+// @Param asset_id              query []int    false "filter by asset id (canonical, may repeat); mutually exclusive with asset_external_key (400 ambiguous_fields if both supplied)" collectionFormat(multi)
+// @Param asset_external_key    query []string false "filter by asset external_key (may repeat); mutually exclusive with asset_id (400 ambiguous_fields if both supplied)" collectionFormat(multi)
 // @Param q                     query string false "substring search (case-insensitive) on asset name, external_key, and active tag values"
 // @Param include_deleted       query bool   false "include rows for soft-deleted assets" default(false)
 // @Param sort                  query []string false "comma-separated sort fields; prefix '-' for DESC" collectionFormat(csv) Enums(asset_last_seen, -asset_last_seen, asset_external_key, -asset_external_key, location_external_key, -location_external_key)
@@ -68,7 +70,7 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(r, httputil.ListAllowlist{
-		Filters:     []string{"location_id", "location_external_key", "q", "include_deleted"},
+		Filters:     []string{"location_id", "location_external_key", "asset_id", "asset_external_key", "q", "include_deleted"},
 		BoolFilters: []string{"include_deleted"},
 		// TRA-641 / BB21 §2.6: sort keys renamed to match the spec convention
 		// used elsewhere — natural-key columns are addressed as
@@ -77,6 +79,29 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, r, err, reqID)
+		return
+	}
+
+	// TRA-681 / TRA-735: each (id, external_key) pair on this endpoint is a
+	// oneOf; supplying both forms of the same entity returns 400
+	// ambiguous_fields. The asset and location pairs are independent —
+	// combining one asset filter with one location filter intersects.
+	_, hasLocID := params.Filters["location_id"]
+	_, hasLocExt := params.Filters["location_external_key"]
+	if hasLocID && hasLocExt {
+		httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{
+			{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+			{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
+		})
+		return
+	}
+	_, hasAssetID := params.Filters["asset_id"]
+	_, hasAssetExt := params.Filters["asset_external_key"]
+	if hasAssetID && hasAssetExt {
+		httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{
+			{Field: "asset_id", Code: "ambiguous_fields", Message: "asset_id and asset_external_key are mutually exclusive; supply exactly one"},
+			{Field: "asset_external_key", Code: "ambiguous_fields", Message: "asset_id and asset_external_key are mutually exclusive; supply exactly one"},
+		})
 		return
 	}
 
@@ -89,9 +114,14 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{*fe})
 		return
 	}
+	if fe := httputil.ValidateExternalKeyFilterValues("asset_external_key", params.Filters["asset_external_key"]); fe != nil {
+		httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{*fe})
+		return
+	}
 
 	filter := report.CurrentLocationFilter{
 		LocationExternalKeys: params.Filters["location_external_key"],
+		AssetExternalKeys:    params.Filters["asset_external_key"],
 		Limit:                params.Limit,
 		Offset:               params.Offset,
 	}
@@ -109,6 +139,22 @@ func (h *Handler) ListCurrentLocations(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			filter.LocationIDs = append(filter.LocationIDs, n)
+		}
+	}
+	if vs, ok := params.Filters["asset_id"]; ok && len(vs) > 0 {
+		filter.AssetIDs = make([]int, 0, len(vs))
+		for _, s := range vs {
+			n, err := strconv.Atoi(s)
+			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
+				httputil.WriteValidationError(w, r, reqID, []modelerrors.FieldError{{
+					Field:   "asset_id",
+					Code:    "invalid_value",
+					Message: fmt.Sprintf("asset_id %q must be a positive integer ≤ %d", s, httputil.SurrogateIDMax),
+				}})
+
+				return
+			}
+			filter.AssetIDs = append(filter.AssetIDs, n)
 		}
 	}
 	if vs, ok := params.Filters["q"]; ok && len(vs) > 0 {
