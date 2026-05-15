@@ -354,7 +354,7 @@ func TestAuth_MissingHeader_Respond401(t *testing.T) {
 	if resp.Error.Title != "Unauthorized" {
 		t.Errorf("title = %q, want normalized", resp.Error.Title)
 	}
-	if resp.Error.Detail != "Authorization header is required" {
+	if resp.Error.Detail != Detail401MissingAuthHeader {
 		t.Errorf("detail = %q, want canonical missing-header string", resp.Error.Detail)
 	}
 }
@@ -371,7 +371,7 @@ func TestAuth_MalformedHeader_Respond401(t *testing.T) {
 	}
 	var resp apierrors.ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error.Detail != "Authorization header must be Bearer <token>" {
+	if resp.Error.Detail != Detail401InvalidAuthFormat {
 		t.Errorf("detail = %q, want canonical malformed-header string", resp.Error.Detail)
 	}
 }
@@ -388,7 +388,7 @@ func TestAuth_InvalidToken_Respond401(t *testing.T) {
 	}
 	var resp apierrors.ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error.Detail != "Bearer token is invalid or expired" {
+	if resp.Error.Detail != Detail401InvalidOrExpiredToken {
 		t.Errorf("detail = %q, want canonical invalid-token string", resp.Error.Detail)
 	}
 }
@@ -411,7 +411,7 @@ func TestAuth_BearerSchemeCaseInsensitive(t *testing.T) {
 			var resp apierrors.ErrorResponse
 			_ = json.Unmarshal(w.Body.Bytes(), &resp)
 			// Must reach the token-validation branch, not the scheme-rejection branch.
-			if resp.Error.Detail != "Bearer token is invalid or expired" {
+			if resp.Error.Detail != Detail401InvalidOrExpiredToken {
 				t.Errorf("detail = %q, want token-validation detail (scheme should have been accepted)", resp.Error.Detail)
 			}
 		})
@@ -438,7 +438,7 @@ func TestAPIKey_MissingHeader_Respond401(t *testing.T) {
 	if resp.Error.Title != "Unauthorized" {
 		t.Errorf("title = %q, want %q", resp.Error.Title, "Unauthorized")
 	}
-	if resp.Error.Detail != "Authorization header is required" {
+	if resp.Error.Detail != Detail401MissingAuthHeader {
 		t.Errorf("detail = %q, want canonical missing-header string", resp.Error.Detail)
 	}
 }
@@ -459,7 +459,7 @@ func TestAPIKey_MalformedHeader_Respond401(t *testing.T) {
 	}
 	var resp apierrors.ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error.Detail != "Authorization header must be Bearer <token>" {
+	if resp.Error.Detail != Detail401InvalidAuthFormat {
 		t.Errorf("detail = %q, want canonical malformed-header string", resp.Error.Detail)
 	}
 }
@@ -480,7 +480,7 @@ func TestAPIKey_InvalidJWT_Respond401(t *testing.T) {
 	}
 	var resp apierrors.ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Error.Detail != "Bearer token is invalid or expired" {
+	if resp.Error.Detail != Detail401InvalidOrExpiredToken {
 		t.Errorf("detail = %q, want canonical invalid-token string", resp.Error.Detail)
 	}
 }
@@ -504,7 +504,7 @@ func TestAPIKey_BearerSchemeCaseInsensitive(t *testing.T) {
 			var resp apierrors.ErrorResponse
 			_ = json.Unmarshal(w.Body.Bytes(), &resp)
 			// Must reach the token-validation branch, not the scheme-rejection branch.
-			if resp.Error.Detail != "Bearer token is invalid or expired" {
+			if resp.Error.Detail != Detail401InvalidOrExpiredToken {
 				t.Errorf("detail = %q, want token-validation detail (scheme should have been accepted)", resp.Error.Detail)
 			}
 		})

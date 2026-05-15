@@ -105,7 +105,7 @@ func TestContract_MissingAuthHeader_WWWAuthenticate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, "Unauthorized", resp.Error.Title)
 	require.Equal(t, string(apierrors.ErrUnauthorized), resp.Error.Type)
-	require.Equal(t, "Authorization header is required", resp.Error.Detail)
+	require.Equal(t, middleware.Detail401MissingAuthHeader, resp.Error.Detail)
 }
 
 // TestContract_BB12_401Reproductions covers the four 401 variants named in
@@ -121,19 +121,19 @@ func TestContract_BB12_401Reproductions(t *testing.T) {
 			reqID := middleware.GetRequestID(r.Context())
 			h := r.Header.Get("Authorization")
 			if h == "" {
-				detail := "Missing authorization header"
+				detail := middleware.Detail401MissingAuthHeader
 				if r.Header.Get("X-API-Key") != "" {
-					detail = "Use Authorization: Bearer <token>"
+					detail = middleware.Detail401UseAuthBearerHint
 				}
 				httputil.Respond401(w, r, detail, reqID)
 				return
 			}
 			parts := strings.SplitN(h, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				httputil.Respond401(w, r, "Invalid authorization header format", reqID)
+				httputil.Respond401(w, r, middleware.Detail401InvalidAuthFormat, reqID)
 				return
 			}
-			httputil.Respond401(w, r, "Invalid or expired token", reqID)
+			httputil.Respond401(w, r, middleware.Detail401InvalidOrExpiredToken, reqID)
 		})
 	}
 
@@ -156,26 +156,26 @@ func TestContract_BB12_401Reproductions(t *testing.T) {
 		{
 			name:           "missing header",
 			setup:          func(r *http.Request) {},
-			wantDetailHas:  "Missing authorization header",
-			titleMustNotBe: []string{"Bearer", "Missing authorization header"},
+			wantDetailHas:  middleware.Detail401MissingAuthHeader,
+			titleMustNotBe: []string{"Bearer", middleware.Detail401MissingAuthHeader},
 		},
 		{
 			name:           "wrong scheme",
 			setup:          func(r *http.Request) { r.Header.Set("Authorization", "Basic abc") },
-			wantDetailHas:  "Invalid authorization header format",
-			titleMustNotBe: []string{"Basic", "Invalid authorization header format"},
+			wantDetailHas:  middleware.Detail401InvalidAuthFormat,
+			titleMustNotBe: []string{"Basic", middleware.Detail401InvalidAuthFormat},
 		},
 		{
 			name:           "garbage token",
 			setup:          func(r *http.Request) { r.Header.Set("Authorization", "Bearer not-a-jwt") },
-			wantDetailHas:  "Invalid or expired token",
-			titleMustNotBe: []string{"Bearer not-a-jwt", "Invalid or expired token"},
+			wantDetailHas:  middleware.Detail401InvalidOrExpiredToken,
+			titleMustNotBe: []string{"Bearer not-a-jwt", middleware.Detail401InvalidOrExpiredToken},
 		},
 		{
 			name:           "missing header with X-API-Key",
 			setup:          func(r *http.Request) { r.Header.Set("X-API-Key", "some-token") },
-			wantDetailHas:  "Use Authorization: Bearer <token>",
-			titleMustNotBe: []string{"Bearer <token>", "Use Authorization: Bearer <token>"},
+			wantDetailHas:  middleware.Detail401UseAuthBearerHint,
+			titleMustNotBe: []string{"Bearer <token>", middleware.Detail401UseAuthBearerHint},
 		},
 	}
 
@@ -199,6 +199,84 @@ func TestContract_BB12_401Reproductions(t *testing.T) {
 			for _, forbidden := range tc.titleMustNotBe {
 				require.NotContains(t, resp.Error.Title, forbidden,
 					"title must not contain the variable substring %q", forbidden)
+			}
+		})
+	}
+}
+
+// TestContract_TRA724_401DetailsAreEndpointAgnostic locks in the TRA-724
+// harmonization: the missing-header and malformed-JWT 401 cases must emit
+// the same canonical detail string regardless of which middleware chain the
+// route is fronted by. The four routes named in the ticket cover both
+// chains in production — `/orgs/me` is APIKeyAuth-only, the rest are
+// EitherAuth-fronted. The bug that motivated this ticket was the two chains
+// diverging on the same condition.
+//
+// The auth chain runs to its terminal 401 without a DB for these inputs
+// (no Authorization header → APIKeyAuth/EitherAuth return early;
+// "Bearer not-a-jwt" → ValidateAPIKey/ClassifyToken fail before any
+// storage call), so nil store is safe.
+func TestContract_TRA724_401DetailsAreEndpointAgnostic(t *testing.T) {
+	t.Setenv("JWT_SECRET", "tra724-test-secret")
+
+	build := func() *chi.Mux {
+		mux := chi.NewRouter()
+		mux.Use(middleware.RequestID)
+		mux.With(middleware.APIKeyAuth(nil)).Get("/api/v1/orgs/me",
+			func(w http.ResponseWriter, r *http.Request) { t.Fatal("auth should reject before handler") })
+		mux.Group(func(r chi.Router) {
+			r.Use(middleware.EitherAuth(nil))
+			r.Get("/api/v1/assets", func(w http.ResponseWriter, r *http.Request) { t.Fatal("auth should reject before handler") })
+			r.Get("/api/v1/locations", func(w http.ResponseWriter, r *http.Request) { t.Fatal("auth should reject before handler") })
+			r.Get("/api/v1/reports/asset-locations", func(w http.ResponseWriter, r *http.Request) { t.Fatal("auth should reject before handler") })
+		})
+		return mux
+	}
+
+	endpoints := []string{
+		"/api/v1/orgs/me",
+		"/api/v1/assets",
+		"/api/v1/locations",
+		"/api/v1/reports/asset-locations",
+	}
+
+	cases := []struct {
+		name       string
+		setReq     func(*http.Request)
+		wantDetail string
+	}{
+		{
+			name:       "missing Authorization header",
+			setReq:     func(r *http.Request) {},
+			wantDetail: middleware.Detail401MissingAuthHeader,
+		},
+		{
+			name:       "malformed JWT in Bearer token",
+			setReq:     func(r *http.Request) { r.Header.Set("Authorization", "Bearer not-a-jwt") },
+			wantDetail: middleware.Detail401InvalidOrExpiredToken,
+		},
+	}
+
+	mux := build()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, path := range endpoints {
+				t.Run(path, func(t *testing.T) {
+					req := httptest.NewRequest(http.MethodGet, path, nil)
+					tc.setReq(req)
+					rec := httptest.NewRecorder()
+					mux.ServeHTTP(rec, req)
+
+					require.Equal(t, http.StatusUnauthorized, rec.Code)
+					require.Equal(t, `Bearer realm="trakrf-api"`, rec.Header().Get("WWW-Authenticate"))
+
+					var resp apierrors.ErrorResponse
+					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+					require.Equal(t, "Unauthorized", resp.Error.Title)
+					require.Equal(t, string(apierrors.ErrUnauthorized), resp.Error.Type)
+					require.Equal(t, tc.wantDetail, resp.Error.Detail,
+						"401 detail must be identical across every endpoint for the same auth-failure condition (TRA-724)")
+				})
 			}
 		})
 	}

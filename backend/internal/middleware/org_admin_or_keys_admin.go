@@ -54,7 +54,7 @@ func RequireOrgAdminOrKeysAdmin(store OrgRoleStore) func(http.Handler) http.Hand
 			}
 
 			// 3. No principal (defensive — EitherAuth should have rejected).
-			httputil.Respond401(w, r, "Authorization required", reqID)
+			httputil.Respond401(w, r, Detail401MissingAuthHeader, reqID)
 		})
 	}
 }
