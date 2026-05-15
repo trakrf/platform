@@ -1626,10 +1626,13 @@ func injectDefaultErrorResponse(doc *openapi3.T) {
 // not writable and don't appear on the write side.
 var nullableFields = map[string][]string{
 	// --- read views (response payloads) ---
-	"asset.PublicAssetView":            {"location_id", "location_external_key", "description", "valid_to", "deleted_at"},
-	"apikey.APIKeyListItem":            {"created_by", "created_by_key_id", "last_used_at"},
-	"report.PublicAssetHistoryItem":    {"duration_seconds", "location_id", "location_external_key"},
-	"report.PublicCurrentLocationItem": {"asset_id", "asset_external_key", "location_id", "location_external_key", "asset_deleted_at"},
+	"asset.PublicAssetView":         {"location_id", "location_external_key", "description", "valid_to", "deleted_at"},
+	"apikey.APIKeyListItem":         {"created_by", "created_by_key_id", "last_used_at"},
+	"report.PublicAssetHistoryItem": {"duration_seconds", "location_id", "location_external_key"},
+	// TRA-732 R4 / BB39 F8: asset_id and asset_external_key are non-nullable
+	// in this view — every row originates from a live (or deletion-included)
+	// trakrf.assets row, which has both columns NOT NULL.
+	"report.PublicCurrentLocationItem": {"location_id", "location_external_key", "asset_deleted_at"},
 	"location.PublicLocationView":      {"parent_id", "parent_external_key", "description", "valid_to", "deleted_at"},
 
 	// --- write schemas (request payloads) — TRA-614 / BB19 §S1 ---

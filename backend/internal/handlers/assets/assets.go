@@ -147,13 +147,12 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TRA-705 (BB32 §C6): valid_from, is_active, and metadata are
-	// non-nullable on both Create and Update. Omission already means "use
-	// server default" — accepting null on Create only (the prior TRA-675
-	// "null-as-now" carve-out) muddied the semantics and forced an
-	// asymmetry doc note that integrators tripped on. Reject explicit
-	// null with invalid_value; accumulate every violation so the
-	// integrator sees the full picture (BB32 §D3 pattern).
+	// TRA-705 (BB32 §C6) + TRA-732 R2: every non-nullable field — including
+	// the required string fields `name` and `external_key` — emits
+	// `invalid_value` for explicit null. `required` is reserved for the
+	// absent-key case; explicit null on a non-nullable field is "you sent
+	// a bad value," not "you forgot to include this." Accumulate every
+	// violation in one response (BB32 §D3 pattern).
 	var nullViolations []modelerrors.FieldError
 	for _, f := range []string{"valid_from", "is_active", "metadata"} {
 		if _, ok := explicitNulls[f]; ok {
@@ -161,6 +160,15 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				Field:   f,
 				Code:    "invalid_value",
 				Message: fmt.Sprintf("%s cannot be null; omit the field to use the server default, or provide a value", f),
+			})
+		}
+	}
+	for _, f := range []string{"name", "external_key"} {
+		if _, ok := explicitNulls[f]; ok {
+			nullViolations = append(nullViolations, modelerrors.FieldError{
+				Field:   f,
+				Code:    "invalid_value",
+				Message: fmt.Sprintf("%s cannot be null; provide a string value", f),
 			})
 		}
 	}

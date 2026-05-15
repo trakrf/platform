@@ -565,8 +565,6 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 		{"report.PublicAssetHistoryItem", "duration_seconds"},
 		{"report.PublicAssetHistoryItem", "location_id"},
 		{"report.PublicAssetHistoryItem", "location_external_key"},
-		{"report.PublicCurrentLocationItem", "asset_id"},
-		{"report.PublicCurrentLocationItem", "asset_external_key"},
 		{"report.PublicCurrentLocationItem", "location_id"},
 		{"report.PublicCurrentLocationItem", "location_external_key"},
 	}
@@ -585,6 +583,15 @@ func TestPostprocess_MarksNullableFields(t *testing.T) {
 	assert.False(t,
 		doc.Components.Schemas["report.PublicCurrentLocationItem"].Value.Properties["asset_last_seen"].Value.Nullable,
 		"asset_last_seen is not nullable")
+	// TRA-732 R4 / BB39 F8: asset_id and asset_external_key are NOT
+	// nullable — they originate from NOT NULL columns and the view
+	// constructor always emits a value.
+	assert.False(t,
+		doc.Components.Schemas["report.PublicCurrentLocationItem"].Value.Properties["asset_id"].Value.Nullable,
+		"asset_id is not nullable")
+	assert.False(t,
+		doc.Components.Schemas["report.PublicCurrentLocationItem"].Value.Properties["asset_external_key"].Value.Nullable,
+		"asset_external_key is not nullable")
 }
 
 func TestPostprocess_AddsDateTimeFormatToTimestampFields(t *testing.T) {
