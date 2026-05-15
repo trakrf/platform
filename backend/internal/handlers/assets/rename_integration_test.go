@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -117,8 +118,11 @@ func TestRenameAsset_Duplicate_Conflict409(t *testing.T) {
 	assert.Equal(t, "conflict", resp.Error.Type)
 }
 
-// POST /rename with the same value returns 200 idempotently. updated_at
-// advances (the SQL UPDATE fires) but external_key stays.
+// POST /rename with the same value returns 200 idempotently AND does not
+// observably mutate the resource — updated_at must not advance. TRA-731 /
+// BB39 F3: integrators following the cached-body PATCH pattern after a
+// defensive rename retry rely on updated_at being stable for value-match
+// renames.
 func TestRenameAsset_SameValue_NoOp200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -128,6 +132,10 @@ func TestRenameAsset_SameValue_NoOp200(t *testing.T) {
 	defer testutil.CleanupTestAccounts(t, pool)
 
 	id := seedRoundTripAsset(t, pool, orgID, "AST-SAME", "SameKey")
+
+	var beforeUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.assets WHERE id = $1`, id).Scan(&beforeUpdatedAt))
 
 	handler := NewHandler(store)
 	r := setupRenameAssetRouter(handler)
@@ -148,6 +156,13 @@ func TestRenameAsset_SameValue_NoOp200(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "AST-SAME", resp.Data["external_key"])
+
+	var afterUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.assets WHERE id = $1`, id).Scan(&afterUpdatedAt))
+	assert.True(t, afterUpdatedAt.Equal(beforeUpdatedAt),
+		"same-value rename must not advance updated_at (before=%s after=%s)",
+		beforeUpdatedAt, afterUpdatedAt)
 }
 
 // POST /rename with a malformed external_key (reserved punctuation, empty)
