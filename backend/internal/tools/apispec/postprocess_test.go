@@ -1724,6 +1724,154 @@ func TestInlinePublicTimeRefs(t *testing.T) {
 	assert.True(t, deleted.Value.Nullable, "nullable on the referencing property must be preserved across the rewrite")
 }
 
+// TestAppendNullableCodegenPolicyDescription_AddsParagraph locks in
+// TRA-726 / BB37 F5: info.description grows a paragraph documenting the
+// `nullable: true` interpretation split across codegen targets.
+func TestAppendNullableCodegenPolicyDescription_AddsParagraph(t *testing.T) {
+	doc := &openapi3.T{Info: &openapi3.Info{Description: "existing prose."}}
+
+	appendNullableCodegenPolicyDescription(doc)
+
+	require.Contains(t, doc.Info.Description, "existing prose.")
+	require.Contains(t, doc.Info.Description, "Nullable field interpretation")
+	require.Contains(t, doc.Info.Description, "datamodel-codegen")
+	require.Contains(t, doc.Info.Description, "openapi-typescript")
+	require.Contains(t, doc.Info.Description, "openapi-generator-cli")
+}
+
+// TestAppendNullableCodegenPolicyDescription_Idempotent verifies the
+// marker check prevents duplicate appends.
+func TestAppendNullableCodegenPolicyDescription_Idempotent(t *testing.T) {
+	doc := &openapi3.T{Info: &openapi3.Info{Description: ""}}
+
+	appendNullableCodegenPolicyDescription(doc)
+	first := doc.Info.Description
+	appendNullableCodegenPolicyDescription(doc)
+
+	assert.Equal(t, first, doc.Info.Description, "second call must be a no-op")
+}
+
+// TestMarkSurrogateIDsInt64_PreservesInt32MaxOnInputs locks in TRA-726 /
+// BB37 F2: surrogate-ID path and query parameters keep the int32 ceiling
+// (server enforces the runtime cap from BB35 B7's wire-vs-storage
+// divergence), while response schema properties drop it (descriptive
+// only). Lifts when TRA-720 (bigint storage migration) lands.
+func TestMarkSurrogateIDsInt64_PreservesInt32MaxOnInputs(t *testing.T) {
+	intMax := float64(2147483647)
+	one := float64(1)
+
+	mkIntSchema := func(withMax bool) *openapi3.Schema {
+		s := openapi3.NewIntegerSchema()
+		s.Min = &one
+		if withMax {
+			m := intMax
+			s.Max = &m
+		}
+		return s
+	}
+
+	doc := &openapi3.T{
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"AssetView": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type: &openapi3.Types{openapi3.TypeObject},
+					Properties: openapi3.Schemas{
+						"id":          &openapi3.SchemaRef{Value: mkIntSchema(true)},
+						"location_id": &openapi3.SchemaRef{Value: mkIntSchema(true)},
+					},
+				}},
+			},
+		},
+		Paths: openapi3.NewPaths(),
+	}
+
+	// Path parameter — should retain the int32 max.
+	pathParamSchema := mkIntSchema(false)
+	queryScalarSchema := mkIntSchema(false)
+	queryArrayItems := mkIntSchema(false)
+	queryArraySchema := openapi3.NewArraySchema()
+	queryArraySchema.Items = &openapi3.SchemaRef{Value: queryArrayItems}
+
+	doc.Paths.Set("/api/v1/assets/{asset_id}", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Parameters: openapi3.Parameters{
+				{Value: &openapi3.Parameter{
+					Name:   "asset_id",
+					In:     "path",
+					Schema: &openapi3.SchemaRef{Value: pathParamSchema},
+				}},
+				{Value: &openapi3.Parameter{
+					Name:   "parent_id",
+					In:     "query",
+					Schema: &openapi3.SchemaRef{Value: queryScalarSchema},
+				}},
+				{Value: &openapi3.Parameter{
+					Name:   "location_id",
+					In:     "query",
+					Schema: &openapi3.SchemaRef{Value: queryArraySchema},
+				}},
+			},
+		},
+	})
+
+	markSurrogateIDsInt64(doc)
+
+	// Response schema properties: format promoted, max dropped.
+	assetID := doc.Components.Schemas["AssetView"].Value.Properties["id"].Value
+	assert.Equal(t, "int64", assetID.Format, "response id should be promoted to int64")
+	assert.Nil(t, assetID.Max, "response id should drop the int32 ceiling (descriptive only)")
+
+	respFK := doc.Components.Schemas["AssetView"].Value.Properties["location_id"].Value
+	assert.Equal(t, "int64", respFK.Format)
+	assert.Nil(t, respFK.Max, "response FK should drop the int32 ceiling")
+
+	// Path param: int64 format, max retained.
+	assert.Equal(t, "int64", pathParamSchema.Format)
+	require.NotNil(t, pathParamSchema.Max, "path-param asset_id must retain int32 max (runtime cap)")
+	assert.Equal(t, intMax, *pathParamSchema.Max)
+
+	// Query scalar param: int64 format, max applied.
+	assert.Equal(t, "int64", queryScalarSchema.Format)
+	require.NotNil(t, queryScalarSchema.Max, "query parent_id must carry int32 max (runtime cap)")
+	assert.Equal(t, intMax, *queryScalarSchema.Max)
+
+	// Query array param: items get int64 + max.
+	assert.Equal(t, "int64", queryArrayItems.Format)
+	require.NotNil(t, queryArrayItems.Max, "query array location_id items must carry int32 max")
+	assert.Equal(t, intMax, *queryArrayItems.Max)
+}
+
+// TestMarkSurrogateIDsInt64_Idempotent verifies the pass can be safely
+// re-run without flipping the max on/off.
+func TestMarkSurrogateIDsInt64_Idempotent(t *testing.T) {
+	intMax := float64(2147483647)
+	pathParamSchema := openapi3.NewIntegerSchema()
+	one := float64(1)
+	pathParamSchema.Min = &one
+
+	doc := &openapi3.T{
+		Paths: openapi3.NewPaths(),
+	}
+	doc.Paths.Set("/api/v1/assets/{asset_id}", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Parameters: openapi3.Parameters{
+				{Value: &openapi3.Parameter{
+					Name:   "asset_id",
+					In:     "path",
+					Schema: &openapi3.SchemaRef{Value: pathParamSchema},
+				}},
+			},
+		},
+	})
+
+	markSurrogateIDsInt64(doc)
+	markSurrogateIDsInt64(doc)
+
+	require.NotNil(t, pathParamSchema.Max)
+	assert.Equal(t, intMax, *pathParamSchema.Max)
+	assert.Equal(t, "int64", pathParamSchema.Format)
+}
+
 // Post-consolidateSchemaNamespaces, the component name is bare
 // `PublicTime` (no `shared.` prefix). The rewrite must match that form
 // too.
