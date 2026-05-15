@@ -19,8 +19,11 @@ const externalKeyPattern = "^[A-Za-z0-9-]+$"
 // external_key_pattern constraint in the spec. Mirrors the
 // `validate:"...,external_key_pattern"` tags on the matching Go structs.
 var externalKeyPatternFields = map[string][]string{
-	"asset.CreateAssetRequest":               {"external_key", "location_external_key"},
-	"asset.CreateAssetWithTagsRequest":       {"external_key", "location_external_key"},
+	// TRA-734 (BB40 F3): location_external_key no longer appears on
+	// CreateAssetRequest or CreateAssetWithTagsRequest — asset location is
+	// scan/operational data, never settable on Create.
+	"asset.CreateAssetRequest":               {"external_key"},
+	"asset.CreateAssetWithTagsRequest":       {"external_key"},
 	"asset.RenameAssetRequest":               {"external_key"},
 	"location.CreateLocationRequest":         {"external_key", "parent_external_key"},
 	"location.CreateLocationWithTagsRequest": {"external_key", "parent_external_key"},
@@ -998,12 +1001,14 @@ var publicWriteSchemas = []string{
 // so a payload that sends `{a: null, b: null}` to clear the FK must remain
 // valid — a `not: required` constraint would reject it. The PATCH handler
 // implements its own per-field reconciliation.
+// TRA-734 (BB40 F3): the asset Create pair (location_id /
+// location_external_key) was removed — those fields are no longer present
+// on CreateAssetWithTagsRequest. Only the location Create pair remains.
 var mutuallyExclusiveFieldPairs = []struct {
 	Schema string
 	FieldA string
 	FieldB string
 }{
-	{"asset.CreateAssetWithTagsRequest", "location_id", "location_external_key"},
 	{"location.CreateLocationWithTagsRequest", "parent_id", "parent_external_key"},
 }
 
@@ -1652,9 +1657,15 @@ var nullableFields = map[string][]string{
 	// TRA-719 / BB35 B2: parent_external_key restored to
 	// UpdateLocationRequest now that PATCH dispatches it through the same
 	// FK-resolution path as Create.
+	// TRA-734 (BB40 F3): location_id / location_external_key dropped from
+	// the Create request schemas — asset location is scan/operational data,
+	// never settable on Create. location_id stays on UpdateAssetRequest
+	// because the BB31 §2 echo check decodes it before nilling it out;
+	// the Go field is *int and the spec advertises it as nullable to mirror
+	// that round-trip-safe shape.
 	"asset.UpdateAssetRequest":               {"description", "location_id", "valid_to"},
-	"asset.CreateAssetRequest":               {"description", "location_id", "location_external_key", "valid_to"},
-	"asset.CreateAssetWithTagsRequest":       {"description", "location_id", "location_external_key", "valid_to", "tags"},
+	"asset.CreateAssetRequest":               {"description", "valid_to"},
+	"asset.CreateAssetWithTagsRequest":       {"description", "valid_to", "tags"},
 	"location.UpdateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
 	"location.CreateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
 	"location.CreateLocationWithTagsRequest": {"description", "parent_id", "parent_external_key", "valid_to", "tags"},

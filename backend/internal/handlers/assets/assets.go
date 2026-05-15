@@ -38,67 +38,24 @@ func NewHandler(storage *storage.Storage) *Handler {
 	}
 }
 
-// resolveLocation reconciles the location_id (canonical surrogate) and
-// location_external_key (natural-key alternate) inputs on Create. Exactly
-// one is expected to be set (TRA-681 oneOf constraint enforced upstream
-// in the Create handler via the ambiguous_fields pre-check). PATCH never
-// supplies the natural-key form — it is stripped before this function
-// runs (see asset.PublicReadOnlyFields).
-//
-// Both nil → nil (no location). When location_id is set it is used;
-// otherwise location_external_key is resolved via lookup. Wire field
-// names dropped the `current_` prefix in TRA-580 C-3.
-//
-// TRA-674 / BB27 F2 / TRA-681: a nonexistent surrogate `location_id`
-// returns the same envelope shape as a nonexistent natural-key
-// `location_external_key` — both surface keyed on the offending field
-// as 400 validation_error with code=fk_not_found. Previously the
-// surrogate path reached the storage layer and tripped the FK
-// constraint, surfacing as 500 internal_error.
-func (handler *Handler) resolveLocation(
-	r *http.Request, orgID int, locID *int, locExternalKey *string,
-) (*int, *modelerrors.FieldError) {
-	hasID := locID != nil
-	hasExt := locExternalKey != nil && *locExternalKey != ""
+// TRA-734 (BB40 F3): location_id / location_external_key on a POST or PATCH
+// body are rejected with code=read_only. The error detail honestly describes
+// the master-data / scan-data bifurcation and points at the consumption
+// surfaces (GET /assets/{id}, GET /assets/{id}/history, GET /reports/asset-
+// locations) rather than the previous opaque "record a scan event" line.
+// Asset location is collected through ingestion paths separate from the
+// public API: the fixed-reader MQTT pipeline and handheld UI submission.
+const assetLocationReadOnlyMessage = "asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API. Read current asset location through GET /api/v1/assets/{id}, GET /api/v1/assets/{id}/history, or GET /api/v1/reports/asset-locations. See https://docs.trakrf.id/api/data-model for the full data model."
 
-	if !hasID && !hasExt {
-		return nil, nil
-	}
-	if hasID {
-		loc, err := handler.storage.GetLocationByID(r.Context(), orgID, *locID)
-		if err != nil {
-			return nil, &modelerrors.FieldError{
-				Field:   "location_id",
-				Code:    "internal_error",
-				Message: err.Error(),
-			}
-		}
-		if loc == nil {
-			return nil, &modelerrors.FieldError{
-				Field:   "location_id",
-				Code:    "fk_not_found",
-				Message: fmt.Sprintf("location_id %d not found", *locID),
-			}
-		}
-		return locID, nil
-	}
-
-	loc, err := handler.storage.GetLocationByExternalKey(r.Context(), orgID, *locExternalKey)
-	if err != nil {
-		return nil, &modelerrors.FieldError{
-			Field:   "location_external_key",
-			Code:    "internal_error",
-			Message: err.Error(),
-		}
-	}
-	if loc == nil {
-		return nil, &modelerrors.FieldError{
-			Field:   "location_external_key",
-			Code:    "fk_not_found",
-			Message: fmt.Sprintf("location_external_key %q not found", *locExternalKey),
-		}
-	}
-	return &loc.ID, nil
+// PublicRejectCreateFields names the JSON keys that POST /api/v1/assets
+// rejects pre-decode with 400 validation_error and code=read_only. Same
+// shape as PublicRejectPatchFields on the PATCH side. TRA-734 (BB40 F3):
+// location_id and location_external_key are scan/operational data —
+// they are derived from ingestion, never set by an integrator on the
+// public API.
+var PublicRejectCreateFields = map[string]httputil.FieldRejectPolicy{
+	"location_id":           {Code: "read_only", Message: assetLocationReadOnlyMessage},
+	"location_external_key": {Code: "read_only", Message: assetLocationReadOnlyMessage},
 }
 
 // @Summary      Create an asset
@@ -133,6 +90,17 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
 		httputil.RespondMissingOrgContext(w, r, requestID)
+		return
+	}
+
+	// TRA-734 (BB40 F3): asset location is scan/operational data and not
+	// directly settable through the public API. Reject location_id /
+	// location_external_key pre-decode with code=read_only and a detail that
+	// names the consumption paths. The struct fields are absent on
+	// CreateAssetRequest, so without this pre-decode reject a caller would
+	// see the generic unknown_field code instead of the positioning-coherent
+	// read_only message.
+	if httputil.RejectFields(w, r, requestID, PublicRejectCreateFields) {
 		return
 	}
 
@@ -211,46 +179,10 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// TRA-681: location_id and location_external_key form a oneOf on Create
-	// bodies — the spec encodes `not: {required: [location_id,
-	// location_external_key]}` on CreateAssetWithTagsRequest. Reject both-
-	// supplied at the handler so callers get a typed ambiguous_fields code
-	// they can branch on, rather than relying on a silent server pick.
-	_, hasLocID := presentKeys["location_id"]
-	_, hasLocExt := presentKeys["location_external_key"]
-	if hasLocID && hasLocExt {
-		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{
-			{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-			{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-		})
-		return
-	}
-
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationErrorWithPresence(w, r, err, requestID, presentKeys, explicitNulls)
 		return
 	}
-
-	resolved, fErr := handler.resolveLocation(r, orgID, request.LocationID, request.LocationExternalKey)
-	if fErr != nil {
-		if fErr.Code == "internal_error" {
-			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-				fErr.Message, requestID)
-
-			return
-		}
-		// TRA-681: fk_not_found surfaces as 400 validation_error on both
-		// surrogate and natural-key paths. Industry precedent (Stripe, AWS,
-		// Atlassian) treats "your body references a row that does not exist"
-		// as a validation failure rather than a state-conflict; 409 is
-		// reserved for true state-conflict cases like the non-leaf-location-
-		// delete pattern. The typed code stays so generated clients can
-		// branch precisely.
-		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{*fErr})
-
-		return
-	}
-	request.LocationID = resolved
 
 	request.OrgID = orgID
 
@@ -271,7 +203,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `location_id`, `location_external_key`). Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `location_id`, `location_external_key`). Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
@@ -376,8 +308,8 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	// A differing value is 400 read_only naming the dedicated write path.
 	//
 	//   external_key            → POST /assets/{asset_id}/rename
-	//   location_id             → record a scan event (record-of-origin posture; TRA-411)
-	//   location_external_key   → record a scan event
+	//   location_id             → scan event ingestion (TRA-734 / BB40 F3)
+	//   location_external_key   → scan event ingestion (TRA-734 / BB40 F3)
 	//
 	// TRA-710 (BB33 F2): the same accept-if-matches / reject-if-differs
 	// rule covers the server-managed surrogate id and timestamps (id,
@@ -470,7 +402,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "location_id",
 				Code:    "read_only",
-				Message: "asset location is derived from scan events and not directly settable; record a scan event to update asset location",
+				Message: assetLocationReadOnlyMessage,
 			})
 		}
 	}
@@ -486,7 +418,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "location_external_key",
 				Code:    "read_only",
-				Message: "asset location is derived from scan events and not directly settable; record a scan event to update asset location",
+				Message: assetLocationReadOnlyMessage,
 			})
 		}
 	}

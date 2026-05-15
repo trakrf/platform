@@ -459,12 +459,6 @@
       },
       "CreateAssetWithTagsRequest": {
         "additionalProperties": false,
-        "not": {
-          "required": [
-            "location_id",
-            "location_external_key"
-          ]
-        },
         "properties": {
           "description": {
             "maxLength": 1024,
@@ -482,21 +476,6 @@
           "is_active": {
             "example": true,
             "type": "boolean"
-          },
-          "location_external_key": {
-            "example": "WHS-01",
-            "maxLength": 255,
-            "minLength": 1,
-            "nullable": true,
-            "pattern": "^[A-Za-z0-9-]+$",
-            "type": "string"
-          },
-          "location_id": {
-            "example": 42,
-            "format": "int64",
-            "minimum": 1,
-            "nullable": true,
-            "type": "integer"
           },
           "metadata": {
             "additionalProperties": {},
@@ -2388,7 +2367,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `location_id`, `location_external_key`). Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is derived from scan events (record a scan event to change it); mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the natural-key reference fields (`external_key`, `location_id`, `location_external_key`). Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
         "operationId": "updateAsset",
         "parameters": [
           {

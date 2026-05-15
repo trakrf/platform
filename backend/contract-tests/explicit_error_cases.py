@@ -119,21 +119,25 @@ def main() -> int:
     status, body = call("POST", "/api/v1/assets", body={"name": "x" * 256})
     record(observed, "POST /assets name=256x → too_long on name", status, body)
 
-    # --- too_small: numeric below min=1 ---
+    # --- too_small: numeric below min=1. TRA-734 (BB40 F3) moved this off
+    # POST /assets (location_id no longer settable); POST /locations carries
+    # the same numeric min on parent_id. ---
     status, body = call(
         "POST",
-        "/api/v1/assets",
-        body={"name": "TRA-692 too_small probe", "location_id": 0},
+        "/api/v1/locations",
+        body={"name": "TRA-692 too_small probe", "parent_id": 0},
     )
-    record(observed, "POST /assets location_id=0 → too_small on location_id", status, body)
+    record(observed, "POST /locations parent_id=0 → too_small on parent_id", status, body)
 
-    # --- too_large: numeric above max=2147483647 ---
+    # --- too_large: numeric above max=2147483647. TRA-734 (BB40 F3) moved
+    # this off POST /assets; POST /locations parent_id carries the same
+    # max=int32. ---
     status, body = call(
         "POST",
-        "/api/v1/assets",
-        body={"name": "TRA-692 too_large probe", "location_id": 9999999999},
+        "/api/v1/locations",
+        body={"name": "TRA-692 too_large probe", "parent_id": 9999999999},
     )
-    record(observed, "POST /assets location_id=9999999999 → too_large on location_id", status, body)
+    record(observed, "POST /locations parent_id=9999999999 → too_large on parent_id", status, body)
 
     # --- invalid_value: bad RFC 3339 valid_from ---
     status, body = call(
@@ -143,28 +147,33 @@ def main() -> int:
     )
     record(observed, "POST /assets valid_from=garbage → invalid_value", status, body)
 
-    # --- fk_not_found: reference a non-existent location ---
+    # --- fk_not_found: reference a non-existent parent location. TRA-734
+    # (BB40 F3) moved this off POST /assets — asset location is no longer
+    # settable on Create — but the location-hierarchy parent FK still uses
+    # the same resolution path. ---
     status, body = call(
         "POST",
-        "/api/v1/assets",
+        "/api/v1/locations",
         body={
             "name": "TRA-692 fk_not_found probe",
-            "location_external_key": "does-not-exist-zzz-TRA-692",
+            "parent_external_key": "does-not-exist-zzz-TRA-692",
         },
     )
-    record(observed, "POST /assets location_external_key=missing → fk_not_found", status, body)
+    record(observed, "POST /locations parent_external_key=missing → fk_not_found", status, body)
 
-    # --- ambiguous_fields: send both surrogate and natural-key location refs ---
+    # --- ambiguous_fields: send both surrogate and natural-key parent refs.
+    # TRA-734 (BB40 F3) moved this off POST /assets; POST /locations still
+    # carries the mutually-exclusive parent_id / parent_external_key pair. ---
     status, body = call(
         "POST",
-        "/api/v1/assets",
+        "/api/v1/locations",
         body={
             "name": "TRA-692 ambiguous_fields probe",
-            "location_id": 1,
-            "location_external_key": SEED_LOCATION_EXTERNAL_KEY,
+            "parent_id": 1,
+            "parent_external_key": SEED_LOCATION_EXTERNAL_KEY,
         },
     )
-    record(observed, "POST /assets both location fields → ambiguous_fields", status, body)
+    record(observed, "POST /locations both parent fields → ambiguous_fields", status, body)
 
     # --- unknown_field: strict decoder rejects unrecognised body keys ---
     status, body = call(

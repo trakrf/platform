@@ -1,17 +1,17 @@
 //go:build integration
 // +build integration
 
-// TRA-674 / BB27 F2 / TRA-681: missing-reference on the surrogate
-// `location_id` returns the same envelope shape as missing-reference on the
-// natural-key `location_external_key` — both surface as 400 validation_error
-// keyed on the offending field with code=fk_not_found.
+// TRA-734 (BB40 F3): asset location is scan/operational data, not master
+// data. The public API no longer accepts location_id or location_external_key
+// on POST /assets — both fields return 400 validation_error / read_only with
+// an envelope that points at the consumption surfaces (GET /assets/{id},
+// GET /assets/{id}/history, GET /reports/asset-locations).
 //
-// Pre-TRA-674 the surrogate path reached the storage layer and tripped the
-// FK constraint as 500 internal_error. TRA-674 collapsed both onto 400
-// invalid_value; TRA-678 then moved both to 409 conflict / fk_not_found to
-// silence Schemathesis's positive_data_acceptance check; TRA-681 reverts to
-// 400 validation_error / fk_not_found per design review. The typed code
-// stays so generated clients can branch precisely.
+// Pre-TRA-734 history kept for context: the surrogate path used to surface
+// fk_not_found via resolveLocation (TRA-674 / BB27 F2 / TRA-681); the
+// mutually-exclusive both-supplied path used to surface ambiguous_fields.
+// Both paths are now unreachable on Create — the read_only pre-decode reject
+// fires first regardless of value.
 
 package assets
 
@@ -32,9 +32,11 @@ import (
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
-// POST /api/v1/assets with a surrogate location_id that does not exist
-// returns 400 validation_error / fk_not_found keyed on `location_id`.
-func TestPostAsset_MissingLocationID_Rejected400(t *testing.T) {
+// TRA-734 (BB40 F3): POST /api/v1/assets with `location_id` is rejected
+// pre-decode with 400 validation_error / read_only naming the consumption
+// surfaces. The check fires whether the row exists or not — asset location
+// is never settable on Create regardless of value.
+func TestPostAsset_LocationID_Rejected400_ReadOnly(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -48,9 +50,9 @@ func TestPostAsset_MissingLocationID_Rejected400(t *testing.T) {
 	r.Post("/api/v1/assets", handler.Create)
 
 	body, err := json.Marshal(map[string]any{
-		"external_key": "ASSET-MISSING-FK",
-		"name":         "missing-fk",
-		"location_id":  99999999,
+		"external_key": "ASSET-LOC-ID-RO",
+		"name":         "loc-id-readonly",
+		"location_id":  42,
 	})
 	require.NoError(t, err)
 
@@ -61,14 +63,15 @@ func TestPostAsset_MissingLocationID_Rejected400(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code,
-		"missing location_id must be 400 (got %d): %s", rec.Code, rec.Body.String())
+		"location_id on POST must be 400 (got %d): %s", rec.Code, rec.Body.String())
 
 	var resp struct {
 		Error struct {
 			Type   string `json:"type"`
 			Fields []struct {
-				Field string `json:"field"`
-				Code  string `json:"code"`
+				Field   string `json:"field"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
 			} `json:"fields"`
 		} `json:"error"`
 	}
@@ -76,13 +79,17 @@ func TestPostAsset_MissingLocationID_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "location_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+	assert.Contains(t, resp.Error.Fields[0].Message,
+		"asset location is collected through scan event ingestion")
+	assert.Contains(t, resp.Error.Fields[0].Message,
+		"/api/v1/reports/asset-locations")
 }
 
-// POST /api/v1/assets with a natural-key location_external_key that does
-// not exist returns 400 validation_error / fk_not_found keyed on
-// `location_external_key` — same envelope as the surrogate-id path.
-func TestPostAsset_MissingLocationExternalKey_Rejected400(t *testing.T) {
+// TRA-734 (BB40 F3): POST /api/v1/assets with `location_external_key` is
+// rejected pre-decode with 400 validation_error / read_only — same shape
+// as the location_id case.
+func TestPostAsset_LocationExternalKey_Rejected400_ReadOnly(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -96,9 +103,9 @@ func TestPostAsset_MissingLocationExternalKey_Rejected400(t *testing.T) {
 	r.Post("/api/v1/assets", handler.Create)
 
 	body, err := json.Marshal(map[string]any{
-		"external_key":          "ASSET-MISSING-EXTFK",
-		"name":                  "missing-extfk",
-		"location_external_key": "NOPE-XYZ",
+		"external_key":          "ASSET-LOC-EXT-RO",
+		"name":                  "loc-ext-readonly",
+		"location_external_key": "WHS-01",
 	})
 	require.NoError(t, err)
 
@@ -109,14 +116,15 @@ func TestPostAsset_MissingLocationExternalKey_Rejected400(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code,
-		"missing location_external_key must be 400 (got %d): %s", rec.Code, rec.Body.String())
+		"location_external_key on POST must be 400 (got %d): %s", rec.Code, rec.Body.String())
 
 	var resp struct {
 		Error struct {
 			Type   string `json:"type"`
 			Fields []struct {
-				Field string `json:"field"`
-				Code  string `json:"code"`
+				Field   string `json:"field"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
 			} `json:"fields"`
 		} `json:"error"`
 	}
@@ -124,7 +132,9 @@ func TestPostAsset_MissingLocationExternalKey_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "location_external_key", resp.Error.Fields[0].Field)
-	assert.Equal(t, "fk_not_found", resp.Error.Fields[0].Code)
+	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+	assert.Contains(t, resp.Error.Fields[0].Message,
+		"asset location is collected through scan event ingestion")
 }
 
 // PATCH /api/v1/assets/{id} with a `location_id` that differs from the
@@ -172,10 +182,12 @@ func TestPatchAsset_DifferingLocationID_Rejected400(t *testing.T) {
 	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
 }
 
-// POST /api/v1/assets with both location_id and location_external_key
-// returns 400 validation_error / ambiguous_fields. TRA-681 oneOf rule —
-// no silent winner on a request the integrator explicitly constructed.
-func TestPostAsset_BothLocationForms_Rejected400(t *testing.T) {
+// TRA-734 (BB40 F3): POST /api/v1/assets with both location_id and
+// location_external_key returns 400 validation_error / read_only with both
+// fields named (RejectFields enumerates every offending key). The pre-
+// TRA-734 ambiguous_fields shape is unreachable because the read_only
+// pre-decode reject fires before any value-level reconciliation.
+func TestPostAsset_BothLocationForms_Rejected400_ReadOnly(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -189,8 +201,8 @@ func TestPostAsset_BothLocationForms_Rejected400(t *testing.T) {
 	r.Post("/api/v1/assets", handler.Create)
 
 	body, err := json.Marshal(map[string]any{
-		"external_key":          "ASSET-BOTH-FORMS",
-		"name":                  "both-forms",
+		"external_key":          "ASSET-BOTH-FORMS-RO",
+		"name":                  "both-forms-readonly",
 		"location_id":           42,
 		"location_external_key": "WHS-01",
 	})
@@ -218,7 +230,7 @@ func TestPostAsset_BothLocationForms_Rejected400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 2)
 	for _, fld := range resp.Error.Fields {
-		assert.Equal(t, "ambiguous_fields", fld.Code, "field %s should carry ambiguous_fields", fld.Field)
+		assert.Equal(t, "read_only", fld.Code, "field %s should carry read_only", fld.Field)
 		assert.Contains(t, []string{"location_id", "location_external_key"}, fld.Field)
 	}
 }

@@ -25,17 +25,22 @@ type Asset struct {
 	DeletedAt   *time.Time `json:"deleted_at"`
 }
 
+// TRA-734 (BB40 F3): location_id and location_external_key are no longer
+// on CreateAssetRequest. Asset location is scan/operational data — collected
+// through the ingestion paths (fixed-reader MQTT pipeline + handheld UI
+// submission), never set through the public API. The handler rejects the
+// fields pre-decode with code=read_only naming the consumption paths
+// (GET /assets/{id}, GET /assets/{id}/history, GET /reports/asset-locations).
+// See PublicRejectCreateFields in the assets handler.
 type CreateAssetRequest struct {
-	OrgID               int                  `json:"-" swaggerignore:"true"`
-	ExternalKey         string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern"`
-	Name                string               `json:"name" validate:"required,min=1,max=255,no_control_chars"`
-	Description         *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars"`
-	LocationID          *int                 `json:"location_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
-	LocationExternalKey *string              `json:"location_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"WHS-01"`
-	ValidFrom           *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
-	ValidTo             *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
-	Metadata            map[string]any       `json:"metadata,omitempty"`
-	IsActive            *bool                `json:"is_active,omitempty" example:"true"`
+	OrgID       int                  `json:"-" swaggerignore:"true"`
+	ExternalKey string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern"`
+	Name        string               `json:"name" validate:"required,min=1,max=255,no_control_chars"`
+	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars"`
+	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
+	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
+	Metadata    map[string]any       `json:"metadata,omitempty"`
+	IsActive    *bool                `json:"is_active,omitempty" example:"true"`
 }
 
 // PublicReadOnlyFields names the JSON keys on PublicAssetView that the PATCH
@@ -88,8 +93,9 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // state (silent no-op); reject if it differs (400 read_only naming the
 // proper write path). Fields:
 //   - ExternalKey (own natural key) → POST /assets/{id}/rename
-//   - LocationExternalKey, LocationID (derived from scan events) →
-//     record a scan event to update asset location
+//   - LocationExternalKey, LocationID (TRA-734 / BB40 F3 — scan/operational
+//     data, collected through ingestion paths, never settable on the public
+//     API)
 //
 // None of these three fields carry validation tags because the value is
 // never written by PATCH; the only valid use is to echo the current value
