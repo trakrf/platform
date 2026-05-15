@@ -6982,7 +6982,7 @@
     },
     "/api/v1/reports/asset-locations": {
       "get": {
-        "description": "**Required scope:** `tracking:read`\n\nSnapshot of each asset's most recent location, filterable by canonical id or external_key. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.\n\nTemporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible. Soft-deleted locations are projected the same way here — null on the report row — even though the identifier still lives on the location row; reports endpoints intentionally hide tombstoned anchor points from scan-derived summaries. Use the locations endpoint with `include_deleted=true` to retrieve the underlying identifier.",
+        "description": "**Required scope:** `tracking:read`\n\nSnapshot of each asset's most recent location, filterable by either side of the join. Filter by location (`location_id` / `location_external_key`) to retrieve everything currently at a place; filter by asset (`asset_id` / `asset_external_key`, repeatable) to resolve a batch of assets from a master system to their current locations in one round-trip. Within each pair the surrogate and natural-key forms are mutually exclusive (400 `ambiguous_fields` if both are supplied); the asset and location filter pairs are independent and intersect when combined. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.\n\nTemporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible. Soft-deleted locations are projected the same way here — null on the report row — even though the identifier still lives on the location row; reports endpoints intentionally hide tombstoned anchor points from scan-derived summaries. Use the locations endpoint with `include_deleted=true` to retrieve the underlying identifier.",
         "operationId": "getAssetLocations",
         "parameters": [
           {
@@ -7008,7 +7008,7 @@
             }
           },
           {
-            "description": "filter by location id (canonical, may repeat)",
+            "description": "filter by location id (canonical, may repeat); mutually exclusive with location_external_key (400 ambiguous_fields if both supplied)",
             "explode": true,
             "in": "query",
             "name": "location_id",
@@ -7025,10 +7025,42 @@
             "style": "form"
           },
           {
-            "description": "filter by location external_key (may repeat)",
+            "description": "filter by location external_key (may repeat); mutually exclusive with location_id (400 ambiguous_fields if both supplied)",
             "explode": true,
             "in": "query",
             "name": "location_external_key",
+            "schema": {
+              "default": [],
+              "items": {
+                "pattern": "^[A-Za-z0-9-]+$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "filter by asset id (canonical, may repeat); mutually exclusive with asset_external_key (400 ambiguous_fields if both supplied)",
+            "explode": true,
+            "in": "query",
+            "name": "asset_id",
+            "schema": {
+              "default": [],
+              "items": {
+                "format": "int64",
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "filter by asset external_key (may repeat); mutually exclusive with asset_id (400 ambiguous_fields if both supplied)",
+            "explode": true,
+            "in": "query",
+            "name": "asset_external_key",
             "schema": {
               "default": [],
               "items": {

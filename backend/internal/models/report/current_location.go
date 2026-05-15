@@ -26,6 +26,8 @@ type CurrentLocationSort struct {
 type CurrentLocationFilter struct {
 	LocationIDs          []int    // filter by canonical location id(s)
 	LocationExternalKeys []string // filter by location external_key(s)
+	AssetIDs             []int    // filter by canonical asset id(s)
+	AssetExternalKeys    []string // filter by asset external_key(s)
 	Q                    *string  // substring search (case-insensitive) on asset name, external_key, and active tag values
 	IncludeDeleted       bool     // when true, includes rows for soft-deleted assets (default false)
 	Sorts                []CurrentLocationSort

@@ -30,7 +30,7 @@ func getReportsQueryEngine() QueryEngine {
 // currentLocationsArgs prepares the variadic args shared by list + count
 // queries. Each filter short-circuits to NULL when empty so the SQL
 // `$N::T[] IS NULL OR ...` branches behave as no-ops.
-func currentLocationsArgs(filter report.CurrentLocationFilter) (locIDsArg, locKeysArg, qArg any) {
+func currentLocationsArgs(filter report.CurrentLocationFilter) (locIDsArg, locKeysArg, qArg, assetIDsArg, assetKeysArg any) {
 	if len(filter.LocationIDs) > 0 {
 		locIDsArg = filter.LocationIDs
 	}
@@ -40,6 +40,12 @@ func currentLocationsArgs(filter report.CurrentLocationFilter) (locIDsArg, locKe
 	if filter.Q != nil {
 		q := "%" + *filter.Q + "%"
 		qArg = q
+	}
+	if len(filter.AssetIDs) > 0 {
+		assetIDsArg = filter.AssetIDs
+	}
+	if len(filter.AssetExternalKeys) > 0 {
+		assetKeysArg = filter.AssetExternalKeys
 	}
 	return
 }
@@ -57,11 +63,11 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 		query = buildCurrentLocationsQueryDistinctOn(orderBy)
 	}
 
-	locIDsArg, locKeysArg, qArg := currentLocationsArgs(filter)
+	locIDsArg, locKeysArg, qArg, assetIDsArg, assetKeysArg := currentLocationsArgs(filter)
 
 	items := []report.CurrentLocationItem{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.Limit, filter.Offset, filter.IncludeDeleted)
+		rows, err := tx.Query(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.Limit, filter.Offset, filter.IncludeDeleted, assetIDsArg, assetKeysArg)
 		if err != nil {
 			return fmt.Errorf("failed to list current locations: %w", err)
 		}
@@ -119,13 +125,15 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $5::bool)
+		  AND ($6::int[]  IS NULL OR a.id           = ANY($6::int[]))
+		  AND ($7::text[] IS NULL OR a.external_key = ANY($7::text[]))
 	`
 
-	locIDsArg, locKeysArg, qArg := currentLocationsArgs(filter)
+	locIDsArg, locKeysArg, qArg, assetIDsArg, assetKeysArg := currentLocationsArgs(filter)
 
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.IncludeDeleted).Scan(&count)
+		return tx.QueryRow(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.IncludeDeleted, assetIDsArg, assetKeysArg).Scan(&count)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count current locations: %w", err)
@@ -204,6 +212,8 @@ func buildCurrentLocationsQueryDistinctOn(orderBy string) string {
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
+		  AND ($8::int[]  IS NULL OR a.id           = ANY($8::int[]))
+		  AND ($9::text[] IS NULL OR a.external_key = ANY($9::text[]))
 		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
 	`
@@ -240,6 +250,8 @@ func buildCurrentLocationsQueryTimescale(orderBy string) string {
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
+		  AND ($8::int[]  IS NULL OR a.id           = ANY($8::int[]))
+		  AND ($9::text[] IS NULL OR a.external_key = ANY($9::text[]))
 		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
 	`
