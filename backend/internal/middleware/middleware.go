@@ -211,7 +211,7 @@ func RequireMergePatchCT(next http.Handler) http.Handler {
 // herring on the resulting 401.
 func missingAuthDetail(r *http.Request, fallback string) string {
 	if r.Header.Get("X-API-Key") != "" {
-		return "Use Authorization: Bearer <token>"
+		return Detail401UseAuthBearerHint
 	}
 	return fallback
 }
@@ -225,7 +225,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("Missing authorization header")
-			httputil.Respond401(w, r, missingAuthDetail(r, "Authorization header is required"), GetRequestID(r.Context()))
+			httputil.Respond401(w, r, missingAuthDetail(r, Detail401MissingAuthHeader), GetRequestID(r.Context()))
 			return
 		}
 
@@ -235,7 +235,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("Invalid authorization header format")
-			httputil.Respond401(w, r, "Authorization header must be Bearer <token>", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, Detail401InvalidAuthFormat, GetRequestID(r.Context()))
 			return
 		}
 		token := parts[1]
@@ -247,7 +247,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("JWT validation failed")
-			httputil.Respond401(w, r, "Bearer token is invalid or expired", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, Detail401InvalidOrExpiredToken, GetRequestID(r.Context()))
 			return
 		}
 
@@ -256,7 +256,7 @@ func Auth(next http.Handler) http.Handler {
 				Str("request_id", GetRequestID(r.Context())).
 				Str("path", r.URL.Path).
 				Msg("Validate returned nil claims without error")
-			httputil.Respond401(w, r, "Bearer token is invalid or expired", GetRequestID(r.Context()))
+			httputil.Respond401(w, r, Detail401InvalidOrExpiredToken, GetRequestID(r.Context()))
 			return
 		}
 

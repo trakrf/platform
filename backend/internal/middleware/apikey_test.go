@@ -82,7 +82,7 @@ func TestAPIKeyAuth_MissingHeader(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	errObj, _ := resp["error"].(map[string]any)
-	assert.Equal(t, "Authorization header is required", errObj["detail"])
+	assert.Equal(t, middleware.Detail401MissingAuthHeader, errObj["detail"])
 }
 
 func TestAPIKeyAuth_RejectsSessionToken(t *testing.T) {
@@ -121,7 +121,7 @@ func TestAPIKeyAuth_RevokedKeyRejected(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	errObj, _ := resp["error"].(map[string]any)
-	assert.Equal(t, "API key has been revoked", errObj["detail"])
+	assert.Equal(t, middleware.Detail401APIKeyRevoked, errObj["detail"])
 }
 
 func TestAPIKeyAuth_DBExpiredKeyRejected(t *testing.T) {
@@ -159,7 +159,7 @@ func TestAPIKeyAuth_DBExpiredKeyRejected(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	errObj, _ := resp["error"].(map[string]any)
-	assert.Equal(t, "API key has expired", errObj["detail"])
+	assert.Equal(t, middleware.Detail401APIKeyExpired, errObj["detail"])
 }
 
 func TestAPIKeyAuth_LastUsedBumped(t *testing.T) {
