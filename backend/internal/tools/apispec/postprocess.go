@@ -85,7 +85,6 @@ func postprocessPublic(doc *openapi3.T) error {
 	normalizeSchemaQuirks(doc)
 	normalizeArrayQueryParams(doc)
 	injectTopLevelSecurity(doc)
-	injectMethodNotAllowedResponse(doc)
 	attachMethodNotAllowedToOperations(doc)
 	if err := stripResponseSchemasAdditive(doc, publicResponseSchemas); err != nil {
 		return err
@@ -565,6 +564,7 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 		{"RetryAfter", "Seconds to wait before retrying.", intSchema},
 		{"WWWAuthenticate", "RFC 7235 authentication challenge. Always `Bearer realm=\"trakrf-api\"` on 401 responses.", strSchema},
 		{"XRequestId", "Server-assigned request correlation identifier; mirrored as error.request_id in error envelopes and echoed in server logs. Quote this when filing support tickets.", strSchema},
+		{"Allow", "Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5). Emitted on every 405 response.", strSchema},
 	}
 	for _, d := range defs {
 		if _, exists := doc.Components.Headers[d.name]; exists {
@@ -590,6 +590,7 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 	retryAfter := &openapi3.HeaderRef{Ref: "#/components/headers/RetryAfter"}
 	wwwAuthenticate := &openapi3.HeaderRef{Ref: "#/components/headers/WWWAuthenticate"}
 	requestID := &openapi3.HeaderRef{Ref: "#/components/headers/XRequestId"}
+	allow := &openapi3.HeaderRef{Ref: "#/components/headers/Allow"}
 
 	for _, item := range doc.Paths.Map() {
 		if item == nil {
@@ -615,6 +616,9 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 				}
 				if code == "401" {
 					resp.Value.Headers["WWW-Authenticate"] = wwwAuthenticate
+				}
+				if code == "405" {
+					resp.Value.Headers["Allow"] = allow
 				}
 			}
 		}
@@ -739,78 +743,36 @@ func appendIDWidthPolicyDescription(doc *openapi3.T) {
 	}
 }
 
-// injectMethodNotAllowedResponse adds a reusable 405 response under
-// components.responses.MethodNotAllowed. The response declares the Allow
-// header (RFC 7231 §6.5.5) alongside the rate-limit and request-id headers
-// the service emits on every response, so an operation that references
-// this component documents the full header set without each operation
-// re-declaring them. The companion attachMethodNotAllowedToOperations
-// pass bulk-references this component from every operation so codegens
-// can model 405 as a possible response on every endpoint (TRA-646 /
-// BB22 S1; TRA-723 / BB36 F3 added the rate-limit + request-id headers
-// to match what the service actually emits).
-func injectMethodNotAllowedResponse(doc *openapi3.T) {
-	if doc.Components == nil {
-		doc.Components = &openapi3.Components{}
-	}
-	if doc.Components.Responses == nil {
-		doc.Components.Responses = openapi3.ResponseBodies{}
-	}
-	if _, exists := doc.Components.Responses["MethodNotAllowed"]; exists {
-		return
-	}
-
-	desc := "Method not allowed"
-	stringType := &openapi3.Types{openapi3.TypeString}
-	allowHeader := &openapi3.HeaderRef{
-		Value: &openapi3.Header{
-			Parameter: openapi3.Parameter{
-				Description: "Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5).",
-				Schema: &openapi3.SchemaRef{
-					Value: &openapi3.Schema{Type: stringType},
-				},
-			},
-		},
-	}
-
-	resp := &openapi3.Response{
-		Description: &desc,
-		Headers: openapi3.Headers{
-			"Allow":                 allowHeader,
-			"X-RateLimit-Limit":     {Ref: "#/components/headers/XRateLimitLimit"},
-			"X-RateLimit-Remaining": {Ref: "#/components/headers/XRateLimitRemaining"},
-			"X-RateLimit-Reset":     {Ref: "#/components/headers/XRateLimitReset"},
-			"X-Request-Id":          {Ref: "#/components/headers/XRequestId"},
-		},
-		Content: openapi3.Content{
-			"application/json": &openapi3.MediaType{
-				Schema: &openapi3.SchemaRef{
-					Ref: "#/components/schemas/errors.ErrorResponse",
-				},
-			},
-		},
-	}
-
-	doc.Components.Responses["MethodNotAllowed"] = &openapi3.ResponseRef{Value: resp}
-}
-
-// attachMethodNotAllowedToOperations references the MethodNotAllowed
-// component from every operation that does not already declare a "405"
-// response (TRA-646 / BB22 S1). Codegens that pre-allocate response arms
-// from the spec need the per-operation declaration; the universal
-// behavior is documented in info.description but is not machine-readable
-// without each operation enumerating it.
+// attachMethodNotAllowedToOperations writes an inline 405 response on
+// every operation that does not already declare one (TRA-646 / BB22 S1).
+// Codegens that pre-allocate response arms from the spec need the
+// per-operation declaration; the universal behavior is documented in
+// info.description but is not machine-readable without each operation
+// enumerating it.
+//
+// TRA-750 / BB46 F2: 405 responses are emitted inline (description +
+// errors.ErrorResponse content) to match the pattern used for every
+// other 4xx/5xx status code. The companion injectGlobalHeaderRefs pass
+// then attaches the standard headers (Allow on 405; X-RateLimit-* and
+// X-Request-Id on every code) directly to the inline response, so
+// codegens that ignore $ref-resolution still see the full header set.
 func attachMethodNotAllowedToOperations(doc *openapi3.T) {
 	if doc.Paths == nil {
 		return
 	}
-	if doc.Components == nil || doc.Components.Responses == nil {
-		return
+	desc := "Method not allowed"
+	newResp := func() *openapi3.ResponseRef {
+		return &openapi3.ResponseRef{Value: &openapi3.Response{
+			Description: &desc,
+			Content: openapi3.Content{
+				"application/json": &openapi3.MediaType{
+					Schema: &openapi3.SchemaRef{
+						Ref: "#/components/schemas/errors.ErrorResponse",
+					},
+				},
+			},
+		}}
 	}
-	if _, ok := doc.Components.Responses["MethodNotAllowed"]; !ok {
-		return
-	}
-	ref := &openapi3.ResponseRef{Ref: "#/components/responses/MethodNotAllowed"}
 	for _, item := range doc.Paths.Map() {
 		if item == nil {
 			continue
@@ -825,7 +787,7 @@ func attachMethodNotAllowedToOperations(doc *openapi3.T) {
 			if existing := op.Responses.Value("405"); existing != nil {
 				continue
 			}
-			op.Responses.Set("405", ref)
+			op.Responses.Set("405", newResp())
 		}
 	}
 }
