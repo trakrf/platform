@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/trakrf/platform/backend/internal/models/errors"
 )
@@ -19,8 +20,30 @@ var modulePathPattern = regexp.MustCompile(`\b[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/[A-
 // sanitizeDetail scrubs internal module paths from a detail string before it
 // reaches the client. The placeholder preserves message structure so callers
 // can still read the surrounding cause text.
+//
+// TRA-739 (BB42 F1): a match preceded by "://" is part of a legitimate URL
+// (e.g. https://docs.trakrf.id/api/data-model) and is preserved verbatim;
+// only bare host/path runs collapse to [internal]. Previously the regex
+// collided with any cited documentation URL.
 func sanitizeDetail(detail string) string {
-	return modulePathPattern.ReplaceAllString(detail, "[internal]")
+	matches := modulePathPattern.FindAllStringIndex(detail, -1)
+	if len(matches) == 0 {
+		return detail
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		b.WriteString(detail[last:start])
+		if start >= 3 && detail[start-3:start] == "://" {
+			b.WriteString(detail[start:end])
+		} else {
+			b.WriteString("[internal]")
+		}
+		last = end
+	}
+	b.WriteString(detail[last:])
+	return b.String()
 }
 
 // genericServerErrorDetail is the only detail string a 5xx response is
