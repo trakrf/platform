@@ -22,7 +22,7 @@ var modulePathPattern = regexp.MustCompile(`\b[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/[A-
 // can still read the surrounding cause text.
 //
 // TRA-739 (BB42 F1): a match preceded by "://" is part of a legitimate URL
-// (e.g. https://docs.trakrf.id/api/data-model) and is preserved verbatim;
+// (e.g. https://docs.trakrf.id/docs/api/data-model) and is preserved verbatim;
 // only bare host/path runs collapse to [internal]. Previously the regex
 // collided with any cited documentation URL.
 func sanitizeDetail(detail string) string {
