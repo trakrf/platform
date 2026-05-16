@@ -25,26 +25,42 @@ var publicJSON []byte
 //go:embed openapi.public.yaml
 var publicYAML []byte
 
+// cacheControl is the Cache-Control directive applied to every spec
+// response. TRA-743: docs.trakrf.id now redirects spec asset requests
+// to this origin instead of mirroring the bytes, so the spec endpoint
+// is the single source of truth and CF's edge sits in front of it.
+// Sixty seconds of fresh-cache caps origin load during refresh storms
+// (codegen smoke jobs, ship-cycle BB probes) while stale-while-
+// revalidate=300 lets edge serve stale bytes for up to five minutes
+// after expiry while it fetches a fresh copy in the background — the
+// spec only changes on deploy, so a brief staleness window is
+// preferable to a synchronous thundering-herd refresh.
+const cacheControl = "public, max-age=60, stale-while-revalidate=300"
+
 // ServeJSON writes the embedded internal OpenAPI spec as JSON.
 func ServeJSON(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", cacheControl)
 	_, _ = w.Write(internalJSON)
 }
 
 // ServeYAML writes the embedded internal OpenAPI spec as YAML.
 func ServeYAML(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml")
+	w.Header().Set("Cache-Control", cacheControl)
 	_, _ = w.Write(internalYAML)
 }
 
 // ServePublicJSON writes the embedded public OpenAPI spec as JSON.
 func ServePublicJSON(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", cacheControl)
 	_, _ = w.Write(publicJSON)
 }
 
 // ServePublicYAML writes the embedded public OpenAPI spec as YAML.
 func ServePublicYAML(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml")
+	w.Header().Set("Cache-Control", cacheControl)
 	_, _ = w.Write(publicYAML)
 }

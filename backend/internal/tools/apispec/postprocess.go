@@ -141,13 +141,6 @@ func postprocessPublic(doc *openapi3.T) error {
 	if doc.Info.Contact.Email == "" {
 		doc.Info.Contact.Email = "support@trakrf.id"
 	}
-	if doc.Info.Contact.URL == "" {
-		// Per OpenAPI 3.0, info.contact.url is "the URL pointing to the
-		// contact information". Generator-default Help / Contact links
-		// land integrators on docs rather than the running API host;
-		// the bare-hostname servers[] entries below cover env routing.
-		doc.Info.Contact.URL = "https://docs.trakrf.id/"
-	}
 	doc.Servers = openapi3.Servers{
 		{
 			URL:         "https://app.preview.trakrf.id",
