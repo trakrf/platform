@@ -339,12 +339,18 @@ components:
             additionalProperties: false
             properties:
                 description:
+                    example: Main warehouse forklift
                     maxLength: 1024
                     minLength: 1
                     nullable: true
                     pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
                     type: string
                 external_key:
+                    description: |-
+                        external_key is optional. Omit to receive a server-assigned key in the
+                        format ASSET-NNNN (per-organization sequence). When supplied, must
+                        satisfy the external_key_pattern.
+                    example: forklift-3
                     maxLength: 255
                     minLength: 1
                     pattern: ^[A-Za-z0-9-]+$
@@ -356,6 +362,7 @@ components:
                     additionalProperties: {}
                     type: object
                 name:
+                    example: Forklift 3
                     maxLength: 255
                     minLength: 1
                     pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
@@ -880,17 +887,20 @@ components:
         UpdateAssetRequest:
             properties:
                 description:
+                    example: Updated description
                     maxLength: 1024
                     minLength: 1
                     nullable: true
                     pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
                     type: string
                 is_active:
+                    example: true
                     type: boolean
                 metadata:
                     additionalProperties: {}
                     type: object
                 name:
+                    example: Forklift 3
                     maxLength: 255
                     minLength: 1
                     pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
@@ -970,7 +980,7 @@ info:
     contact:
         email: support@trakrf.id
         name: TrakRF Support
-        url: https://app.trakrf.id/api
+        url: https://docs.trakrf.id/
     description: |-
         TrakRF public REST API. See /api for the customer-facing reference.
 

@@ -142,13 +142,11 @@ func postprocessPublic(doc *openapi3.T) error {
 		doc.Info.Contact.Email = "support@trakrf.id"
 	}
 	if doc.Info.Contact.URL == "" {
-		// Production canonical. The build emits a single artifact for every
-		// environment, so the committed spec must pin one value. The backend
-		// swaps this to the preview equivalent at serve time when
-		// APP_ENV=preview — see swaggerspec.resolvePublicSpec (TRA-717 / BB34
-		// F4). Keep the bare-hostname servers[] entries below untouched so
-		// the substitution remains targeted to contact.url alone.
-		doc.Info.Contact.URL = "https://app.trakrf.id/api"
+		// Per OpenAPI 3.0, info.contact.url is "the URL pointing to the
+		// contact information". Generator-default Help / Contact links
+		// land integrators on docs rather than the running API host;
+		// the bare-hostname servers[] entries below cover env routing.
+		doc.Info.Contact.URL = "https://docs.trakrf.id/"
 	}
 	doc.Servers = openapi3.Servers{
 		{

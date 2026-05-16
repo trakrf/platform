@@ -33,10 +33,13 @@ type Asset struct {
 // (GET /assets/{id}, GET /assets/{id}/history, GET /reports/asset-locations).
 // See PublicRejectCreateFields in the assets handler.
 type CreateAssetRequest struct {
-	OrgID       int                  `json:"-" swaggerignore:"true"`
-	ExternalKey string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern"`
-	Name        string               `json:"name" validate:"required,min=1,max=255,no_control_chars"`
-	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars"`
+	OrgID int `json:"-" swaggerignore:"true"`
+	// external_key is optional. Omit to receive a server-assigned key in the
+	// format ASSET-NNNN (per-organization sequence). When supplied, must
+	// satisfy the external_key_pattern.
+	ExternalKey string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"forklift-3"`
+	Name        string               `json:"name" validate:"required,min=1,max=255,no_control_chars" example:"Forklift 3"`
+	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Main warehouse forklift"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
 	Metadata    map[string]any       `json:"metadata,omitempty"`
@@ -101,8 +104,8 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // never written by PATCH; the only valid use is to echo the current value
 // back. The handler nils them out after the echo check passes.
 type UpdateAssetRequest struct {
-	Name        *string              `json:"name" validate:"omitempty,min=1,max=255,no_control_chars"`
-	Description *string              `json:"description" validate:"omitempty,min=1,max=1024,no_control_chars"`
+	Name        *string              `json:"name" validate:"omitempty,min=1,max=255,no_control_chars" example:"Forklift 3"`
+	Description *string              `json:"description" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
 	// TRA-699 natural-key echo fields. Decoded so the handler can compare
@@ -116,7 +119,7 @@ type UpdateAssetRequest struct {
 	ClearDescription bool            `json:"-" swaggerignore:"true"`
 	ClearValidTo     bool            `json:"-" swaggerignore:"true"`
 	Metadata         *map[string]any `json:"metadata"`
-	IsActive         *bool           `json:"is_active"`
+	IsActive         *bool           `json:"is_active" example:"true"`
 }
 
 // PublicRejectPatchFields names the JSON keys that PATCH /api/v1/assets/{id}
