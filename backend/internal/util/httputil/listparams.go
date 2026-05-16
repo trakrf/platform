@@ -159,9 +159,15 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 			out.Sorts = parsed
 		default:
 			if _, ok := filterAllow[key]; !ok {
+				// TRA-739 (BB42 F8): an unknown filter key is a *field-shaped*
+				// failure — the key itself isn't a recognized parameter, so
+				// code is unknown_field, mirroring the body-side analogue on
+				// strict JSON decoding (POST {"bogus":1} → unknown_field).
+				// Generated clients branching on unknown_field per the BB32
+				// changelog now see the same code on query and body alike.
 				return out, &ListParamError{Fields: []apierrors.FieldError{{
 					Field:   key,
-					Code:    "invalid_value",
+					Code:    "unknown_field",
 					Message: fmt.Sprintf("unknown parameter: %s", key),
 				}}}
 			}
@@ -241,8 +247,11 @@ func toSet(ss []string) map[string]struct{} {
 // the endpoint accepts no query parameters at all.
 //
 // The returned error carries one *FieldError per offending key (sorted
-// lexically for determinism), code=invalid_value, mirroring the per-key
-// shape ParseListParams emits on the list path.
+// lexically for determinism), code=unknown_field, mirroring the per-key
+// shape ParseListParams emits on the list path AND the body-side
+// strict-decode path (POST {"bogus":1} → unknown_field). TRA-739 (BB42
+// F8) closed the body-vs-query code asymmetry — both now emit
+// unknown_field, matching the BB32 changelog claim.
 //
 // Pair with RespondListParamError to render uniformly.
 func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
@@ -266,7 +275,7 @@ func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
 	for _, key := range unknowns {
 		fields = append(fields, apierrors.FieldError{
 			Field:   key,
-			Code:    "invalid_value",
+			Code:    "unknown_field",
 			Message: fmt.Sprintf("unknown parameter: %s", key),
 		})
 	}

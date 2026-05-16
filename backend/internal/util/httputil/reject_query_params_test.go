@@ -12,6 +12,10 @@ import (
 // must honor the docs claim that unknown query keys are rejected uniformly
 // alongside unknown body keys. The helper returns one *FieldError per
 // offending key, sorted lexically for stable client branching.
+//
+// TRA-739 (BB42 F8): code is unknown_field (not invalid_value) to match
+// the body-side strict-decode analogue and the BB32 changelog claim that
+// query and body emit the same code for unknown keys.
 func TestRejectUnknownQueryParams_RejectsUnknown_NoAllowList(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/v1/assets/1?bogus=42", nil)
 	err := httputil.RejectUnknownQueryParams(r)
@@ -25,8 +29,8 @@ func TestRejectUnknownQueryParams_RejectsUnknown_NoAllowList(t *testing.T) {
 	if len(lpe.Fields) != 1 || lpe.Fields[0].Field != "bogus" {
 		t.Fatalf("Fields = %+v, want one entry for 'bogus'", lpe.Fields)
 	}
-	if lpe.Fields[0].Code != "invalid_value" {
-		t.Fatalf("code = %q, want invalid_value", lpe.Fields[0].Code)
+	if lpe.Fields[0].Code != "unknown_field" {
+		t.Fatalf("code = %q, want unknown_field", lpe.Fields[0].Code)
 	}
 }
 
