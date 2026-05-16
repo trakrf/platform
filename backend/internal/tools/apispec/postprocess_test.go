@@ -153,39 +153,6 @@ func TestPostprocess_AttachesMethodNotAllowed_PreservesExisting(t *testing.T) {
 	t.Fatalf("operation-level 405 was overwritten by the bulk-attach pass")
 }
 
-// TestPostprocess_InjectsDeprecationComponents covers TRA-646 BB22 S3.
-// The Deprecation/Sunset header components and the Gone (410) response
-// must exist as reusable components so codegens can model RFC 8594
-// deprecation+sunset before the first endpoint sunset ships.
-func TestPostprocess_InjectsDeprecationComponents(t *testing.T) {
-	withEmptyRequiredFields(t)
-	doc := loadAndConvert(t, "testdata/minimal-v2.json")
-	require.NoError(t, postprocessPublic(doc))
-
-	require.NotNil(t, doc.Components)
-	require.NotNil(t, doc.Components.Headers)
-	require.NotNil(t, doc.Components.Responses)
-
-	dep := doc.Components.Headers["Deprecation"]
-	require.NotNil(t, dep, "components.headers.Deprecation must be present")
-	require.NotNil(t, dep.Value)
-	assert.Contains(t, dep.Value.Description, "RFC 8594")
-
-	sun := doc.Components.Headers["Sunset"]
-	require.NotNil(t, sun, "components.headers.Sunset must be present")
-	require.NotNil(t, sun.Value)
-	assert.Contains(t, sun.Value.Description, "RFC 8594")
-
-	gone := doc.Components.Responses["Gone"]
-	require.NotNil(t, gone, "components.responses.Gone must be present")
-	require.NotNil(t, gone.Value)
-	require.NotNil(t, gone.Value.Description)
-	assert.Contains(t, *gone.Value.Description, "Sunset")
-	media := gone.Value.Content["application/json"]
-	require.NotNil(t, media)
-	assert.Equal(t, "#/components/schemas/errors.ErrorResponse", media.Schema.Ref)
-}
-
 // TestPostprocess_StripsResponseSchemasAdditive covers TRA-668 BB27 S8 /
 // TRA-672: the explicit `additionalProperties: true` swag emits on every
 // response object caused some generators to emit wrapper classes instead

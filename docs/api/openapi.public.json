@@ -1,23 +1,10 @@
 {
   "components": {
     "headers": {
-      "Deprecation": {
-        "description": "RFC 8594 deprecation indicator. Either the literal value `true` or an HTTP-date marking when the endpoint became deprecated. Present on every response from a deprecated endpoint until the sunset date.",
-        "schema": {
-          "type": "string"
-        }
-      },
       "RetryAfter": {
         "description": "Seconds to wait before retrying.",
         "schema": {
           "type": "integer"
-        }
-      },
-      "Sunset": {
-        "description": "RFC 8594 sunset date. HTTP-date marking when the endpoint will stop responding (200 series replaced by 410 Gone). Pairs with Deprecation; appears on every response from a deprecated endpoint.",
-        "schema": {
-          "format": "http-date",
-          "type": "string"
         }
       },
       "WWWAuthenticate": {
@@ -52,16 +39,6 @@
       }
     },
     "responses": {
-      "Gone": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            }
-          }
-        },
-        "description": "Endpoint sunset. The endpoint was deprecated and has now passed its Sunset date; clients should migrate to the documented replacement (RFC 8594)."
-      },
       "MethodNotAllowed": {
         "content": {
           "application/json": {

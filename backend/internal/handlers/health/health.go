@@ -23,6 +23,12 @@ type Response struct {
 	Timestamp time.Time `json:"timestamp"`
 	Uptime    string    `json:"uptime"`
 	Database  string    `json:"database"`
+	// SpecRefreshedAt is the canonical "what spec is live" signal called
+	// out in the TRA-743 acceptance criteria. The OpenAPI spec is
+	// regenerated and embedded in the binary on every build, so this
+	// mirrors BuildTime — the distinct json name is the contract BB
+	// tooling watches for deploy-lag detection.
+	SpecRefreshedAt string `json:"spec_refreshed_at"`
 }
 
 type Handler struct {
@@ -100,15 +106,16 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{
-		Status:    "ok",
-		Version:   h.info.Version,
-		Commit:    h.info.Commit,
-		Tag:       h.info.Tag,
-		BuildTime: h.info.BuildTime,
-		GoVersion: h.info.GoVersion,
-		Timestamp: time.Now().UTC(),
-		Uptime:    uptime.String(),
-		Database:  dbStatus,
+		Status:          "ok",
+		Version:         h.info.Version,
+		Commit:          h.info.Commit,
+		Tag:             h.info.Tag,
+		BuildTime:       h.info.BuildTime,
+		GoVersion:       h.info.GoVersion,
+		Timestamp:       time.Now().UTC(),
+		Uptime:          uptime.String(),
+		Database:        dbStatus,
+		SpecRefreshedAt: h.info.BuildTime,
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -120,4 +127,9 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/healthz", h.Healthz)
 	r.Get("/readyz", h.Readyz)
 	r.Get("/health", h.Health)
+	// /health.json is the canonical curl-able platform health surface; the
+	// dotted extension also makes the route reachable past the SPA catch-all
+	// (the same reason /version.json and /manifest.json are registered as
+	// explicit routes). BB tooling watches this URL for spec_refreshed_at.
+	r.Get("/health.json", h.Health)
 }
