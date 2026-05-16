@@ -105,7 +105,7 @@ func TestWriteJSONErrorWithFields_PreservesHttpsURLInDetail(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/api/v1/assets", nil)
 
-	detail := "See https://docs.trakrf.id/api/data-model for the full data model."
+	detail := "See https://docs.trakrf.id/docs/api/data-model for the full data model."
 	httputil.WriteJSONErrorWithFields(w, r, 400, apierrors.ErrValidation, detail, "req-1", nil)
 
 	var resp httputil.ErrorResponse
@@ -121,7 +121,7 @@ func TestWriteJSONErrorWithFields_MixedURLAndModulePath(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/api/v1/assets", nil)
 
-	detail := "wrapped: github.com/trakrf/platform/backend/internal/foo.Bar: see https://docs.trakrf.id/api/data-model"
+	detail := "wrapped: github.com/trakrf/platform/backend/internal/foo.Bar: see https://docs.trakrf.id/docs/api/data-model"
 	httputil.WriteJSONErrorWithFields(w, r, 400, apierrors.ErrValidation, detail, "req-1", nil)
 
 	var resp httputil.ErrorResponse
@@ -129,5 +129,5 @@ func TestWriteJSONErrorWithFields_MixedURLAndModulePath(t *testing.T) {
 
 	assert.NotContains(t, resp.Error.Detail, "github.com/")
 	assert.Contains(t, resp.Error.Detail, "[internal]")
-	assert.Contains(t, resp.Error.Detail, "https://docs.trakrf.id/api/data-model")
+	assert.Contains(t, resp.Error.Detail, "https://docs.trakrf.id/docs/api/data-model")
 }
