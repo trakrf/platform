@@ -303,7 +303,7 @@ func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
 	assert.Equal(t, "1.0.0", doc.Info.Version,
 		"info.version must be semver per Zalando must-use-semantic-versioning (TRA-672)")
 	require.NotNil(t, doc.Info.Contact, "info.contact must be present per Zalando must-have-info-contact-url (TRA-672)")
-	assert.Equal(t, "https://app.trakrf.id/api", doc.Info.Contact.URL)
+	assert.Equal(t, "https://docs.trakrf.id/", doc.Info.Contact.URL)
 	assert.Equal(t, "support@trakrf.id", doc.Info.Contact.Email)
 	require.Len(t, doc.Servers, 2)
 

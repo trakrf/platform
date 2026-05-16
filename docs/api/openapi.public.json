@@ -461,6 +461,7 @@
         "additionalProperties": false,
         "properties": {
           "description": {
+            "example": "Main warehouse forklift",
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
@@ -468,6 +469,8 @@
             "type": "string"
           },
           "external_key": {
+            "description": "external_key is optional. Omit to receive a server-assigned key in the\nformat ASSET-NNNN (per-organization sequence). When supplied, must\nsatisfy the external_key_pattern.",
+            "example": "forklift-3",
             "maxLength": 255,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9-]+$",
@@ -482,6 +485,7 @@
             "type": "object"
           },
           "name": {
+            "example": "Forklift 3",
             "maxLength": 255,
             "minLength": 1,
             "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
@@ -1184,6 +1188,7 @@
       "UpdateAssetRequest": {
         "properties": {
           "description": {
+            "example": "Updated description",
             "maxLength": 1024,
             "minLength": 1,
             "nullable": true,
@@ -1191,6 +1196,7 @@
             "type": "string"
           },
           "is_active": {
+            "example": true,
             "type": "boolean"
           },
           "metadata": {
@@ -1198,6 +1204,7 @@
             "type": "object"
           },
           "name": {
+            "example": "Forklift 3",
             "maxLength": 255,
             "minLength": 1,
             "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
@@ -1303,7 +1310,7 @@
     "contact": {
       "email": "support@trakrf.id",
       "name": "TrakRF Support",
-      "url": "https://app.trakrf.id/api"
+      "url": "https://docs.trakrf.id/"
     },
     "description": "TrakRF public REST API. See /api for the customer-facing reference.\n\nSpec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).\n\nHTTP method coverage (HEAD, OPTIONS, 405 / Allow): /api/http-method-coverage\n\nSurrogate ID width: declared `format: int64` on the wire so SDK regeneration does not break when the ID namespace eventually outgrows int32. Service-side ID generation stays within int32 (2^31-1) during v1; values above that bound are rejected with 400 validation_error / `too_large`. The wider wire type is a long-horizon contract, not a claim that current values exceed int32.\n\nNullable field interpretation: OpenAPI 3.0's `nullable: true` keyword is interpreted differently across codegen targets. Verified-working: `openapi-typescript@7.x` emits `string | null` correctly, and the `openapi-generator-cli` python target emits `Optional[StrictStr]` correctly — both round-trip CRUD against null-bearing responses unmodified. Known-broken: `datamodel-codegen@0.57.0` emits `nullable: true` read-shape fields as non-Optional required fields, so Pydantic validation fails on every nullable field that is actually null. Integrators using `datamodel-codegen` should either switch to the `openapi-generator-cli` python target or apply `--use-annotated --use-union-operator` with a custom post-processing pass.",
     "license": {
