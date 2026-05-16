@@ -87,7 +87,6 @@ func postprocessPublic(doc *openapi3.T) error {
 	injectTopLevelSecurity(doc)
 	injectMethodNotAllowedResponse(doc)
 	attachMethodNotAllowedToOperations(doc)
-	injectDeprecationComponents(doc)
 	if err := stripResponseSchemasAdditive(doc, publicResponseSchemas); err != nil {
 		return err
 	}
@@ -827,71 +826,6 @@ func attachMethodNotAllowedToOperations(doc *openapi3.T) {
 				continue
 			}
 			op.Responses.Set("405", ref)
-		}
-	}
-}
-
-// injectDeprecationComponents adds the response/header pair the
-// RFC 8594 deprecation+sunset flow needs (TRA-646 / BB22 S3). No path
-// references these yet — they are forward-looking so codegens can model
-// "endpoint returns 410 after sunset" and "Deprecation/Sunset headers may
-// appear on a deprecated endpoint" before the first endpoint sunset.
-//
-// Components added:
-//   - components.headers.Deprecation: RFC 8594 boolean/date header.
-//   - components.headers.Sunset:      RFC 8594 sunset date header.
-//   - components.responses.Gone:      410 response after sunset.
-func injectDeprecationComponents(doc *openapi3.T) {
-	if doc.Components == nil {
-		doc.Components = &openapi3.Components{}
-	}
-	if doc.Components.Headers == nil {
-		doc.Components.Headers = openapi3.Headers{}
-	}
-	if doc.Components.Responses == nil {
-		doc.Components.Responses = openapi3.ResponseBodies{}
-	}
-
-	stringType := &openapi3.Types{openapi3.TypeString}
-
-	if _, exists := doc.Components.Headers["Deprecation"]; !exists {
-		doc.Components.Headers["Deprecation"] = &openapi3.HeaderRef{
-			Value: &openapi3.Header{
-				Parameter: openapi3.Parameter{
-					Description: "RFC 8594 deprecation indicator. Either the literal value `true` or an HTTP-date marking when the endpoint became deprecated. Present on every response from a deprecated endpoint until the sunset date.",
-					Schema: &openapi3.SchemaRef{
-						Value: &openapi3.Schema{Type: stringType},
-					},
-				},
-			},
-		}
-	}
-	if _, exists := doc.Components.Headers["Sunset"]; !exists {
-		doc.Components.Headers["Sunset"] = &openapi3.HeaderRef{
-			Value: &openapi3.Header{
-				Parameter: openapi3.Parameter{
-					Description: "RFC 8594 sunset date. HTTP-date marking when the endpoint will stop responding (200 series replaced by 410 Gone). Pairs with Deprecation; appears on every response from a deprecated endpoint.",
-					Schema: &openapi3.SchemaRef{
-						Value: &openapi3.Schema{Type: stringType, Format: "http-date"},
-					},
-				},
-			},
-		}
-	}
-
-	if _, exists := doc.Components.Responses["Gone"]; !exists {
-		desc := "Endpoint sunset. The endpoint was deprecated and has now passed its Sunset date; clients should migrate to the documented replacement (RFC 8594)."
-		doc.Components.Responses["Gone"] = &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: &desc,
-				Content: openapi3.Content{
-					"application/json": &openapi3.MediaType{
-						Schema: &openapi3.SchemaRef{
-							Ref: "#/components/schemas/errors.ErrorResponse",
-						},
-					},
-				},
-			},
 		}
 	}
 }
