@@ -219,7 +219,7 @@ func messageForField(fe validator.FieldError) string {
 				strings.Join(strings.Fields(fe.Param()), ", "))
 		}
 		if fe.Tag() == "external_key_pattern" {
-			return fmt.Sprintf("%s must match %s (alphanumerics and hyphens only — underscore, period, whitespace, slash, and colon are reserved)",
+			return fmt.Sprintf("%s must match %s (alphanumerics and hyphens only — underscore, period, whitespace, slash, colon, and non-ASCII are reserved)",
 				fe.Field(), ExternalKeyPattern.String())
 		}
 		if fe.Tag() == "no_control_chars" {
