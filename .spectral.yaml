@@ -55,6 +55,15 @@ rules:
   must-have-info-x-api-id: off
   must-provide-api-audience: off
 
+  # info.contact.url — Zalando MUST contain API meta information [218]
+  # mandates a contact URL. TRA-743 eliminates the docs-side spec mirror
+  # by treating the platform spec as the single source of truth; the
+  # contact URL string is the substrate that previously drifted (BB42 F1)
+  # and was the hook for env-aware swap machinery. Removing the field
+  # entirely retires both. info.contact.name + info.contact.email remain
+  # present and satisfy the "MUST have contact info" intent.
+  must-have-info-contact-url: off
+
   # Zalando-proprietary x-extensible-enum extension — not OpenAPI-standard;
   # TrakRF uses plain enums and accepts the forward-compatibility tradeoff.
   should-use-x-extensible-enum: off

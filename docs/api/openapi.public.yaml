@@ -980,7 +980,6 @@ info:
     contact:
         email: support@trakrf.id
         name: TrakRF Support
-        url: https://docs.trakrf.id/
     description: |-
         TrakRF public REST API. See /api for the customer-facing reference.
 
