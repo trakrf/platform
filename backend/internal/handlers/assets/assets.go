@@ -45,7 +45,13 @@ func NewHandler(storage *storage.Storage) *Handler {
 // locations) rather than the previous opaque "record a scan event" line.
 // Asset location is collected through ingestion paths separate from the
 // public API: the fixed-reader MQTT pipeline and handheld UI submission.
-const assetLocationReadOnlyMessage = "asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API. Read current asset location through GET /api/v1/assets/{id}, GET /api/v1/assets/{id}/history, or GET /api/v1/reports/asset-locations. See https://docs.trakrf.id/docs/api/data-model for the full data model."
+//
+// TRA-750 / BB46 F3: the trailing "See https://docs.trakrf.id/..." link
+// was dropped to avoid an env leak — a preview integrator hitting this
+// error otherwise gets routed to production docs. The error envelope's
+// `type` field is the canonical documented entry point per /docs/api/
+// errors; the trailing URL was redundant.
+const assetLocationReadOnlyMessage = "asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API. Read current asset location through GET /api/v1/assets/{id}, GET /api/v1/assets/{id}/history, or GET /api/v1/reports/asset-locations."
 
 // PublicRejectCreateFields names the JSON keys that POST /api/v1/assets
 // rejects pre-decode with 400 validation_error and code=read_only. Same

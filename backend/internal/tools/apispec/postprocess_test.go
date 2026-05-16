@@ -10,27 +10,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPostprocess_InjectsMethodNotAllowedResponse covers TRA-588: the
-// public spec must declare a reusable MethodNotAllowed response component
-// with an Allow header, ready for operations to $ref. Internal spec gets
-// the same treatment.
-func TestPostprocess_InjectsMethodNotAllowedResponse(t *testing.T) {
+// TestPostprocess_DeclaresAllowHeaderComponent covers TRA-750 / BB46 F2:
+// the public spec must declare a reusable Allow header under
+// components.headers so every 405 response can reference it instead of
+// inlining the schema. Matches the established pattern for the rate-limit
+// and request-id header components.
+func TestPostprocess_DeclaresAllowHeaderComponent(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
 	require.NoError(t, postprocessPublic(doc))
 
 	require.NotNil(t, doc.Components)
-	require.NotNil(t, doc.Components.Responses)
+	require.NotNil(t, doc.Components.Headers)
 
-	respRef := doc.Components.Responses["MethodNotAllowed"]
-	require.NotNil(t, respRef, "components.responses.MethodNotAllowed must be present")
-	require.NotNil(t, respRef.Value)
-
-	require.NotNil(t, respRef.Value.Description)
-	assert.Equal(t, "Method not allowed", *respRef.Value.Description)
-
-	allow := respRef.Value.Headers["Allow"]
-	require.NotNil(t, allow, "Allow header must be declared on the MethodNotAllowed response")
+	allow := doc.Components.Headers["Allow"]
+	require.NotNil(t, allow, "components.headers.Allow must be present")
 	require.NotNil(t, allow.Value)
 	require.NotNil(t, allow.Value.Schema)
 	require.NotNil(t, allow.Value.Schema.Value)
@@ -38,50 +32,14 @@ func TestPostprocess_InjectsMethodNotAllowedResponse(t *testing.T) {
 		"Allow header schema must be type:string")
 	assert.Contains(t, allow.Value.Description, "RFC 7231",
 		"Allow header description should cite the relevant RFC clause")
-
-	media := respRef.Value.Content["application/json"]
-	require.NotNil(t, media, "MethodNotAllowed must declare application/json content")
-	require.NotNil(t, media.Schema)
-	assert.Equal(t, "#/components/schemas/errors.ErrorResponse", media.Schema.Ref,
-		"content schema must reference the canonical error envelope")
-
-	// TRA-723 / BB36 F3: the service emits the standard rate-limit and
-	// request-id headers on every 405 response. The shared component must
-	// declare them so every operation that $refs it inherits the full
-	// header set — otherwise codegen targets miss four headers on 21 of
-	// 22 operations (the only inline 405 was getCurrentOrg's, which has
-	// since been removed in favor of the shared $ref).
-	expectedHeaderRefs := map[string]string{
-		"X-RateLimit-Limit":     "#/components/headers/XRateLimitLimit",
-		"X-RateLimit-Remaining": "#/components/headers/XRateLimitRemaining",
-		"X-RateLimit-Reset":     "#/components/headers/XRateLimitReset",
-		"X-Request-Id":          "#/components/headers/XRequestId",
-	}
-	for name, ref := range expectedHeaderRefs {
-		h := respRef.Value.Headers[name]
-		require.NotNil(t, h, "MethodNotAllowed must declare %s header", name)
-		assert.Equal(t, ref, h.Ref, "%s must $ref %s", name, ref)
-	}
-}
-
-// TestPostprocess_InjectMethodNotAllowed_Idempotent verifies running the
-// postprocess twice does not duplicate or replace the component.
-func TestPostprocess_InjectMethodNotAllowed_Idempotent(t *testing.T) {
-	withEmptyRequiredFields(t)
-	doc := loadAndConvert(t, "testdata/minimal-v2.json")
-	require.NoError(t, postprocessPublic(doc))
-	first := doc.Components.Responses["MethodNotAllowed"]
-	require.NotNil(t, first)
-
-	require.NoError(t, postprocessPublic(doc))
-	second := doc.Components.Responses["MethodNotAllowed"]
-	assert.Same(t, first, second, "second pass must not replace the existing response")
 }
 
 // TestPostprocess_AttachesMethodNotAllowedToEveryOperation covers TRA-646
-// BB22 S1: codegens that pre-allocate response arms can only model 405 if
-// every operation declares it. The MethodNotAllowed component must be
-// referenced from every operation that does not already declare 405.
+// BB22 S1 and TRA-750 / BB46 F2: codegens that pre-allocate response arms
+// can only model 405 if every operation declares it. The inline 405
+// response must carry the same standard headers the other 4xx/5xx
+// responses already do — the four standard headers plus the Allow header
+// (RFC 7231 §6.5.5).
 func TestPostprocess_AttachesMethodNotAllowedToEveryOperation(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
@@ -89,6 +47,13 @@ func TestPostprocess_AttachesMethodNotAllowedToEveryOperation(t *testing.T) {
 
 	require.NotNil(t, doc.Paths)
 	opCount := 0
+	expectedHeaderRefs := map[string]string{
+		"Allow":                 "#/components/headers/Allow",
+		"X-RateLimit-Limit":     "#/components/headers/XRateLimitLimit",
+		"X-RateLimit-Remaining": "#/components/headers/XRateLimitRemaining",
+		"X-RateLimit-Reset":     "#/components/headers/XRateLimitReset",
+		"X-Request-Id":          "#/components/headers/XRequestId",
+	}
 	for path, item := range doc.Paths.Map() {
 		if item == nil {
 			continue
@@ -101,11 +66,62 @@ func TestPostprocess_AttachesMethodNotAllowedToEveryOperation(t *testing.T) {
 			require.NotNil(t, op.Responses, "%s %s missing responses", method, path)
 			r405 := op.Responses.Value("405")
 			require.NotNil(t, r405, "%s %s must declare 405", method, path)
-			assert.Equal(t, "#/components/responses/MethodNotAllowed", r405.Ref,
-				"%s %s 405 must $ref MethodNotAllowed", method, path)
+			require.NotNil(t, r405.Value, "%s %s 405 must be inline (Value set)", method, path)
+			require.NotNil(t, r405.Value.Description)
+			assert.Equal(t, "Method not allowed", *r405.Value.Description)
+
+			media := r405.Value.Content["application/json"]
+			require.NotNil(t, media, "%s %s 405 must declare application/json content", method, path)
+			require.NotNil(t, media.Schema)
+			assert.Equal(t, "#/components/schemas/errors.ErrorResponse", media.Schema.Ref,
+				"%s %s 405 content schema must reference the canonical error envelope", method, path)
+
+			for name, ref := range expectedHeaderRefs {
+				h := r405.Value.Headers[name]
+				require.NotNil(t, h, "%s %s 405 must declare %s header", method, path, name)
+				assert.Equal(t, ref, h.Ref, "%s %s 405 %s must $ref %s", method, path, name, ref)
+			}
 		}
 	}
 	require.Greater(t, opCount, 0, "fixture must have at least one operation")
+}
+
+// TestPostprocess_AttachesMethodNotAllowed_Idempotent verifies running the
+// postprocess twice does not replace the inline 405 response on every
+// operation.
+func TestPostprocess_AttachesMethodNotAllowed_Idempotent(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	require.NoError(t, postprocessPublic(doc))
+
+	first := map[string]*openapi3.ResponseRef{}
+	for path, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for method, op := range item.Operations() {
+			if op == nil || op.Responses == nil {
+				continue
+			}
+			first[method+" "+path] = op.Responses.Value("405")
+		}
+	}
+	require.NotEmpty(t, first)
+
+	require.NoError(t, postprocessPublic(doc))
+	for path, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for method, op := range item.Operations() {
+			if op == nil || op.Responses == nil {
+				continue
+			}
+			key := method + " " + path
+			assert.Same(t, first[key], op.Responses.Value("405"),
+				"second pass must not replace 405 on %s", key)
+		}
+	}
 }
 
 // TestPostprocess_AttachesMethodNotAllowed_PreservesExisting verifies an

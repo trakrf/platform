@@ -1,5 +1,9 @@
 components:
     headers:
+        Allow:
+            description: Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5). Emitted on every 405 response.
+            schema:
+                type: string
         RetryAfter:
             description: Seconds to wait before retrying.
             schema:
@@ -24,26 +28,6 @@ components:
             description: Server-assigned request correlation identifier; mirrored as error.request_id in error envelopes and echoed in server logs. Quote this when filing support tickets.
             schema:
                 type: string
-    responses:
-        MethodNotAllowed:
-            content:
-                application/json:
-                    schema:
-                        $ref: '#/components/schemas/ErrorResponse'
-            description: Method not allowed
-            headers:
-                Allow:
-                    description: Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5).
-                    schema:
-                        type: string
-                X-RateLimit-Limit:
-                    $ref: '#/components/headers/XRateLimitLimit'
-                X-RateLimit-Remaining:
-                    $ref: '#/components/headers/XRateLimitRemaining'
-                X-RateLimit-Reset:
-                    $ref: '#/components/headers/XRateLimitReset'
-                X-Request-Id:
-                    $ref: '#/components/headers/XRequestId'
     schemas:
         AddAssetTagResponse:
             properties:
@@ -1148,7 +1132,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -1307,7 +1306,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -1484,7 +1498,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -1636,7 +1665,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -1779,7 +1823,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -2001,7 +2060,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -2164,7 +2238,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -2358,7 +2447,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -2545,7 +2649,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -2766,7 +2885,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -2924,7 +3058,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -3101,7 +3250,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -3268,7 +3432,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -3411,7 +3590,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -3608,7 +3802,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -3775,7 +3984,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -3942,7 +4166,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -4103,7 +4342,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -4293,7 +4547,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "409":
                     content:
                         application/json:
@@ -4480,7 +4749,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
@@ -4603,7 +4887,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "422":
                     content:
                         application/json:
@@ -4846,7 +5145,22 @@ paths:
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
                 "405":
-                    $ref: '#/components/responses/MethodNotAllowed'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "429":
                     content:
                         application/json:
