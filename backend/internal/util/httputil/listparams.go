@@ -254,6 +254,17 @@ func toSet(ss []string) map[string]struct{} {
 // unknown_field, matching the BB32 changelog claim.
 //
 // Pair with RespondListParamError to render uniformly.
+//
+// TRA-765 (BB56 F4): for parameters that are accepted on the list-endpoint
+// sibling but rejected on the detail endpoint (today: `include_deleted`),
+// the message is specialized to a diagnostic that names the list-only
+// scope and a concrete workaround URL. The generic "unknown parameter"
+// message left integrators chasing the wrong layer — `include_deleted`
+// works on `GET /api/v1/assets`, so a 400 from `GET /api/v1/assets/{id}?include_deleted=true`
+// reads like a bug rather than a contract decision (soft-deleted rows
+// aren't retrievable by id because the natural key is freed for reuse on
+// soft-delete; see /docs/api/pagination-filtering-sorting). The code
+// stays `unknown_field` for branching parity with list-endpoint rejections.
 func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
 	q := r.URL.Query()
 	if len(q) == 0 {
@@ -276,10 +287,45 @@ func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
 		fields = append(fields, apierrors.FieldError{
 			Field:   key,
 			Code:    "unknown_field",
-			Message: fmt.Sprintf("unknown parameter: %s", key),
+			Message: unknownQueryParamMessage(key, r.URL.Path),
 		})
 	}
 	return &ListParamError{Fields: fields}
+}
+
+// unknownQueryParamMessage returns the integrator-facing message for an
+// unknown query parameter on `path`. For most keys this is the generic
+// "unknown parameter: <key>" string. The exceptions are list-only filters
+// supplied to a detail endpoint, where the behavior is correct but the
+// generic message is misleading — see RejectUnknownQueryParams (TRA-765
+// BB56 F4) for the rationale.
+func unknownQueryParamMessage(key, requestPath string) string {
+	if key == "include_deleted" {
+		listPath := listSiblingPathFromDetail(requestPath)
+		if listPath != "" {
+			return fmt.Sprintf(
+				"include_deleted is a list-only filter; soft-deleted records are not retrievable by id (the natural key is freed for reuse on soft-delete). Use %s?external_key=<key>&include_deleted=true to retrieve soft-deleted rows by natural key.",
+				listPath,
+			)
+		}
+	}
+	return fmt.Sprintf("unknown parameter: %s", key)
+}
+
+// listSiblingPathFromDetail returns the list-endpoint path for a detail
+// path like `/api/v1/assets/{id}` by trimming the final segment. Returns
+// the empty string when the path has no preceding segment (the unknown
+// param diagnostic falls back to the generic message). The trailing
+// segment is assumed to be the path-param value; the router only attaches
+// RejectQueryParams to detail/write endpoints so a list-style trailing
+// segment doesn't occur in practice.
+func listSiblingPathFromDetail(requestPath string) string {
+	requestPath = strings.TrimRight(requestPath, "/")
+	idx := strings.LastIndex(requestPath, "/")
+	if idx <= 0 {
+		return ""
+	}
+	return requestPath[:idx]
 }
 
 // RespondListParamError writes a 400 validation_error envelope populated from

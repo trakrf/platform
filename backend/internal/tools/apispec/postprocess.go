@@ -646,30 +646,39 @@ func appendSpecVariantsDescription(doc *openapi3.T) {
 }
 
 // appendMethodPolicyDescription (TRA-633 B1, B4 / TRA-649 BB23 S4 /
-// TRA-657 BB25 B4) keeps info.description at a one-line pointer to the
-// customer-facing reference. The platform router exposes HEAD and OPTIONS
-// uniformly via middleware (chimiddleware.GetHead rewrites HEAD→GET; CORS
-// middleware short-circuits OPTIONS to 204), so per-path declarations
-// would double the operation count for no codegen value. Earlier
-// iterations inlined the policy prose directly into info.description, but
-// generated SDK class docstrings (AssetsApi.ts, LocationsApi.ts,
-// OrgsApi.ts) carried the entire HTTP-method-coverage paragraph at the
-// top of every file — TRA-649 / BB23 S4 trimmed that bloat. The full
-// policy now lives at /api/http-method-coverage on the docs site.
+// TRA-657 BB25 B4 / TRA-765 BB56 F1) keeps info.description at a
+// one-line pointer to the customer-facing reference. The platform router
+// exposes HEAD and OPTIONS uniformly via middleware (chimiddleware.GetHead
+// rewrites HEAD→GET; CORS middleware short-circuits OPTIONS to 204), so
+// per-path declarations would double the operation count for no codegen
+// value. Earlier iterations inlined the policy prose directly into
+// info.description, but generated SDK class docstrings (AssetsApi.ts,
+// LocationsApi.ts, OrgsApi.ts) carried the entire HTTP-method-coverage
+// paragraph at the top of every file — TRA-649 / BB23 S4 trimmed that
+// bloat. The full policy now lives at /docs/api/http-method-coverage on
+// the docs site.
 //
-// The link is emitted as a site-relative path (/api/http-method-coverage)
-// rather than the absolute https://docs.trakrf.id/... URL: the canonical
-// spec is published from docs.preview.trakrf.id during PR review and from
-// docs.trakrf.id in production, and a partner doing strict env isolation
-// should not see preview-spec links pointing at production docs
-// (TRA-657 / BB25 B4).
+// The link is emitted as a site-relative path
+// (/docs/api/http-method-coverage) rather than the absolute
+// https://docs.trakrf.id/... URL: the canonical spec is published from
+// docs.preview.trakrf.id during PR review and from docs.trakrf.id in
+// production, and a partner doing strict env isolation should not see
+// preview-spec links pointing at production docs (TRA-657 / BB25 B4).
+//
+// TRA-765 / BB56 F1: the path was previously /api/http-method-coverage,
+// which 404s on both the app origin and the docs origin (the docs site is
+// served from Docusaurus with a /docs/ base path). Sibling paths in this
+// same paragraph (/api/openapi.yaml, /api/openapi.json) DO resolve at the
+// docs origin via a documented 302 redirect; the http-method-coverage
+// page never had that redirect, so the canonical site-relative path
+// matches its Docusaurus location: /docs/api/http-method-coverage.
 func appendMethodPolicyDescription(doc *openapi3.T) {
 	const marker = "HTTP method coverage"
 	if strings.Contains(doc.Info.Description, marker) {
 		return
 	}
 	policy := "HTTP method coverage (HEAD, OPTIONS, 405 / Allow): " +
-		"/api/http-method-coverage"
+		"/docs/api/http-method-coverage"
 	if doc.Info.Description == "" {
 		doc.Info.Description = policy
 	} else {

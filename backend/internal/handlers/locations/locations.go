@@ -275,6 +275,19 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		request.ValidFrom = &fd
 	}
 
+	// TRA-765 (BB56 F3): reject inverted or instantaneous validity windows.
+	// valid_from has been defaulted above so the comparison runs against an
+	// effective non-zero value.
+	var locValidTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		locValidTo = &t
+	}
+	if fe := httputil.ValidateValidityWindow(request.ValidFrom.ToTime(), locValidTo); fe != nil {
+		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{*fe})
+		return
+	}
+
 	result, err := handler.storage.CreateLocationWithTags(r.Context(), orgID, request)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
@@ -292,7 +305,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send EITHER `parent_id` (surrogate) OR `parent_external_key` (natural key); both forms accept `null` to clear the FK, and supplying both in the same body returns 400 `ambiguous_fields` (symmetric with CreateLocationRequest). Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send `parent_id` (surrogate) OR `parent_external_key` (natural key), or both forms in the same body provided they resolve to the same parent (silently normalized to a single re-parent operation, symmetric with CreateLocationRequest); either form accepts `null` to clear the FK, and disagreement between the two forms returns 400 `ambiguous_fields`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -557,6 +570,29 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
+		return
+	}
+
+	// TRA-765 (BB56 F3): reject inverted or instantaneous validity windows on
+	// PATCH. Effective valid_from is the body value when supplied else the
+	// current value; effective valid_to is nil when the body clears it, the
+	// body value when present and non-null, else the current value.
+	effectiveValidFrom := current.ValidFrom
+	if request.ValidFrom != nil {
+		effectiveValidFrom = request.ValidFrom.ToTime()
+	}
+	var effectiveValidTo *time.Time
+	switch {
+	case request.ClearValidTo:
+		effectiveValidTo = nil
+	case request.ValidTo != nil:
+		t := request.ValidTo.ToTime()
+		effectiveValidTo = &t
+	default:
+		effectiveValidTo = current.ValidTo
+	}
+	if fe := httputil.ValidateValidityWindow(effectiveValidFrom, effectiveValidTo); fe != nil {
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
 		return
 	}
 

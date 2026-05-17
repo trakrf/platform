@@ -3,6 +3,7 @@ package httputil_test
 import (
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -45,6 +46,58 @@ func TestRejectUnknownQueryParams_AllAllowed_OK(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/v1/lookup/tag?type=rfid&value=abc", nil)
 	if err := httputil.RejectUnknownQueryParams(r, "type", "value"); err != nil {
 		t.Fatalf("unexpected error on allowed keys: %v", err)
+	}
+}
+
+// TRA-765 (BB56 F4): include_deleted on a detail endpoint emits a
+// diagnostic message naming the list-only scope and a concrete workaround
+// URL. The generic "unknown parameter: include_deleted" message left
+// integrators chasing the wrong layer — the same parameter works on the
+// list-endpoint sibling, so a 400 from the detail endpoint reads like a
+// bug rather than the documented contract decision (soft-deleted rows
+// aren't retrievable by id because the natural key is freed for reuse on
+// soft-delete). Code stays unknown_field for branching parity.
+func TestRejectUnknownQueryParams_IncludeDeletedOnDetail_EmitsDiagnostic_Assets(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/assets/123?include_deleted=true", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if len(lpe.Fields) != 1 {
+		t.Fatalf("Fields len=%d, want 1", len(lpe.Fields))
+	}
+	if lpe.Fields[0].Field != "include_deleted" {
+		t.Fatalf("Fields[0].Field = %q, want include_deleted", lpe.Fields[0].Field)
+	}
+	if lpe.Fields[0].Code != "unknown_field" {
+		t.Fatalf("Fields[0].Code = %q, want unknown_field — branching parity with list-endpoint rejections", lpe.Fields[0].Code)
+	}
+	msg := lpe.Fields[0].Message
+	for _, want := range []string{
+		"list-only filter",
+		"natural key is freed for reuse on soft-delete",
+		"/api/v1/assets?external_key=",
+		"include_deleted=true",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("message missing %q; got: %s", want, msg)
+		}
+	}
+}
+
+func TestRejectUnknownQueryParams_IncludeDeletedOnDetail_EmitsDiagnostic_Locations(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/locations/456?include_deleted=true", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if len(lpe.Fields) != 1 {
+		t.Fatalf("Fields len=%d, want 1", len(lpe.Fields))
+	}
+	if !strings.Contains(lpe.Fields[0].Message, "/api/v1/locations?external_key=") {
+		t.Fatalf("message must reference list-endpoint sibling for locations; got: %s", lpe.Fields[0].Message)
 	}
 }
 
