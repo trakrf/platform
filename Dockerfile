@@ -1,22 +1,14 @@
 # Stage 0: Build Metadata
-# Derives COMMIT_SHA / BUILD_TAG from the source's .git directory so the
-# resulting binaries can carry a real SHA even when the build caller doesn't
-# pass --build-arg. Railway's `${{ RAILWAY_GIT_COMMIT_SHA }}` template only
-# resolves for services using its native GitHub source integration; this
-# preview service deploys via a force-pushed `preview` branch so the
-# template resolves to nothing and the build-args never arrive. TRA-760 F2.
+# Receives COMMIT_SHA / BUILD_TAG as build args and writes them to files the
+# frontend and backend stages consume. Callers responsible for supplying real
+# values: GHA passes github.sha + ref tag (.github/workflows/docker-build.yml);
+# Railway passes RAILWAY_GIT_COMMIT_SHA + RAILWAY_GIT_BRANCH (railway.json).
+# An earlier revision read these from .git, but Railway's build context omits
+# .git so the COPY failed. TRA-760 F2.
 FROM alpine:3.20 AS build-meta
-RUN apk add --no-cache git
-ARG COMMIT_SHA=""
-ARG BUILD_TAG=""
-WORKDIR /src
-COPY .git ./.git
-RUN set -e; \
-    git config --global --add safe.directory /src; \
-    if [ -z "$COMMIT_SHA" ]; then COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo unknown); fi; \
-    if [ -z "$BUILD_TAG" ]; then BUILD_TAG=$(git describe --tags --always 2>/dev/null || echo dev); fi; \
-    printf '%s' "$COMMIT_SHA" > /commit; \
-    printf '%s' "$BUILD_TAG" > /tag
+ARG COMMIT_SHA=unknown
+ARG BUILD_TAG=dev
+RUN printf '%s' "$COMMIT_SHA" > /commit && printf '%s' "$BUILD_TAG" > /tag
 
 # Stage 1: Frontend Builder
 FROM node:24-alpine AS frontend-builder
@@ -30,8 +22,6 @@ ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
 
 # Build metadata — same values passed to the backend stage. Exposed as VITE_*
 # so the Vite plugin can emit dist/version.json for curl-able drift detection.
-# Values come from build-meta so a missing --build-arg falls back to the
-# source's .git SHA rather than the literal string "unknown".
 COPY --from=build-meta /commit /tag /tmp/buildinfo/
 
 # Install pnpm — major-pinned to 9.x. `pnpm@latest` resolved to 10.x in
@@ -61,9 +51,7 @@ FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
 
 # Build-time metadata injected via -ldflags so /health can report the
-# deployed commit. Values come from build-meta so a missing --build-arg
-# falls back to the source's .git SHA rather than the literal string
-# "unknown" (TRA-760 F2).
+# deployed commit. Values come from build-meta. TRA-760 F2.
 ARG VERSION=0.1.0-preview
 COPY --from=build-meta /commit /tag /tmp/buildinfo/
 
