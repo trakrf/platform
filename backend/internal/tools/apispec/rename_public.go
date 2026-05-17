@@ -90,10 +90,13 @@ var publicSchemaRenames = map[string]string{
 // publicOperationIdRenames maps the dotted operationIds swag emits
 // (assets.create, locations.tags.add, reports.asset-locations) to
 // camelCase verbResource form (createAsset, addLocationTag,
-// getAssetLocations) for the public spec (TRA-660 / BB25 C1). Codegen
+// listAssetLocations) for the public spec (TRA-660 / BB25 C1). Codegen
 // tools derive method names from operationId, so this is what
 // determines whether an SDK call reads `client.create_asset()` or
 // `client.assets_create()`.
+//
+// Paginated list endpoints use a `list*` prefix (TRA-755 / BB47 F2);
+// `get*` is reserved for single-resource fetches.
 var publicOperationIdRenames = map[string]string{
 	"assets.list":             "listAssets",
 	"assets.create":           "createAsset",
@@ -101,7 +104,7 @@ var publicOperationIdRenames = map[string]string{
 	"assets.get":              "getAsset",
 	"assets.update":           "updateAsset",
 	"assets.rename":           "renameAsset",
-	"assets.history":          "getAssetHistory",
+	"assets.history":          "listAssetHistory",
 	"assets.tags.add":         "addAssetTag",
 	"assets.tags.remove":      "removeAssetTag",
 	"locations.list":          "listLocations",
@@ -116,7 +119,7 @@ var publicOperationIdRenames = map[string]string{
 	"locations.tags.add":      "addLocationTag",
 	"locations.tags.remove":   "removeLocationTag",
 	"orgs.me":                 "getCurrentOrg",
-	"reports.asset-locations": "getAssetLocations",
+	"reports.asset-locations": "listAssetLocations",
 }
 
 // publicTagDescriptions adds top-level tag definitions to the public

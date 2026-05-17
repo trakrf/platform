@@ -28,10 +28,10 @@ function appendRepeatable(
 
 export const reportsApi = {
   /**
-   * Get current locations for all assets
-   * GET /api/v1/reports/asset-locations
+   * List current locations for all assets
+   * GET /api/v1/reports/asset-locations (operationId: listAssetLocations)
    */
-  getCurrentLocations: (options: CurrentLocationsParams = {}) => {
+  listAssetLocations: (options: CurrentLocationsParams = {}) => {
     const params = new URLSearchParams();
     if (options.limit !== undefined) params.append('limit', String(options.limit));
     if (options.offset !== undefined) params.append('offset', String(options.offset));
@@ -51,10 +51,10 @@ export const reportsApi = {
   },
 
   /**
-   * Get movement history for a specific asset by canonical id.
-   * GET /api/v1/assets/{id}/history
+   * List movement history for a specific asset by canonical id.
+   * GET /api/v1/assets/{id}/history (operationId: listAssetHistory)
    */
-  getAssetHistory: (assetId: number, options: AssetHistoryParams = {}) => {
+  listAssetHistory: (assetId: number, options: AssetHistoryParams = {}) => {
     const params = new URLSearchParams();
     if (options.limit !== undefined) params.append('limit', String(options.limit));
     if (options.offset !== undefined) params.append('offset', String(options.offset));
