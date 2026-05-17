@@ -100,6 +100,7 @@ func (handler *Handler) resolveParent(
 // @Summary      Create a location
 // @Description  Create a new location in the hierarchy, optionally with one or more tags.
 // @Description  Set parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.
+// @Description  Both forms may be supplied together when they name the same parent (silently normalized to a single re-parent operation); a disagreement returns 400 `ambiguous_fields`.
 // @Description
 // @Description  The `external_key` field is optional. Provide a value from your system of record
 // @Description  (ERP, WMS, layout/plan) for natural-key joins, or omit it to receive a
@@ -189,19 +190,55 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// TRA-681: parent_id and parent_external_key form a oneOf on Create
-	// bodies — the spec encodes `not: {required: [parent_id,
-	// parent_external_key]}` on CreateLocationWithTagsRequest. Reject both-
-	// supplied at the handler so callers get a typed ambiguous_fields code
-	// they can branch on, rather than relying on a silent server pick.
+	// TRA-757 (BB50/51/52 F1): reconcile parent_id and parent_external_key
+	// when both supplied on Create. Symmetric with the PATCH reconciliation
+	// below — a payload that names the same parent through both forms is
+	// silently normalized to a single re-parent operation, and only a
+	// disagreement returns 400 ambiguous_fields. The "POST-the-GET-response
+	// after editing one field" workflow is encouraged elsewhere in the docs
+	// and is a natural integrator pattern; pre-TRA-757 POST was the one place
+	// it broke. Mixed null/non-null intent stays ambiguous on Create too.
 	_, hasParentID := presentKeys["parent_id"]
 	_, hasParentExt := presentKeys["parent_external_key"]
 	if hasParentID && hasParentExt {
-		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{
-			{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
-			{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive; supply exactly one"},
-		})
-		return
+		_, idNull := explicitNulls["parent_id"]
+		_, extNull := explicitNulls["parent_external_key"]
+		switch {
+		case idNull && extNull:
+			// Both null — equivalent to "no parent." Drop the natural-key
+			// form so resolveParent below sees a single intent.
+			request.ParentExternalKey = nil
+		case !idNull && !extNull:
+			// Both non-null: resolve the natural key and verify it matches
+			// the supplied surrogate. resolveParent returns fk_not_found if
+			// the natural key doesn't exist.
+			extResolved, fErr := handler.resolveParent(r, orgID, nil, request.ParentExternalKey)
+			if fErr != nil {
+				if fErr.Code == "internal_error" {
+					httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, fErr.Message, requestID)
+					return
+				}
+				httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{*fErr})
+				return
+			}
+			if extResolved == nil || request.ParentID == nil || *extResolved != *request.ParentID {
+				httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{
+					{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key both supplied and disagree; supply exactly one or supply consistent values"},
+					{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key both supplied and disagree; supply exactly one or supply consistent values"},
+				})
+				return
+			}
+			// Consistent — drop the natural-key form and proceed with the
+			// surrogate.
+			request.ParentExternalKey = nil
+		default:
+			// Mixed intent (one null, one non-null): ambiguous.
+			httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{
+				{Field: "parent_id", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive when one is null and the other is set; supply exactly one"},
+				{Field: "parent_external_key", Code: "ambiguous_fields", Message: "parent_id and parent_external_key are mutually exclusive when one is null and the other is set; supply exactly one"},
+			})
+			return
+		}
 	}
 
 	if err := validate.Struct(request); err != nil {

@@ -878,26 +878,20 @@ var publicWriteSchemas = []string{
 
 // mutuallyExclusiveFieldPairs declares (schema, fieldA, fieldB) tuples
 // where the surrogate id and natural-key alternate cannot be supplied
-// together on Create (TRA-678). Encoded via a JSON Schema `not: required:
-// [a, b]` clause so generators understand the constraint and Schemathesis-
-// class "API rejected schema-compliant request" failures stop firing when
-// the server's "both must agree" check rejects a fuzz-generated payload.
+// together. Encoded via a JSON Schema `not: required: [a, b]` clause so
+// generators understand the constraint and Schemathesis-class "API
+// rejected schema-compliant request" failures stop firing when the server
+// rejects a fuzz-generated payload.
 //
-// Update / PATCH bodies are intentionally NOT listed: the JSON-Merge-Patch
-// semantic uses explicit null on either field as a clear-this-FK signal,
-// so a payload that sends `{a: null, b: null}` to clear the FK must remain
-// valid — a `not: required` constraint would reject it. The PATCH handler
-// implements its own per-field reconciliation.
-// TRA-734 (BB40 F3): the asset Create pair (location_id /
-// location_external_key) was removed — those fields are no longer present
-// on CreateAssetWithTagsRequest. Only the location Create pair remains.
+// TRA-757 (BB50/51/52 F1): the location Create pair (parent_id /
+// parent_external_key) was removed — POST /api/v1/locations now follows
+// the same reconcile-matching-pair semantic as PATCH. The mechanism stays
+// in place for any future "strict reject both" Create surface.
 var mutuallyExclusiveFieldPairs = []struct {
 	Schema string
 	FieldA string
 	FieldB string
-}{
-	{"location.CreateLocationWithTagsRequest", "parent_id", "parent_external_key"},
-}
+}{}
 
 // markMutuallyExclusiveFieldPairs walks each (schema, a, b) tuple and
 // installs a `not: { required: [a, b] }` clause on the schema. Idempotent;
