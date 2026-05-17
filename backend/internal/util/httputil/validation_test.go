@@ -314,7 +314,7 @@ func TestWriteValidationError_EchoesSingleFieldMessageInDetail(t *testing.T) {
 	httputil.WriteValidationError(w, r, "req-1", []apierrors.FieldError{{
 		Field:   "external_key",
 		Code:    "read_only",
-		Message: "external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename to change it",
+		Message: `external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename with body {"external_key": "<new value>"} to change it`,
 	}})
 
 	if w.Code != 400 {
@@ -324,7 +324,7 @@ func TestWriteValidationError_EchoesSingleFieldMessageInDetail(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, string(apierrors.ErrValidation), resp.Error.Type)
 	assert.Equal(t,
-		"external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename to change it",
+		`external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename with body {"external_key": "<new value>"} to change it`,
 		resp.Error.Detail,
 		"detail must echo fields[0].message verbatim")
 	require.Len(t, resp.Error.Fields, 1)
