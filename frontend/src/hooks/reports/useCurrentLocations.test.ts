@@ -40,9 +40,9 @@ describe('useCurrentLocations', () => {
   });
 
   it('should fetch and return current locations', async () => {
-    vi.mocked(reportsApi.getCurrentLocations).mockResolvedValue({
+    vi.mocked(reportsApi.listAssetLocations).mockResolvedValue({
       data: { data: mockData, count: 1, offset: 0, total_count: 1 },
-    } as ReturnType<typeof reportsApi.getCurrentLocations>);
+    } as ReturnType<typeof reportsApi.listAssetLocations>);
 
     const { result } = renderHook(() => useCurrentLocations(), {
       wrapper: createWrapper(),
@@ -57,16 +57,16 @@ describe('useCurrentLocations', () => {
   });
 
   it('should pass params to API', async () => {
-    vi.mocked(reportsApi.getCurrentLocations).mockResolvedValue({
+    vi.mocked(reportsApi.listAssetLocations).mockResolvedValue({
       data: { data: [], count: 0, offset: 0, total_count: 0 },
-    } as ReturnType<typeof reportsApi.getCurrentLocations>);
+    } as ReturnType<typeof reportsApi.listAssetLocations>);
 
     renderHook(() => useCurrentLocations({ q: 'test', limit: 10 }), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => {
-      expect(reportsApi.getCurrentLocations).toHaveBeenCalledWith({
+      expect(reportsApi.listAssetLocations).toHaveBeenCalledWith({
         q: 'test',
         limit: 10,
       });
@@ -74,7 +74,7 @@ describe('useCurrentLocations', () => {
   });
 
   it('should handle errors', async () => {
-    vi.mocked(reportsApi.getCurrentLocations).mockRejectedValue(new Error('Failed'));
+    vi.mocked(reportsApi.listAssetLocations).mockRejectedValue(new Error('Failed'));
 
     const { result } = renderHook(() => useCurrentLocations(), {
       wrapper: createWrapper(),
@@ -93,7 +93,7 @@ describe('useCurrentLocations', () => {
     });
 
     await new Promise((r) => setTimeout(r, 100));
-    expect(reportsApi.getCurrentLocations).not.toHaveBeenCalled();
+    expect(reportsApi.listAssetLocations).not.toHaveBeenCalled();
     expect(result.current.isLoading).toBe(false);
   });
 
@@ -112,13 +112,13 @@ describe('useCurrentLocations', () => {
       const page1 = makePage(200, 1);
       const page2 = makePage(150, 201);
 
-      vi.mocked(reportsApi.getCurrentLocations)
+      vi.mocked(reportsApi.listAssetLocations)
         .mockResolvedValueOnce({
           data: { data: page1, limit: 200, offset: 0, total_count: 350 },
-        } as ReturnType<typeof reportsApi.getCurrentLocations>)
+        } as ReturnType<typeof reportsApi.listAssetLocations>)
         .mockResolvedValueOnce({
           data: { data: page2, limit: 200, offset: 200, total_count: 350 },
-        } as ReturnType<typeof reportsApi.getCurrentLocations>);
+        } as ReturnType<typeof reportsApi.listAssetLocations>);
 
       const { result } = renderHook(
         () => useCurrentLocations({ fetchAll: true, q: 'foo' }),
@@ -129,13 +129,13 @@ describe('useCurrentLocations', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(reportsApi.getCurrentLocations).toHaveBeenCalledTimes(2);
-      expect(reportsApi.getCurrentLocations).toHaveBeenNthCalledWith(1, {
+      expect(reportsApi.listAssetLocations).toHaveBeenCalledTimes(2);
+      expect(reportsApi.listAssetLocations).toHaveBeenNthCalledWith(1, {
         q: 'foo',
         limit: 200,
         offset: 0,
       });
-      expect(reportsApi.getCurrentLocations).toHaveBeenNthCalledWith(2, {
+      expect(reportsApi.listAssetLocations).toHaveBeenNthCalledWith(2, {
         q: 'foo',
         limit: 200,
         offset: 200,
@@ -147,9 +147,9 @@ describe('useCurrentLocations', () => {
     it('stops after a single page when total_count fits in one page', async () => {
       const page1 = makePage(50, 1);
 
-      vi.mocked(reportsApi.getCurrentLocations).mockResolvedValueOnce({
+      vi.mocked(reportsApi.listAssetLocations).mockResolvedValueOnce({
         data: { data: page1, limit: 200, offset: 0, total_count: 50 },
-      } as ReturnType<typeof reportsApi.getCurrentLocations>);
+      } as ReturnType<typeof reportsApi.listAssetLocations>);
 
       const { result } = renderHook(
         () => useCurrentLocations({ fetchAll: true }),
@@ -160,7 +160,7 @@ describe('useCurrentLocations', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(reportsApi.getCurrentLocations).toHaveBeenCalledTimes(1);
+      expect(reportsApi.listAssetLocations).toHaveBeenCalledTimes(1);
       expect(result.current.data).toHaveLength(50);
       expect(result.current.totalCount).toBe(50);
     });

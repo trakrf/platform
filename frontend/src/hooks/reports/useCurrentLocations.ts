@@ -23,7 +23,7 @@ async function fetchAllPages(
   const all: CurrentLocationsResponse['data'] = [];
   let totalCount = 0;
   for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
-    const response = await reportsApi.getCurrentLocations({
+    const response = await reportsApi.listAssetLocations({
       ...rest,
       limit: MAX_PAGE_SIZE,
       offset,
@@ -44,7 +44,7 @@ export function useCurrentLocations(options: UseCurrentLocationsOptions = {}) {
     queryKey: ['reports', 'current-locations', currentOrg?.id, fetchAll, params],
     queryFn: async () => {
       if (fetchAll) return fetchAllPages(params);
-      const response = await reportsApi.getCurrentLocations(params);
+      const response = await reportsApi.listAssetLocations(params);
       return response.data;
     },
     enabled: enabled && !!currentOrg?.id,

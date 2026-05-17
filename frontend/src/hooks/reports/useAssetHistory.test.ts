@@ -43,9 +43,9 @@ describe('useAssetHistory', () => {
   });
 
   it('should fetch asset history', async () => {
-    vi.mocked(reportsApi.getAssetHistory).mockResolvedValue({
+    vi.mocked(reportsApi.listAssetHistory).mockResolvedValue({
       data: mockResponse,
-    } as ReturnType<typeof reportsApi.getAssetHistory>);
+    } as ReturnType<typeof reportsApi.listAssetHistory>);
 
     const { result } = renderHook(() => useAssetHistory(1), {
       wrapper: createWrapper(),
@@ -64,11 +64,11 @@ describe('useAssetHistory', () => {
     });
 
     await new Promise((r) => setTimeout(r, 100));
-    expect(reportsApi.getAssetHistory).not.toHaveBeenCalled();
+    expect(reportsApi.listAssetHistory).not.toHaveBeenCalled();
   });
 
   it('should handle 404 errors', async () => {
-    vi.mocked(reportsApi.getAssetHistory).mockRejectedValue(new Error('Not found'));
+    vi.mocked(reportsApi.listAssetHistory).mockRejectedValue(new Error('Not found'));
 
     const { result } = renderHook(() => useAssetHistory(999), {
       wrapper: createWrapper(),
@@ -80,9 +80,9 @@ describe('useAssetHistory', () => {
   });
 
   it('should pass date params to API', async () => {
-    vi.mocked(reportsApi.getAssetHistory).mockResolvedValue({
+    vi.mocked(reportsApi.listAssetHistory).mockResolvedValue({
       data: mockResponse,
-    } as ReturnType<typeof reportsApi.getAssetHistory>);
+    } as ReturnType<typeof reportsApi.listAssetHistory>);
 
     renderHook(
       () =>
@@ -96,7 +96,7 @@ describe('useAssetHistory', () => {
     );
 
     await waitFor(() => {
-      expect(reportsApi.getAssetHistory).toHaveBeenCalledWith(1, {
+      expect(reportsApi.listAssetHistory).toHaveBeenCalledWith(1, {
         from: '2025-01-01T00:00:00Z',
         to: '2025-01-27T23:59:59Z',
       });

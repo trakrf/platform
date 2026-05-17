@@ -15,7 +15,7 @@ export function useAssetHistory(assetId: number | null, options: UseAssetHistory
     queryKey: ['reports', 'asset-history', currentOrg?.id, assetId, params],
     queryFn: async () => {
       if (!assetId) throw new Error('Asset ID required');
-      const response = await reportsApi.getAssetHistory(assetId, params);
+      const response = await reportsApi.listAssetHistory(assetId, params);
       return response.data;
     },
     enabled: enabled && !!currentOrg?.id && !!assetId,
