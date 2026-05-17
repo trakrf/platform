@@ -653,11 +653,26 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 				// *json.UnmarshalTypeError path as any other format failure,
 				// but the per-field guidance differs — the integrator did
 				// produce a valid RFC 3339 string, they just supplied a
-				// language-default marker where they meant "unset". Point
-				// them at JSON null explicitly so the next request is
-				// correct instead of swapping one sentinel for the other.
+				// language-default marker where they meant "unset".
+				//
+				// TRA-767 / BB57 F1: the sentinel-rejection recommendation
+				// must match the null-rejection recommendation on the same
+				// field. Non-nullable timestamps (currently only valid_from)
+				// reject null with "omit the field" (assets/locations
+				// handlers), so the sentinel path must point at omit too —
+				// not at JSON null, which the null path would then reject.
+				// Nullable timestamps still get the "use JSON null" hint
+				// because that is the correct way to leave them unset.
 				if raw := strings.Trim(typeErr.Value, "\""); shared.IsSentinelTimestamp(raw) {
-					msg = fmt.Sprintf("%s must not be a default-value sentinel (%s); use JSON null to leave the field unset", field, raw)
+					if isNonNullableTimestampField(field) {
+						omitHint := "omit the field to use the server default"
+						if r.Method == http.MethodPatch {
+							omitHint = "omit the field to leave unchanged"
+						}
+						msg = fmt.Sprintf("%s must not be a default-value sentinel (%s); %s, or provide a real timestamp", field, raw, omitHint)
+					} else {
+						msg = fmt.Sprintf("%s must not be a default-value sentinel (%s); use JSON null to leave the field unset", field, raw)
+					}
 				}
 				WriteValidationError(w, r, requestID, []apierrors.FieldError{{
 					Field:   field,
@@ -688,15 +703,78 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 // strip the struct qualifier so the response matches the request body shape
 // integrators see, mirroring the same handling on the time-target branch
 // in RespondDecodeError.
+//
+// TRA-767 / BB57 F2: include the expected JSON type name when the decoder
+// knows it (typeErr.Type carries the destination Go type). The validation-
+// stage envelope surfaces this via params; the decode-stage envelope
+// withheld it. Closing the asymmetry saves a round-trip for integrators
+// who otherwise probe to find the expected type.
 func typeMismatchDetail(e *json.UnmarshalTypeError) string {
 	field := e.Field
 	if i := strings.LastIndex(field, "."); i >= 0 {
 		field = field[i+1:]
 	}
+	expected := jsonTypeName(e.Type)
 	if field != "" {
+		if expected != "" {
+			return fmt.Sprintf("Body field %q could not be decoded as the expected type (%s)", field, expected)
+		}
 		return fmt.Sprintf("Body field %q could not be decoded as the expected type", field)
 	}
+	if expected != "" {
+		return fmt.Sprintf("Request body could not be decoded as the expected type (%s)", expected)
+	}
 	return "Request body could not be decoded as the expected type"
+}
+
+// jsonTypeName maps a Go reflect.Type to the wire-facing JSON type label
+// the integrator sees in the public spec (boolean / number / integer /
+// string / array / object). Returns "" when the destination is something
+// we don't want to expose verbatim (interfaces, unknown structs) so the
+// caller falls back to the generic phrasing.
+func jsonTypeName(t reflect.Type) string {
+	if t == nil {
+		return ""
+	}
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Bool:
+		return "boolean"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "integer"
+	case reflect.Float32, reflect.Float64:
+		return "number"
+	case reflect.String:
+		return "string"
+	case reflect.Slice, reflect.Array:
+		return "array"
+	case reflect.Map:
+		return "object"
+	}
+	return ""
+}
+
+// nonNullableTimestampFields enumerates request-body timestamp fields whose
+// spec contract is non-nullable: an explicit JSON null is rejected by the
+// handler-level null-violation loop. The sentinel-rejection path in
+// RespondDecodeError must match that recommendation rather than pointing
+// integrators at JSON null (TRA-767 / BB57 F1).
+//
+// Kept as a hard-coded set because all public-API non-nullable timestamps
+// are *shared.FlexibleDate at the Go level (same as nullable timestamps),
+// so reflection cannot distinguish them. The corresponding handler-level
+// null-violation loops in handlers/assets and handlers/locations are the
+// source of truth; this list mirrors them.
+var nonNullableTimestampFields = map[string]struct{}{
+	"valid_from": {},
+}
+
+func isNonNullableTimestampField(name string) bool {
+	_, ok := nonNullableTimestampFields[name]
+	return ok
 }
 
 // isTimeTarget reports whether t is time.Time or *time.Time, including

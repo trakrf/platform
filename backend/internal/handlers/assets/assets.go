@@ -406,7 +406,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "external_key",
 				Code:    "read_only",
-				Message: "external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename to change it",
+				Message: `external_key is immutable via PATCH; use POST /api/v1/assets/{asset_id}/rename with body {"external_key": "<new value>"} to change it`,
 			})
 		}
 	}
