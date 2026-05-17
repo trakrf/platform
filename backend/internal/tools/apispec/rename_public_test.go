@@ -63,7 +63,7 @@ func TestRenamePublicSpec_RenamesOperationIds(t *testing.T) {
 	assert.Equal(t, "listAssets", doc.Paths.Find("/api/v1/assets").Get.OperationID)
 	assert.Equal(t, "createAsset", doc.Paths.Find("/api/v1/assets").Post.OperationID)
 	assert.Equal(t, "addLocationTag", doc.Paths.Find("/api/v1/locations/{id}/tags").Post.OperationID)
-	assert.Equal(t, "getAssetLocations", doc.Paths.Find("/api/v1/reports/asset-locations").Get.OperationID)
+	assert.Equal(t, "listAssetLocations", doc.Paths.Find("/api/v1/reports/asset-locations").Get.OperationID)
 }
 
 // TestRenamePublicSpec_AddsTopLevelTagDescriptions verifies the top-level

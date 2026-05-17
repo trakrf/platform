@@ -26,7 +26,7 @@
         }
       },
       "XRateLimitRemaining": {
-        "description": "Requests remaining before throttling; bounded by X-RateLimit-Limit.",
+        "description": "Steady-state requests remaining in the rate-limit bucket; bounded above by X-RateLimit-Limit. Does not decrement on each call while within the burst margin — clients should not pace on this header.",
         "schema": {
           "type": "integer"
         }
@@ -2740,7 +2740,7 @@
     "/api/v1/assets/{asset_id}/history": {
       "get": {
         "description": "**Required scope:** `tracking:read`\n\nLocation history for an asset identified by its canonical id.\n\nThe asset existence check follows path-addressed semantics — the asset is returned even if its `valid_to` has elapsed. Each history row's location reference applies the temporal-validity predicate, so an event referencing a location whose effective window is past surfaces with null `location_external_key`.",
-        "operationId": "getAssetHistory",
+        "operationId": "listAssetHistory",
         "parameters": [
           {
             "description": "Asset id (canonical)",
@@ -7444,7 +7444,7 @@
     "/api/v1/reports/asset-locations": {
       "get": {
         "description": "**Required scope:** `tracking:read`\n\nSnapshot of each asset's most recent location, filterable by either side of the join. Filter by location (`location_id` / `location_external_key`) to retrieve everything currently at a place; filter by asset (`asset_id` / `asset_external_key`, repeatable) to resolve a batch of assets from a master system to their current locations in one round-trip. Within each pair the surrogate and natural-key forms are mutually exclusive (400 `ambiguous_fields` if both are supplied); the asset and location filter pairs are independent and intersect when combined. Because this view is derived from immutable scan history, it can resolve references for assets that have since been deleted. By default those rows are excluded; pass `include_deleted=true` to include them, and check `asset_deleted_at` to distinguish deleted from live.\n\nTemporal validity is applied to both joined entities. Assets whose effective window is past or future are excluded entirely. Locations whose effective window is past or future surface with null `location_id` / `location_external_key` while the parent asset row remains visible. Soft-deleted locations are projected the same way here — null on the report row — even though the identifier still lives on the location row; reports endpoints intentionally hide tombstoned anchor points from scan-derived summaries. Use the locations endpoint with `include_deleted=true` to retrieve the underlying identifier.",
-        "operationId": "getAssetLocations",
+        "operationId": "listAssetLocations",
         "parameters": [
           {
             "description": "max 200",
