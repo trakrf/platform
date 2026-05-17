@@ -1,14 +1,20 @@
 # Stage 0: Build Metadata
-# Receives COMMIT_SHA / BUILD_TAG as build args and writes them to files the
-# frontend and backend stages consume. Callers responsible for supplying real
-# values: GHA passes github.sha + ref tag (.github/workflows/docker-build.yml);
-# Railway passes RAILWAY_GIT_COMMIT_SHA + RAILWAY_GIT_BRANCH (railway.json).
-# An earlier revision read these from .git, but Railway's build context omits
-# .git so the COPY failed. TRA-760 F2.
+# Resolves the deployed commit and tag from one of two sources:
+#   1. Explicit caller --build-arg COMMIT_SHA / BUILD_TAG (GHA path, see
+#      .github/workflows/docker-build.yml — passes github.sha + meta tag).
+#   2. Railway-provided RAILWAY_GIT_COMMIT_SHA / RAILWAY_GIT_BRANCH. Railway
+#      injects these into the build environment for any ARG declared with a
+#      matching name (per https://docs.railway.com/guides/dockerfiles), so no
+#      railway.json dockerBuildArgs indirection is needed.
+# Explicit args win; Railway args are the fallback; "unknown"/"dev" if neither.
+# TRA-760 F2.
 FROM alpine:3.20 AS build-meta
-ARG COMMIT_SHA=unknown
-ARG BUILD_TAG=dev
-RUN printf '%s' "$COMMIT_SHA" > /commit && printf '%s' "$BUILD_TAG" > /tag
+ARG COMMIT_SHA=
+ARG BUILD_TAG=
+ARG RAILWAY_GIT_COMMIT_SHA=
+ARG RAILWAY_GIT_BRANCH=
+RUN printf '%s' "${COMMIT_SHA:-${RAILWAY_GIT_COMMIT_SHA:-unknown}}" > /commit && \
+    printf '%s' "${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}" > /tag
 
 # Stage 1: Frontend Builder
 FROM node:24-alpine AS frontend-builder
