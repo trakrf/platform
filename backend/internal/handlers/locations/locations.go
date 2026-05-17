@@ -616,6 +616,34 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 	}
 	request.ParentID = resolved
 
+	// TRA-770 BB58 F1: when the PATCH actually changes parent_id to a non-null
+	// value, reject any assignment that would create a cycle. Routes both the
+	// 1-hop self-parent case and the N-hop transitive case through the same
+	// 409 path with a specific actionable detail (TRA-770 BB58 F2 folded in).
+	// A null parent_id (root-promotion) and a no-op same-parent assignment
+	// can't form cycles and skip the check.
+	if resolved != nil {
+		sameParent := current.ParentID != nil && *current.ParentID == *resolved
+		if !sameParent {
+			wouldCycle, cycErr := handler.storage.WouldCreateLocationCycle(req.Context(), orgID, id, *resolved)
+			if cycErr != nil {
+				httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+					cycErr.Error(), reqID)
+				return
+			}
+			if wouldCycle {
+				var detail string
+				if *resolved == id {
+					detail = fmt.Sprintf("parent_id %d would create a self-referential cycle", id)
+				} else {
+					detail = fmt.Sprintf("parent_id %d would create a cycle through location %d", *resolved, id)
+				}
+				httputil.WriteJSONError(w, req, http.StatusConflict, modelerrors.ErrConflict, detail, reqID)
+				return
+			}
+		}
+	}
+
 	result, err := handler.storage.UpdateLocation(req.Context(), orgID, id, request)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exist") {
@@ -1066,6 +1094,10 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if cycErr := handler.guardTreeCycle(w, req, orgID, id, reqID); cycErr {
+		return
+	}
+
 	results, err := handler.storage.ListAncestorsPaginated(req.Context(), orgID, id, params.Limit, params.Offset)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
@@ -1123,6 +1155,10 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{})
 	if err != nil {
 		httputil.RespondListParamError(w, req, err, reqID)
+		return
+	}
+
+	if cycErr := handler.guardTreeCycle(w, req, orgID, id, reqID); cycErr {
 		return
 	}
 
@@ -1208,6 +1244,27 @@ func (handler *Handler) GetChildren(w http.ResponseWriter, req *http.Request) {
 		Offset:     params.Offset,
 		TotalCount: total,
 	})
+}
+
+// guardTreeCycle pre-checks the location tree from `id` (both up and down)
+// for a cycle in `parent_location_id`. With the TRA-770 BB58 F1 write-time
+// check in place the tree should always be acyclic; this is the read-time
+// defense in depth so a corrupt-tree state surfaces as a 500 with a
+// diagnostic detail instead of hanging the recursive walker forever.
+// Returns true when the response has been written and the caller must stop.
+func (handler *Handler) guardTreeCycle(w http.ResponseWriter, req *http.Request, orgID, id int, reqID string) bool {
+	hasCycle, err := handler.storage.DetectLocationTreeCycle(req.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			err.Error(), reqID)
+		return true
+	}
+	if hasCycle {
+		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
+			fmt.Sprintf("location %d is part of a parent_id cycle; tree walk aborted", id), reqID)
+		return true
+	}
+	return false
 }
 
 func toPublicLocationViews(locs []location.LocationWithParent) []location.PublicLocationView {

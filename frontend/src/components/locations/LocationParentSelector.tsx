@@ -28,9 +28,14 @@ export function LocationParentSelector({
 
     const excludedIds = new Set<number>([currentLocationId]);
 
+    // TRA-770 BB58 F1: defensive visited tracking. The API now rejects
+    // parent_id cycles, but pre-fix data or a stale cache could still feed
+    // this picker a cyclic tree — recurse without the guard and the SPA
+    // hangs.
     const getDescendants = (locationId: number) => {
       const children = cache.byParentId.get(locationId) || new Set();
       children.forEach((childId) => {
+        if (excludedIds.has(childId)) return;
         excludedIds.add(childId);
         getDescendants(childId);
       });
