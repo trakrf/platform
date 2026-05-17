@@ -1067,7 +1067,7 @@ func TestGetLocationWithRelations(t *testing.T) {
 	orgID := 1
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`WITH RECURSIVE ancestors AS`).
+	mock.ExpectQuery(`WITH RECURSIVE ancestors_raw AS`).
 		WithArgs(targetID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -1120,7 +1120,7 @@ func TestGetLocationWithRelations_RootLocation(t *testing.T) {
 	orgID := 1
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`WITH RECURSIVE ancestors AS`).
+	mock.ExpectQuery(`WITH RECURSIVE ancestors_raw AS`).
 		WithArgs(rootID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -1169,7 +1169,7 @@ func TestGetLocationWithRelations_LeafLocation(t *testing.T) {
 	orgID := 1
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`WITH RECURSIVE ancestors AS`).
+	mock.ExpectQuery(`WITH RECURSIVE ancestors_raw AS`).
 		WithArgs(leafID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()
@@ -1206,7 +1206,7 @@ func TestGetLocationWithRelations_NotFound(t *testing.T) {
 	orgID := 1
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`WITH RECURSIVE ancestors AS`).
+	mock.ExpectQuery(`WITH RECURSIVE ancestors_raw AS`).
 		WithArgs(locationID, orgID).
 		WillReturnRows(rows)
 	mock.ExpectCommit()

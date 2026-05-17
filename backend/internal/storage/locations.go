@@ -192,6 +192,10 @@ func (s *Storage) RenameLocation(ctx context.Context, orgID, id int, newExternal
 		// Soft-deleted rows are excluded because they're no longer
 		// observable through the public API; integrators don't need to
 		// re-fetch a subtree they can't see.
+		//
+		// TRA-770 BB58 F1: CYCLE clause is read-time defense — if a
+		// cycle is ever present the walk terminates rather than
+		// hanging. The cycle row is filtered out of the count.
 		err = tx.QueryRow(ctx, `
 			WITH RECURSIVE subtree AS (
 				SELECT id FROM trakrf.locations
@@ -200,8 +204,8 @@ func (s *Storage) RenameLocation(ctx context.Context, orgID, id int, newExternal
 				SELECT c.id FROM trakrf.locations c
 				JOIN subtree s ON c.parent_location_id = s.id
 				WHERE c.org_id = $1 AND c.deleted_at IS NULL
-			)
-			SELECT count(*) FROM subtree WHERE id != $2
+			) CYCLE id SET cycle_hit USING cycle_path
+			SELECT count(*) FROM subtree WHERE id != $2 AND NOT cycle_hit
 		`, orgID, id).Scan(&descendantCount)
 		if err != nil {
 			return err
@@ -301,8 +305,12 @@ func (s *Storage) GetLocationsByIDs(ctx context.Context, orgID int, ids []int) (
 func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (*location.Location, error) {
 	// TRA-684: replaces the prior ltree path queries with a parent_id walk.
 	// ancestors() recurses up; the children join is unchanged.
+	//
+	// TRA-770 BB58 F1: CYCLE clause is read-time defense in depth — a
+	// cycle in the stored chain terminates the walk instead of hanging.
+	// The cycle row is filtered out of the projection.
 	query := `
-	WITH RECURSIVE ancestors AS (
+	WITH RECURSIVE ancestors_raw AS (
 		SELECT id, org_id, name, external_key, parent_location_id,
 		       COALESCE(description, '') AS description,
 		       valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
@@ -315,13 +323,14 @@ func (s *Storage) GetLocationWithRelations(ctx context.Context, orgID, id int) (
 		       p.valid_from, p.valid_to, p.is_active, p.created_at, p.updated_at, p.deleted_at,
 		       a.rdepth - 1
 		FROM trakrf.locations p
-		JOIN ancestors a ON p.id = a.parent_location_id
+		JOIN ancestors_raw a ON p.id = a.parent_location_id
 		WHERE p.org_id = $2 AND p.deleted_at IS NULL
-	)
+	) CYCLE id SET cycle_hit USING cycle_path
 	SELECT id, org_id, name, external_key, parent_location_id,
 	       description, valid_from, valid_to, is_active, created_at, updated_at, deleted_at,
 	       CASE WHEN id = $1 THEN 'target' ELSE 'ancestor' END AS relation_type
-	FROM ancestors
+	FROM ancestors_raw
+	WHERE NOT cycle_hit
 	UNION ALL
 	SELECT l.id, l.org_id, l.name, l.external_key, l.parent_location_id,
 	       COALESCE(l.description, ''),
@@ -493,20 +502,119 @@ func (s *Storage) DeleteLocation(ctx context.Context, orgID, id int) (bool, erro
 	return rowsAffected > 0, nil
 }
 
+// ErrLocationTreeCycle is returned by ancestors/descendants walks when a
+// cycle is detected in the live parent_location_id chain. With the TRA-770
+// write-time cycle check in place this should be unreachable in normal
+// operation; surfacing the error rather than hanging burns a request instead
+// of a pod (BB58 F1 read-time defense in depth).
+var ErrLocationTreeCycle = stderrors.New("location tree contains a cycle (parent_location_id chain not acyclic)")
+
+// WouldCreateLocationCycle returns true if reparenting `locationID` under
+// `proposedParentID` would create a cycle — i.e. the proposed parent is
+// `locationID` itself, or any descendant of `locationID`. Implementation
+// walks upward from the proposed parent: if the walk visits `locationID`,
+// the new edge would close a loop. PG14+ CYCLE clause is a belt-and-
+// suspenders against pre-existing cyclic data so the helper terminates
+// even on a corrupt tree (TRA-770 BB58 F1).
+//
+// Bounded by tree depth (O(depth) rows scanned). Cheap relative to the
+// PATCH it gates.
+func (s *Storage) WouldCreateLocationCycle(ctx context.Context, orgID, locationID, proposedParentID int) (bool, error) {
+	if locationID == proposedParentID {
+		return true, nil
+	}
+	query := `
+		WITH RECURSIVE chain AS (
+			SELECT id, parent_location_id
+			FROM trakrf.locations
+			WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
+			UNION ALL
+			SELECT p.id, p.parent_location_id
+			FROM trakrf.locations p
+			JOIN chain c ON p.id = c.parent_location_id
+			WHERE p.org_id = $1 AND p.deleted_at IS NULL
+		) CYCLE id SET cycle_hit USING cycle_path
+		SELECT EXISTS(
+			SELECT 1 FROM chain WHERE id = $3 AND NOT cycle_hit
+		)
+	`
+	var wouldCycle bool
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, proposedParentID, locationID).Scan(&wouldCycle)
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to check parent cycle: %w", err)
+	}
+	return wouldCycle, nil
+}
+
+// DetectLocationTreeCycle returns true if either the ancestor walk or the
+// descendant walk from `id` traverses a cycle in the live parent_location_id
+// chain. Used as a pre-check by /locations/{id}/ancestors and /descendants
+// to convert a would-be hang into a fast 500 with diagnostic (TRA-770 BB58
+// F1 read-time defense). Both walks use the PG14+ CYCLE clause so the
+// helper terminates even on cyclic data.
+func (s *Storage) DetectLocationTreeCycle(ctx context.Context, orgID, id int) (bool, error) {
+	query := `
+		WITH RECURSIVE up_chain AS (
+			SELECT id, parent_location_id
+			FROM trakrf.locations
+			WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
+			UNION ALL
+			SELECT p.id, p.parent_location_id
+			FROM trakrf.locations p
+			JOIN up_chain u ON p.id = u.parent_location_id
+			WHERE p.org_id = $1 AND p.deleted_at IS NULL
+		) CYCLE id SET up_cycle USING up_path,
+		down_chain AS (
+			SELECT id, parent_location_id
+			FROM trakrf.locations
+			WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
+			UNION ALL
+			SELECT c.id, c.parent_location_id
+			FROM trakrf.locations c
+			JOIN down_chain d ON c.parent_location_id = d.id
+			WHERE c.org_id = $1 AND c.deleted_at IS NULL
+		) CYCLE id SET down_cycle USING down_path
+		SELECT
+			(SELECT bool_or(up_cycle) FROM up_chain) OR
+			(SELECT bool_or(down_cycle) FROM down_chain) AS has_cycle
+	`
+	var hasCycle sql.NullBool
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, id).Scan(&hasCycle)
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to detect location tree cycle: %w", err)
+	}
+	return hasCycle.Valid && hasCycle.Bool, nil
+}
+
 // ancestorsCTE walks parent_location_id from $2 (the target) upward through
 // live, same-org rows. rdepth starts at 0 for the target and decreases toward
 // the root, so ORDER BY rdepth ASC yields root-first order without storing
 // an absolute depth column.
+//
+// TRA-770 BB58 F1: the inner recursive CTE carries a PG14+ CYCLE clause as
+// read-time defense in depth — without it a cycle in the stored tree
+// produces unbounded recursion. The outer `ancestors` CTE filters out the
+// cycle-marker row so downstream projections see only acyclic data; cycle
+// detection is performed separately by DetectLocationTreeCycle.
 const ancestorsCTE = `
-		WITH RECURSIVE ancestors AS (
+		WITH RECURSIVE ancestors_raw AS (
 			SELECT id, parent_location_id, 0 AS rdepth
 			FROM trakrf.locations
 			WHERE id = $2 AND org_id = $1 AND deleted_at IS NULL
 			UNION ALL
 			SELECT p.id, p.parent_location_id, a.rdepth - 1
 			FROM trakrf.locations p
-			JOIN ancestors a ON p.id = a.parent_location_id
+			JOIN ancestors_raw a ON p.id = a.parent_location_id
 			WHERE p.org_id = $1 AND p.deleted_at IS NULL
+		) CYCLE id SET cycle_hit USING cycle_path,
+		ancestors AS (
+			SELECT id, parent_location_id, rdepth
+			FROM ancestors_raw
+			WHERE NOT cycle_hit
 		)
 `
 
@@ -567,8 +675,13 @@ func (s *Storage) CountAncestors(ctx context.Context, orgID, id int) (int, error
 // live, same-org rows. sort_path is the row's chain of (lower(external_key))
 // segments and reproduces the depth-first tree order the prior ltree query
 // emitted via `ORDER BY l.path`.
+//
+// TRA-770 BB58 F1: the inner recursive CTE carries a PG14+ CYCLE clause as
+// read-time defense in depth. The outer `subtree` CTE filters the cycle row
+// out of downstream projections; detection is performed separately by
+// DetectLocationTreeCycle.
 const descendantsCTE = `
-		WITH RECURSIVE subtree AS (
+		WITH RECURSIVE subtree_raw AS (
 			SELECT id, parent_location_id, external_key,
 			       ARRAY[lower(external_key)]::text[] AS sort_path
 			FROM trakrf.locations
@@ -577,8 +690,13 @@ const descendantsCTE = `
 			SELECT c.id, c.parent_location_id, c.external_key,
 			       s.sort_path || lower(c.external_key)
 			FROM trakrf.locations c
-			JOIN subtree s ON c.parent_location_id = s.id
+			JOIN subtree_raw s ON c.parent_location_id = s.id
 			WHERE c.org_id = $1 AND c.deleted_at IS NULL
+		) CYCLE id SET cycle_hit USING cycle_path,
+		subtree AS (
+			SELECT id, parent_location_id, external_key, sort_path
+			FROM subtree_raw
+			WHERE NOT cycle_hit
 		)
 `
 

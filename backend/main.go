@@ -11,7 +11,7 @@
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account. Some OpenAPI generators (e.g. openapi-fetch) do not auto-attach the Authorization header from this scheme — set it manually if your generated client does not.
+// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account. Some OpenAPI generators (e.g. openapi-fetch, openapi-generator-cli python target) do not auto-attach the Authorization header from this scheme — set it manually if your generated client does not.
 // @securityDefinitions.apikey SessionAuth
 // @in header
 // @name Authorization
