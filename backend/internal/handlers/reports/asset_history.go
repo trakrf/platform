@@ -117,6 +117,9 @@ func (h *Handler) GetAssetHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.To = &t
 	}
+	for _, s := range params.Sorts {
+		filter.Sorts = append(filter.Sorts, report.AssetHistorySort{Field: s.Field, Desc: s.Desc})
+	}
 
 	items, err := h.storage.ListAssetHistory(r.Context(), assetRow.ID, orgID, filter)
 	if err != nil {
