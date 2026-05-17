@@ -257,8 +257,41 @@ func buildCurrentLocationsQueryTimescale(orderBy string) string {
 	`
 }
 
+// buildAssetHistoryOrderBy renders the ORDER BY fragment for the
+// listAssetHistory query. Default — when no sort token is supplied — is
+// most-recent-first by event_observed_at with a stable tiebreaker on
+// location_id so pagination is deterministic across pages of
+// same-timestamp rows. "no prefix means ASC" per the public API
+// convention; only the spec-allowlisted sort field is recognised.
+func buildAssetHistoryOrderBy(sorts []report.AssetHistorySort) string {
+	const defaultOrder = "timestamp DESC, location_id ASC"
+	if len(sorts) == 0 {
+		return defaultOrder
+	}
+	out := make([]string, 0, len(sorts))
+	for _, s := range sorts {
+		var col string
+		switch s.Field {
+		case "event_observed_at":
+			col = "timestamp"
+		default:
+			continue
+		}
+		dir := "ASC"
+		if s.Desc {
+			dir = "DESC"
+		}
+		out = append(out, col+" "+dir)
+	}
+	if len(out) == 0 {
+		return defaultOrder
+	}
+	return strings.Join(out, ", ")
+}
+
 // ListAssetHistory returns paginated location history for a single asset
 func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filter report.AssetHistoryFilter) ([]report.AssetHistoryItem, error) {
+	orderBy := buildAssetHistoryOrderBy(filter.Sorts)
 	query := `
 		WITH scans AS (
 			SELECT
@@ -281,7 +314,7 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			location_external_key,
 			EXTRACT(EPOCH FROM (next_timestamp - timestamp))::INT AS duration_seconds
 		FROM scans
-		ORDER BY timestamp DESC
+		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
 	`
 

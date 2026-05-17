@@ -1,3 +1,23 @@
+# Stage 0: Build Metadata
+# Derives COMMIT_SHA / BUILD_TAG from the source's .git directory so the
+# resulting binaries can carry a real SHA even when the build caller doesn't
+# pass --build-arg. Railway's `${{ RAILWAY_GIT_COMMIT_SHA }}` template only
+# resolves for services using its native GitHub source integration; this
+# preview service deploys via a force-pushed `preview` branch so the
+# template resolves to nothing and the build-args never arrive. TRA-760 F2.
+FROM alpine:3.20 AS build-meta
+RUN apk add --no-cache git
+ARG COMMIT_SHA=""
+ARG BUILD_TAG=""
+WORKDIR /src
+COPY .git ./.git
+RUN set -e; \
+    git config --global --add safe.directory /src; \
+    if [ -z "$COMMIT_SHA" ]; then COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo unknown); fi; \
+    if [ -z "$BUILD_TAG" ]; then BUILD_TAG=$(git describe --tags --always 2>/dev/null || echo dev); fi; \
+    printf '%s' "$COMMIT_SHA" > /commit; \
+    printf '%s' "$BUILD_TAG" > /tag
+
 # Stage 1: Frontend Builder
 FROM node:24-alpine AS frontend-builder
 WORKDIR /app
@@ -10,10 +30,9 @@ ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
 
 # Build metadata — same values passed to the backend stage. Exposed as VITE_*
 # so the Vite plugin can emit dist/version.json for curl-able drift detection.
-ARG COMMIT_SHA=unknown
-ARG BUILD_TAG=dev
-ENV VITE_COMMIT_SHA=$COMMIT_SHA
-ENV VITE_BUILD_TAG=$BUILD_TAG
+# Values come from build-meta so a missing --build-arg falls back to the
+# source's .git SHA rather than the literal string "unknown".
+COPY --from=build-meta /commit /tag /tmp/buildinfo/
 
 # Install pnpm — major-pinned to 9.x. `pnpm@latest` resolved to 10.x in
 # May 2026, which gates installs on explicit build-script approval
@@ -32,7 +51,9 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY frontend/ ./frontend/
-RUN pnpm --filter frontend run build
+RUN VITE_COMMIT_SHA=$(cat /tmp/buildinfo/commit) \
+    VITE_BUILD_TAG=$(cat /tmp/buildinfo/tag) \
+    pnpm --filter frontend run build
 # Output: /app/frontend/dist
 
 # Stage 2: Backend Builder
@@ -40,10 +61,11 @@ FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
 
 # Build-time metadata injected via -ldflags so /health can report the
-# deployed commit. Defaults keep `docker build` working without --build-arg.
-ARG COMMIT_SHA=unknown
-ARG BUILD_TAG=dev
+# deployed commit. Values come from build-meta so a missing --build-arg
+# falls back to the source's .git SHA rather than the literal string
+# "unknown" (TRA-760 F2).
 ARG VERSION=0.1.0-preview
+COPY --from=build-meta /commit /tag /tmp/buildinfo/
 
 # Copy go.mod for layer caching
 COPY backend/go.mod backend/go.sum ./
@@ -84,6 +106,8 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 # evaluated inside the container so it reflects the actual build, not the
 # invocation of docker build.
 RUN BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && \
+    COMMIT_SHA=$(cat /tmp/buildinfo/commit) && \
+    BUILD_TAG=$(cat /tmp/buildinfo/tag) && \
     CGO_ENABLED=0 GOOS=linux go build \
         -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT_SHA} -X main.tag=${BUILD_TAG} -X main.buildTime=${BUILD_TIME}" \
         -o server .

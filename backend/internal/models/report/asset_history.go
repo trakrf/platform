@@ -11,10 +11,18 @@ type AssetHistoryItem struct {
 	DurationSeconds     *int      `json:"duration_seconds"`
 }
 
+// AssetHistorySort is a single (field, direction) clause as parsed from
+// the ?sort= query parameter.
+type AssetHistorySort struct {
+	Field string
+	Desc  bool
+}
+
 // AssetHistoryFilter contains query parameters for filtering
 type AssetHistoryFilter struct {
 	From   *time.Time
 	To     *time.Time
 	Limit  int
 	Offset int
+	Sorts  []AssetHistorySort
 }
