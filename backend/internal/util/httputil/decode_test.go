@@ -272,6 +272,96 @@ func TestRespondDecodeError_SentinelTimestamps_PointAtNull(t *testing.T) {
 	}
 }
 
+// TRA-767 / BB57 F1: the sentinel-rejection recommendation must match the
+// null-rejection recommendation. valid_from is non-nullable: the handler
+// rejects explicit null with "omit the field to use the server default" on
+// POST and "omit the field to leave unchanged" on PATCH. The sentinel
+// rejection path must point at the same omit hint instead of pointing at
+// JSON null, which the null path would then reject.
+func TestRespondDecodeError_SentinelTimestamps_NonNullableField_PointAtOmit(t *testing.T) {
+	type target struct {
+		ValidFrom shared.FlexibleDate `json:"valid_from"`
+	}
+	cases := []struct {
+		name       string
+		method     string
+		wantPhrase string
+	}{
+		{"POST uses server-default hint", "POST", "omit the field to use the server default"},
+		{"PATCH uses leave-unchanged hint", "PATCH", "omit the field to leave unchanged"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var dst target
+			decErr := json.Unmarshal([]byte(`{"valid_from":"0001-01-01T00:00:00Z"}`), &dst)
+			if decErr == nil {
+				t.Fatalf("expected json.Unmarshal to return an error, got nil")
+			}
+
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(tc.method, "/", strings.NewReader(""))
+			httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+			if w.Code != 400 {
+				t.Fatalf("status = %d, want 400", w.Code)
+			}
+			var resp apierrors.ErrorResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode resp: %v", err)
+			}
+			if len(resp.Error.Fields) != 1 {
+				t.Fatalf("fields = %d, want 1", len(resp.Error.Fields))
+			}
+			msg := resp.Error.Fields[0].Message
+			if !strings.Contains(msg, tc.wantPhrase) {
+				t.Fatalf("fields[0].message %q must contain %q (matches null-rejection path on non-nullable timestamps)", msg, tc.wantPhrase)
+			}
+			if strings.Contains(msg, "use JSON null") {
+				t.Fatalf("fields[0].message %q must NOT instruct integrator to use JSON null on non-nullable field — the null path rejects that", msg)
+			}
+			if !strings.Contains(msg, "or provide a real timestamp") {
+				t.Fatalf("fields[0].message %q should include the provide-a-real-timestamp alternative", msg)
+			}
+		})
+	}
+}
+
+// TRA-767 / BB57 F2: a type-mismatch detail must name the expected JSON
+// type when the decoder knows it. The validation-stage envelope surfaces
+// the expected type through params; the decode-stage envelope previously
+// withheld it, forcing integrators to probe to find the expected type.
+func TestRespondDecodeError_TypeMismatch_IncludesExpectedJSONType(t *testing.T) {
+	type target struct {
+		IsActive bool `json:"is_active"`
+	}
+	var dst target
+	decErr := json.Unmarshal([]byte(`{"is_active":"true"}`), &dst)
+	if decErr == nil {
+		t.Fatalf("expected json.Unmarshal to return an UnmarshalTypeError, got nil")
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+	if resp.Error.Type != string(apierrors.ErrBadRequest) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrBadRequest)
+	}
+	if !strings.Contains(resp.Error.Detail, "is_active") {
+		t.Fatalf("detail = %q, should name the offending field", resp.Error.Detail)
+	}
+	if !strings.Contains(resp.Error.Detail, "boolean") {
+		t.Fatalf("detail = %q, should include the expected type 'boolean'", resp.Error.Detail)
+	}
+}
+
 // Top-level type mismatch (no field name available) must still avoid the
 // misleading "not valid JSON" wording.
 func TestRespondDecodeError_TypeMismatch_TopLevel_GenericWording(t *testing.T) {
