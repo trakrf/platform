@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
@@ -50,6 +51,43 @@ func ValidateExternalKeyFilterValues(field string, values []string) *apierrors.F
 				Code:    "invalid_value",
 				Message: fmt.Sprintf("%s %q must match %s", field, v, ExternalKeyPattern.String()),
 			}
+		}
+	}
+	return nil
+}
+
+// ValidateValidityWindow enforces the half-open temporal validity contract
+// shared by every public resource that exposes paired `valid_from` /
+// `valid_to` columns (assets, locations). The window is open at `valid_to`
+// — the "currently-effective" predicate documented on
+// /docs/api/pagination-filtering-sorting requires `valid_from <= now < valid_to`,
+// so a row with `valid_to <= valid_from` is never effective and is
+// indistinguishable from `is_active=false` for default list queries but a
+// distinct storage state no integrator builds on purpose. TRA-765 (BB56 F3)
+// caught the missing guard on POST and PATCH; the validator returns a
+// `valid_to invalid_value` field error and the caller can rebuild the
+// payload without a server round-trip.
+//
+// `validFrom` is the effective start of the window after handler defaulting
+// (Create supplies time.Now() when the body omits it). `validTo` is the
+// effective end; a nil pointer means open-ended and is always valid. An
+// instantaneous window (`validTo == validFrom`) is rejected for the same
+// half-open reason: an instant is never effective and is the same
+// "indistinguishable from is_active=false" storage state as an inverted
+// window.
+func ValidateValidityWindow(validFrom time.Time, validTo *time.Time) *apierrors.FieldError {
+	if validTo == nil || validTo.IsZero() {
+		return nil
+	}
+	if !validTo.After(validFrom) {
+		return &apierrors.FieldError{
+			Field: "valid_to",
+			Code:  "invalid_value",
+			Message: fmt.Sprintf(
+				"valid_to (%s) must be after valid_from (%s); the currently-effective window is half-open so a row with valid_to <= valid_from is never effective",
+				validTo.UTC().Format(time.RFC3339),
+				validFrom.UTC().Format(time.RFC3339),
+			),
 		}
 	}
 	return nil

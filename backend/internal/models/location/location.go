@@ -94,9 +94,13 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // symmetric with CreateLocationRequest. The handler dispatches it through
 // the same FK resolution logic used at create time (resolveParent), so a
 // re-parent via the natural key works without requiring integrators to
-// resolve the surrogate first. `parent_id` and `parent_external_key` are
-// mutually exclusive on a single PATCH; supplying both yields 400
-// ambiguous_fields.
+// resolve the surrogate first.
+//
+// TRA-757 (BB50/51/52 F1): `parent_id` and `parent_external_key` may be
+// supplied together when they name the same parent (silently normalized
+// to a single re-parent operation); only a disagreement returns 400
+// ambiguous_fields. Symmetric with CreateLocationRequest. See the PATCH
+// reconciliation block in handlers/locations.
 type UpdateLocationRequest struct {
 	Name        *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,no_control_chars" example:"Warehouse 1"`
 	ParentID    *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`

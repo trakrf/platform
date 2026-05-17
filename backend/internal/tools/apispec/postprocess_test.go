@@ -1506,8 +1506,10 @@ func TestAppendMethodPolicyDescription(t *testing.T) {
 
 	assert.Contains(t, doc.Info.Description, "Existing prose.", "existing description must be preserved")
 	assert.Contains(t, doc.Info.Description, "HTTP method coverage", "method-coverage pointer must be present")
-	assert.Contains(t, doc.Info.Description, "/api/http-method-coverage",
-		"description must link out to the docs page for method-coverage details")
+	assert.Contains(t, doc.Info.Description, "/docs/api/http-method-coverage",
+		"description must link out to the docs page for method-coverage details (TRA-765: /docs/ base path on the docs origin)")
+	assert.NotContains(t, doc.Info.Description, " /api/http-method-coverage",
+		"the bare /api/http-method-coverage path 404s on both origins (TRA-765 BB56 F1); use the /docs-prefixed Docusaurus location")
 	assert.NotContains(t, doc.Info.Description, "docs.trakrf.id",
 		"link must be site-relative, not env-pinned to production docs (TRA-657 / BB25 B4)")
 	assert.NotContains(t, doc.Info.Description, "transparently strips the response body",

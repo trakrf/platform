@@ -190,6 +190,19 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TRA-765 (BB56 F3): reject inverted or instantaneous validity windows.
+	// valid_from has been defaulted to time.Now() above when absent, so the
+	// comparison runs against an effective non-zero value.
+	var assetValidTo *time.Time
+	if request.ValidTo != nil {
+		t := request.ValidTo.ToTime()
+		assetValidTo = &t
+	}
+	if fe := httputil.ValidateValidityWindow(request.ValidFrom.ToTime(), assetValidTo); fe != nil {
+		httputil.WriteValidationError(w, r, requestID, []modelerrors.FieldError{*fe})
+		return
+	}
+
 	request.OrgID = orgID
 
 	result, err := handler.storage.CreateAssetWithTags(r.Context(), request)
@@ -450,6 +463,29 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
+		return
+	}
+
+	// TRA-765 (BB56 F3): reject inverted or instantaneous validity windows on
+	// PATCH. Effective valid_from is the body value when supplied else the
+	// current value; effective valid_to is nil when the body clears it,
+	// the body value when present and non-null, else the current value.
+	effectiveValidFrom := current.ValidFrom
+	if request.ValidFrom != nil {
+		effectiveValidFrom = request.ValidFrom.ToTime()
+	}
+	var effectiveValidTo *time.Time
+	switch {
+	case request.ClearValidTo:
+		effectiveValidTo = nil
+	case request.ValidTo != nil:
+		t := request.ValidTo.ToTime()
+		effectiveValidTo = &t
+	default:
+		effectiveValidTo = current.ValidTo
+	}
+	if fe := httputil.ValidateValidityWindow(effectiveValidFrom, effectiveValidTo); fe != nil {
+		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
 		return
 	}
 
