@@ -500,6 +500,7 @@ components:
                 - fk_not_found
                 - ambiguous_fields
                 - read_only
+                - invalid_context
             example: required
             type: string
             x-extensible-enum: true
@@ -960,6 +961,7 @@ info:
         url: https://github.com/trakrf/platform/blob/main/LICENSE
     title: TrakRF API
     version: 1.0.0
+    x-package-name: trakrf-api-client
 openapi: 3.0.3
 paths:
     /api/v1/assets:

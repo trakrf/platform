@@ -263,8 +263,16 @@ func toSet(ss []string) map[string]struct{} {
 // works on `GET /api/v1/assets`, so a 400 from `GET /api/v1/assets/{id}?include_deleted=true`
 // reads like a bug rather than a contract decision (soft-deleted rows
 // aren't retrievable by id because the natural key is freed for reuse on
-// soft-delete; see /docs/api/pagination-filtering-sorting). The code
-// stays `unknown_field` for branching parity with list-endpoint rejections.
+// soft-delete; see /docs/api/pagination-filtering-sorting).
+//
+// TRA-777 (BB62 F3): the code value on those "known parameter, wrong
+// context" rejections is `invalid_context`, distinct from the
+// `unknown_field` bucket used for truly unrecognised parameters
+// (`{"wat": 1}`). Strict-typed clients branching on fields[].code can
+// distinguish "field doesn't exist anywhere on the surface" from "field
+// exists elsewhere but isn't allowed here" — the latter is a contract-
+// shape signal, not a typo. Apply to every parameter that is known on a
+// sibling endpoint but disallowed in this context.
 func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
 	q := r.URL.Query()
 	if len(q) == 0 {
@@ -284,32 +292,34 @@ func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
 	sort.Strings(unknowns)
 	fields := make([]apierrors.FieldError, 0, len(unknowns))
 	for _, key := range unknowns {
+		code, msg := unknownQueryParamCodeMessage(key, r.URL.Path)
 		fields = append(fields, apierrors.FieldError{
 			Field:   key,
-			Code:    "unknown_field",
-			Message: unknownQueryParamMessage(key, r.URL.Path),
+			Code:    code,
+			Message: msg,
 		})
 	}
 	return &ListParamError{Fields: fields}
 }
 
-// unknownQueryParamMessage returns the integrator-facing message for an
-// unknown query parameter on `path`. For most keys this is the generic
-// "unknown parameter: <key>" string. The exceptions are list-only filters
-// supplied to a detail endpoint, where the behavior is correct but the
-// generic message is misleading — see RejectUnknownQueryParams (TRA-765
-// BB56 F4) for the rationale.
-func unknownQueryParamMessage(key, requestPath string) string {
+// unknownQueryParamCodeMessage returns the FieldError code and message
+// for an unknown query parameter on `path`. For most keys this is
+// (unknown_field, "unknown parameter: <key>"). The exceptions are
+// list-only filters supplied to a detail endpoint, where the behavior is
+// correct but the parameter is known elsewhere on the surface — those
+// emit (invalid_context, specialized diagnostic) per TRA-777 / BB62 F3.
+func unknownQueryParamCodeMessage(key, requestPath string) (code, message string) {
 	if key == "include_deleted" {
 		listPath := listSiblingPathFromDetail(requestPath)
 		if listPath != "" {
-			return fmt.Sprintf(
+			msg := fmt.Sprintf(
 				"include_deleted is a list-only filter; soft-deleted records are not retrievable by id (the natural key is freed for reuse on soft-delete). Use %s?external_key=<key>&include_deleted=true to retrieve soft-deleted rows by natural key.",
 				listPath,
 			)
+			return "invalid_context", msg
 		}
 	}
-	return fmt.Sprintf("unknown parameter: %s", key)
+	return "unknown_field", fmt.Sprintf("unknown parameter: %s", key)
 }
 
 // listSiblingPathFromDetail returns the list-endpoint path for a detail

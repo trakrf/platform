@@ -649,7 +649,8 @@
           "too_large",
           "fk_not_found",
           "ambiguous_fields",
-          "read_only"
+          "read_only",
+          "invalid_context"
         ],
         "example": "required",
         "type": "string",
@@ -1262,7 +1263,8 @@
       "url": "https://github.com/trakrf/platform/blob/main/LICENSE"
     },
     "title": "TrakRF API",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "x-package-name": "trakrf-api-client"
   },
   "openapi": "3.0.3",
   "paths": {

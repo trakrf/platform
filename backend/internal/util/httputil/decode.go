@@ -737,14 +737,68 @@ func RespondDecodeError(w http.ResponseWriter, r *http.Request, err error, reque
 				}})
 				return
 			}
-			detail := typeMismatchDetail(typeErr)
+			// TRA-777 / BB62 F2: scalar type-mismatch on a named field
+			// surfaces as validation_error with fields[] populated, matching
+			// the envelope shape integrators already handle for value-level
+			// validation failures. The split between "type mismatch on
+			// decode" (previously bad_request, no fields[]) and "value
+			// invalid on validation" (validation_error, fields[]) was the
+			// fourth-instance hygiene cluster — see TRA-758, TRA-775 docs
+			// workarounds being dialed back. Top-level mismatches without a
+			// field name still fall back to bad_request because there is
+			// nothing to attribute fields[] to (e.g. body is a JSON array
+			// where an object was expected).
+			field := typeErr.Field
+			if i := strings.LastIndex(field, "."); i >= 0 {
+				field = field[i+1:]
+			}
+			expected := jsonTypeName(typeErr.Type)
+			if field != "" && expected != "" {
+				received := normalizeReceivedJSONType(typeErr.Value)
+				msg := fmt.Sprintf("%s must be %s; received %s", field, expected, received)
+				WriteValidationError(w, r, requestID, []apierrors.FieldError{{
+					Field:   field,
+					Code:    "invalid_value",
+					Message: msg,
+					Params: map[string]any{
+						"expected_type": expected,
+						"received_type": received,
+					},
+				}})
+				return
+			}
+			// No field name (top-level) or unexposable destination type —
+			// fall back to bad_request with the generic detail wording.
 			WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
-				detail, requestID)
+				typeMismatchDetail(typeErr), requestID)
 			return
 		}
 	}
 	WriteJSONError(w, r, http.StatusBadRequest, apierrors.ErrBadRequest,
 		"Request body is not valid JSON", requestID)
+}
+
+// normalizeReceivedJSONType maps encoding/json's UnmarshalTypeError.Value
+// (which carries the Go vocabulary "bool", plus the wire-aligned strings
+// "string", "number", "array", "object", "null") onto the wire-facing JSON
+// type vocabulary so error.params.received_type reads consistently with
+// expected_type. The function preserves any extra context the decoder
+// appended (e.g. "number 99999999999999999999" for an integer overflow)
+// by only rewriting the leading token.
+func normalizeReceivedJSONType(value string) string {
+	if value == "" {
+		return value
+	}
+	// Decoder emits "bool" for JSON true/false; wire vocabulary is
+	// "boolean". Preserve any suffix the decoder added (e.g. overflow
+	// markers on numbers).
+	if value == "bool" {
+		return "boolean"
+	}
+	if strings.HasPrefix(value, "bool ") {
+		return "boolean " + strings.TrimPrefix(value, "bool ")
+	}
+	return value
 }
 
 // typeMismatchDetail renders a stable detail string for a json type-mismatch
