@@ -25,7 +25,7 @@ type GetOrgMeResponse struct {
 }
 
 // @Summary Get the org associated with the authenticated API key
-// @Description Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end.
+// @Description Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end. Singleton endpoint; accepts no query parameters. Any query parameter returns `400 validation_error / unknown_field`.
 // @Tags orgs,public
 // @ID orgs.me
 // @Accept json

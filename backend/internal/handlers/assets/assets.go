@@ -396,7 +396,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "tags",
 				Code:    "read_only",
-				Message: "tags are managed via POST /api/v1/assets/{asset_id}/tags and DELETE /api/v1/assets/{asset_id}/tags/{tag_id}",
+				Message: "the tags field on PATCH must equal the current value (idempotent echo only); use POST /api/v1/assets/{asset_id}/tags and DELETE /api/v1/assets/{asset_id}/tags/{tag_id} to mutate",
 			})
 		}
 	}

@@ -11,7 +11,7 @@
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account. Some OpenAPI generators (e.g. openapi-fetch, openapi-generator-cli python target) do not auto-attach the Authorization header from this scheme — set it manually if your generated client does not.
+// @description TrakRF API key (JWT). Format: "Bearer <jwt>". Mint keys from the API Keys section of your TrakRF account. Some OpenAPI generators (e.g. openapi-fetch, openapi-generator-cli python target) do not auto-attach the Authorization header from this scheme — set it manually if your generated client does not. Similarly, some generated clients (notably openapi-fetch) do not auto-attach `Content-Type: application/merge-patch+json` on PATCH operations, even though the operation's requestBody.content lists only that media type; set the header manually per PATCH call if your client does not.
 // @securityDefinitions.apikey SessionAuth
 // @in header
 // @name Authorization
