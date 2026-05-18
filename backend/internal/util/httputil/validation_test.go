@@ -464,19 +464,19 @@ func TestDisplayNameValidator_AcceptsAndRejects(t *testing.T) {
 	}
 
 	reject := []string{
-		" ",             // single space
-		"   ",           // multi-space
-		"\t",            // tab
-		"\n",            // LF
-		"\r",            // CR
-		" \t\n ",        // mixed whitespace
-		"line1\nline2",  // embedded LF
-		"line1\rline2",  // embedded CR
-		"col1\tcol2",    // embedded tab
-		"foo\x00bar",    // NUL
-		"foo\x7Fbar",    // DEL
-		" leading",      // leading whitespace (anchored end OK but start fails \S)
-		"trailing ",     // trailing whitespace (anchored start OK but end fails \S)
+		" ",            // single space
+		"   ",          // multi-space
+		"\t",           // tab
+		"\n",           // LF
+		"\r",           // CR
+		" \t\n ",       // mixed whitespace
+		"line1\nline2", // embedded LF
+		"line1\rline2", // embedded CR
+		"col1\tcol2",   // embedded tab
+		"foo\x00bar",   // NUL
+		"foo\x7Fbar",   // DEL
+		" leading",     // leading whitespace (anchored end OK but start fails \S)
+		"trailing ",    // trailing whitespace (anchored start OK but end fails \S)
 	}
 	for _, name := range reject {
 		t.Run("reject/"+name, func(t *testing.T) {

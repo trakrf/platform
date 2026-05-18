@@ -1702,6 +1702,21 @@ paths:
                             $ref: '#/components/headers/XRateLimitReset'
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Internal Server Error
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 default:
                     content:
                         application/json:
@@ -3462,6 +3477,21 @@ paths:
                     headers:
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: internal_error
+                    headers:
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
