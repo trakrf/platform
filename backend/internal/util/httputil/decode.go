@@ -346,6 +346,62 @@ func SameJSON(submitted json.RawMessage, expected any) bool {
 	return bytes.Equal(a, b)
 }
 
+// SameTagSet reports whether a peeked raw JSON value representing an array
+// of tag objects matches the expected `[]shared.Tag` slice as a set: same
+// length, same set of tag ids, and full-content equality (tag_type, value)
+// on the tag at each id. Element order is not significant.
+//
+// Used by the PATCH read-only echo check on the `tags` field (TRA-775) so a
+// verbatim GET → PATCH round-trip succeeds even when the generated client
+// deserialized tags into an unordered collection — Python `set`, Go
+// `map[int64]Tag`, ORMs with hash-ordered associations — and reordered them
+// on re-serialization. Set-equality replaces the byte-level sequence
+// comparison from TRA-710 / BB33 F2 (via SameJSON), which rejected
+// reordered-but-set-equal echoes with a surprising 400 read_only.
+//
+// Full-content equality on every Tag field is important: set-equality on
+// ids alone would accept a submitted tag with the right id but a wrong
+// tag_type or value, masking a real client bug. The map-based, O(n),
+// delete-on-consume implementation is also robust to hypothetical
+// duplicate-id submissions (schema constraints make duplicate ids
+// impossible today, but the consume pattern keeps behavior well-defined
+// regardless).
+//
+// A submitted value that is not a valid JSON array of tag objects returns
+// false; the caller responds with 400 read_only.
+func SameTagSet(submitted json.RawMessage, expected []shared.Tag) bool {
+	if submitted == nil {
+		return false
+	}
+	// `null` is not a valid tag-set echo — preserves the TRA-710 behavior
+	// where `{"tags":null}` against a current `[]` returned 400 read_only.
+	if bytes.Equal(bytes.TrimSpace([]byte(submitted)), []byte("null")) {
+		return false
+	}
+	var subTags []shared.Tag
+	if err := json.Unmarshal(submitted, &subTags); err != nil {
+		return false
+	}
+	if len(subTags) != len(expected) {
+		return false
+	}
+	expectedByID := make(map[int]shared.Tag, len(expected))
+	for _, t := range expected {
+		expectedByID[t.ID] = t
+	}
+	for _, t := range subTags {
+		cur, ok := expectedByID[t.ID]
+		if !ok {
+			return false
+		}
+		if t != cur {
+			return false
+		}
+		delete(expectedByID, t.ID)
+	}
+	return true
+}
+
 // SameJSONInstant reports whether a peeked raw JSON datetime value
 // represents the same wall-clock instant as expected. Both sides are
 // parsed as RFC 3339 datetimes (any fractional precision, any offset
