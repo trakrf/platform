@@ -111,14 +111,14 @@ func WriteJSONError(w http.ResponseWriter, r *http.Request, status int, errType 
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp)
+	encodeBody(w, resp)
 }
 
 // WriteJSON writes a successful JSON response with the given status code.
 func WriteJSON(w http.ResponseWriter, status int, data any) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(data)
+	return encodeBody(w, data)
 }
 
 // WriteJSONErrorWithFields is WriteJSONError plus a populated fields[]
@@ -143,5 +143,16 @@ func WriteJSONErrorWithFields(w http.ResponseWriter, r *http.Request, status int
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp)
+	encodeBody(w, resp)
+}
+
+// encodeBody writes data as JSON with HTML escaping disabled. Defaults render
+// `<`/`>` inside detail strings as `<`/`>`, which is invisible to
+// JSON parsers but noisy in raw curl output, log aggregators, and support
+// pastes (TRA-772 / BB59 F3). Returns the encoder error so success-path
+// callers can propagate it.
+func encodeBody(w http.ResponseWriter, data any) error {
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(data)
 }
