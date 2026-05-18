@@ -476,6 +476,16 @@ func TestPostprocess_AnnotatesTagPolymorphism(t *testing.T) {
 		assert.Contains(t, ref.Value.Description, "rfid", "%s description must list rfid", name)
 		assert.Contains(t, ref.Value.Description, "ble", "%s description must list ble", name)
 		assert.Contains(t, ref.Value.Description, "barcode", "%s description must list barcode", name)
+		// TRA-787 F3: schema description must disambiguate the
+		// read-direction-open vs write-direction-closed asymmetry so
+		// integrators don't read the "open enumeration" wording as
+		// contradicted by the 400 validation_error on writes.
+		assert.Contains(t, ref.Value.Description, "write surface is closed",
+			"%s description must call out that the write direction is closed-enum", name)
+		assert.Contains(t, ref.Value.Description, "validation_error",
+			"%s description must reference the validation_error rejection on writes", name)
+		assert.Contains(t, ref.Value.Description, "allowed_values",
+			"%s description must reference the allowed_values params field on write rejections", name)
 
 		require.Len(t, ref.Value.OneOf, 3, "%s must be split into a oneOf union", name)
 		require.NotNil(t, ref.Value.Discriminator, "%s must carry a discriminator", name)
