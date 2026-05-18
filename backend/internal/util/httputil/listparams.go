@@ -302,12 +302,60 @@ func RejectUnknownQueryParams(r *http.Request, allowed ...string) error {
 	return &ListParamError{Fields: fields}
 }
 
+// knownListFilters is the union of every parameter name that appears as a
+// filter on any public-API list endpoint (assets, locations, the
+// asset-locations report). Membership marks a parameter as "known
+// elsewhere on the surface" for the invalid_context determination —
+// receiving one of these on a detail or write endpoint is a
+// context-mismatch (correct parameter, wrong endpoint), distinct from a
+// genuine typo that lands in the unknown_field bucket.
+//
+// Kept as a static set rather than a registry populated at startup
+// because the public-API filter surface is small and rarely changes;
+// the source of truth is the ListAllowlist literals in
+// handlers/assets, handlers/locations, and handlers/reports.
+var knownListFilters = map[string]struct{}{
+	"asset_external_key":    {},
+	"asset_id":              {},
+	"external_key":          {},
+	"include_deleted":       {},
+	"is_active":             {},
+	"location_external_key": {},
+	"location_id":           {},
+	"parent_external_key":   {},
+	"parent_id":             {},
+	"q":                     {},
+}
+
+// knownListSiblingPaths enumerates the resource list paths whose detail
+// endpoints should reference them in the invalid_context diagnostic.
+// listSiblingPathFromDetail returns the chopped-segment path verbatim,
+// which is only meaningful when that path is itself a registered list
+// endpoint — otherwise (e.g. nested sub-resource paths like
+// /api/v1/assets/{id}/tags) the trimmed result points at another detail
+// endpoint and would mislead the integrator.
+var knownListSiblingPaths = map[string]struct{}{
+	"/api/v1/assets":    {},
+	"/api/v1/locations": {},
+}
+
 // unknownQueryParamCodeMessage returns the FieldError code and message
-// for an unknown query parameter on `path`. For most keys this is
-// (unknown_field, "unknown parameter: <key>"). The exceptions are
-// list-only filters supplied to a detail endpoint, where the behavior is
-// correct but the parameter is known elsewhere on the surface — those
-// emit (invalid_context, specialized diagnostic) per TRA-777 / BB62 F3.
+// for an unknown query parameter on `path`.
+//
+// Three branches:
+//
+//   - include_deleted on a detail endpoint with a known list sibling →
+//     invalid_context + specialized diagnostic naming the natural-key
+//     workaround (TRA-765 / BB56 F4 prose, TRA-777 / BB62 F3 code).
+//   - Other parameters in knownListFilters → invalid_context + generic
+//     message pointing at the list-endpoint sibling when one can be
+//     derived from the request path (TRA-777 audit follow-up: the F3
+//     ticket directed "Apply to every parameter that is known on a
+//     sibling endpoint but disallowed in this context"; the initial fix
+//     special-cased include_deleted only because that was the named
+//     instance, but every other list-only filter shares the same shape
+//     and benefits from the same code differentiation).
+//   - Anything else → unknown_field + generic "unknown parameter" message.
 func unknownQueryParamCodeMessage(key, requestPath string) (code, message string) {
 	if key == "include_deleted" {
 		listPath := listSiblingPathFromDetail(requestPath)
@@ -318,6 +366,19 @@ func unknownQueryParamCodeMessage(key, requestPath string) (code, message string
 			)
 			return "invalid_context", msg
 		}
+	}
+	if _, ok := knownListFilters[key]; ok {
+		listPath := listSiblingPathFromDetail(requestPath)
+		if _, known := knownListSiblingPaths[listPath]; known {
+			return "invalid_context", fmt.Sprintf(
+				"%s is a list-endpoint filter and is not allowed on this endpoint; see GET %s for the supported filter parameters.",
+				key, listPath,
+			)
+		}
+		return "invalid_context", fmt.Sprintf(
+			"%s is a list-endpoint filter and is not allowed on this endpoint.",
+			key,
+		)
 	}
 	return "unknown_field", fmt.Sprintf("unknown parameter: %s", key)
 }

@@ -107,6 +107,118 @@ func TestRejectUnknownQueryParams_IncludeDeletedOnDetail_EmitsDiagnostic_Locatio
 	}
 }
 
+// TRA-777 audit follow-up: the F3 fix landed invalid_context for
+// include_deleted only, but the ticket text directs "Apply to every
+// parameter that is known on a sibling endpoint but disallowed in this
+// context." Every other list-only filter sent to a detail or write
+// endpoint also emits invalid_context so strict-typed clients can
+// distinguish "field exists elsewhere on the surface" from a genuine
+// typo (unknown_field). The message points the integrator at the
+// list-endpoint sibling when one can be derived from the request path.
+func TestRejectUnknownQueryParams_ExternalKeyOnAssetDetail_InvalidContext(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/assets/123?external_key=ABC", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if len(lpe.Fields) != 1 || lpe.Fields[0].Field != "external_key" {
+		t.Fatalf("Fields = %+v, want one entry for 'external_key'", lpe.Fields)
+	}
+	if lpe.Fields[0].Code != "invalid_context" {
+		t.Fatalf("Code = %q, want invalid_context", lpe.Fields[0].Code)
+	}
+	if !strings.Contains(lpe.Fields[0].Message, "/api/v1/assets") {
+		t.Fatalf("message should reference list-endpoint sibling; got: %s", lpe.Fields[0].Message)
+	}
+}
+
+func TestRejectUnknownQueryParams_IsActiveOnAssetDetail_InvalidContext(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/assets/123?is_active=true", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if lpe.Fields[0].Code != "invalid_context" {
+		t.Fatalf("Code = %q, want invalid_context", lpe.Fields[0].Code)
+	}
+}
+
+func TestRejectUnknownQueryParams_ParentIdOnLocationDetail_InvalidContext(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/locations/456?parent_id=7", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if lpe.Fields[0].Code != "invalid_context" {
+		t.Fatalf("Code = %q, want invalid_context", lpe.Fields[0].Code)
+	}
+	if !strings.Contains(lpe.Fields[0].Message, "/api/v1/locations") {
+		t.Fatalf("message should reference list-endpoint sibling; got: %s", lpe.Fields[0].Message)
+	}
+}
+
+func TestRejectUnknownQueryParams_QOnLocationDetail_InvalidContext(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/locations/456?q=foo", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if lpe.Fields[0].Code != "invalid_context" {
+		t.Fatalf("Code = %q, want invalid_context", lpe.Fields[0].Code)
+	}
+}
+
+func TestRejectUnknownQueryParams_ExternalKeyOnPostCreate_InvalidContext(t *testing.T) {
+	// Write endpoints under RejectQueryParams() also benefit: external_key
+	// belongs in the body, not the query string.
+	r := httptest.NewRequest("POST", "/api/v1/assets?external_key=ABC", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if lpe.Fields[0].Code != "invalid_context" {
+		t.Fatalf("Code = %q, want invalid_context", lpe.Fields[0].Code)
+	}
+}
+
+func TestRejectUnknownQueryParams_TrulyUnknown_StaysUnknownField(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/assets/123?wat=1", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if lpe.Fields[0].Code != "unknown_field" {
+		t.Fatalf("Code = %q, want unknown_field — genuinely unrecognised parameter stays in the unknown_field bucket", lpe.Fields[0].Code)
+	}
+}
+
+// Mixed: known-elsewhere param and truly-unknown param in the same request
+// each get the appropriate code.
+func TestRejectUnknownQueryParams_MixedKnownAndUnknown_DistinctCodes(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/assets/123?external_key=ABC&wat=1", nil)
+	err := httputil.RejectUnknownQueryParams(r)
+	var lpe *httputil.ListParamError
+	if !errors.As(err, &lpe) {
+		t.Fatalf("expected *ListParamError, got %T", err)
+	}
+	if len(lpe.Fields) != 2 {
+		t.Fatalf("Fields len=%d, want 2", len(lpe.Fields))
+	}
+	// sorted lexically: external_key, wat
+	if lpe.Fields[0].Field != "external_key" || lpe.Fields[0].Code != "invalid_context" {
+		t.Fatalf("Fields[0] = %+v, want external_key/invalid_context", lpe.Fields[0])
+	}
+	if lpe.Fields[1].Field != "wat" || lpe.Fields[1].Code != "unknown_field" {
+		t.Fatalf("Fields[1] = %+v, want wat/unknown_field", lpe.Fields[1])
+	}
+}
+
 // Multiple unknown keys arrive sorted lexically so client-side branching
 // and test assertions see a deterministic order, matching ParseListParams'
 // unknown-field treatment.
