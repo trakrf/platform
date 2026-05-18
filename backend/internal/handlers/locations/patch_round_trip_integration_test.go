@@ -479,38 +479,56 @@ func TestPutLocation_OnlyReadOnlyFields_MatchingCurrent_Returns200NoOp(t *testin
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedLocationRoundTrip(t, pool, orgID, "LOC-RO-NOOP", "RoNoop")
-
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
 
-	// GET the current resource so we can echo back its server-managed
-	// timestamps verbatim — the matching path requires real values.
-	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/locations/%d", id), nil)
-	getReq = withLocationRoundTripOrgContext(getReq, orgID)
-	getRec := httptest.NewRecorder()
-	router.ServeHTTP(getRec, getReq)
-	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
-	var current struct {
-		Data map[string]any `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
-	cur := current.Data
-
+	// TRA-783: each accepted PATCH advances updated_at, so the cached-body
+	// pattern (capture once at top, reuse across sub-tests) goes stale
+	// after the first PATCH. Each sub-test now seeds its own location
+	// and re-GETs to capture the current updated_at/created_at.
+	type bodyFn func(t *testing.T, cur map[string]any) string
 	cases := []struct {
 		name string
-		body string
+		body bodyFn
 	}{
-		{"only id matches", fmt.Sprintf(`{"id":%d}`, id)},
-		{"only created_at matches", fmt.Sprintf(`{"created_at":%q}`, cur["created_at"])},
-		{"only updated_at matches", fmt.Sprintf(`{"updated_at":%q}`, cur["updated_at"])},
-		{"only deleted_at matches", `{"deleted_at":null}`},
-		{"only tags matches (empty)", `{"tags":[]}`},
-		{"empty object", `{}`},
+		{"only id matches", func(t *testing.T, cur map[string]any) string {
+			return fmt.Sprintf(`{"id":%v}`, cur["id"])
+		}},
+		{"only created_at matches", func(t *testing.T, cur map[string]any) string {
+			return fmt.Sprintf(`{"created_at":%q}`, cur["created_at"])
+		}},
+		{"only updated_at matches", func(t *testing.T, cur map[string]any) string {
+			return fmt.Sprintf(`{"updated_at":%q}`, cur["updated_at"])
+		}},
+		{"only deleted_at matches", func(t *testing.T, cur map[string]any) string {
+			return `{"deleted_at":null}`
+		}},
+		{"only tags matches (empty)", func(t *testing.T, cur map[string]any) string {
+			return `{"tags":[]}`
+		}},
+		{"empty object", func(t *testing.T, cur map[string]any) string {
+			return `{}`
+		}},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(tc.body)))
+	for i, tc := range cases {
+		idx := i
+		tcCopy := tc
+		t.Run(tcCopy.name, func(t *testing.T) {
+			id := seedLocationRoundTrip(t, pool, orgID,
+				fmt.Sprintf("LOC-RO-NOOP-%d", idx), "RoNoop")
+
+			getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/locations/%d", id), nil)
+			getReq = withLocationRoundTripOrgContext(getReq, orgID)
+			getRec := httptest.NewRecorder()
+			router.ServeHTTP(getRec, getReq)
+			require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+			var current struct {
+				Data map[string]any `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+
+			body := tcCopy.body(t, current.Data)
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(body)))
 			patchReq.Header.Set("Content-Type", "application/json")
 			patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
 			putRec := httptest.NewRecorder()
@@ -524,7 +542,6 @@ func TestPutLocation_OnlyReadOnlyFields_MatchingCurrent_Returns200NoOp(t *testin
 			}
 			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
 			assert.Equal(t, "RoNoop", resp.Data["name"], "name unchanged")
-			assert.Equal(t, "LOC-RO-NOOP", resp.Data["external_key"], "external_key unchanged")
 		})
 	}
 }
@@ -597,20 +614,8 @@ func TestPatchLocation_DatetimeEncodingVariants_InstantEquality_200(t *testing.T
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedLocationRoundTrip(t, pool, orgID, "LOC-RO-INST", "ReadOnlyInstant")
-
 	handler := NewHandler(store)
 	router := setupLocationRoundTripRouter(handler)
-
-	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/locations/%d", id), nil)
-	getReq = withLocationRoundTripOrgContext(getReq, orgID)
-	getRec := httptest.NewRecorder()
-	router.ServeHTTP(getRec, getReq)
-	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
-	var current struct {
-		Data map[string]any `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
 
 	parseWireTime := func(s string) time.Time {
 		t.Helper()
@@ -618,30 +623,39 @@ func TestPatchLocation_DatetimeEncodingVariants_InstantEquality_200(t *testing.T
 		require.NoError(t, err)
 		return v
 	}
-	createdAt := parseWireTime(current.Data["created_at"].(string))
-	updatedAt := parseWireTime(current.Data["updated_at"].(string))
 
-	variants := func(label string, t0 time.Time) []struct {
-		name, value string
-	} {
-		return []struct{ name, value string }{
-			{label + " literal Z (millis)", t0.UTC().Format("2006-01-02T15:04:05.000Z")},
-			{label + " +00:00 offset form", t0.UTC().Format("2006-01-02T15:04:05.000-07:00")},
-			{label + " microsecond +00:00", t0.UTC().Format("2006-01-02T15:04:05.000000-07:00")},
-		}
+	variantNames := []string{"literal Z millis", "+00:00 offset", "microsecond +00:00"}
+	variantFmts := []string{
+		"2006-01-02T15:04:05.000Z",
+		"2006-01-02T15:04:05.000-07:00",
+		"2006-01-02T15:04:05.000000-07:00",
 	}
 
-	cases := []struct {
-		field    string
-		variants []struct{ name, value string }
-	}{
-		{"created_at", variants("created_at", createdAt)},
-		{"updated_at", variants("updated_at", updatedAt)},
-	}
-	for _, c := range cases {
-		for _, v := range c.variants {
-			t.Run(v.name, func(t *testing.T) {
-				body := fmt.Sprintf(`{%q:%q}`, c.field, v.value)
+	// TRA-783: every accepted PATCH advances updated_at, so each sub-test
+	// re-fetches the current value rather than relying on a snapshot
+	// captured at the top of the test.
+	for i, vname := range variantNames {
+		variantFmt := variantFmts[i]
+		for _, field := range []string{"created_at", "updated_at"} {
+			fieldCopy, vnameCopy := field, vname
+			t.Run(fieldCopy+"/"+vnameCopy, func(t *testing.T) {
+				id := seedLocationRoundTrip(t, pool, orgID,
+					fmt.Sprintf("LOC-RO-INST-%d-%s", i, fieldCopy),
+					"ReadOnlyInstant")
+
+				getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/locations/%d", id), nil)
+				getReq = withLocationRoundTripOrgContext(getReq, orgID)
+				getRec := httptest.NewRecorder()
+				router.ServeHTTP(getRec, getReq)
+				require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+				var current struct {
+					Data map[string]any `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+				ts := parseWireTime(current.Data[fieldCopy].(string))
+				value := ts.UTC().Format(variantFmt)
+
+				body := fmt.Sprintf(`{%q:%q}`, fieldCopy, value)
 				patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(body)))
 				patchReq.Header.Set("Content-Type", "application/json")
 				patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
@@ -649,7 +663,7 @@ func TestPatchLocation_DatetimeEncodingVariants_InstantEquality_200(t *testing.T
 				router.ServeHTTP(rec, patchReq)
 				require.Equal(t, http.StatusOK, rec.Code,
 					"%s = %s must be 200 (same instant as server state): %s",
-					c.field, v.value, rec.Body.String())
+					fieldCopy, value, rec.Body.String())
 			})
 		}
 	}

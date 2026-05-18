@@ -306,9 +306,11 @@ func TestUpdateLocation_MoveToNewParent(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TRA-619: an empty UpdateLocationRequest (e.g. the PUT body decoded to no
-// writable fields after the read-only drop) is a no-op success — return the
-// unchanged record instead of surfacing as 500.
+// TRA-619 / TRA-783: an empty UpdateLocationRequest (e.g. the PUT body
+// decoded to no writable fields after the read-only drop, or a literal `{}`)
+// is a no-op-with-touch success — TRA-783 always advances updated_at on
+// accepted PATCH (filesystem `touch` semantics), so the storage layer issues
+// an UPDATE that only sets updated_at and returns the (now-touched) record.
 func TestUpdateLocation_NoFields(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
@@ -320,8 +322,15 @@ func TestUpdateLocation_NoFields(t *testing.T) {
 	locationID := 1
 	request := location.UpdateLocationRequest{}
 
-	// No UPDATE issued; storage short-circuits straight to
-	// getLocationWithParentByID + GetTagsByLocationID, both wrapped in WithOrgTx.
+	// TRA-783: UPDATE always issued — even with no settable fields the query
+	// sets `updated_at = NOW()` and RETURNINGs the row id.
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
+	mock.ExpectQuery(`UPDATE trakrf.locations[\s\S]+SET updated_at = NOW\(\)[\s\S]+RETURNING id`).
+		WithArgs(locationID, 1).
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(locationID))
+	mock.ExpectCommit()
+
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 1`).WillReturnResult(pgxmock.NewResult("SET", 0))
 	mock.ExpectQuery(`SELECT[\s\S]+FROM trakrf.locations l[\s\S]+LEFT JOIN trakrf.locations p`).

@@ -89,7 +89,6 @@ func GenerateAssetExternalKey(seq int) string {
 
 func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.AssetWithLocation, error) {
 	setClauses := []string{}
-	distinctClauses := []string{}
 	args := []any{id, orgID}
 	argPos := 3
 	fields, err := mapReqToFields(request)
@@ -99,55 +98,37 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 	}
 
 	// Nil entries (only from ClearValidTo) pass through as SQL NULL.
-	// TRA-732 R1: each settable column also gets an IS DISTINCT FROM clause so
-	// the UPDATE only fires when at least one field actually changes — preserves
-	// updated_at across a value-match PATCH (cached-body PATCH safety).
 	for key, value := range fields {
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", key, argPos))
-		distinctClauses = append(distinctClauses, fmt.Sprintf("%s IS DISTINCT FROM $%d", key, argPos))
 		args = append(args, value)
 		argPos++
 	}
 
-	// Empty effective body (e.g. PATCH body that decoded to no writable fields
-	// after the read-only drop in TRA-608, or a `{}` body) is a no-op success:
-	// return the unchanged record so a verbatim GET → PATCH round-trip with only
-	// read-only fields succeeds. TRA-619.
-	if len(setClauses) == 0 {
-		return s.getAssetWithLocationByID(ctx, orgID, id)
-	}
+	// TRA-783: every accepted PATCH advances updated_at — filesystem `touch`
+	// semantics. Pre-TRA-783 the storage layer applied a per-row
+	// IS DISTINCT FROM gate that skipped the UPDATE (and thus updated_at)
+	// when no settable field's value differed from the current state. That
+	// model broke for valid_from/valid_to when storage precision (µs)
+	// exceeded wire precision (ms) — server-defaulted or sub-ms client
+	// inputs round-tripped to a wire value that compared as "different"
+	// against storage but as "identical" from the integrator's POV. The
+	// new rule: every accepted PATCH advances updated_at, including empty
+	// body (`{}`) and verbatim writable echoes. Removes all edge cases;
+	// matches POLS expectations from filesystems where any successful
+	// write advances mtime. Concurrency-token semantics on updated_at
+	// (echo-current-value check in the handler) are unaffected.
+	setClauses = append(setClauses, "updated_at = NOW()")
 
 	query := fmt.Sprintf(`
 		update trakrf.assets
-		set %s, updated_at = now()
+		set %s
 		where id = $1 and org_id = $2 and deleted_at is null
-		  and (%s)
 		returning id
-	`, strings.Join(setClauses, ", "), strings.Join(distinctClauses, " OR "))
+	`, strings.Join(setClauses, ", "))
 
 	var updatedID int
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		qerr := tx.QueryRow(ctx, query, args...).Scan(&updatedID)
-		if qerr == pgx.ErrNoRows {
-			// Either the row doesn't exist (genuine 404) or every field
-			// matched current (same-value no-op). Disambiguate without
-			// firing an UPDATE — keeps updated_at stable on the no-op path.
-			var exists bool
-			if cerr := tx.QueryRow(ctx, `
-				select exists(
-					select 1 from trakrf.assets
-					where id = $1 and org_id = $2 and deleted_at is null
-				)
-			`, id, orgID).Scan(&exists); cerr != nil {
-				return cerr
-			}
-			if !exists {
-				return pgx.ErrNoRows
-			}
-			updatedID = id
-			return nil
-		}
-		return qerr
+		return tx.QueryRow(ctx, query, args...).Scan(&updatedID)
 	})
 
 	if err != nil {
