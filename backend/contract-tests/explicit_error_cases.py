@@ -183,6 +183,19 @@ def main() -> int:
     )
     record(observed, "POST /assets unknown body field → unknown_field", status, body)
 
+    # --- invalid_context: include_deleted on a detail endpoint (TRA-777 / BB62
+    #     F3). The same parameter is accepted on the list sibling, so the
+    #     rejection carries a specialized diagnostic with the
+    #     `invalid_context` code instead of falling into the generic
+    #     `unknown_field` bucket.
+    status, body = call("GET", "/api/v1/assets/1?include_deleted=true")
+    record(
+        observed,
+        "GET /assets/1?include_deleted=true → invalid_context",
+        status,
+        body,
+    )
+
     # --- read_only: PATCH attempting to mutate external_key directly ---
     # PATCH requires application/merge-patch+json per the public spec; sending
     # plain application/json returns 415 with no fields[], which fails coverage.

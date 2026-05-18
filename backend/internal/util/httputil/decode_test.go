@@ -95,10 +95,13 @@ func TestRespondDecodeError_UnknownField_EmitsValidationError(t *testing.T) {
 	}
 }
 
-// TRA-634: a body that parses as JSON but mismatches a Go field type must
-// produce a wording that describes the type mismatch with the offending
-// field name — not "Request body is not valid JSON", which is misleading
-// because the body IS valid JSON.
+// TRA-634, refreshed for TRA-777 / BB62 F2: a body that parses as JSON
+// but mismatches a Go field type now produces a validation_error envelope
+// (was bad_request pre-refactor) keyed on the offending field, so client
+// branching on type=validation_error + iteration over fields[] sees the
+// type-mismatch alongside every value-level validation failure. The
+// wording must still name the offending field — not "Request body is not
+// valid JSON" — because the body IS valid JSON.
 func TestRespondDecodeError_TypeMismatch_NamesFieldAndAvoidsInvalidJSONWording(t *testing.T) {
 	type target struct {
 		Count int `json:"count"`
@@ -120,8 +123,8 @@ func TestRespondDecodeError_TypeMismatch_NamesFieldAndAvoidsInvalidJSONWording(t
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode resp: %v", err)
 	}
-	if resp.Error.Type != string(apierrors.ErrBadRequest) {
-		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrBadRequest)
+	if resp.Error.Type != string(apierrors.ErrValidation) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrValidation)
 	}
 	if resp.Error.Detail == "Request body is not valid JSON" {
 		t.Fatalf("detail = %q, must not claim the body is invalid JSON — it is valid, just wrong type", resp.Error.Detail)
@@ -129,8 +132,8 @@ func TestRespondDecodeError_TypeMismatch_NamesFieldAndAvoidsInvalidJSONWording(t
 	if !strings.Contains(resp.Error.Detail, "count") {
 		t.Fatalf("detail = %q, should name the offending field 'count'", resp.Error.Detail)
 	}
-	if !strings.Contains(resp.Error.Detail, "expected type") {
-		t.Fatalf("detail = %q, should describe the type-mismatch nature of the failure", resp.Error.Detail)
+	if len(resp.Error.Fields) != 1 || resp.Error.Fields[0].Field != "count" || resp.Error.Fields[0].Code != "invalid_value" {
+		t.Fatalf("fields = %+v, want one entry with field=count code=invalid_value", resp.Error.Fields)
 	}
 }
 
@@ -326,11 +329,15 @@ func TestRespondDecodeError_SentinelTimestamps_NonNullableField_PointAtOmit(t *t
 	}
 }
 
-// TRA-767 / BB57 F2: a type-mismatch detail must name the expected JSON
-// type when the decoder knows it. The validation-stage envelope surfaces
-// the expected type through params; the decode-stage envelope previously
-// withheld it, forcing integrators to probe to find the expected type.
-func TestRespondDecodeError_TypeMismatch_IncludesExpectedJSONType(t *testing.T) {
+// TRA-777 / BB62 F2: a scalar type-mismatch on a named body field surfaces
+// as a validation_error envelope with fields[] populated, matching the
+// envelope shape integrators already handle for value-level validation
+// failures. The pre-refactor behavior (bad_request with detail only) was
+// the fourth instance of the envelope-split surfacing (BB52 / BB56 / BB61 /
+// BB62) and motivated retiring the split entirely. params carries the
+// wire-facing expected/received JSON type so generated clients can
+// branch on them programmatically without parsing the detail string.
+func TestRespondDecodeError_TypeMismatch_NamedField_EmitsValidationError(t *testing.T) {
 	type target struct {
 		IsActive bool `json:"is_active"`
 	}
@@ -351,19 +358,38 @@ func TestRespondDecodeError_TypeMismatch_IncludesExpectedJSONType(t *testing.T) 
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode resp: %v", err)
 	}
-	if resp.Error.Type != string(apierrors.ErrBadRequest) {
-		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrBadRequest)
+	if resp.Error.Type != string(apierrors.ErrValidation) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrValidation)
+	}
+	if len(resp.Error.Fields) != 1 {
+		t.Fatalf("fields = %d, want 1", len(resp.Error.Fields))
+	}
+	f := resp.Error.Fields[0]
+	if f.Field != "is_active" {
+		t.Fatalf("fields[0].field = %q, want %q", f.Field, "is_active")
+	}
+	if f.Code != "invalid_value" {
+		t.Fatalf("fields[0].code = %q, want %q", f.Code, "invalid_value")
+	}
+	if !strings.Contains(f.Message, "boolean") {
+		t.Fatalf("fields[0].message = %q, should name the expected type 'boolean'", f.Message)
+	}
+	if got, _ := f.Params["expected_type"].(string); got != "boolean" {
+		t.Fatalf("fields[0].params.expected_type = %v, want %q", f.Params["expected_type"], "boolean")
+	}
+	if got, _ := f.Params["received_type"].(string); got != "string" {
+		t.Fatalf("fields[0].params.received_type = %v, want %q", f.Params["received_type"], "string")
 	}
 	if !strings.Contains(resp.Error.Detail, "is_active") {
-		t.Fatalf("detail = %q, should name the offending field", resp.Error.Detail)
-	}
-	if !strings.Contains(resp.Error.Detail, "boolean") {
-		t.Fatalf("detail = %q, should include the expected type 'boolean'", resp.Error.Detail)
+		t.Fatalf("detail = %q, should echo fields[0].message naming the offending field", resp.Error.Detail)
 	}
 }
 
 // Top-level type mismatch (no field name available) must still avoid the
-// misleading "not valid JSON" wording.
+// misleading "not valid JSON" wording. TRA-777 / BB62 F2: the envelope
+// stays bad_request because no field can be attributed (the entire body
+// is the wrong shape); the named-field branch promotes to validation_error
+// instead.
 func TestRespondDecodeError_TypeMismatch_TopLevel_GenericWording(t *testing.T) {
 	type target struct {
 		Name string `json:"name"`
@@ -385,11 +411,61 @@ func TestRespondDecodeError_TypeMismatch_TopLevel_GenericWording(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode resp: %v", err)
 	}
+	if resp.Error.Type != string(apierrors.ErrBadRequest) {
+		t.Fatalf("type = %q, want %q — no field to attribute, validation_error branch must not fire", resp.Error.Type, apierrors.ErrBadRequest)
+	}
 	if resp.Error.Detail == "Request body is not valid JSON" {
 		t.Fatalf("detail = %q, must not claim the body is invalid JSON", resp.Error.Detail)
 	}
 	if !strings.Contains(resp.Error.Detail, "expected type") {
 		t.Fatalf("detail = %q, should describe a type-decoding failure", resp.Error.Detail)
+	}
+	if len(resp.Error.Fields) != 0 {
+		t.Fatalf("fields = %+v, want empty (no field can be attributed on a top-level mismatch)", resp.Error.Fields)
+	}
+}
+
+// TRA-777 / BB62 F2: a numeric type-mismatch (float where int expected,
+// integer overflow) routes through the same validation_error path as the
+// boolean case, with params.expected_type=integer and params.received_type
+// echoing what the JSON decoder reported (e.g. "number" or
+// "number 99999999999999999999" on overflow).
+func TestRespondDecodeError_TypeMismatch_NumericField_EmitsValidationError(t *testing.T) {
+	type target struct {
+		ParentID int64 `json:"parent_id"`
+	}
+	var dst target
+	decErr := json.Unmarshal([]byte(`{"parent_id":1.5}`), &dst)
+	if decErr == nil {
+		t.Fatalf("expected json.Unmarshal to return an UnmarshalTypeError, got nil")
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader(""))
+	httputil.RespondDecodeError(w, r, &httputil.JSONDecodeError{Cause: decErr}, "req-1")
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resp: %v", err)
+	}
+	if resp.Error.Type != string(apierrors.ErrValidation) {
+		t.Fatalf("type = %q, want %q", resp.Error.Type, apierrors.ErrValidation)
+	}
+	if len(resp.Error.Fields) != 1 {
+		t.Fatalf("fields = %+v, want one entry", resp.Error.Fields)
+	}
+	f := resp.Error.Fields[0]
+	if f.Field != "parent_id" || f.Code != "invalid_value" {
+		t.Fatalf("fields[0] = %+v, want field=parent_id code=invalid_value", f)
+	}
+	if got, _ := f.Params["expected_type"].(string); got != "integer" {
+		t.Fatalf("fields[0].params.expected_type = %v, want %q", f.Params["expected_type"], "integer")
+	}
+	if got, _ := f.Params["received_type"].(string); !strings.HasPrefix(got, "number") {
+		t.Fatalf("fields[0].params.received_type = %v, want a value starting with 'number'", f.Params["received_type"])
 	}
 }
 
@@ -558,11 +634,12 @@ func TestRespondDecodeError_MultipleUnknownFields_MultiEntryAndEchoesDetail(t *t
 	}
 }
 
-// TRA-707 / BB32 D6: a type-mismatch on a field declared via an embedded
-// struct surfaces from encoding/json as "OuterType.field". The wire-facing
-// detail string must show the JSON-tag leaf only — integrators see bare
-// keys in their request body, not Go-struct-qualified names. Mirrors the
-// embedded-struct stripping already applied on the time-target branch in
+// TRA-707 / BB32 D6, refreshed for TRA-777 / BB62 F2: a type-mismatch on a
+// field declared via an embedded struct surfaces from encoding/json as
+// "OuterType.field". The wire-facing field name must be the JSON-tag leaf
+// only — integrators see bare keys in their request body, not
+// Go-struct-qualified names. Mirrors the embedded-struct stripping already
+// applied on the time-target branch in
 // TestRespondDecodeError_BadRFC3339_EmbeddedStruct_StripsStructPrefix.
 func TestRespondDecodeError_TypeMismatch_EmbeddedStruct_StripsStructPrefix(t *testing.T) {
 	type inner struct {
@@ -588,8 +665,14 @@ func TestRespondDecodeError_TypeMismatch_EmbeddedStruct_StripsStructPrefix(t *te
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode resp: %v", err)
 	}
-	if !strings.Contains(resp.Error.Detail, `"count"`) {
-		t.Fatalf("detail = %q, should name the offending field 'count'", resp.Error.Detail)
+	if len(resp.Error.Fields) != 1 {
+		t.Fatalf("fields = %d, want 1", len(resp.Error.Fields))
+	}
+	if resp.Error.Fields[0].Field != "count" {
+		t.Fatalf("fields[0].field = %q, want %q", resp.Error.Fields[0].Field, "count")
+	}
+	if strings.Contains(resp.Error.Fields[0].Field, ".") {
+		t.Fatalf("fields[0].field = %q, must not contain a struct-qualified prefix", resp.Error.Fields[0].Field)
 	}
 	if strings.Contains(resp.Error.Detail, ".") {
 		t.Fatalf("detail = %q, should not contain a struct-qualified field name", resp.Error.Detail)

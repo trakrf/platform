@@ -139,6 +139,16 @@ func postprocessPublic(doc *openapi3.T) error {
 	if doc.Info.Contact.Email == "" {
 		doc.Info.Contact.Email = "support@trakrf.id"
 	}
+	// TRA-777 / BB62 F4: declare the canonical Python package name on
+	// info so openapi-python-client's snake-case derivation (which
+	// otherwise yields the awkward `trak_rf_api_client` from "TrakRF API")
+	// produces `trakrf_api_client`. Generators that don't honor
+	// x-package-name fall back to the `--meta` CLI override; the docs
+	// codegen examples carry that fallback path.
+	if doc.Info.Extensions == nil {
+		doc.Info.Extensions = map[string]any{}
+	}
+	doc.Info.Extensions["x-package-name"] = "trakrf-api-client"
 	doc.Servers = openapi3.Servers{
 		{
 			URL:         "https://app.preview.trakrf.id",

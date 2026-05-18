@@ -56,7 +56,13 @@ func TestRejectUnknownQueryParams_AllAllowed_OK(t *testing.T) {
 // list-endpoint sibling, so a 400 from the detail endpoint reads like a
 // bug rather than the documented contract decision (soft-deleted rows
 // aren't retrievable by id because the natural key is freed for reuse on
-// soft-delete). Code stays unknown_field for branching parity.
+// soft-delete).
+//
+// TRA-777 / BB62 F3: the code value is invalid_context (not
+// unknown_field) so strict-typed clients can distinguish "known
+// parameter, wrong context" from "parameter doesn't exist anywhere on
+// the surface". unknown_field stays the bucket for genuinely
+// unrecognised query keys.
 func TestRejectUnknownQueryParams_IncludeDeletedOnDetail_EmitsDiagnostic_Assets(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/v1/assets/123?include_deleted=true", nil)
 	err := httputil.RejectUnknownQueryParams(r)
@@ -70,8 +76,8 @@ func TestRejectUnknownQueryParams_IncludeDeletedOnDetail_EmitsDiagnostic_Assets(
 	if lpe.Fields[0].Field != "include_deleted" {
 		t.Fatalf("Fields[0].Field = %q, want include_deleted", lpe.Fields[0].Field)
 	}
-	if lpe.Fields[0].Code != "unknown_field" {
-		t.Fatalf("Fields[0].Code = %q, want unknown_field — branching parity with list-endpoint rejections", lpe.Fields[0].Code)
+	if lpe.Fields[0].Code != "invalid_context" {
+		t.Fatalf("Fields[0].Code = %q, want invalid_context — known-elsewhere parameter rejected here is distinct from unknown_field", lpe.Fields[0].Code)
 	}
 	msg := lpe.Fields[0].Message
 	for _, want := range []string{

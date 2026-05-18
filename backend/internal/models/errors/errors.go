@@ -40,6 +40,11 @@ const (
 //     dedicated rename endpoint owns the mutation (e.g. external_key on
 //     PATCH /assets/{id} → use POST /assets/{id}/rename). The message
 //     names the dedicated endpoint. TRA-686 / BB29 F8.
+//   - invalid_context: a known parameter supplied where it is not
+//     accepted (e.g. `include_deleted` on a detail endpoint, where the
+//     parameter is valid on the list sibling). Distinct from
+//     unknown_field, which is reserved for parameters the surface does
+//     not recognise at all. TRA-777 / BB62 F3.
 //
 // Numeric values are float64 so that both integer constraints ("8") and
 // fractional constraints ("1.5") parse without loss. JSON numbers decode to
@@ -49,7 +54,7 @@ const (
 // Params is omitted entirely when no structured data is available.
 type FieldError struct {
 	Field   string         `json:"field"`
-	Code    string         `json:"code" example:"required" enums:"required,invalid_value,unknown_field,too_short,too_long,too_small,too_large,fk_not_found,ambiguous_fields,read_only" extensions:"x-extensible-enum=true"`
+	Code    string         `json:"code" example:"required" enums:"required,invalid_value,unknown_field,too_short,too_long,too_small,too_large,fk_not_found,ambiguous_fields,read_only,invalid_context" extensions:"x-extensible-enum=true"`
 	Message string         `json:"message"`
 	Params  map[string]any `json:"params,omitempty"`
 }
