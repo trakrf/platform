@@ -209,7 +209,7 @@ def main() -> int:
         status, body = call(
             "PATCH",
             f"/api/v1/assets/{aid}",
-            body={"id": aid + 99999},
+            body={"id": int(aid) + 99999},
             content_type="application/merge-patch+json",
         )
         record(
