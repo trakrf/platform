@@ -2404,6 +2404,11 @@ func annotateReadOnlyTags(doc *openapi3.T) {
 // versioning policy, and the codegen artifact in the schema-level
 // description so generated SDK class docstrings carry the contract to
 // integrators reading them directly.
+// TRA-787 F3: disambiguate the read-direction-open / write-direction-closed
+// asymmetry — the open-enum guidance applies to response handling, but
+// POST/PATCH writes still reject unrecognized variants with
+// 400 validation_error. Without the disambiguation a careful integrator
+// reads the "open" wording and the write rejection as contradictory.
 const tagSchemaDescription = "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: " +
 	"`RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). " +
 	"The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; " +
@@ -2411,6 +2416,11 @@ const tagSchemaDescription = "Polymorphic identifier attached to an asset or loc
 	"\n\n" +
 	"`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. " +
 	"Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. " +
+	"\n\n" +
+	"**Read direction is open; write direction is closed.** The open-enumeration semantic applies to **response handling**: if a `GET` returns a `tag_type` value your client doesn't recognize, pass the row through untouched rather than rejecting it (additive variants may appear in minor revisions). " +
+	"The **write surface is closed**: `POST /tags` and the natural-key tuple `(tag_type, value)` accept only the currently-defined variants (`rfid`, `ble`, `barcode`). " +
+	"Writes carrying an unrecognized `tag_type` are rejected with `400 validation_error` / `code: invalid_value` / `params.allowed_values: [...]`. " +
+	"The asymmetry is intentional — forward-compatibility on read, strict validation on write — and is expected to be retired in a future migration that surfaces `x-extensible-enum: true` natively (currently emitted as a vendor extension on `tag_type`)." +
 	"\n\n" +
 	"**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. " +
 	"That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
