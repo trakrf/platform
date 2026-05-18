@@ -547,38 +547,55 @@ func TestPutAsset_OnlyReadOnlyFields_MatchingCurrent_Returns200NoOp(t *testing.T
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedRoundTripAsset(t, pool, orgID, "ASSET-RO-NOOP", "ReadOnlyNoop")
-
 	handler := NewHandler(store)
 	router := setupRoundTripRouter(handler)
 
-	// GET the current resource so we can echo back its server-managed
-	// timestamps verbatim — the matching path now requires real values.
-	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
-	getReq = withRoundTripOrgContext(getReq, orgID)
-	getRec := httptest.NewRecorder()
-	router.ServeHTTP(getRec, getReq)
-	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
-	var current struct {
-		Data map[string]any `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
-	cur := current.Data
-
+	// TRA-783: each accepted PATCH advances updated_at, so the cached-body
+	// pattern (capture once at top, reuse across sub-tests) goes stale
+	// after the first PATCH. Each sub-test seeds its own asset and re-GETs.
+	type bodyFn func(t *testing.T, cur map[string]any) string
 	cases := []struct {
 		name string
-		body string
+		body bodyFn
 	}{
-		{"only id matches", fmt.Sprintf(`{"id":%d}`, id)},
-		{"only created_at matches", fmt.Sprintf(`{"created_at":%q}`, cur["created_at"])},
-		{"only updated_at matches", fmt.Sprintf(`{"updated_at":%q}`, cur["updated_at"])},
-		{"only deleted_at matches", `{"deleted_at":null}`},
-		{"only tags matches (empty)", `{"tags":[]}`},
-		{"empty object", `{}`},
+		{"only id matches", func(t *testing.T, cur map[string]any) string {
+			return fmt.Sprintf(`{"id":%v}`, cur["id"])
+		}},
+		{"only created_at matches", func(t *testing.T, cur map[string]any) string {
+			return fmt.Sprintf(`{"created_at":%q}`, cur["created_at"])
+		}},
+		{"only updated_at matches", func(t *testing.T, cur map[string]any) string {
+			return fmt.Sprintf(`{"updated_at":%q}`, cur["updated_at"])
+		}},
+		{"only deleted_at matches", func(t *testing.T, cur map[string]any) string {
+			return `{"deleted_at":null}`
+		}},
+		{"only tags matches (empty)", func(t *testing.T, cur map[string]any) string {
+			return `{"tags":[]}`
+		}},
+		{"empty object", func(t *testing.T, cur map[string]any) string {
+			return `{}`
+		}},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(tc.body)))
+	for i, tc := range cases {
+		idx := i
+		tcCopy := tc
+		t.Run(tcCopy.name, func(t *testing.T) {
+			id := seedRoundTripAsset(t, pool, orgID,
+				fmt.Sprintf("ASSET-RO-NOOP-%d", idx), "ReadOnlyNoop")
+
+			getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
+			getReq = withRoundTripOrgContext(getReq, orgID)
+			getRec := httptest.NewRecorder()
+			router.ServeHTTP(getRec, getReq)
+			require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+			var current struct {
+				Data map[string]any `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+
+			body := tcCopy.body(t, current.Data)
+			patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(body)))
 			patchReq.Header.Set("Content-Type", "application/json")
 			patchReq = withRoundTripOrgContext(patchReq, orgID)
 			putRec := httptest.NewRecorder()
@@ -592,7 +609,6 @@ func TestPutAsset_OnlyReadOnlyFields_MatchingCurrent_Returns200NoOp(t *testing.T
 			}
 			require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
 			assert.Equal(t, "ReadOnlyNoop", resp.Data["name"], "name unchanged")
-			assert.Equal(t, "ASSET-RO-NOOP", resp.Data["external_key"], "external_key unchanged")
 		})
 	}
 }
@@ -668,22 +684,8 @@ func TestPatchAsset_DatetimeEncodingVariants_InstantEquality_200(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id := seedRoundTripAsset(t, pool, orgID, "ASSET-RO-INST", "ReadOnlyInstant")
-
 	handler := NewHandler(store)
 	router := setupRoundTripRouter(handler)
-
-	// GET to pick up the server's current created_at / updated_at on the
-	// wire (millisecond-Z PublicTime shape).
-	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
-	getReq = withRoundTripOrgContext(getReq, orgID)
-	getRec := httptest.NewRecorder()
-	router.ServeHTTP(getRec, getReq)
-	require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
-	var current struct {
-		Data map[string]any `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
 
 	parseWireTime := func(s string) time.Time {
 		t.Helper()
@@ -691,34 +693,47 @@ func TestPatchAsset_DatetimeEncodingVariants_InstantEquality_200(t *testing.T) {
 		require.NoError(t, err)
 		return v
 	}
-	createdAt := parseWireTime(current.Data["created_at"].(string))
-	updatedAt := parseWireTime(current.Data["updated_at"].(string))
 
-	// Three variants per field: literal Z (server emit shape — control),
-	// "+00:00" UTC offset form (Go time.Time MarshalJSON default), and
-	// microsecond-fractional "+00:00" (Pydantic v2 model_dump default).
-	// All three represent the same instant and must round-trip as 200.
-	variants := func(label string, t0 time.Time) []struct {
-		name, value string
-	} {
-		return []struct{ name, value string }{
-			{label + " literal Z (millis)", t0.UTC().Format("2006-01-02T15:04:05.000Z")},
-			{label + " +00:00 offset form", t0.UTC().Format("2006-01-02T15:04:05.000-07:00")},
-			{label + " microsecond +00:00", t0.UTC().Format("2006-01-02T15:04:05.000000-07:00")},
-		}
+	// Three encoding variants per field: literal Z (server emit shape —
+	// control), "+00:00" UTC offset form (Go time.Time MarshalJSON
+	// default), and microsecond-fractional "+00:00" (Pydantic v2
+	// model_dump default). All three represent the same instant and must
+	// round-trip as 200.
+	variantNames := []string{"literal Z millis", "+00:00 offset", "microsecond +00:00"}
+	variantFmts := []string{
+		"2006-01-02T15:04:05.000Z",
+		"2006-01-02T15:04:05.000-07:00",
+		"2006-01-02T15:04:05.000000-07:00",
 	}
 
-	cases := []struct {
-		field    string
-		variants []struct{ name, value string }
-	}{
-		{"created_at", variants("created_at", createdAt)},
-		{"updated_at", variants("updated_at", updatedAt)},
-	}
-	for _, c := range cases {
-		for _, v := range c.variants {
-			t.Run(v.name, func(t *testing.T) {
-				body := fmt.Sprintf(`{%q:%q}`, c.field, v.value)
+	// TRA-783: every accepted PATCH advances updated_at, so each sub-test
+	// re-fetches the current value rather than relying on a snapshot
+	// captured at the top of the test (which would go stale as soon as
+	// the first PATCH lands).
+	for i, vname := range variantNames {
+		variantFmt := variantFmts[i]
+		for _, field := range []string{"created_at", "updated_at"} {
+			fieldCopy, vnameCopy := field, vname
+			t.Run(fieldCopy+"/"+vnameCopy, func(t *testing.T) {
+				id := seedRoundTripAsset(t, pool, orgID,
+					fmt.Sprintf("ASSET-RO-INST-%d-%s", i, fieldCopy),
+					"ReadOnlyInstant")
+
+				// GET the current state for THIS sub-test — updated_at
+				// changes between sub-tests under the TRA-783 rule.
+				getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
+				getReq = withRoundTripOrgContext(getReq, orgID)
+				getRec := httptest.NewRecorder()
+				router.ServeHTTP(getRec, getReq)
+				require.Equal(t, http.StatusOK, getRec.Code, getRec.Body.String())
+				var current struct {
+					Data map[string]any `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &current))
+				ts := parseWireTime(current.Data[fieldCopy].(string))
+				value := ts.UTC().Format(variantFmt)
+
+				body := fmt.Sprintf(`{%q:%q}`, fieldCopy, value)
 				patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader([]byte(body)))
 				patchReq.Header.Set("Content-Type", "application/json")
 				patchReq = withRoundTripOrgContext(patchReq, orgID)
@@ -726,7 +741,7 @@ func TestPatchAsset_DatetimeEncodingVariants_InstantEquality_200(t *testing.T) {
 				router.ServeHTTP(rec, patchReq)
 				require.Equal(t, http.StatusOK, rec.Code,
 					"%s = %s must be 200 (same instant as server state): %s",
-					c.field, v.value, rec.Body.String())
+					fieldCopy, value, rec.Body.String())
 			})
 		}
 	}

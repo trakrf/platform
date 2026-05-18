@@ -81,7 +81,6 @@ func GenerateLocationExternalKey(seq int) string {
 
 func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.LocationWithParent, error) {
 	setClauses := []string{}
-	distinctClauses := []string{}
 	args := []any{id, orgID}
 	argPos := 3
 	fields, err := mapLocationReqToFields(request)
@@ -91,55 +90,28 @@ func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request loc
 	}
 
 	// Nil entries (only from ClearValidTo) pass through as SQL NULL.
-	// TRA-732 R1: each settable column also gets an IS DISTINCT FROM clause so
-	// the UPDATE only fires when at least one field actually changes — preserves
-	// updated_at across a value-match PATCH (cached-body PATCH safety).
 	for key, value := range fields {
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", key, argPos))
-		distinctClauses = append(distinctClauses, fmt.Sprintf("%s IS DISTINCT FROM $%d", key, argPos))
 		args = append(args, value)
 		argPos++
 	}
 
-	// Empty effective body (e.g. PATCH body that decoded to no writable fields
-	// after the read-only drop in TRA-608, or a `{}` body) is a no-op success:
-	// return the unchanged record so a verbatim GET → PATCH round-trip with only
-	// read-only fields succeeds. TRA-619.
-	if len(setClauses) == 0 {
-		return s.getLocationWithParentByID(ctx, orgID, id)
-	}
+	// TRA-783: every accepted PATCH advances updated_at — filesystem `touch`
+	// semantics. See the matching block in storage/assets.go.UpdateAsset for
+	// the full rationale; both resources moved together so the integrator-
+	// facing model is uniform.
+	setClauses = append(setClauses, "updated_at = NOW()")
 
 	query := fmt.Sprintf(`
 		UPDATE trakrf.locations
-		SET %s, updated_at = NOW()
+		SET %s
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-		  AND (%s)
 		RETURNING id
-	`, strings.Join(setClauses, ", "), strings.Join(distinctClauses, " OR "))
+	`, strings.Join(setClauses, ", "))
 
 	var updatedID int
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		qerr := tx.QueryRow(ctx, query, args...).Scan(&updatedID)
-		if qerr == pgx.ErrNoRows {
-			// Either the row doesn't exist (genuine 404) or every field
-			// matched current (same-value no-op). Disambiguate without
-			// firing an UPDATE — keeps updated_at stable on the no-op path.
-			var exists bool
-			if cerr := tx.QueryRow(ctx, `
-				SELECT EXISTS(
-					SELECT 1 FROM trakrf.locations
-					WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-				)
-			`, id, orgID).Scan(&exists); cerr != nil {
-				return cerr
-			}
-			if !exists {
-				return pgx.ErrNoRows
-			}
-			updatedID = id
-			return nil
-		}
-		return qerr
+		return tx.QueryRow(ctx, query, args...).Scan(&updatedID)
 	})
 
 	if err != nil {

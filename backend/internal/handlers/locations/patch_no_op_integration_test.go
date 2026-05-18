@@ -1,9 +1,10 @@
 //go:build integration
 // +build integration
 
-// TRA-732 R1: PATCH /api/v1/locations/{id} with a body whose writable fields
-// all match current values must not advance updated_at. Locations parallel
-// to the assets contract pinned in patch_no_op_integration_test.go.
+// TRA-783 supersedes TRA-732 R1: every accepted PATCH advances updated_at,
+// including empty body (`{}`), verbatim writable echoes, and partial
+// mutations. Locations parallel to the assets contract pinned in
+// patch_no_op_integration_test.go.
 
 package locations
 
@@ -25,8 +26,9 @@ import (
 )
 
 // PATCH with every writable field set to its current value returns 200 with
-// the unchanged LocationView AND leaves updated_at untouched.
-func TestPatchLocation_SameValueBody_PreservesUpdatedAt(t *testing.T) {
+// the unchanged LocationView AND advances updated_at (TRA-783 supersedes
+// the pre-TRA-783 "no-op preserves updated_at" contract).
+func TestPatchLocation_SameValueBody_AdvancesUpdatedAt(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -43,6 +45,8 @@ func TestPatchLocation_SameValueBody_PreservesUpdatedAt(t *testing.T) {
 	require.NoError(t, pool.QueryRow(context.Background(),
 		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&beforeUpdatedAt))
 
+	time.Sleep(5 * time.Millisecond)
+
 	patchBody := []byte(`{"name":"NoOpLocation","is_active":true}`)
 	patchReq := httptest.NewRequest(http.MethodPatch,
 		fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(patchBody))
@@ -55,18 +59,14 @@ func TestPatchLocation_SameValueBody_PreservesUpdatedAt(t *testing.T) {
 	var afterUpdatedAt time.Time
 	require.NoError(t, pool.QueryRow(context.Background(),
 		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&afterUpdatedAt))
-	assert.True(t, afterUpdatedAt.Equal(beforeUpdatedAt),
-		"same-value PATCH must not advance updated_at (before=%s after=%s)",
+	assert.True(t, afterUpdatedAt.After(beforeUpdatedAt),
+		"same-value PATCH must advance updated_at (before=%s after=%s)",
 		beforeUpdatedAt, afterUpdatedAt)
 }
 
-// Verbatim GET → PATCH round-trip (the cached-body PATCH retry pattern) must
-// be fully idempotent: 200 with the same LocationView and stable updated_at.
-//
-// The wire format emits timestamps at millisecond precision; the seed below
-// matches that precision so the test represents the real integrator path
-// (rows authored via wire are already millisecond-precise).
-func TestPatchLocation_VerbatimGETRoundTrip_PreservesUpdatedAt(t *testing.T) {
+// Verbatim GET → PATCH round-trip succeeds (200) and advances updated_at
+// per TRA-783.
+func TestPatchLocation_VerbatimGETRoundTrip_AdvancesUpdatedAt(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -100,6 +100,8 @@ func TestPatchLocation_VerbatimGETRoundTrip_PreservesUpdatedAt(t *testing.T) {
 	require.NoError(t, pool.QueryRow(context.Background(),
 		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&beforeUpdatedAt))
 
+	time.Sleep(5 * time.Millisecond)
+
 	patchReq := httptest.NewRequest(http.MethodPatch,
 		fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(bodyBytes))
 	patchReq.Header.Set("Content-Type", "application/json")
@@ -112,13 +114,13 @@ func TestPatchLocation_VerbatimGETRoundTrip_PreservesUpdatedAt(t *testing.T) {
 	var afterUpdatedAt time.Time
 	require.NoError(t, pool.QueryRow(context.Background(),
 		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&afterUpdatedAt))
-	assert.True(t, afterUpdatedAt.Equal(beforeUpdatedAt),
-		"verbatim GET round-trip PATCH must not advance updated_at (before=%s after=%s)",
+	assert.True(t, afterUpdatedAt.After(beforeUpdatedAt),
+		"verbatim GET round-trip PATCH must advance updated_at (before=%s after=%s)",
 		beforeUpdatedAt, afterUpdatedAt)
 }
 
-// PATCH with at least one field that genuinely differs still advances
-// updated_at — confirms the IS DISTINCT FROM guard fires only on full-match.
+// PATCH with at least one field that genuinely differs advances updated_at.
+// Regression check.
 func TestPatchLocation_ActualChange_AdvancesUpdatedAt(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -155,8 +157,85 @@ func TestPatchLocation_ActualChange_AdvancesUpdatedAt(t *testing.T) {
 		beforeUpdatedAt, afterUpdatedAt)
 }
 
-// PATCH against a nonexistent location id still returns 404 — the IS DISTINCT
-// FROM disambiguation must not mask missing rows.
+// TRA-783: PATCH with an empty body (`{}`) — the filesystem `touch`
+// case — advances updated_at.
+func TestPatchLocation_EmptyBody_AdvancesUpdatedAt(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTripWithParent(t, pool, orgID, "LOC-EMPTY", "EmptyBodyLocation", nil)
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	var beforeUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&beforeUpdatedAt))
+
+	time.Sleep(5 * time.Millisecond)
+
+	patchReq := httptest.NewRequest(http.MethodPatch,
+		fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader([]byte(`{}`)))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, patchReq)
+	require.Equal(t, http.StatusOK, rec.Code, "empty-body PATCH must be 200: %s", rec.Body.String())
+
+	var afterUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&afterUpdatedAt))
+	assert.True(t, afterUpdatedAt.After(beforeUpdatedAt),
+		"empty-body PATCH must advance updated_at (before=%s after=%s)",
+		beforeUpdatedAt, afterUpdatedAt)
+}
+
+// TRA-783 regression: when a PATCH is REJECTED (e.g. read-only field with a
+// differing value), updated_at must NOT advance — the operation was rejected
+// before reaching the storage write.
+func TestPatchLocation_RejectedReadOnlyMismatch_PreservesUpdatedAt(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTripWithParent(t, pool, orgID, "LOC-REJECT", "RejectedLocation", nil)
+
+	handler := NewHandler(store)
+	router := setupLocationRoundTripRouter(handler)
+
+	var beforeUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&beforeUpdatedAt))
+
+	time.Sleep(5 * time.Millisecond)
+
+	patchBody := []byte(fmt.Sprintf(`{"id":%d}`, id+99999))
+	patchReq := httptest.NewRequest(http.MethodPatch,
+		fmt.Sprintf("/api/v1/locations/%d", id), bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq = withLocationRoundTripOrgContext(patchReq, orgID)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, patchReq)
+	require.Equal(t, http.StatusBadRequest, rec.Code,
+		"differing read-only field PATCH must be 400: %s", rec.Body.String())
+
+	var afterUpdatedAt time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM trakrf.locations WHERE id = $1`, id).Scan(&afterUpdatedAt))
+	assert.True(t, afterUpdatedAt.Equal(beforeUpdatedAt),
+		"rejected PATCH must NOT advance updated_at (before=%s after=%s)",
+		beforeUpdatedAt, afterUpdatedAt)
+}
+
+// PATCH against a nonexistent location id still returns 404 — the always-touch
+// UPDATE must not mask missing rows.
 func TestPatchLocation_NonexistentID_Returns404(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
