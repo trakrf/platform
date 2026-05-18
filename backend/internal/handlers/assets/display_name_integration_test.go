@@ -25,8 +25,8 @@ import (
 )
 
 type displayNameCase struct {
-	label    string
-	body     string
+	label     string
+	body      string
 	expect4xx bool
 }
 
@@ -101,6 +101,60 @@ func TestPostAsset_NameDisplayValidator(t *testing.T) {
 				"%s: expected name=invalid_value, got fields=%+v", tc.label, resp.Error.Fields)
 		})
 	}
+}
+
+// TRA-780 F3: the display_name validator message must name every rejection
+// class — leading/trailing whitespace, control characters, and
+// whitespace-only — so a developer hitting any one class reads a description
+// of their specific failure mode. TRA-778 shipped the tightened pattern with
+// a message that only named control-character and whitespace-only classes;
+// developers hitting the leading/trailing-whitespace case followed the stale
+// message into a retry loop.
+func TestPostAsset_NameDisplayValidator_MessageNamesAllClasses(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	handler := NewHandler(store)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Post("/api/v1/assets", handler.Create)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/assets",
+		bytes.NewReader([]byte(`{"external_key":"DN-MSG","name":" leadspace"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req = withRoundTripOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	var resp struct {
+		Error struct {
+			Fields []struct {
+				Field   string `json:"field"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	var msg string
+	for _, f := range resp.Error.Fields {
+		if f.Field == "name" {
+			msg = f.Message
+			break
+		}
+	}
+	require.NotEmpty(t, msg, "name field error must be present: %+v", resp.Error.Fields)
+	assert.Contains(t, msg, "start or end with whitespace",
+		"message must name the leading/trailing-whitespace rejection class")
+	assert.Contains(t, msg, "control characters",
+		"message must name the control-character rejection class")
+	assert.Contains(t, msg, "only whitespace",
+		"message must name the whitespace-only rejection class")
 }
 
 // PATCH /api/v1/assets/{id} — same rules on the update surface.

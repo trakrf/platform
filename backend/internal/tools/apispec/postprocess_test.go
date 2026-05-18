@@ -376,53 +376,55 @@ func TestPostprocess_ConvertsExtensibleEnumStringToBool(t *testing.T) {
 	assert.Equal(t, true, got, "x-extensible-enum must be a real bool so consumers don't parse the string")
 }
 
-// TestPostprocess_AnnotatesErrorEnvelope locks in TRA-517 AC4: the
-// errors.ErrorResponse schema must carry the title/detail contract in its
-// schema description, and the title/detail properties must each describe
-// their semantics. swaggo doesn't propagate godoc through an outer struct
-// that wraps an anonymous nested struct, so this is applied here.
+// TestPostprocess_AnnotatesErrorEnvelope locks in TRA-517 AC4 / TRA-780 F2:
+// the hoisted errors.ErrorEnvelope schema must carry the title/detail
+// contract in its schema description, and the title/detail properties must
+// each describe their semantics. Pre-TRA-780 the envelope shape lived as
+// an anonymous nested object inside errors.ErrorResponse; F2 hoisted it
+// to a named top-level schema so generated clients get an independently
+// importable name (e.g. ErrorEnvelope rather than openapi-generator-cli's
+// `ErrorResponseError`).
 //
-// Also locks in TRA-632 / A1: the inner anonymous `error` object's required
-// list must include every field the service always emits (type, title,
-// status, detail, instance, request_id). Fields with json `,omitempty`
-// (fields[]) stay optional.
+// Also locks in TRA-632 / A1: ErrorEnvelope's required list must include
+// every field the service always emits (type, title, status, detail,
+// instance, request_id). Fields with json `,omitempty` (fields[]) stay
+// optional.
 func TestPostprocess_AnnotatesErrorEnvelope(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
+		"errors.ErrorEnvelope": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				"type":       stringProp(""),
+				"title":      stringProp(""),
+				"status":     &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"detail":     stringProp(""),
+				"instance":   stringProp(""),
+				"request_id": stringProp(""),
+			},
+		}},
 		"errors.ErrorResponse": &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: openapi3.Schemas{
-				"error": &openapi3.SchemaRef{Value: &openapi3.Schema{
-					Type: &openapi3.Types{openapi3.TypeObject},
-					Properties: openapi3.Schemas{
-						"type":       stringProp(""),
-						"title":      stringProp(""),
-						"status":     &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
-						"detail":     stringProp(""),
-						"instance":   stringProp(""),
-						"request_id": stringProp(""),
-					},
-				}},
+				"error": &openapi3.SchemaRef{Ref: "#/components/schemas/errors.ErrorEnvelope"},
 			},
 		}},
 	})
 	postprocessPublic(doc)
 
-	envelope := doc.Components.Schemas["errors.ErrorResponse"].Value
+	envelope := doc.Components.Schemas["errors.ErrorEnvelope"].Value
 	require.NotEmpty(t, envelope.Description, "envelope schema must carry the contract description")
 	assert.Contains(t, envelope.Description, "title")
 	assert.Contains(t, envelope.Description, "detail")
 	assert.Contains(t, envelope.Description, "stable", "description must say title is stable")
 
-	errInner := envelope.Properties["error"].Value
-	errProps := errInner.Properties
-	assert.NotEmpty(t, errProps["title"].Value.Description, "title field needs its own description")
-	assert.NotEmpty(t, errProps["detail"].Value.Description, "detail field needs its own description")
+	assert.NotEmpty(t, envelope.Properties["title"].Value.Description, "title field needs its own description")
+	assert.NotEmpty(t, envelope.Properties["detail"].Value.Description, "detail field needs its own description")
 
 	assert.ElementsMatch(t,
 		[]string{"type", "title", "status", "detail", "instance", "request_id"},
-		errInner.Required,
-		"inner error object must mark every always-emitted field as required",
+		envelope.Required,
+		"ErrorEnvelope must mark every always-emitted field as required",
 	)
 }
 
@@ -750,12 +752,13 @@ func TestMarkRequiredFields_ErrorsOnMissingField(t *testing.T) {
 // server-managed fields on read views are tagged readOnly so codegen splits
 // read and write types and a verbatim GET → PATCH round-trip is type-safe.
 //
-// `tags` and `external_key` are intentionally excluded from the readOnly list
-// (TRA-686 / BB29 F7+F8, history TRA-643): each has a dedicated mutation path,
-// and the PATCH validator rejects them with per-category codes (tags →
-// invalid_value, external_key → read_only). Keeping these fields writable in
-// the spec preserves the runtime signal — codegen tools won't strip them, so
-// an SDK that mistakenly sends them surfaces the failure.
+// TRA-780 F1 broadened the list to include sub-resource-mutable fields
+// (`tags`, `location_id`, `location_external_key`) since the OpenAPI 3.0
+// `readOnly: true` semantic ("MAY be sent in response but SHOULD NOT be sent
+// in request") matches the runtime accept-if-matches/reject-if-differs rule
+// for both server-managed and sub-resource-mutable fields. The runtime
+// rejection code differs (`read_only` vs `invalid_context`) but the spec
+// annotation is the same.
 func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := docWithSchemas(openapi3.Schemas{
@@ -769,8 +772,10 @@ func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 					Type:  &openapi3.Types{openapi3.TypeArray},
 					Items: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeObject}}},
 				}},
-				"name":         stringProp(""), // not on the allowlist — must remain writable
-				"external_key": stringProp(""), // mutable lookup key (TRA-555) — must remain writable
+				"name":                  stringProp(""), // not on the allowlist — must remain writable
+				"external_key":          stringProp(""), // mutable via POST /rename — must remain writable
+				"location_id":           &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				"location_external_key": stringProp(""),
 			},
 		}},
 		"location.PublicLocationView": &openapi3.SchemaRef{Value: &openapi3.Schema{
@@ -789,8 +794,8 @@ func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 	})
 
 	readOnly := map[string][]string{
-		"asset.PublicAssetView":       {"id", "created_at", "updated_at"},
-		"location.PublicLocationView": {"id", "created_at", "updated_at"},
+		"asset.PublicAssetView":       {"id", "created_at", "updated_at", "location_id", "location_external_key", "tags"},
+		"location.PublicLocationView": {"id", "created_at", "updated_at", "tags"},
 	}
 	if err := markReadOnlyFields(doc, readOnly); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -810,20 +815,10 @@ func TestPostprocess_MarksReadOnlyFields(t *testing.T) {
 		"name must remain writable")
 	assert.False(t,
 		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["external_key"].Value.ReadOnly,
-		"external_key must remain writable")
+		"external_key must remain writable (mutable via POST /rename)")
 	assert.False(t,
 		doc.Components.Schemas["location.PublicLocationView"].Value.Properties["name"].Value.ReadOnly,
 		"name must remain writable")
-
-	// `tags` is managed via subresource and rejected by the PUT validator
-	// (TRA-643 / BB22 F1); it must NOT be marked readOnly so codegen keeps it
-	// in the request shape and SDK consumers see the rejection signal.
-	assert.False(t,
-		doc.Components.Schemas["asset.PublicAssetView"].Value.Properties["tags"].Value.ReadOnly,
-		"asset tags must remain writable so SDK callers see the rejection")
-	assert.False(t,
-		doc.Components.Schemas["location.PublicLocationView"].Value.Properties["tags"].Value.ReadOnly,
-		"location tags must remain writable so SDK callers see the rejection")
 }
 
 func TestMarkReadOnlyFields_ErrorsOnMissingSchema(t *testing.T) {
@@ -1082,30 +1077,34 @@ func TestPostprocess_StripsBearerScopeArrays_EmitsExtension(t *testing.T) {
 	assert.Equal(t, []string{"assets:read"}, got)
 }
 
-// TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs locks in TRA-585 S1.
-// The errors page declares the envelope is "modeled on RFC 7807 but not
-// 7807-compliant" — the spec description must match instead of claiming
-// full RFC 7807 compliance.
+// TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs locks in TRA-585 S1
+// (and TRA-780 F2's hoist). The errors page declares the envelope is
+// "modeled on RFC 7807 but not 7807-compliant" — the spec description on
+// the hoisted ErrorEnvelope must match instead of claiming full RFC 7807
+// compliance.
 func TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs(t *testing.T) {
 	withEmptyRequiredFields(t)
 	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	doc.Components.Schemas["errors.ErrorEnvelope"] = &openapi3.SchemaRef{
+		Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: map[string]*openapi3.SchemaRef{
+				"title":  {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+				"detail": {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+			},
+		},
+	}
 	doc.Components.Schemas["errors.ErrorResponse"] = &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
 			Type: &openapi3.Types{openapi3.TypeObject},
 			Properties: map[string]*openapi3.SchemaRef{
-				"error": {Value: &openapi3.Schema{
-					Type: &openapi3.Types{openapi3.TypeObject},
-					Properties: map[string]*openapi3.SchemaRef{
-						"title":  {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
-						"detail": {Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
-					},
-				}},
+				"error": {Ref: "#/components/schemas/errors.ErrorEnvelope"},
 			},
 		},
 	}
 	require.NoError(t, postprocessPublic(doc))
 
-	desc := doc.Components.Schemas["errors.ErrorResponse"].Value.Description
+	desc := doc.Components.Schemas["errors.ErrorEnvelope"].Value.Description
 	assert.Contains(t, desc, "modeled on RFC 7807 but not 7807-compliant",
 		"description must match the docs/api/errors page wording (TRA-585 S1)")
 	assert.Contains(t, desc, "application/json",

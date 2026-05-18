@@ -5,11 +5,12 @@
 // path for mutating an asset's external_key (single audit-log surface for
 // the natural / join key).
 //
-// TRA-686 / BB29 F8: PATCH rejects an `external_key` body field with 400
-// read_only naming the rename endpoint. The TRA-674 strip-on-PATCH rule
-// was reversed — silent-drop hid bugs where an integrator believed a
-// rename PATCH took effect while the natural key (the join key downstream
-// systems rely on) stayed unchanged. The runtime reject coverage lives in
+// TRA-686 / BB29 F8 / TRA-780 F4: PATCH rejects an `external_key` body field
+// with 400 invalid_context naming the rename endpoint (was read_only
+// pre-TRA-780 F4). The TRA-674 strip-on-PATCH rule was reversed —
+// silent-drop hid bugs where an integrator believed a rename PATCH took
+// effect while the natural key (the join key downstream systems rely on)
+// stayed unchanged. The runtime reject coverage lives in
 // TestPatchAsset_ExternalKeyRejected400; this file pins the happy-path
 // rename endpoint behavior.
 

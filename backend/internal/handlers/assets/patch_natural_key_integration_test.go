@@ -114,7 +114,9 @@ func TestPatchAsset_NaturalKey_ExternalKey_Matches200(t *testing.T) {
 	assert.Equal(t, "ASSET-EK-MATCH", resp.Data["external_key"], "external_key unchanged (stripped from update)")
 }
 
-// TRA-699 §1.B: external_key differing → 400 read_only naming /rename.
+// TRA-699 §1.B / TRA-780 F4: external_key differing → 400 invalid_context
+// naming /rename. The code shifted from read_only to invalid_context in
+// TRA-780 to disambiguate from truly server-managed fields.
 func TestPatchAsset_NaturalKey_ExternalKey_Differs400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -133,7 +135,7 @@ func TestPatchAsset_NaturalKey_ExternalKey_Differs400(t *testing.T) {
 	assert.Equal(t, "validation_error", resp.Error.Type)
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
-	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+	assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 	assert.Contains(t, resp.Error.Fields[0].Message, "/rename",
 		"message must name the rename endpoint")
 
@@ -287,10 +289,10 @@ func TestPatchAsset_NaturalKey_LocationID_NullVsNonNullDiffers400(t *testing.T) 
 	assert.Equal(t, locID, *curLoc)
 }
 
-// TRA-702 / BB32 D2: a single differing read_only field must echo
-// fields[0].message verbatim in detail — pre-TRA-702 the inline emit-site
-// wrote the literal "validation failed", burying the redirect-to-/rename
-// message in fields[0].
+// TRA-702 / BB32 D2: a single differing read-only field (here external_key,
+// rejected with invalid_context post-TRA-780 F4) must echo fields[0].message
+// verbatim in detail — pre-TRA-702 the inline emit-site wrote the literal
+// "validation failed", burying the redirect-to-/rename message in fields[0].
 func TestPatchAsset_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -313,9 +315,12 @@ func TestPatchAsset_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T) {
 		"detail must name the rename endpoint so AI integrators can self-redirect")
 }
 
-// TRA-702 / BB32 D3: a PATCH body with multiple differing read_only fields
-// must surface one entry per field in fields[] AND a "(and N more
-// validation errors)" suffix in detail — not just the first violation.
+// TRA-702 / BB32 D3 / TRA-780 F4: a PATCH body with multiple differing
+// read-only fields must surface one entry per field in fields[] AND a
+// "(and N more validation errors)" suffix in detail. After TRA-780 F4 the
+// rejection code splits: external_key emits invalid_context (mutable via
+// sub-resource); location_external_key and location_id stay read_only
+// (server-managed via scan ingestion).
 func TestPatchAsset_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -333,13 +338,13 @@ func TestPatchAsset_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *test
 
 	var resp patchErrorResp
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Error.Fields, 3, "all three differing read_only fields must surface")
+	require.Len(t, resp.Error.Fields, 3, "all three differing fields must surface")
 
 	fields := map[string]string{}
 	for _, f := range resp.Error.Fields {
 		fields[f.Field] = f.Code
 	}
-	assert.Equal(t, "read_only", fields["external_key"])
+	assert.Equal(t, "invalid_context", fields["external_key"])
 	assert.Equal(t, "read_only", fields["location_external_key"])
 	assert.Equal(t, "read_only", fields["location_id"])
 

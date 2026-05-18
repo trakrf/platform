@@ -655,9 +655,10 @@ func TestPatchLocation_DatetimeEncodingVariants_InstantEquality_200(t *testing.T
 	}
 }
 
-// TRA-710 (BB33 F2): `tags` follows the uniform accept-if-matches /
-// reject-if-differs rule on locations. Pre-TRA-710 any `tags` presence
-// was rejected with 400 invalid_value regardless of value.
+// TRA-710 (BB33 F2) / TRA-780 F4: `tags` follows the uniform
+// accept-if-matches / reject-if-differs rule on locations; mismatch returns
+// 400 invalid_context (was read_only pre-TRA-780 F4). Pre-TRA-710 any
+// `tags` presence was rejected with 400 invalid_value regardless of value.
 func TestPatchLocation_TagsDiffersFromCurrent_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -704,7 +705,7 @@ func TestPatchLocation_TagsDiffersFromCurrent_Rejected400(t *testing.T) {
 			assert.Equal(t, "validation_error", resp.Error.Type)
 			require.Len(t, resp.Error.Fields, 1)
 			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+			assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 			assert.Contains(t, resp.Error.Fields[0].Message,
 				"POST /api/v1/locations/{location_id}/tags")
 
@@ -771,8 +772,62 @@ func TestPatchLocation_TagsMatchesCurrent_200(t *testing.T) {
 	})
 }
 
-// TRA-686 / BB29 F8: `external_key` in a PATCH body is rejected with 400
-// read_only pointing at /locations/{id}/rename.
+// TRA-780 F4: read_only / invalid_context semantic split on PATCH /locations.
+// Server-managed fields (id, timestamps) keep code: read_only. Sub-resource-
+// mutable fields (external_key via /rename; tags via /tags POST/DELETE) emit
+// code: invalid_context so strict-typed clients branching on code can route
+// to the correct verb.
+func TestPatchLocation_ReadOnlyVsInvalidContext_Split_TRA780F4(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedLocationRoundTrip(t, pool, orgID, "LOC-TRA780-SPLIT", "Tra780Split")
+	router := setupLocationRoundTripRouter(NewHandler(store))
+
+	cases := []struct {
+		name     string
+		body     string
+		field    string
+		wantCode string
+	}{
+		{"external_key → invalid_context", `{"external_key":"LOC-OTHER"}`, "external_key", "invalid_context"},
+		{"tags → invalid_context", `{"tags":[{"tag_type":"rfid","value":"NEW"}]}`, "tags", "invalid_context"},
+		{"id → read_only", fmt.Sprintf(`{"id":%d}`, id+99999), "id", "read_only"},
+		{"created_at → read_only", `{"created_at":"2020-01-01T00:00:00Z"}`, "created_at", "read_only"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/locations/%d", id),
+				bytes.NewReader([]byte(tc.body)))
+			req.Header.Set("Content-Type", "application/json")
+			req = withLocationRoundTripOrgContext(req, orgID)
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+			var resp struct {
+				Error struct {
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, tc.wantCode, resp.Error.Fields[0].Code)
+		})
+	}
+}
+
+// TRA-686 / BB29 F8 / TRA-780 F4: `external_key` in a PATCH body is rejected
+// with 400 invalid_context pointing at /locations/{id}/rename. Pre-TRA-780 F4
+// the code was read_only.
 func TestPatchLocation_ExternalKeyRejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -819,7 +874,7 @@ func TestPatchLocation_ExternalKeyRejected400(t *testing.T) {
 			assert.Equal(t, "validation_error", resp.Error.Type)
 			require.Len(t, resp.Error.Fields, 1)
 			assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
-			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+			assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 			assert.Contains(t, resp.Error.Fields[0].Message,
 				"POST /api/v1/locations/{location_id}/rename")
 
@@ -1201,11 +1256,11 @@ func TestPutLocation_NullValidFrom_Rejected400(t *testing.T) {
 	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
 }
 
-// TRA-775 (BB61-3 F1): `tags` PATCH echo on locations is now compared as a
-// set on full tag content, mirroring the asset behavior. A submitted array
-// with the same tag content as the current state matches regardless of
-// order; differing set membership or differing field values on a matching
-// id still returns 400 read_only.
+// TRA-775 (BB61-3 F1) / TRA-780 F4: `tags` PATCH echo on locations is now
+// compared as a set on full tag content, mirroring the asset behavior. A
+// submitted array with the same tag content as the current state matches
+// regardless of order; differing set membership or differing field values
+// on a matching id returns 400 invalid_context (was read_only pre-TRA-780).
 func TestPatchLocation_TagsSetEqualityEcho(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -1305,9 +1360,9 @@ func TestPatchLocation_TagsSetEqualityEcho(t *testing.T) {
 		return rec
 	}
 
-	requireReadOnlyTagsRejection := func(t *testing.T, rec *httptest.ResponseRecorder) {
+	requireTagsRejection := func(t *testing.T, rec *httptest.ResponseRecorder) {
 		t.Helper()
-		require.Equal(t, http.StatusBadRequest, rec.Code, "expected 400 read_only, got %d: %s", rec.Code, rec.Body.String())
+		require.Equal(t, http.StatusBadRequest, rec.Code, "expected 400 invalid_context, got %d: %s", rec.Code, rec.Body.String())
 		var resp struct {
 			Error struct {
 				Type   string `json:"type"`
@@ -1322,7 +1377,7 @@ func TestPatchLocation_TagsSetEqualityEcho(t *testing.T) {
 		assert.Equal(t, "validation_error", resp.Error.Type)
 		require.Len(t, resp.Error.Fields, 1)
 		assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-		assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+		assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 		assert.Contains(t, resp.Error.Fields[0].Message, "POST /api/v1/locations/{location_id}/tags",
 			"message must name the subresource endpoint")
 	}
@@ -1339,17 +1394,17 @@ func TestPatchLocation_TagsSetEqualityEcho(t *testing.T) {
 		rec := patchTags(t, rotatedJSON)
 		require.Equal(t, http.StatusOK, rec.Code, "rotated tags echo must be 200 under set-equality: %s", rec.Body.String())
 	})
-	t.Run("length mismatch (4 vs 3) 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, tooManyJSON))
+	t.Run("length mismatch (4 vs 3) 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, tooManyJSON))
 	})
-	t.Run("same length different id set 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, swappedIDJSON))
+	t.Run("same length different id set 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, swappedIDJSON))
 	})
-	t.Run("same ids wrong tag_type 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, wrongTagTypeJSON))
+	t.Run("same ids wrong tag_type 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, wrongTagTypeJSON))
 	})
-	t.Run("same ids wrong value 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, wrongValueJSON))
+	t.Run("same ids wrong value 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, wrongValueJSON))
 	})
 
 	rows, err := pool.Query(context.Background(), `

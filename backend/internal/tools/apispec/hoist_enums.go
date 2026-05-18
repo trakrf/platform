@@ -59,8 +59,11 @@ var inlineEnumExtractions = []inlineEnumExtraction{
 	{
 		Target:      "ErrorType",
 		Description: "Machine-readable error envelope discriminator. Pairs with `title` and `detail` to drive client-side branching on a stable token (per RFC 9457).",
+		// TRA-780 F2: source pivoted to the hoisted ErrorEnvelope schema; the
+		// `type` enum is now a direct property of the envelope rather than
+		// living one level deep inside ErrorResponse's anonymous `error` object.
 		Sources: []enumSource{
-			{Schema: "errors.ErrorResponse", Property: []string{"error", "type"}},
+			{Schema: "errors.ErrorEnvelope", Property: []string{"type"}},
 		},
 	},
 	{

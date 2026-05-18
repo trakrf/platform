@@ -234,11 +234,13 @@
           },
           "location_external_key": {
             "nullable": true,
+            "readOnly": true,
             "type": "string"
           },
           "location_id": {
             "format": "int64",
             "nullable": true,
+            "readOnly": true,
             "type": "integer"
           },
           "metadata": {
@@ -253,6 +255,7 @@
             "items": {
               "$ref": "#/components/schemas/Tag"
             },
+            "readOnly": true,
             "type": "array"
           },
           "updated_at": {
@@ -546,48 +549,51 @@
         ],
         "type": "object"
       },
+      "ErrorEnvelope": {
+        "description": "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. Carried nested under `error.*` on every error response; content-type is `application/json` (not `application/problem+json`). Generated clients should branch on `type` and `title`, not `detail`. `title` is a stable, machine-readable summary that does not vary between calls for the same condition. `detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
+        "properties": {
+          "detail": {
+            "description": "Specific, human-readable cause of this particular failure. May be empty when title alone fully describes the condition. Do not branch on this value.",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "type": "array"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "status": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Stable, machine-readable summary suitable for client-side branching. Does not vary between calls for the same condition.",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ErrorType"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "request_id"
+        ],
+        "type": "object"
+      },
       "ErrorResponse": {
-        "description": "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). Generated clients should branch on `error.type` and `error.title`, not `error.detail`. `error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. `error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition.",
         "properties": {
           "error": {
-            "properties": {
-              "detail": {
-                "description": "Specific, human-readable cause of this particular failure. May be empty when title alone fully describes the condition. Do not branch on this value.",
-                "type": "string"
-              },
-              "fields": {
-                "items": {
-                  "$ref": "#/components/schemas/FieldError"
-                },
-                "type": "array"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "request_id": {
-                "type": "string"
-              },
-              "status": {
-                "format": "int32",
-                "type": "integer"
-              },
-              "title": {
-                "description": "Stable, machine-readable summary suitable for client-side branching. Does not vary between calls for the same condition.",
-                "type": "string"
-              },
-              "type": {
-                "$ref": "#/components/schemas/ErrorType"
-              }
-            },
-            "required": [
-              "type",
-              "title",
-              "status",
-              "detail",
-              "instance",
-              "request_id"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/ErrorEnvelope"
           }
         },
         "required": [
@@ -896,6 +902,7 @@
             "items": {
               "$ref": "#/components/schemas/Tag"
             },
+            "readOnly": true,
             "type": "array"
           },
           "updated_at": {
@@ -2416,7 +2423,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection (compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `read_only`), and the natural-key reference fields (`external_key`, `location_id`, `location_external_key`). Mutate `external_key` via POST /assets/{asset_id}/rename; asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `assets:write`\n\nApply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400. The rejection `code` splits the two semantic classes: server-managed fields (`id`, `created_at`, `updated_at`, `deleted_at`, `location_id`, `location_external_key`) return `code: read_only` — they have no public mutation path. Fields mutable via a sub-resource verb (`external_key`, `tags`) return `code: invalid_context` and the detail names the correct verb: mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}. The `tags` collection is compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `invalid_context`. Asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API.",
         "operationId": "updateAsset",
         "parameters": [
           {
@@ -5126,7 +5133,7 @@
         ]
       },
       "patch": {
-        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection (compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `read_only`), and the `external_key` natural key. To re-parent, send `parent_id` (surrogate) OR `parent_external_key` (natural key), or both forms in the same body provided they resolve to the same parent (silently normalized to a single re-parent operation, symmetric with CreateLocationRequest); either form accepts `null` to clear the FK, and disagreement between the two forms returns 400 `ambiguous_fields`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.",
+        "description": "**Required scope:** `locations:write`\n\nApply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400. The rejection `code` splits the two semantic classes: server-managed fields (`id`, `created_at`, `updated_at`, `deleted_at`) return `code: read_only` — they have no public mutation path. Fields mutable via a sub-resource verb (`external_key`, `tags`) return `code: invalid_context` and the detail names the correct verb: mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}. The `tags` collection is compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `invalid_context`. To re-parent, send `parent_id` (surrogate) OR `parent_external_key` (natural key), or both forms in the same body provided they resolve to the same parent (silently normalized to a single re-parent operation, symmetric with CreateLocationRequest); either form accepts `null` to clear the FK, and disagreement between the two forms returns 400 `ambiguous_fields`.",
         "operationId": "updateLocation",
         "parameters": [
           {

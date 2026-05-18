@@ -70,8 +70,10 @@ var publicSchemaRenames = map[string]string{
 	"report.PublicAssetHistoryItem":       "AssetHistoryItem",
 	"report.PublicCurrentLocationItem":    "AssetLocationItem",
 
-	// errors
+	// errors — ErrorEnvelope was hoisted out of ErrorResponse in TRA-780 F2
+	// so generated clients get an independently importable class name.
 	"errors.ErrorResponse": "ErrorResponse",
+	"errors.ErrorEnvelope": "ErrorEnvelope",
 	"errors.FieldError":    "FieldError",
 
 	// shared — Tag and TagRequest are discriminated unions after
