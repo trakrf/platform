@@ -34,7 +34,7 @@ type LocationWithRelations struct {
 }
 
 type CreateLocationRequest struct {
-	Name string `json:"name" validate:"required,min=1,max=255,no_control_chars" example:"Warehouse 1"`
+	Name string `json:"name" validate:"required,min=1,max=255,display_name" example:"Warehouse 1"`
 	// external_key is optional. Omit to receive a server-assigned key in the
 	// format LOC-NNNN (per-organization sequence), parallel to assets'
 	// ASSET-NNNN behavior. When supplied, must satisfy the external_key_pattern.
@@ -102,7 +102,7 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // ambiguous_fields. Symmetric with CreateLocationRequest. See the PATCH
 // reconciliation block in handlers/locations.
 type UpdateLocationRequest struct {
-	Name        *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,no_control_chars" example:"Warehouse 1"`
+	Name        *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,display_name" example:"Warehouse 1"`
 	ParentID    *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
 	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`

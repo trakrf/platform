@@ -435,3 +435,55 @@ func TestRespondValidationError_UnknownTagFallsBackToInvalidValue(t *testing.T) 
 	}
 	assert.Nil(t, resp.Error.Fields[0].Params, "unknown tag should produce no structured params (omitempty contract)")
 }
+
+// TRA-778 (BB62-1 F1): the display_name validator must reject
+// whitespace-only values and any C0 control char (no \t/\n/\r whitelist)
+// while still accepting single-character and internally-spaced names.
+func TestDisplayNameValidator_AcceptsAndRejects(t *testing.T) {
+	v := validator.New()
+	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
+	httputil.RegisterCustomValidations(v)
+
+	type s struct {
+		Name string `json:"name" validate:"display_name"`
+	}
+
+	accept := []string{
+		"",          // empty is left to min/required; validator must not fire
+		"X",         // single character
+		"Asset 1",   // internal whitespace
+		"léger-é",   // non-ASCII letters
+		"a b c d e", // multiple internal spaces
+	}
+	for _, name := range accept {
+		t.Run("accept/"+name, func(t *testing.T) {
+			if err := v.Struct(s{Name: name}); err != nil {
+				t.Fatalf("display_name unexpectedly rejected %q: %v", name, err)
+			}
+		})
+	}
+
+	reject := []string{
+		" ",             // single space
+		"   ",           // multi-space
+		"\t",            // tab
+		"\n",            // LF
+		"\r",            // CR
+		" \t\n ",        // mixed whitespace
+		"line1\nline2",  // embedded LF
+		"line1\rline2",  // embedded CR
+		"col1\tcol2",    // embedded tab
+		"foo\x00bar",    // NUL
+		"foo\x7Fbar",    // DEL
+		" leading",      // leading whitespace (anchored end OK but start fails \S)
+		"trailing ",     // trailing whitespace (anchored start OK but end fails \S)
+	}
+	for _, name := range reject {
+		t.Run("reject/"+name, func(t *testing.T) {
+			err := v.Struct(s{Name: name})
+			if err == nil {
+				t.Fatalf("display_name unexpectedly accepted %q", name)
+			}
+		})
+	}
+}

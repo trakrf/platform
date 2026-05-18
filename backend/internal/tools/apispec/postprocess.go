@@ -95,6 +95,9 @@ func postprocessPublic(doc *openapi3.T) error {
 	if err := markMutuallyExclusiveFieldPairs(doc, mutuallyExclusiveFieldPairs); err != nil {
 		return err
 	}
+	if err := markDisplayNameFields(doc, displayNameFields); err != nil {
+		return err
+	}
 	if err := markPrintableStringFields(doc, printableStringFields); err != nil {
 		return err
 	}
@@ -951,16 +954,51 @@ func markMutuallyExclusiveFieldPairs(doc *openapi3.T, pairs []struct{ Schema, Fi
 // behavior is preserved.
 const printableStringRegex = `^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$`
 
+// displayNameRegex mirrors the server-side `display_name` validator (TRA-778 /
+// BB62-1 F1): same C0/DEL exclusion as printableStringRegex but additionally
+// rejects tab/LF/CR (no free-form whitelist) and requires at least one
+// non-whitespace character. The "non-whitespace anchor on both ends with any
+// printable middle" shape covers single-character names ("X") and names with
+// internal whitespace ("Asset 1") while rejecting "   ", "\t", and
+// "line1\nline2". TRA-687 raw-string note applies: literal `\xNN` escapes
+// survive YAML/JSON serialization for Python source-emission targets.
+const displayNameRegex = `^\S(?:[^\x00-\x1F\x7F]*\S)?$`
+
 // printableStringFields names (schema, field) pairs that the no_control_chars
 // validator gates server-side. Mirror in the spec so generated fuzz payloads
 // don't trip the validator with class-A NUL / control-char strings.
+//
+// TRA-778: `name` moved off this map to displayNameFields under the stricter
+// display_name validator. Description and tag value fields keep the
+// multi-line-tolerant printableStringRegex.
 var printableStringFields = map[string][]string{
-	"asset.CreateAssetWithTagsRequest":       {"name", "description"},
-	"asset.UpdateAssetRequest":               {"name", "description"},
-	"location.CreateLocationWithTagsRequest": {"name", "description"},
-	"location.UpdateLocationRequest":         {"name", "description"},
+	"asset.CreateAssetWithTagsRequest":       {"description"},
+	"asset.UpdateAssetRequest":               {"description"},
+	"location.CreateLocationWithTagsRequest": {"description"},
+	"location.UpdateLocationRequest":         {"description"},
 	"shared.TagRequest":                      {"value"},
 	"shared.Tag":                             {"value"},
+}
+
+// displayNameFields names (schema, field) pairs that the server-side
+// `display_name` validator gates (TRA-778 / BB62-1 F1). Mirror the tighter
+// pattern in the spec so generated clients and Schemathesis treat
+// whitespace-only and embedded-newline names as out-of-schema rather than
+// as contract gaps.
+var displayNameFields = map[string][]string{
+	"asset.CreateAssetWithTagsRequest":       {"name"},
+	"asset.UpdateAssetRequest":               {"name"},
+	"location.CreateLocationWithTagsRequest": {"name"},
+	"location.UpdateLocationRequest":         {"name"},
+}
+
+// markDisplayNameFields sets `pattern: displayNameRegex` on each listed
+// (schema, field) pair (TRA-778). Same lenient/idempotent semantics as
+// markPrintableStringFields. Called before markPrintableStringFields so the
+// stricter display-name pattern wins on `name` fields; printable-string
+// pattern still applies to description/value siblings declared separately.
+func markDisplayNameFields(doc *openapi3.T, fields map[string][]string) error {
+	return applyFieldPattern(doc, fields, displayNameRegex)
 }
 
 // markPrintableStringFields sets `pattern: printableStringRegex` on each
@@ -968,6 +1006,10 @@ var printableStringFields = map[string][]string{
 // lenient pattern as markNullableFields. Idempotent: if an explicit
 // pattern is already declared, it is preserved.
 func markPrintableStringFields(doc *openapi3.T, fields map[string][]string) error {
+	return applyFieldPattern(doc, fields, printableStringRegex)
+}
+
+func applyFieldPattern(doc *openapi3.T, fields map[string][]string, pattern string) error {
 	if doc.Components == nil || doc.Components.Schemas == nil {
 		return nil
 	}
@@ -982,7 +1024,7 @@ func markPrintableStringFields(doc *openapi3.T, fields map[string][]string) erro
 				continue
 			}
 			if prop.Value.Pattern == "" {
-				prop.Value.Pattern = printableStringRegex
+				prop.Value.Pattern = pattern
 			}
 		}
 	}

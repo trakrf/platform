@@ -38,7 +38,7 @@ type CreateAssetRequest struct {
 	// format ASSET-NNNN (per-organization sequence). When supplied, must
 	// satisfy the external_key_pattern.
 	ExternalKey string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"forklift-3"`
-	Name        string               `json:"name" validate:"required,min=1,max=255,no_control_chars" example:"Forklift 3"`
+	Name        string               `json:"name" validate:"required,min=1,max=255,display_name" example:"Forklift 3"`
 	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Main warehouse forklift"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
@@ -104,7 +104,7 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // never written by PATCH; the only valid use is to echo the current value
 // back. The handler nils them out after the echo check passes.
 type UpdateAssetRequest struct {
-	Name        *string              `json:"name" validate:"omitempty,min=1,max=255,no_control_chars" example:"Forklift 3"`
+	Name        *string              `json:"name" validate:"omitempty,min=1,max=255,display_name" example:"Forklift 3"`
 	Description *string              `json:"description" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`

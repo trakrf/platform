@@ -112,7 +112,7 @@ func (handler *Handler) resolveParent(
 // @Produce      json
 // @Param        request  body  location.CreateLocationWithTagsRequest  true  "Location to create with optional tags"
 // @Success      201  {object}  locations.CreateLocationResponse
-// @Header       201  {string}  Location  "Canonical URL of the created resource"
+// @Header       201  {string}  Location  "Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -1294,7 +1294,7 @@ type AddTagResponse struct {
 // @Param location_id path int               true "Location ID" minimum(1) maximum(2147483647) format(int32)
 // @Param request body shared.TagRequest true "Tag to attach"
 // @Success 201 {object} locations.AddTagResponse "tag attached"
-// @Header  201 {string} Location "Canonical URL of the created tag"
+// @Header  201 {string} Location "Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
 // @Failure 403 {object} modelerrors.ErrorResponse "forbidden"
