@@ -668,6 +668,105 @@ func TestSameJSON(t *testing.T) {
 	}
 }
 
+// TRA-775 (BB61-3 F1): SameTagSet compares a peeked tags JSON value
+// against the current []shared.Tag as a set on full tag content, so a
+// reordered-but-set-equal echo accepts while differing set membership or
+// differing field values on a matching id rejects.
+func TestSameTagSet(t *testing.T) {
+	tagA := shared.Tag{ID: 1, TagType: "rfid", Value: "alpha"}
+	tagB := shared.Tag{ID: 2, TagType: "rfid", Value: "bravo"}
+	tagC := shared.Tag{ID: 3, TagType: "ble", Value: "charlie"}
+	current := []shared.Tag{tagA, tagB, tagC}
+
+	cases := []struct {
+		name      string
+		submitted string
+		expected  []shared.Tag
+		want      bool
+	}{
+		{
+			name:      "same order matches",
+			submitted: `[{"id":1,"tag_type":"rfid","value":"alpha"},{"id":2,"tag_type":"rfid","value":"bravo"},{"id":3,"tag_type":"ble","value":"charlie"}]`,
+			expected:  current,
+			want:      true,
+		},
+		{
+			name:      "reverse order matches",
+			submitted: `[{"id":3,"tag_type":"ble","value":"charlie"},{"id":2,"tag_type":"rfid","value":"bravo"},{"id":1,"tag_type":"rfid","value":"alpha"}]`,
+			expected:  current,
+			want:      true,
+		},
+		{
+			name:      "arbitrary permutation matches",
+			submitted: `[{"id":2,"tag_type":"rfid","value":"bravo"},{"id":3,"tag_type":"ble","value":"charlie"},{"id":1,"tag_type":"rfid","value":"alpha"}]`,
+			expected:  current,
+			want:      true,
+		},
+		{
+			name:      "empty echo against empty current matches",
+			submitted: `[]`,
+			expected:  []shared.Tag{},
+			want:      true,
+		},
+		{
+			name:      "submitted length longer differs",
+			submitted: `[{"id":1,"tag_type":"rfid","value":"alpha"},{"id":2,"tag_type":"rfid","value":"bravo"},{"id":3,"tag_type":"ble","value":"charlie"},{"id":4,"tag_type":"rfid","value":"delta"}]`,
+			expected:  current,
+			want:      false,
+		},
+		{
+			name:      "submitted length shorter differs",
+			submitted: `[{"id":1,"tag_type":"rfid","value":"alpha"},{"id":2,"tag_type":"rfid","value":"bravo"}]`,
+			expected:  current,
+			want:      false,
+		},
+		{
+			name:      "same length different id set differs",
+			submitted: `[{"id":1,"tag_type":"rfid","value":"alpha"},{"id":2,"tag_type":"rfid","value":"bravo"},{"id":99,"tag_type":"ble","value":"charlie"}]`,
+			expected:  current,
+			want:      false,
+		},
+		{
+			name:      "same ids wrong tag_type differs",
+			submitted: `[{"id":1,"tag_type":"rfid","value":"alpha"},{"id":2,"tag_type":"barcode","value":"bravo"},{"id":3,"tag_type":"ble","value":"charlie"}]`,
+			expected:  current,
+			want:      false,
+		},
+		{
+			name:      "same ids wrong value differs",
+			submitted: `[{"id":1,"tag_type":"rfid","value":"alpha"},{"id":2,"tag_type":"rfid","value":"BRAVO"},{"id":3,"tag_type":"ble","value":"charlie"}]`,
+			expected:  current,
+			want:      false,
+		},
+		{
+			name:      "null submitted differs from empty current",
+			submitted: `null`,
+			expected:  []shared.Tag{},
+			want:      false,
+		},
+		{
+			name:      "non-array submitted differs",
+			submitted: `"not an array"`,
+			expected:  current,
+			want:      false,
+		},
+		{
+			name:      "malformed json differs",
+			submitted: `[{`,
+			expected:  current,
+			want:      false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := httputil.SameTagSet(json.RawMessage(tc.submitted), tc.expected)
+			if got != tc.want {
+				t.Fatalf("SameTagSet(%s, %v) = %v, want %v", tc.submitted, tc.expected, got, tc.want)
+			}
+		})
+	}
+}
+
 // TRA-721: SameJSONInstant compares a peeked datetime JSON value against
 // an expected time.Time / shared.PublicTime as instants, so byte-different
 // RFC 3339 representations of the same moment compare equal. The four

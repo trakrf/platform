@@ -305,7 +305,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a location
-// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection, and the `external_key` natural key. To re-parent, send `parent_id` (surrogate) OR `parent_external_key` (natural key), or both forms in the same body provided they resolve to the same parent (silently normalized to a single re-parent operation, symmetric with CreateLocationRequest); either form accepts `null` to clear the FK, and disagreement between the two forms returns 400 `ambiguous_fields`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to a location. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. An empty body (`{}`) is a no-op and returns the current resource unchanged. Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400 with `code: read_only`. This applies to the server-managed surrogate id + timestamps (`id`, `created_at`, `updated_at`, `deleted_at`), the `tags` collection (compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `read_only`), and the `external_key` natural key. To re-parent, send `parent_id` (surrogate) OR `parent_external_key` (natural key), or both forms in the same body provided they resolve to the same parent (silently normalized to a single re-parent operation, symmetric with CreateLocationRequest); either form accepts `null` to clear the FK, and disagreement between the two forms returns 400 `ambiguous_fields`. Mutate `external_key` via POST /locations/{location_id}/rename; mutate `tags` via POST /locations/{location_id}/tags and DELETE /locations/{location_id}/tags/{tag_id}.
 // @Tags         locations,public
 // @ID           locations.update
 // @Accept       json
@@ -489,11 +489,19 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		}
 	}
 	if v, present := rawReadOnly["tags"]; present {
-		if !httputil.SameJSON(v, currentView.Tags) {
+		// TRA-775 (BB61-3 F1): tags PATCH echo is compared as a set, not a
+		// sequence. A submitted array with the same tag content as the
+		// current state matches regardless of element order, so generated
+		// clients that deserialize tags into unordered collections (Python
+		// set, Go map, ORMs with hash-ordered associations) succeed on a
+		// verbatim GET → PATCH round-trip without manual sort. Differing
+		// set membership or differing field values on a matching id still
+		// returns 400 read_only.
+		if !httputil.SameTagSet(v, currentView.Tags) {
 			echoViolations = append(echoViolations, modelerrors.FieldError{
 				Field:   "tags",
 				Code:    "read_only",
-				Message: "the tags field on PATCH must equal the current value (idempotent echo only); use POST /api/v1/locations/{location_id}/tags and DELETE /api/v1/locations/{location_id}/tags/{tag_id} to mutate",
+				Message: "the tags field on PATCH must equal the current value as a set (idempotent echo only; ordering is not significant); use POST /api/v1/locations/{location_id}/tags and DELETE /api/v1/locations/{location_id}/tags/{tag_id} to mutate",
 			})
 		}
 	}

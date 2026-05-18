@@ -1523,3 +1523,197 @@ func TestPutAsset_NullValidFrom_Rejected400(t *testing.T) {
 	assert.Equal(t, "valid_from", resp.Error.Fields[0].Field)
 	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
 }
+
+// TRA-775 (BB61-3 F1): `tags` PATCH echo is now compared as a set on full
+// tag content. A submitted array with the same tag content as the current
+// state matches regardless of order — generated clients that deserialize
+// tags into unordered collections (Python set, Go map, ORMs with
+// hash-ordered associations) no longer trip 400 read_only on a verbatim
+// GET → PATCH round-trip. Differing set membership or differing field
+// values on a matching id still returns 400 read_only.
+func TestPatchAsset_TagsSetEqualityEcho(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-TAGS-SETEQ", "TagsSetEq")
+
+	// Seed three tags with mixed tag_type to exercise full-content checks.
+	type seedTag struct {
+		tagType string
+		value   string
+	}
+	seeded := []seedTag{
+		{"rfid", "V-ALPHA"},
+		{"rfid", "V-BRAVO"},
+		{"ble", "V-CHARLIE"},
+	}
+	ids := make([]int, 0, len(seeded))
+	for _, s := range seeded {
+		var tagID int
+		require.NoError(t, pool.QueryRow(context.Background(), `
+			INSERT INTO trakrf.tags (org_id, type, value, asset_id, is_active)
+			VALUES ($1, $2, $3, $4, true) RETURNING id
+		`, orgID, s.tagType, s.value, id).Scan(&tagID))
+		ids = append(ids, tagID)
+	}
+
+	handler := NewHandler(store)
+	router := setupRoundTripRouter(handler)
+
+	// GET the current tags wire shape so we have an authoritative starting
+	// point — the integration matters: server-emitted IDs, server-emitted
+	// tag_type ordering, etc.
+	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
+	getReq = withRoundTripOrgContext(getReq, orgID)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	require.Equal(t, http.StatusOK, getRec.Code, "GET asset failed: %s", getRec.Body.String())
+
+	var getResp struct {
+		Data struct {
+			Tags []map[string]any `json:"tags"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &getResp))
+	require.Len(t, getResp.Data.Tags, 3, "asset must report all three seeded tags")
+
+	current := getResp.Data.Tags
+	currentJSON, err := json.Marshal(current)
+	require.NoError(t, err)
+
+	reversed := []map[string]any{current[2], current[1], current[0]}
+	reversedJSON, err := json.Marshal(reversed)
+	require.NoError(t, err)
+
+	rotated := []map[string]any{current[1], current[2], current[0]}
+	rotatedJSON, err := json.Marshal(rotated)
+	require.NoError(t, err)
+
+	// Length 4: extend with an extra tag object (any plausible id beyond
+	// the seeded ones).
+	extraTag := map[string]any{"id": ids[2] + 1000, "tag_type": "rfid", "value": "V-EXTRA"}
+	tooMany := append([]map[string]any{}, current...)
+	tooMany = append(tooMany, extraTag)
+	tooManyJSON, err := json.Marshal(tooMany)
+	require.NoError(t, err)
+
+	// Same length, swap one id for a non-existent one.
+	swappedID := []map[string]any{
+		current[0],
+		current[1],
+		{"id": ids[2] + 999, "tag_type": current[2]["tag_type"], "value": current[2]["value"]},
+	}
+	swappedIDJSON, err := json.Marshal(swappedID)
+	require.NoError(t, err)
+
+	// Same length, same ids, but tweak one tag_type.
+	wrongTagType := []map[string]any{
+		current[0],
+		{"id": current[1]["id"], "tag_type": "barcode", "value": current[1]["value"]},
+		current[2],
+	}
+	wrongTagTypeJSON, err := json.Marshal(wrongTagType)
+	require.NoError(t, err)
+
+	// Same length, same ids, but tweak one value.
+	wrongValue := []map[string]any{
+		current[0],
+		{"id": current[1]["id"], "tag_type": current[1]["tag_type"], "value": "MUTATED"},
+		current[2],
+	}
+	wrongValueJSON, err := json.Marshal(wrongValue)
+	require.NoError(t, err)
+
+	patchTags := func(t *testing.T, tagsJSON []byte) *httptest.ResponseRecorder {
+		t.Helper()
+		body := []byte(fmt.Sprintf(`{"tags":%s}`, string(tagsJSON)))
+		patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id), bytes.NewReader(body))
+		patchReq.Header.Set("Content-Type", "application/json")
+		patchReq = withRoundTripOrgContext(patchReq, orgID)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, patchReq)
+		return rec
+	}
+
+	requireReadOnlyTagsRejection := func(t *testing.T, rec *httptest.ResponseRecorder) {
+		t.Helper()
+		require.Equal(t, http.StatusBadRequest, rec.Code, "expected 400 read_only, got %d: %s", rec.Code, rec.Body.String())
+		var resp struct {
+			Error struct {
+				Type   string `json:"type"`
+				Fields []struct {
+					Field   string `json:"field"`
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"fields"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "validation_error", resp.Error.Type)
+		require.Len(t, resp.Error.Fields, 1)
+		assert.Equal(t, "tags", resp.Error.Fields[0].Field)
+		assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+		assert.Contains(t, resp.Error.Fields[0].Message, "POST /api/v1/assets/{asset_id}/tags",
+			"message must name the subresource endpoint")
+	}
+
+	t.Run("in-order echo 200 (regression)", func(t *testing.T) {
+		rec := patchTags(t, currentJSON)
+		require.Equal(t, http.StatusOK, rec.Code, "in-order tags echo must remain 200: %s", rec.Body.String())
+	})
+	t.Run("reverse-order echo 200 (new)", func(t *testing.T) {
+		rec := patchTags(t, reversedJSON)
+		require.Equal(t, http.StatusOK, rec.Code, "reverse-order tags echo must be 200 under set-equality: %s", rec.Body.String())
+	})
+	t.Run("rotated-order echo 200 (new)", func(t *testing.T) {
+		rec := patchTags(t, rotatedJSON)
+		require.Equal(t, http.StatusOK, rec.Code, "rotated tags echo must be 200 under set-equality: %s", rec.Body.String())
+	})
+	t.Run("length mismatch (4 vs 3) 400 read_only", func(t *testing.T) {
+		requireReadOnlyTagsRejection(t, patchTags(t, tooManyJSON))
+	})
+	t.Run("same length different id set 400 read_only", func(t *testing.T) {
+		requireReadOnlyTagsRejection(t, patchTags(t, swappedIDJSON))
+	})
+	t.Run("same ids wrong tag_type 400 read_only", func(t *testing.T) {
+		requireReadOnlyTagsRejection(t, patchTags(t, wrongTagTypeJSON))
+	})
+	t.Run("same ids wrong value 400 read_only", func(t *testing.T) {
+		requireReadOnlyTagsRejection(t, patchTags(t, wrongValueJSON))
+	})
+
+	// After all of the above (200 echoes + 400 rejections), the persisted
+	// tag set must remain unchanged in ids and content.
+	rows, err := pool.Query(context.Background(), `
+		SELECT id, type, value FROM trakrf.tags
+		WHERE asset_id = $1 AND deleted_at IS NULL
+		ORDER BY id
+	`, id)
+	require.NoError(t, err)
+	defer rows.Close()
+	var persisted []struct {
+		ID    int
+		Type  string
+		Value string
+	}
+	for rows.Next() {
+		var r struct {
+			ID    int
+			Type  string
+			Value string
+		}
+		require.NoError(t, rows.Scan(&r.ID, &r.Type, &r.Value))
+		persisted = append(persisted, r)
+	}
+	require.NoError(t, rows.Err())
+	require.Len(t, persisted, 3, "tag set must be unchanged after echo PATCHes")
+	for i, want := range seeded {
+		assert.Equal(t, ids[i], persisted[i].ID)
+		assert.Equal(t, want.tagType, persisted[i].Type)
+		assert.Equal(t, want.value, persisted[i].Value)
+	}
+}
