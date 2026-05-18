@@ -867,6 +867,7 @@ var publicResponseSchemas = []string{
 
 	// error envelopes — also returned over the wire
 	"errors.ErrorResponse",
+	"errors.ErrorEnvelope",
 	"errors.FieldError",
 }
 
@@ -1696,68 +1697,71 @@ var internalOnlyRequiredFields = map[string][]string{
 	"org.ListAPIKeysResponse":     {"data", "limit", "offset", "total_count"},
 }
 
-// readOnlyFields names schema/field pairs whose values are server-managed and
-// must not be supplied on the write path (TRA-587 / BB16 S8). Generators that
-// honor `readOnly: true` (openapi-generator-cli, openapi-typescript) split the
-// schema into read and write variants so SDK consumers can't accidentally send
-// these fields back on a verbatim read → write round-trip.
+// readOnlyFields names schema/field pairs whose values are server-managed
+// or otherwise immutable via the write verb on the same resource. Generators
+// that honor `readOnly: true` (openapi-generator-cli, openapi-typescript)
+// split the schema into read and write variants so SDK consumers can't
+// accidentally send these fields back on a verbatim read → write round-trip
+// (TRA-587 / BB16 S8).
 //
-// `tags`, `external_key`, and `parent_external_key` (locations) are
-// intentionally NOT marked readOnly. They have dedicated mutation paths —
-// POST/DELETE /tags for tags and POST /rename for the natural keys — and
-// the PATCH validator rejects each with a per-category code (tags →
-// invalid_value, the natural-key forms → read_only) rather than silently
-// dropping them (TRA-686 / BB29 F7+F8, history TRA-643 / TRA-664). Keeping
-// these fields out of the readOnly list preserves the runtime signal —
-// codegen tools won't strip them from request shapes, so an SDK that
-// mistakenly sends them surfaces the failure.
+// The runtime PATCH validator applies an accept-if-matches / reject-if-differs
+// rule to every field marked here — a verbatim GET → PATCH echo of the
+// current value silently normalizes out, and a differing value is rejected
+// with `code: read_only` (server-managed fields) or `code: invalid_context`
+// (sub-resource-mutable fields, TRA-780 F4). The OpenAPI 3.0 §4.7.6 semantic
+// of `readOnly: true` ("MAY be sent in response but SHOULD NOT be sent in
+// request") matches the runtime rule for both categories, so the annotation
+// covers them uniformly even though the runtime code differs.
+//
+// TRA-780 F1 added `location_id`, `location_external_key`, and `tags` to
+// AssetView, and `tags` to LocationView. Strict-typed generators now omit
+// these fields from PATCH request constructions so SDK consumers see the
+// constraint at compile time rather than runtime; clients that do send them
+// still get a structured rejection (per the runtime code split above).
 //
 // markReadOnlyFields errors if a configured schema or field is missing from
 // the spec — keeps this map honest as struct fields rename or move.
 var readOnlyFields = map[string][]string{
-	"asset.PublicAssetView":            {"id", "created_at", "updated_at", "deleted_at"},
-	"location.PublicLocationView":      {"id", "created_at", "updated_at", "deleted_at"},
+	"asset.PublicAssetView":            {"id", "created_at", "updated_at", "deleted_at", "location_id", "location_external_key", "tags"},
+	"location.PublicLocationView":      {"id", "created_at", "updated_at", "deleted_at", "tags"},
 	"org.OrgMeView":                    {"id"},
 	"shared.Tag":                       {"id"},
 	"report.PublicCurrentLocationItem": {"asset_deleted_at"},
 }
 
-// annotateErrorEnvelope adds a schema-level description to errors.ErrorResponse
+// annotateErrorEnvelope adds a schema-level description to errors.ErrorEnvelope
 // (and per-property descriptions on the title and detail fields) documenting
-// the title vs detail contract from TRA-517 AC4. swaggo doesn't propagate
-// godoc on a struct that wraps an anonymous nested struct, so the
-// description has to be applied here.
+// the title vs detail contract from TRA-517 AC4. The envelope was hoisted
+// out of errors.ErrorResponse in TRA-780 F2 so generated clients get an
+// independently importable schema name; this annotator pivoted along with
+// the hoist.
 //
-// Also sets the required: list on the inner anonymous `error` object. The
-// generator only writes a top-level required: for the wrapper struct, so the
-// inner Type/Title/Status/Detail/Instance/RequestID fields — which the
-// service always emits — never get marked required. Fields with json
-// `,omitempty` (e.g. Fields []FieldError) stay optional. TRA-632 / A1.
+// Also sets the required: list on ErrorEnvelope. The generator only writes
+// a top-level required: for ErrorResponse (the wrapper), so the envelope's
+// Type/Title/Status/Detail/Instance/RequestID fields — which the service
+// always emits — never get marked required. Fields with json `,omitempty`
+// (e.g. Fields []FieldError) stay optional. TRA-632 / A1.
 func annotateErrorEnvelope(doc *openapi3.T) {
 	if doc.Components == nil || doc.Components.Schemas == nil {
 		return
 	}
-	ref := doc.Components.Schemas["errors.ErrorResponse"]
-	if ref == nil || ref.Value == nil {
+	env := doc.Components.Schemas["errors.ErrorEnvelope"]
+	if env == nil || env.Value == nil {
 		return
 	}
-	ref.Value.Description = "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. " +
-		"Fields are nested under `error.*` and content-type is `application/json` (not `application/problem+json`). " +
-		"Generated clients should branch on `error.type` and `error.title`, not `error.detail`. " +
-		"`error.title` is a stable, machine-readable summary that does not vary between calls for the same condition. " +
-		"`error.detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition."
+	env.Value.Description = "TrakRF error envelope, modeled on RFC 7807 but not 7807-compliant. " +
+		"Carried nested under `error.*` on every error response; content-type is `application/json` (not `application/problem+json`). " +
+		"Generated clients should branch on `type` and `title`, not `detail`. " +
+		"`title` is a stable, machine-readable summary that does not vary between calls for the same condition. " +
+		"`detail` is the specific, human-readable cause of this particular failure and may be empty when title alone fully describes the condition."
 
-	errProp := ref.Value.Properties["error"]
-	if errProp == nil || errProp.Value == nil {
-		return
-	}
-	if title := errProp.Value.Properties["title"]; title != nil && title.Value != nil {
+	if title := env.Value.Properties["title"]; title != nil && title.Value != nil {
 		title.Value.Description = "Stable, machine-readable summary suitable for client-side branching. Does not vary between calls for the same condition."
 	}
-	if detail := errProp.Value.Properties["detail"]; detail != nil && detail.Value != nil {
+	if detail := env.Value.Properties["detail"]; detail != nil && detail.Value != nil {
 		detail.Value.Description = "Specific, human-readable cause of this particular failure. May be empty when title alone fully describes the condition. Do not branch on this value."
 	}
-	errProp.Value.Required = []string{"type", "title", "status", "detail", "instance", "request_id"}
+	env.Value.Required = []string{"type", "title", "status", "detail", "instance", "request_id"}
 }
 
 // markNullableFields walks doc.Components.Schemas and sets nullable:true

@@ -103,7 +103,8 @@ func TestPatchLocation_NaturalKey_ExternalKey_Matches200(t *testing.T) {
 	assert.Equal(t, "LOC-EK-MATCH", resp.Data["external_key"])
 }
 
-// TRA-699 §2.B: external_key differing → 400 read_only naming /rename.
+// TRA-699 §2.B / TRA-780 F4: external_key differing → 400 invalid_context
+// naming /rename. Code shifted from read_only to invalid_context in TRA-780.
 func TestPatchLocation_NaturalKey_ExternalKey_Differs400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -121,7 +122,7 @@ func TestPatchLocation_NaturalKey_ExternalKey_Differs400(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Error.Fields, 1)
 	assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
-	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+	assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 	assert.Contains(t, resp.Error.Fields[0].Message, "/rename")
 }
 
@@ -295,10 +296,11 @@ func TestPatchLocation_NaturalKey_ParentIDStillWritable(t *testing.T) {
 	assert.Equal(t, destParent, *dbParent)
 }
 
-// TRA-702 / BB32 D2: a single differing read_only field must echo
-// fields[0].message verbatim in detail. Pre-TRA-702 the inline emit-site
-// wrote the literal "validation failed", which buried the redirect-to-/rename
-// message inside fields[0] where AI integrators were less likely to read it.
+// TRA-702 / BB32 D2: a single differing read-only field (here external_key,
+// rejected with invalid_context post-TRA-780 F4) must echo fields[0].message
+// verbatim in detail. Pre-TRA-702 the inline emit-site wrote the literal
+// "validation failed", which buried the redirect-to-/rename message inside
+// fields[0] where AI integrators were less likely to read it.
 func TestPatchLocation_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -321,13 +323,15 @@ func TestPatchLocation_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T
 		"detail must name the rename endpoint")
 }
 
-// TRA-702 / BB32 D3: a PATCH body with multiple differing read_only fields
-// must surface one entry per field in fields[] AND a "(and N more
-// validation errors)" suffix in detail.
+// TRA-702 / BB32 D3 / TRA-780 F4: a PATCH body with multiple differing
+// read-only fields must surface one entry per field in fields[] AND a
+// "(and N more validation errors)" suffix in detail.
 //
 // TRA-719 / BB35 B2: parent_external_key is no longer read_only — the
 // multi-field case is now external_key (natural key, /rename-only) paired
-// with a server-managed read_only field (id).
+// with a server-managed read-only field (id). After TRA-780 F4 the
+// rejection codes split: external_key → invalid_context (sub-resource-
+// mutable); id → read_only (server-managed).
 func TestPatchLocation_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -338,20 +342,20 @@ func TestPatchLocation_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *t
 	id, _, _ := seedLocationWithOptionalParent(t, pool, orgID, "LOC-D3-MULTI", "D3Multi", "LOC-D3-PARENT")
 	router := setupLocationRoundTripRouter(NewHandler(store))
 
-	// Both read_only fields differ from current resource state.
+	// Both fields differ from current resource state.
 	rec := patchLoc(t, router, orgID, id,
 		fmt.Sprintf(`{"external_key":"LOC-OTHER","id":%d}`, id+1))
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 
 	var resp locPatchErrorResp
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Error.Fields, 2, "both differing read_only fields must surface")
+	require.Len(t, resp.Error.Fields, 2, "both differing fields must surface")
 
 	fields := map[string]string{}
 	for _, f := range resp.Error.Fields {
 		fields[f.Field] = f.Code
 	}
-	assert.Equal(t, "read_only", fields["external_key"])
+	assert.Equal(t, "invalid_context", fields["external_key"])
 	assert.Equal(t, "read_only", fields["id"])
 
 	assert.Contains(t, resp.Error.Detail, "(and 1 more validation error)",

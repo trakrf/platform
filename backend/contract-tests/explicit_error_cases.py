@@ -196,20 +196,44 @@ def main() -> int:
         body,
     )
 
-    # --- read_only: PATCH attempting to mutate external_key directly ---
-    # PATCH requires application/merge-patch+json per the public spec; sending
-    # plain application/json returns 415 with no fields[], which fails coverage.
+    # --- read_only: PATCH attempting to mutate a truly server-managed field ---
+    # `id` is server-assigned and immutable with no public mutation path, so
+    # a differing value returns `code: read_only` (the "server-managed"
+    # branch of the TRA-780 F4 split — `external_key` and `tags` now emit
+    # `invalid_context` instead, since they're mutable via a sub-resource
+    # verb). PATCH requires application/merge-patch+json per the public
+    # spec; sending plain application/json returns 415 with no fields[],
+    # which fails coverage.
     aid = resolve_seed_asset_id()
     if aid is not None:
         status, body = call(
             "PATCH",
             f"/api/v1/assets/{aid}",
-            body={"external_key": "TRA-692-blocked"},
+            body={"id": int(aid) + 99999},
             content_type="application/merge-patch+json",
         )
         record(
             observed,
-            f"PATCH /assets/{aid} external_key=… → read_only",
+            f"PATCH /assets/{aid} differing id → read_only",
+            status,
+            body,
+        )
+
+        # --- invalid_context: PATCH attempting to mutate external_key
+        # directly — emits `code: invalid_context` post-TRA-780 F4 since the
+        # field is mutable via POST /rename, not via PATCH. Complements the
+        # query-param case above (include_deleted on a detail endpoint) so
+        # both surfaces — body field and query param — are deterministically
+        # covered.
+        status, body = call(
+            "PATCH",
+            f"/api/v1/assets/{aid}",
+            body={"external_key": "TRA-780-blocked"},
+            content_type="application/merge-patch+json",
+        )
+        record(
+            observed,
+            f"PATCH /assets/{aid} external_key=… → invalid_context",
             status,
             body,
         )
@@ -217,7 +241,7 @@ def main() -> int:
         # Fallback: PATCH against external-key alias path if the API exposes
         # one, else log skip — coverage check will flag the gap.
         print(
-            "[read_only] no seed asset resolvable; skipping case (gate will flag)",
+            "[read_only/invalid_context PATCH] no seed asset resolvable; skipping cases (gate will flag)",
             file=sys.stderr,
         )
 

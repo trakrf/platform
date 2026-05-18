@@ -45,18 +45,30 @@ func run(inPath, publicOut, internalOut string) error {
 		return err
 	}
 
-	if err := postprocessPublic(public); err != nil {
-		return fmt.Errorf("postprocess public: %w", err)
-	}
+	// TRA-780 F2: postprocessInternal must run AND emit before postprocessPublic.
+	// partition() shallow-copies the doc, so public and internal share
+	// *openapi3.SchemaRef pointers through Components. postprocessPublic's
+	// renamePublicSpec rewrites $refs in place (e.g. errors.ErrorEnvelope →
+	// ErrorEnvelope), which leaks into internal because the SchemaRef objects
+	// are shared. Emitting the internal spec before postprocessPublic mutates
+	// shared state keeps the internal spec self-consistent.
+	//
+	// Pre-TRA-780 the issue was latent: no nested $ref between two errors.*
+	// schemas existed, so the public rename never produced an in-place rewrite
+	// the internal spec would notice. F2 introduced errors.ErrorResponse →
+	// $ref errors.ErrorEnvelope, exposing the bug.
 	if err := postprocessInternal(internal); err != nil {
 		return fmt.Errorf("postprocess internal: %w", err)
 	}
-
-	if err := emit(public, publicOut); err != nil {
-		return fmt.Errorf("emit public: %w", err)
-	}
 	if err := emit(internal, internalOut); err != nil {
 		return fmt.Errorf("emit internal: %w", err)
+	}
+
+	if err := postprocessPublic(public); err != nil {
+		return fmt.Errorf("postprocess public: %w", err)
+	}
+	if err := emit(public, publicOut); err != nil {
+		return fmt.Errorf("emit public: %w", err)
 	}
 	return nil
 }

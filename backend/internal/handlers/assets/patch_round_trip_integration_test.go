@@ -732,16 +732,18 @@ func TestPatchAsset_DatetimeEncodingVariants_InstantEquality_200(t *testing.T) {
 	}
 }
 
-// TRA-710 (BB33 F2): `tags` follows the uniform accept-if-matches /
-// reject-if-differs rule. A submitted `tags` value that does not match
-// the asset's current tag set is rejected with 400 read_only (pointing at
-// the /assets/{id}/tags subresource). A submitted `tags` matching current
-// state is silently stripped (round-trip ergonomic — see
-// TestPatchAsset_TagsMatchesCurrent_200).
+// TRA-710 (BB33 F2) / TRA-780 F4: `tags` follows the uniform
+// accept-if-matches / reject-if-differs rule. A submitted `tags` value
+// that does not match the asset's current tag set is rejected with 400
+// invalid_context (pointing at the /assets/{id}/tags subresource). A
+// submitted `tags` matching current state is silently stripped
+// (round-trip ergonomic — see TestPatchAsset_TagsMatchesCurrent_200).
 //
 // Pre-TRA-710 behavior (TRA-686 / BB29 F7): any `tags` presence was
 // rejected with 400 invalid_value regardless of value, including the
 // verbatim GET → PATCH echo of `[]` against an empty current tag set.
+// Pre-TRA-780 F4 the code was read_only; TRA-780 split read_only (truly
+// server-managed) from invalid_context (sub-resource-mutable).
 func TestPatchAsset_TagsDiffersFromCurrent_Rejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -789,7 +791,7 @@ func TestPatchAsset_TagsDiffersFromCurrent_Rejected400(t *testing.T) {
 			assert.Equal(t, "validation_error", resp.Error.Type)
 			require.Len(t, resp.Error.Fields, 1)
 			assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+			assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 			assert.Contains(t, resp.Error.Fields[0].Message,
 				"POST /api/v1/assets/{asset_id}/tags",
 				"message must name the subresource endpoint")
@@ -862,11 +864,70 @@ func TestPatchAsset_TagsMatchesCurrent_200(t *testing.T) {
 	})
 }
 
-// TRA-686 / BB29 F8: `external_key` in a PATCH body is rejected with 400
-// read_only pointing at the rename endpoint (POST /assets/{id}/rename).
-// Silent-drop would let an integrator believe a rename PATCH succeeded
-// while the natural key — the join key downstream systems rely on —
-// stayed unchanged.
+// TRA-780 F4: read_only / invalid_context semantic split on PATCH /assets.
+// Server-managed fields (id, timestamps, location_id, location_external_key
+// — derived from scan ingestion, no public mutation path) keep code: read_only.
+// Sub-resource-mutable fields (external_key via /rename; tags via /tags
+// POST/DELETE) emit code: invalid_context — same wire envelope, distinct
+// code so strict-typed clients branching on code can route to the correct
+// verb instead of treating both as "server-only."
+func TestPatchAsset_ReadOnlyVsInvalidContext_Split_TRA780F4(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	id := seedRoundTripAsset(t, pool, orgID, "ASSET-TRA780-SPLIT", "Tra780Split")
+	router := setupRoundTripRouter(NewHandler(store))
+
+	cases := []struct {
+		name     string
+		body     string
+		field    string
+		wantCode string
+	}{
+		// invalid_context — sub-resource mutation paths exist
+		{"external_key → invalid_context", `{"external_key":"ASSET-OTHER"}`, "external_key", "invalid_context"},
+		{"tags → invalid_context", `{"tags":[{"tag_type":"rfid","value":"NEW"}]}`, "tags", "invalid_context"},
+		// read_only — no public mutation path
+		{"id → read_only", fmt.Sprintf(`{"id":%d}`, id+99999), "id", "read_only"},
+		{"created_at → read_only", `{"created_at":"2020-01-01T00:00:00Z"}`, "created_at", "read_only"},
+		{"location_id → read_only", `{"location_id":99999}`, "location_id", "read_only"},
+		{"location_external_key → read_only", `{"location_external_key":"WHS-OTHER"}`, "location_external_key", "read_only"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", id),
+				bytes.NewReader([]byte(tc.body)))
+			req.Header.Set("Content-Type", "application/json")
+			req = withRoundTripOrgContext(req, orgID)
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+			var resp struct {
+				Error struct {
+					Fields []struct {
+						Field string `json:"field"`
+						Code  string `json:"code"`
+					} `json:"fields"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			require.Len(t, resp.Error.Fields, 1)
+			assert.Equal(t, tc.field, resp.Error.Fields[0].Field)
+			assert.Equal(t, tc.wantCode, resp.Error.Fields[0].Code)
+		})
+	}
+}
+
+// TRA-686 / BB29 F8 / TRA-780 F4: `external_key` in a PATCH body is rejected
+// with 400 invalid_context pointing at the rename endpoint (POST
+// /assets/{id}/rename). Silent-drop would let an integrator believe a rename
+// PATCH succeeded while the natural key — the join key downstream systems
+// rely on — stayed unchanged. Pre-TRA-780 F4 the code was read_only.
 func TestPatchAsset_ExternalKeyRejected400(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -913,7 +974,7 @@ func TestPatchAsset_ExternalKeyRejected400(t *testing.T) {
 			assert.Equal(t, "validation_error", resp.Error.Type)
 			require.Len(t, resp.Error.Fields, 1)
 			assert.Equal(t, "external_key", resp.Error.Fields[0].Field)
-			assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+			assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 			assert.Contains(t, resp.Error.Fields[0].Message,
 				"POST /api/v1/assets/{asset_id}/rename",
 				"message must name the rename endpoint")
@@ -1524,13 +1585,13 @@ func TestPutAsset_NullValidFrom_Rejected400(t *testing.T) {
 	assert.Equal(t, "invalid_value", resp.Error.Fields[0].Code)
 }
 
-// TRA-775 (BB61-3 F1): `tags` PATCH echo is now compared as a set on full
-// tag content. A submitted array with the same tag content as the current
-// state matches regardless of order — generated clients that deserialize
-// tags into unordered collections (Python set, Go map, ORMs with
-// hash-ordered associations) no longer trip 400 read_only on a verbatim
-// GET → PATCH round-trip. Differing set membership or differing field
-// values on a matching id still returns 400 read_only.
+// TRA-775 (BB61-3 F1) / TRA-780 F4: `tags` PATCH echo is now compared as a
+// set on full tag content. A submitted array with the same tag content as
+// the current state matches regardless of order — generated clients that
+// deserialize tags into unordered collections (Python set, Go map, ORMs
+// with hash-ordered associations) no longer trip on a verbatim GET → PATCH
+// round-trip. Differing set membership or differing field values on a
+// matching id returns 400 invalid_context (was read_only pre-TRA-780 F4).
 func TestPatchAsset_TagsSetEqualityEcho(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -1639,9 +1700,9 @@ func TestPatchAsset_TagsSetEqualityEcho(t *testing.T) {
 		return rec
 	}
 
-	requireReadOnlyTagsRejection := func(t *testing.T, rec *httptest.ResponseRecorder) {
+	requireTagsRejection := func(t *testing.T, rec *httptest.ResponseRecorder) {
 		t.Helper()
-		require.Equal(t, http.StatusBadRequest, rec.Code, "expected 400 read_only, got %d: %s", rec.Code, rec.Body.String())
+		require.Equal(t, http.StatusBadRequest, rec.Code, "expected 400 invalid_context, got %d: %s", rec.Code, rec.Body.String())
 		var resp struct {
 			Error struct {
 				Type   string `json:"type"`
@@ -1656,7 +1717,7 @@ func TestPatchAsset_TagsSetEqualityEcho(t *testing.T) {
 		assert.Equal(t, "validation_error", resp.Error.Type)
 		require.Len(t, resp.Error.Fields, 1)
 		assert.Equal(t, "tags", resp.Error.Fields[0].Field)
-		assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
+		assert.Equal(t, "invalid_context", resp.Error.Fields[0].Code)
 		assert.Contains(t, resp.Error.Fields[0].Message, "POST /api/v1/assets/{asset_id}/tags",
 			"message must name the subresource endpoint")
 	}
@@ -1673,17 +1734,17 @@ func TestPatchAsset_TagsSetEqualityEcho(t *testing.T) {
 		rec := patchTags(t, rotatedJSON)
 		require.Equal(t, http.StatusOK, rec.Code, "rotated tags echo must be 200 under set-equality: %s", rec.Body.String())
 	})
-	t.Run("length mismatch (4 vs 3) 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, tooManyJSON))
+	t.Run("length mismatch (4 vs 3) 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, tooManyJSON))
 	})
-	t.Run("same length different id set 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, swappedIDJSON))
+	t.Run("same length different id set 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, swappedIDJSON))
 	})
-	t.Run("same ids wrong tag_type 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, wrongTagTypeJSON))
+	t.Run("same ids wrong tag_type 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, wrongTagTypeJSON))
 	})
-	t.Run("same ids wrong value 400 read_only", func(t *testing.T) {
-		requireReadOnlyTagsRejection(t, patchTags(t, wrongValueJSON))
+	t.Run("same ids wrong value 400 invalid_context", func(t *testing.T) {
+		requireTagsRejection(t, patchTags(t, wrongValueJSON))
 	})
 
 	// After all of the above (200 echoes + 400 rejections), the persisted

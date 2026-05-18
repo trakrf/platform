@@ -295,7 +295,14 @@ func messageForField(fe validator.FieldError) string {
 			return fmt.Sprintf("%s must not contain control characters (NUL, etc.)", fe.Field())
 		}
 		if fe.Tag() == "display_name" {
-			return fmt.Sprintf("%s must not contain control characters (including tab, newline, carriage return) or be only whitespace", fe.Field())
+			// TRA-780 F3: message must name every rejection class the
+			// `display_name` validator enforces — control characters,
+			// whitespace-only, and leading/trailing whitespace — so a
+			// developer hitting any one class reads a description of
+			// their specific failure mode rather than concluding the
+			// message is wrong about their input. The empty case is
+			// handled by minLength/required and produces code: too_short.
+			return fmt.Sprintf("%s must not start or end with whitespace, must not contain control characters (including tab, newline, carriage return), and must not be only whitespace", fe.Field())
 		}
 		return fmt.Sprintf("%s is not a valid value", fe.Field())
 	}
