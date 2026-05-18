@@ -439,7 +439,7 @@
             "example": "Forklift 3",
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "pattern": "^\\S(?:[^\\x00-\\x1F\\x7F]*\\S)?$",
             "type": "string"
           },
           "tags": {
@@ -504,7 +504,7 @@
             "example": "Warehouse 1",
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "pattern": "^\\S(?:[^\\x00-\\x1F\\x7F]*\\S)?$",
             "type": "string"
           },
           "parent_external_key": {
@@ -1153,7 +1153,7 @@
             "example": "Forklift 3",
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "pattern": "^\\S(?:[^\\x00-\\x1F\\x7F]*\\S)?$",
             "type": "string"
           },
           "valid_from": {
@@ -1199,7 +1199,7 @@
             "example": "Warehouse 1",
             "maxLength": 255,
             "minLength": 1,
-            "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]*$",
+            "pattern": "^\\S(?:[^\\x00-\\x1F\\x7F]*\\S)?$",
             "type": "string"
           },
           "parent_external_key": {
@@ -1622,7 +1622,7 @@
         ]
       },
       "post": {
-        "description": "**Required scope:** `assets:write`\n\nCreate a new asset record, optionally with one or more tags (RFID, BLE, barcode).\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the canonical URL.",
+        "description": "**Required scope:** `assets:write`\n\nCreate a new asset record, optionally with one or more tags (RFID, BLE, barcode).\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, asset management) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing asset returns 409.\n\nReturns the created asset with its assigned tags. The Location response header contains the path of the created resource (resolve against the request URL per RFC 7231 §7.1.2).",
         "operationId": "createAsset",
         "requestBody": {
           "content": {
@@ -1648,7 +1648,7 @@
             "description": "Created",
             "headers": {
               "Location": {
-                "description": "Canonical URL of the created resource",
+                "description": "Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)",
                 "schema": {
                   "type": "string"
                 }
@@ -3407,7 +3407,7 @@
             "description": "tag attached",
             "headers": {
               "Location": {
-                "description": "Canonical URL of the created tag",
+                "description": "Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)",
                 "schema": {
                   "type": "string"
                 }
@@ -4334,7 +4334,7 @@
             "description": "Created",
             "headers": {
               "Location": {
-                "description": "Canonical URL of the created resource",
+                "description": "Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)",
                 "schema": {
                   "type": "string"
                 }
@@ -6647,7 +6647,7 @@
             "description": "tag attached",
             "headers": {
               "Location": {
-                "description": "Canonical URL of the created tag",
+                "description": "Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)",
                 "schema": {
                   "type": "string"
                 }

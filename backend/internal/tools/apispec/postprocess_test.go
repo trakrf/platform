@@ -1891,3 +1891,52 @@ func TestInlinePublicTimeRefs_PostConsolidationName(t *testing.T) {
 	assert.Equal(t, "", vf.Ref)
 	assert.Equal(t, "date-time", vf.Value.Format)
 }
+
+// TRA-778 (BB62-1 F1): name fields get the stricter displayNameRegex;
+// description keeps the multi-line-tolerant printableStringRegex. The
+// existing-pattern preservation contract (set only if empty) still holds.
+func TestMarkDisplayNameFields_AppliesStricterPatternThanPrintable(t *testing.T) {
+	doc := &openapi3.T{
+		Components: &openapi3.Components{
+			Schemas: openapi3.Schemas{
+				"asset.CreateAssetWithTagsRequest": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Properties: openapi3.Schemas{
+						"name":        {Value: &openapi3.Schema{}},
+						"description": {Value: &openapi3.Schema{}},
+					},
+				}},
+				"location.CreateLocationWithTagsRequest": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Properties: openapi3.Schemas{
+						"name":        {Value: &openapi3.Schema{}},
+						"description": {Value: &openapi3.Schema{}},
+					},
+				}},
+				// Pre-set pattern must survive the lenient overwrite contract.
+				"asset.UpdateAssetRequest": &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Properties: openapi3.Schemas{
+						"name": {Value: &openapi3.Schema{Pattern: "^custom$"}},
+					},
+				}},
+			},
+		},
+	}
+
+	require.NoError(t, markDisplayNameFields(doc, displayNameFields))
+	require.NoError(t, markPrintableStringFields(doc, printableStringFields))
+
+	assert.Equal(t, displayNameRegex,
+		doc.Components.Schemas["asset.CreateAssetWithTagsRequest"].Value.Properties["name"].Value.Pattern,
+		"name must get displayNameRegex")
+	assert.Equal(t, printableStringRegex,
+		doc.Components.Schemas["asset.CreateAssetWithTagsRequest"].Value.Properties["description"].Value.Pattern,
+		"description must keep printableStringRegex (multi-line tolerant)")
+	assert.Equal(t, displayNameRegex,
+		doc.Components.Schemas["location.CreateLocationWithTagsRequest"].Value.Properties["name"].Value.Pattern,
+		"location name must get displayNameRegex")
+	assert.Equal(t, printableStringRegex,
+		doc.Components.Schemas["location.CreateLocationWithTagsRequest"].Value.Properties["description"].Value.Pattern,
+		"location description must keep printableStringRegex")
+	assert.Equal(t, "^custom$",
+		doc.Components.Schemas["asset.UpdateAssetRequest"].Value.Properties["name"].Value.Pattern,
+		"explicit existing pattern must be preserved")
+}

@@ -334,7 +334,7 @@ components:
                     example: Forklift 3
                     maxLength: 255
                     minLength: 1
-                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    pattern: ^\S(?:[^\x00-\x1F\x7F]*\S)?$
                     type: string
                 tags:
                     items:
@@ -387,7 +387,7 @@ components:
                     example: Warehouse 1
                     maxLength: 255
                     minLength: 1
-                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    pattern: ^\S(?:[^\x00-\x1F\x7F]*\S)?$
                     type: string
                 parent_external_key:
                     example: wh1
@@ -869,7 +869,7 @@ components:
                     example: Forklift 3
                     maxLength: 255
                     minLength: 1
-                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    pattern: ^\S(?:[^\x00-\x1F\x7F]*\S)?$
                     type: string
                 valid_from:
                     example: "2025-01-01T00:00:00Z"
@@ -904,7 +904,7 @@ components:
                     example: Warehouse 1
                     maxLength: 255
                     minLength: 1
-                    pattern: ^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]*$
+                    pattern: ^\S(?:[^\x00-\x1F\x7F]*\S)?$
                     type: string
                 parent_external_key:
                     example: wh1
@@ -1211,7 +1211,7 @@ paths:
                 server-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).
                 A caller-supplied external_key that collides with an existing asset returns 409.
 
-                Returns the created asset with its assigned tags. The Location response header contains the canonical URL.
+                Returns the created asset with its assigned tags. The Location response header contains the path of the created resource (resolve against the request URL per RFC 7231 §7.1.2).
             operationId: createAsset
             requestBody:
                 content:
@@ -1230,7 +1230,7 @@ paths:
                     description: Created
                     headers:
                         Location:
-                            description: Canonical URL of the created resource
+                            description: Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
                         X-RateLimit-Limit:
@@ -2371,7 +2371,7 @@ paths:
                     description: tag attached
                     headers:
                         Location:
-                            description: Canonical URL of the created tag
+                            description: Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
                         X-RateLimit-Limit:
@@ -2983,7 +2983,7 @@ paths:
                     description: Created
                     headers:
                         Location:
-                            description: Canonical URL of the created resource
+                            description: Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
                         X-RateLimit-Limit:
@@ -4472,7 +4472,7 @@ paths:
                     description: tag attached
                     headers:
                         Location:
-                            description: Canonical URL of the created tag
+                            description: Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
                         X-RateLimit-Limit:

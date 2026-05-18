@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-playground/validator/v10"
 	apierrors "github.com/trakrf/platform/backend/internal/models/errors"
@@ -107,6 +108,9 @@ func RegisterCustomValidations(v *validator.Validate) {
 	_ = v.RegisterValidation("no_control_chars", func(fl validator.FieldLevel) bool {
 		return !containsDisallowedControl(fl.Field().String())
 	})
+	_ = v.RegisterValidation("display_name", func(fl validator.FieldLevel) bool {
+		return isValidDisplayName(fl.Field().String())
+	})
 }
 
 // containsDisallowedControl reports whether s contains a C0 control
@@ -125,6 +129,33 @@ func containsDisallowedControl(s string) bool {
 		}
 	}
 	return false
+}
+
+// isValidDisplayName reports whether s is a valid single-line display name:
+// no C0 control characters or DEL (including tab/LF/CR), and non-whitespace
+// at both the first and last rune (which implicitly requires at least one
+// visible character). Empty string returns true so min=1 / required handle
+// the empty case with their own codes (TRA-778 / BB62-1 F1). Whitespace is
+// judged via unicode.IsSpace so a name surrounded by NBSP, ideographic
+// space, etc. is also rejected — those render as blank padding in any UI or
+// CSV consumer the same as ASCII-space padding. The "no leading/trailing
+// whitespace" anchor matches the spec-side displayNameRegex so a generated
+// client validating locally against the spec sees the same accept/reject
+// boundary as the server (TRA-687).
+func isValidDisplayName(s string) bool {
+	if s == "" {
+		return true
+	}
+	for _, r := range s {
+		if r < 0x20 || r == 0x7F {
+			return false
+		}
+	}
+	runes := []rune(s)
+	if unicode.IsSpace(runes[0]) || unicode.IsSpace(runes[len(runes)-1]) {
+		return false
+	}
+	return true
 }
 
 // tagToCode maps go-playground/validator tag names to our public error
@@ -262,6 +293,9 @@ func messageForField(fe validator.FieldError) string {
 		}
 		if fe.Tag() == "no_control_chars" {
 			return fmt.Sprintf("%s must not contain control characters (NUL, etc.)", fe.Field())
+		}
+		if fe.Tag() == "display_name" {
+			return fmt.Sprintf("%s must not contain control characters (including tab, newline, carriage return) or be only whitespace", fe.Field())
 		}
 		return fmt.Sprintf("%s is not a valid value", fe.Field())
 	}

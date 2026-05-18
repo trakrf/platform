@@ -72,14 +72,14 @@ var PublicRejectCreateFields = map[string]httputil.FieldRejectPolicy{
 // @Description  server-assigned external_key in the format `ASSET-NNNN` (per-organization sequence).
 // @Description  A caller-supplied external_key that collides with an existing asset returns 409.
 // @Description
-// @Description  Returns the created asset with its assigned tags. The Location response header contains the canonical URL.
+// @Description  Returns the created asset with its assigned tags. The Location response header contains the path of the created resource (resolve against the request URL per RFC 7231 §7.1.2).
 // @Tags         assets,public
 // @ID           assets.create
 // @Accept       json
 // @Produce      json
 // @Param        request  body  asset.CreateAssetWithTagsRequest  true  "Asset to create with optional tags"
 // @Success      201  {object}  assets.CreateAssetResponse
-// @Header       201  {string}  Location  "Canonical URL of the created resource"
+// @Header       201  {string}  Location  "Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
@@ -889,7 +889,7 @@ type AddTagResponse struct {
 // @Param        asset_id path  int                true  "Asset id (canonical)" minimum(1) maximum(2147483647) format(int32)
 // @Param        request  body  shared.TagRequest  true  "Tag to attach"
 // @Success      201  {object}  assets.AddTagResponse         "tag attached"
-// @Header       201  {string}  Location                      "Canonical URL of the created tag"
+// @Header       201  {string}  Location                      "Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)"
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
 // @Failure      401  {object}  modelerrors.ErrorResponse     "unauthorized"
 // @Failure      403  {object}  modelerrors.ErrorResponse     "forbidden"
