@@ -850,6 +850,7 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429  {object}  modelerrors.ErrorResponse     "rate_limited"
 // @Header  429 {integer} Retry-After           "Seconds to wait before retrying"
+// @Failure 500 {object} modelerrors.ErrorResponse
 // @Security BearerAuth[assets:read]
 // @Router /api/v1/assets/{asset_id} [get]
 func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {

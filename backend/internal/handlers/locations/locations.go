@@ -1031,6 +1031,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Failure 403 {object} modelerrors.ErrorResponse
 // @Failure 404 {object} modelerrors.ErrorResponse
 // @Failure 429 {object} modelerrors.ErrorResponse
+// @Failure 500 {object} modelerrors.ErrorResponse "internal_error"
 // @Security BearerAuth[locations:read]
 // @Router /api/v1/locations/{location_id} [get]
 func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
