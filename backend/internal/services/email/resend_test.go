@@ -66,3 +66,35 @@ func TestGetEnvironmentNotice(t *testing.T) {
 		})
 	}
 }
+
+func TestIsReservedTestRecipient(t *testing.T) {
+	tests := []struct {
+		name     string
+		addr     string
+		expected bool
+	}{
+		{"example.com", "fixture@example.com", true},
+		{"example.net", "fixture@example.net", true},
+		{"example.org", "fixture@example.org", true},
+		{".test TLD", "fixture@foo.test", true},
+		{".invalid TLD", "fixture@foo.invalid", true},
+		{".example TLD", "fixture@foo.example", true},
+		{"case-insensitive domain", "Fixture@Example.COM", true},
+		{"subdomain of example.com", "fixture@mail.example.com", true},
+		{"trakrf.id", "user@trakrf.id", false},
+		{"gmail", "user@gmail.com", false},
+		{"gmail alias", "miks2u+t2@gmail.com", false},
+		{"customer domain", "user@acme.co", false},
+		{"empty", "", false},
+		{"no at-sign", "not-an-email", false},
+		{"trailing whitespace", "fixture@example.com  ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isReservedTestRecipient(tt.addr); got != tt.expected {
+				t.Errorf("isReservedTestRecipient(%q) = %v, want %v", tt.addr, got, tt.expected)
+			}
+		})
+	}
+}

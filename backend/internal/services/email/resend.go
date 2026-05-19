@@ -3,11 +3,45 @@ package email
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/resend/resend-go/v2"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+// reservedTestDomains are RFC 2606 / RFC 6761 addresses reserved for documentation
+// and testing. No real user can own one, so we never attempt to send to them —
+// this prevents e2e fixtures from burning Resend quota.
+var reservedTestDomains = map[string]struct{}{
+	"example.com": {},
+	"example.net": {},
+	"example.org": {},
+}
+
+var reservedTestSuffixes = []string{".test", ".invalid", ".example"}
+
+func isReservedTestRecipient(addr string) bool {
+	at := strings.LastIndex(addr, "@")
+	if at < 0 || at == len(addr)-1 {
+		return false
+	}
+	domain := strings.ToLower(strings.TrimSpace(addr[at+1:]))
+	if _, ok := reservedTestDomains[domain]; ok {
+		return true
+	}
+	for _, s := range reservedTestSuffixes {
+		if strings.HasSuffix(domain, s) {
+			return true
+		}
+	}
+	for d := range reservedTestDomains {
+		if strings.HasSuffix(domain, "."+d) {
+			return true
+		}
+	}
+	return false
+}
 
 // Client wraps the Resend email client
 type Client struct {
