@@ -9,29 +9,30 @@ import type { Page } from '@playwright/test';
 import { getAuthToken } from './org.fixture';
 
 /**
- * Location creation data (public-API write shape per TRA-447).
- * Parent is referenced by natural identifier, not surrogate ID.
+ * Location creation data (public-API write shape).
+ * Parent is referenced by natural key (`parent_external_key`) per the
+ * 2026-04-29 canonical-key pivot — surrogate IDs are not required.
  */
 export interface CreateLocationData {
-  identifier: string;
+  external_key: string;
   name: string;
   description?: string;
-  parent_identifier?: string | null;
+  parent_external_key?: string | null;
   is_active?: boolean;
 }
 
 /**
- * Trimmed view of the public PublicLocationView response (TRA-447).
- * Surrogate IDs are intentionally omitted — fixtures use natural identifiers
- * end-to-end so e2e tests exercise the same contract external SDK consumers see.
+ * Trimmed view of the public LocationView response.
+ * Includes both surrogate `id` (needed for DELETE) and natural
+ * `external_key` so parent linkage can stay natural-key end-to-end.
  */
 export interface CreatedLocation {
-  identifier: string;
+  id: number;
+  external_key: string;
   name: string;
-  description: string;
-  parent: string | null;
-  path: string;
-  depth: number;
+  description: string | null;
+  parent_external_key: string | null;
+  parent_id: number | null;
   is_active: boolean;
 }
 
@@ -61,10 +62,10 @@ export async function createLocationViaAPI(
       'Content-Type': 'application/json',
     },
     data: {
-      identifier: data.identifier,
+      external_key: data.external_key,
       name: data.name,
       description: data.description || '',
-      parent_identifier: data.parent_identifier ?? null,
+      parent_external_key: data.parent_external_key ?? null,
       is_active: data.is_active ?? true,
     },
   });
@@ -79,24 +80,21 @@ export async function createLocationViaAPI(
 }
 
 /**
- * Delete a location via the public API (DELETE /locations/{identifier}).
- * Uses the natural-key route so fixtures don't depend on internal surrogate IDs.
+ * Delete a location via the public API (DELETE /locations/{location_id}).
+ * The public DELETE route only accepts the surrogate `id`.
  */
-export async function deleteLocationByIdentifierViaAPI(
+export async function deleteLocationByIdViaAPI(
   page: Page,
-  identifier: string
+  id: number
 ): Promise<void> {
   const baseUrl = getApiBaseUrl();
   const token = await getAuthToken(page);
 
-  const response = await page.request.delete(
-    `${baseUrl}/locations/${encodeURIComponent(identifier)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
+  const response = await page.request.delete(`${baseUrl}/locations/${id}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
   if (!response.ok()) {
     const text = await response.text();
@@ -128,17 +126,22 @@ export async function getLocationsViaAPI(page: Page): Promise<CreatedLocation[]>
 
 /**
  * Delete all locations for clean test state.
- * Sorts by depth descending (deepest first) so children are deleted before
- * their parents, avoiding FK constraint failures.
+ * Children must be removed before parents to avoid 409 conflicts;
+ * sort by parent_external_key presence (children first) as a coarse proxy
+ * — for deeper hierarchies retry the loop until empty.
  */
 export async function deleteAllLocationsViaAPI(page: Page): Promise<void> {
   const locations = await getLocationsViaAPI(page);
 
-  const sortedByDepth = [...locations].sort((a, b) => b.depth - a.depth);
+  const sortedChildrenFirst = [...locations].sort((a, b) => {
+    const aHasParent = a.parent_external_key ? 1 : 0;
+    const bHasParent = b.parent_external_key ? 1 : 0;
+    return bHasParent - aHasParent;
+  });
 
-  for (const location of sortedByDepth) {
+  for (const location of sortedChildrenFirst) {
     try {
-      await deleteLocationByIdentifierViaAPI(page, location.identifier);
+      await deleteLocationByIdViaAPI(page, location.id);
     } catch {
       // Cascade may have removed children already; teardown errors are
       // intentionally swallowed so they don't mask real test failures.
@@ -172,63 +175,63 @@ export interface TestHierarchy {
 
 /**
  * Create a complete test hierarchy.
- * Parent linkage uses parent_identifier (TRA-447 natural-key contract);
- * the parent's identifier is a string literal already in scope, so we
+ * Parent linkage uses parent_external_key (natural-key contract);
+ * the parent's external_key is a string literal already in scope, so we
  * never need to read back a surrogate ID from a previous response.
  */
 export async function createTestHierarchy(page: Page): Promise<TestHierarchy> {
   const warehouseA = await createLocationViaAPI(page, {
-    identifier: 'warehouse-a',
+    external_key: 'warehouse-a',
     name: 'Warehouse A',
     description: 'Main warehouse facility',
   });
 
   const warehouseB = await createLocationViaAPI(page, {
-    identifier: 'warehouse-b',
+    external_key: 'warehouse-b',
     name: 'Warehouse B',
     description: 'Secondary warehouse',
   });
 
   const floor1 = await createLocationViaAPI(page, {
-    identifier: 'floor-1',
+    external_key: 'floor-1',
     name: 'Floor 1',
     description: 'First floor',
-    parent_identifier: 'warehouse-a',
+    parent_external_key: 'warehouse-a',
   });
 
   const floor2 = await createLocationViaAPI(page, {
-    identifier: 'floor-2',
+    external_key: 'floor-2',
     name: 'Floor 2',
     description: 'Second floor',
-    parent_identifier: 'warehouse-a',
+    parent_external_key: 'warehouse-a',
   });
 
   const sectionA = await createLocationViaAPI(page, {
-    identifier: 'section-a',
+    external_key: 'section-a',
     name: 'Section A',
     description: 'Storage section A',
-    parent_identifier: 'floor-1',
+    parent_external_key: 'floor-1',
   });
 
   const sectionB = await createLocationViaAPI(page, {
-    identifier: 'section-b',
+    external_key: 'section-b',
     name: 'Section B',
     description: 'Storage section B',
-    parent_identifier: 'floor-1',
+    parent_external_key: 'floor-1',
   });
 
   const sectionC = await createLocationViaAPI(page, {
-    identifier: 'section-c',
+    external_key: 'section-c',
     name: 'Section C',
     description: 'Storage section C',
-    parent_identifier: 'floor-2',
+    parent_external_key: 'floor-2',
   });
 
   const storageArea = await createLocationViaAPI(page, {
-    identifier: 'storage-area',
+    external_key: 'storage-area',
     name: 'Storage Area',
     description: 'General storage',
-    parent_identifier: 'warehouse-b',
+    parent_external_key: 'warehouse-b',
   });
 
   return {

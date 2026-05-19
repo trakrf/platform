@@ -65,9 +65,8 @@ async function createTestLocation(
     },
     data: {
       name,
-      identifier: `LOC-${uniqueId()}`,
+      external_key: `LOC-${uniqueId()}`,
       is_active: true,
-      valid_from: new Date().toISOString().split('T')[0],
       tags,
     },
   });
@@ -103,10 +102,8 @@ async function createTestAsset(
     },
     data: {
       name,
-      identifier: `ASSET-${uniqueId()}`,
-      type: 'asset',
+      external_key: `ASSET-${uniqueId()}`,
       is_active: true,
-      valid_from: new Date().toISOString().split('T')[0],
       tags: [{ type: 'rfid', value: rfidEpc }],
     },
   });

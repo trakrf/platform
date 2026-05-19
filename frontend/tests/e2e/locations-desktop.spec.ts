@@ -426,8 +426,8 @@ test.describe('Locations Desktop - Fresh State', () => {
     // Fill in the form
     await expect(page.locator('text=Create Location')).toBeVisible({ timeout: 5000 });
 
-    const identifierInput = page.locator('input#identifier');
-    await identifierInput.fill('test-location');
+    const externalKeyInput = page.locator('input#external_key');
+    await externalKeyInput.fill('test-location');
 
     const nameInput = page.locator('input#name');
     await nameInput.fill('Test Location');
