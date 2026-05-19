@@ -3,11 +3,46 @@ package email
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/resend/resend-go/v2"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+// reservedTestDomains are RFC 2606 / RFC 6761 addresses reserved for documentation
+// and testing. No real user can own one, so we never attempt to send to them —
+// this prevents e2e fixtures from burning Resend quota.
+var reservedTestDomains = map[string]struct{}{
+	"example.com": {},
+	"example.net": {},
+	"example.org": {},
+}
+
+var reservedTestSuffixes = []string{".test", ".invalid", ".example"}
+
+func isReservedTestRecipient(addr string) bool {
+	at := strings.LastIndex(addr, "@")
+	if at < 0 || at == len(addr)-1 {
+		return false
+	}
+	domain := strings.ToLower(strings.TrimSpace(addr[at+1:]))
+	if _, ok := reservedTestDomains[domain]; ok {
+		return true
+	}
+	for _, s := range reservedTestSuffixes {
+		if strings.HasSuffix(domain, s) {
+			return true
+		}
+	}
+	for d := range reservedTestDomains {
+		if strings.HasSuffix(domain, "."+d) {
+			return true
+		}
+	}
+	return false
+}
 
 // Client wraps the Resend email client
 type Client struct {
@@ -50,6 +85,15 @@ func getEnvironmentNotice() string {
 func (c *Client) SendPasswordResetEmail(toEmail, resetURL, token string) error {
 	fullResetURL := fmt.Sprintf("%s?token=%s", resetURL, token)
 
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "password_reset").
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
+
 	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
 		From:    "TrakRF <noreply@trakrf.id>",
 		To:      []string{toEmail},
@@ -74,6 +118,16 @@ func (c *Client) SendPasswordResetEmail(toEmail, resetURL, token string) error {
 // baseURL should be the frontend origin (e.g., "https://app.trakrf.id")
 func (c *Client) SendInvitationEmail(toEmail, orgName, inviterName, role, token, baseURL string) error {
 	acceptURL := fmt.Sprintf("%s/#accept-invite?token=%s", baseURL, token)
+
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "invitation").
+			Str("org", orgName).
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
 
 	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
 		From:    "TrakRF <noreply@trakrf.id>",
