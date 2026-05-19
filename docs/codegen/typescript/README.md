@@ -34,7 +34,7 @@ import type { paths } from "./schema";
 
 const client = createTrakrfClient<paths>({ baseUrl: "https://app.trakrf.id" });
 
-await client.PATCH("/api/v1/assets/by-id/{id}", {
+await client.PATCH("/api/v1/assets/{id}", {
   params: { path: { id: 42 } },
   body: { name: "renamed" },
 });

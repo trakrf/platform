@@ -111,7 +111,7 @@ describe('assetsApi', () => {
   });
 
   describe('get()', () => {
-    it('should call GET /assets/by-id/:id', async () => {
+    it('should call GET /assets/:id', async () => {
       const mockAsset: Asset = {
         id: 1,
         org_id: 1,
@@ -132,7 +132,7 @@ describe('assetsApi', () => {
 
       await assetsApi.get(1);
 
-      expect(apiClient.get).toHaveBeenCalledWith('/assets/by-id/1', { signal: undefined });
+      expect(apiClient.get).toHaveBeenCalledWith('/assets/1', { signal: undefined });
     });
 
     it('should handle 404 errors', async () => {
@@ -228,7 +228,7 @@ describe('assetsApi', () => {
 
       await assetsApi.update(1, updateData);
 
-      expect(apiClient.patch).toHaveBeenCalledWith('/assets/by-id/1', updateData, {
+      expect(apiClient.patch).toHaveBeenCalledWith('/assets/1', updateData, {
         headers: { 'Content-Type': 'application/merge-patch+json' },
       });
     });
@@ -254,12 +254,12 @@ describe('assetsApi', () => {
   });
 
   describe('delete()', () => {
-    it('should call DELETE /assets/by-id/:id', async () => {
+    it('should call DELETE /assets/:id', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
 
       await assetsApi.delete(1);
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/assets/by-id/1');
+      expect(apiClient.delete).toHaveBeenCalledWith('/assets/1');
     });
 
     it('should return deletion status', async () => {
@@ -354,7 +354,7 @@ describe('assetsApi', () => {
   });
 
   describe('addTag()', () => {
-    it('should call POST /assets/by-id/:assetId/tags with tag data', async () => {
+    it('should call POST /assets/:assetId/tags with tag data', async () => {
       const mockResponse = {
         data: { id: 1, tag_type: 'rfid', value: 'TAG-001' },
       };
@@ -363,7 +363,7 @@ describe('assetsApi', () => {
 
       await assetsApi.addTag(1, { tag_type: 'rfid', value: 'TAG-001' });
 
-      expect(apiClient.post).toHaveBeenCalledWith('/assets/by-id/1/tags', {
+      expect(apiClient.post).toHaveBeenCalledWith('/assets/1/tags', {
         tag_type: 'rfid',
         value: 'TAG-001',
       });
@@ -417,12 +417,12 @@ describe('assetsApi', () => {
   });
 
   describe('removeTag()', () => {
-    it('should call DELETE /assets/by-id/:assetId/tags/:tagId', async () => {
+    it('should call DELETE /assets/:assetId/tags/:tagId', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ data: { deleted: true } });
 
       await assetsApi.removeTag(1, 42);
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/assets/by-id/1/tags/42');
+      expect(apiClient.delete).toHaveBeenCalledWith('/assets/1/tags/42');
     });
 
     it('should return deletion status', async () => {
