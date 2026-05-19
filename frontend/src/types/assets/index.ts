@@ -39,7 +39,7 @@ export interface Asset {
 export interface CreateAssetRequest {
   external_key?: string; // optional - auto-generated as ASSET-XXXX if omitted
   name: string; // required, max 255
-  description?: string; // optional, max 1024
+  description?: string | null; // optional, max 1024; null clears the column
   location_id?: number | null;
   location_external_key?: string | null;
   valid_from: string;
@@ -57,7 +57,7 @@ export interface CreateAssetRequest {
  */
 export interface UpdateAssetRequest {
   name?: string;
-  description?: string;
+  description?: string | null;
   location_id?: number | null;
   location_external_key?: string | null;
   valid_from?: string;

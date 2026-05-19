@@ -42,7 +42,7 @@ export interface CreateLocationRequest {
   external_key: string;
   parent_id?: number | null;
   parent_external_key?: string | null;
-  description?: string;
+  description?: string | null;
   valid_from: string;
   valid_to?: string | null;
   is_active: boolean;
@@ -59,7 +59,7 @@ export interface UpdateLocationRequest {
   name?: string;
   parent_id?: number | null;
   parent_external_key?: string | null;
-  description?: string;
+  description?: string | null;
   valid_from?: string;
   valid_to?: string | null;
   is_active?: boolean;
