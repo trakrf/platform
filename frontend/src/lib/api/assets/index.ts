@@ -46,10 +46,10 @@ export const assetsApi = {
 
   /**
    * Get single asset by surrogate ID
-   * GET /api/v1/assets/by-id/:id
+   * GET /api/v1/assets/:id
    */
   get: (id: number, options?: { signal?: AbortSignal }) =>
-    apiClient.get<AssetResponse>(`/assets/by-id/${id}`, { signal: options?.signal }),
+    apiClient.get<AssetResponse>(`/assets/${id}`, { signal: options?.signal }),
 
   /**
    * Create new asset
@@ -60,18 +60,18 @@ export const assetsApi = {
 
   /**
    * Update existing asset (RFC 7396 JSON Merge Patch — TRA-663)
-   * PATCH /api/v1/assets/by-id/:id
+   * PATCH /api/v1/assets/:id
    */
   update: (id: number, data: UpdateAssetRequest) =>
-    apiClient.patch<AssetResponse>(`/assets/by-id/${id}`, data, {
+    apiClient.patch<AssetResponse>(`/assets/${id}`, data, {
       headers: { 'Content-Type': 'application/merge-patch+json' },
     }),
 
   /**
    * Soft delete asset
-   * DELETE /api/v1/assets/by-id/:id
+   * DELETE /api/v1/assets/:id
    */
-  delete: (id: number) => apiClient.delete<DeleteResponse>(`/assets/by-id/${id}`),
+  delete: (id: number) => apiClient.delete<DeleteResponse>(`/assets/${id}`),
 
   /**
    * Upload CSV for bulk asset creation
@@ -100,18 +100,18 @@ export const assetsApi = {
 
   /**
    * Remove a tag from an asset
-   * DELETE /api/v1/assets/by-id/:assetId/tags/:tagId
+   * DELETE /api/v1/assets/:assetId/tags/:tagId
    */
   removeTag: (assetId: number, tagId: number) =>
-    apiClient.delete<DeleteResponse>(`/assets/by-id/${assetId}/tags/${tagId}`),
+    apiClient.delete<DeleteResponse>(`/assets/${assetId}/tags/${tagId}`),
 
   /**
    * Add a tag to an asset
-   * POST /api/v1/assets/by-id/:assetId/tags
+   * POST /api/v1/assets/:assetId/tags
    */
   addTag: (assetId: number, tag: { tag_type: TagType; value: string }) =>
     apiClient.post<{ data: Tag }>(
-      `/assets/by-id/${assetId}/tags`,
+      `/assets/${assetId}/tags`,
       tag
     ),
 };
