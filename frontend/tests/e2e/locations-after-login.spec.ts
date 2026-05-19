@@ -33,7 +33,7 @@ function getApiBaseUrl(): string {
 }
 
 interface TestLocation {
-  identifier: string;
+  external_key: string;
   name: string;
 }
 
@@ -51,9 +51,8 @@ async function createTestLocation(page: Page, name: string): Promise<TestLocatio
     },
     data: {
       name,
-      identifier: `LOC-${uniqueId()}`,
+      external_key: `LOC-${uniqueId()}`,
       is_active: true,
-      valid_from: new Date().toISOString().split('T')[0],
     },
   });
 
@@ -64,7 +63,7 @@ async function createTestLocation(page: Page, name: string): Promise<TestLocatio
 
   const data = await response.json();
   return {
-    identifier: data.data.identifier,
+    external_key: data.data.external_key,
     name: data.data.name,
   };
 }
@@ -145,7 +144,7 @@ test.describe('Locations After Login (TRA-318)', () => {
     for (let i = 1; i <= 3; i++) {
       const location = await createTestLocation(sharedPage, `Test Location ${i} - ${testId}`);
       testLocations.push(location);
-      console.log(`[LocationsAfterLogin] Created location: ${location.name} (identifier: ${location.identifier})`);
+      console.log(`[LocationsAfterLogin] Created location: ${location.name} (external_key: ${location.external_key})`);
     }
 
     console.log(`[LocationsAfterLogin] Setup complete: ${testLocations.length} locations created`);
@@ -285,9 +284,8 @@ test.describe('Locations After Fresh Browser Session (TRA-318)', () => {
       },
       data: {
         name: `Fresh Location ${testId}`,
-        identifier: `LOC-FRESH-${testId}`,
+        external_key: `LOC-FRESH-${testId}`,
         is_active: true,
-        valid_from: new Date().toISOString().split('T')[0],
       },
     });
     expect(response.ok()).toBe(true);

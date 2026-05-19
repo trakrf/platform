@@ -254,8 +254,8 @@ test.describe('Locations Accessibility - Desktop', () => {
       await fab.click();
 
       // Check for labeled inputs
-      const identifierInput = page.locator('input#identifier');
-      await expect(identifierInput).toBeVisible();
+      const externalKeyInput = page.locator('input#external_key');
+      await expect(externalKeyInput).toBeVisible();
 
       const nameInput = page.locator('input#name');
       await expect(nameInput).toBeVisible();

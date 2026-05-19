@@ -336,8 +336,8 @@ test.describe('Locations Mobile - Fresh State', () => {
     // Fill in the form
     await expect(page.locator('text=Create Location')).toBeVisible({ timeout: 5000 });
 
-    const identifierInput = page.locator('input#identifier');
-    await identifierInput.fill('mobile-test-loc');
+    const externalKeyInput = page.locator('input#external_key');
+    await externalKeyInput.fill('mobile-test-loc');
 
     const nameInput = page.locator('input#name');
     await nameInput.fill('Mobile Test Location');
