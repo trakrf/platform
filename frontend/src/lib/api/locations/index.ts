@@ -52,13 +52,13 @@ export const locationsApi = {
 
   /**
    * Get a single location by surrogate ID
-   * GET /api/v1/locations/by-id/:id
+   * GET /api/v1/locations/:id
    *
    * @param id - Location surrogate ID
    * @returns Promise<LocationResponse> with single location
    */
   get: (id: number) =>
-    apiClient.get<LocationResponse>(`/locations/by-id/${id}`),
+    apiClient.get<LocationResponse>(`/locations/${id}`),
 
   /**
    * Create a new location
@@ -72,26 +72,26 @@ export const locationsApi = {
 
   /**
    * Update an existing location by ID (RFC 7396 JSON Merge Patch — TRA-663)
-   * PATCH /api/v1/locations/by-id/:id
+   * PATCH /api/v1/locations/:id
    *
    * @param id - Location ID to update
    * @param data - Partial location merge-patch payload
    * @returns Promise<LocationResponse> with updated location
    */
   update: (id: number, data: UpdateLocationRequest) =>
-    apiClient.patch<LocationResponse>(`/locations/by-id/${id}`, data, {
+    apiClient.patch<LocationResponse>(`/locations/${id}`, data, {
       headers: { 'Content-Type': 'application/merge-patch+json' },
     }),
 
   /**
    * Soft delete a location by ID
-   * DELETE /api/v1/locations/by-id/:id
+   * DELETE /api/v1/locations/:id
    *
    * @param id - Location ID to delete
    * @returns Promise<DeleteResponse> with deleted status
    */
   delete: (id: number) =>
-    apiClient.delete<DeleteResponse>(`/locations/by-id/${id}`),
+    apiClient.delete<DeleteResponse>(`/locations/${id}`),
 
   /**
    * Get all ancestor locations from root to parent
@@ -138,7 +138,7 @@ export const locationsApi = {
 
   /**
    * Add a tag to a location
-   * POST /api/v1/locations/by-id/:locationId/tags
+   * POST /api/v1/locations/:locationId/tags
    *
    * @param locationId - Location ID to add tag to
    * @param tag - Tag data (tag_type and value)
@@ -146,18 +146,18 @@ export const locationsApi = {
    */
   addTag: (locationId: number, tag: { tag_type: TagType; value: string }) =>
     apiClient.post<{ data: Tag }>(
-      `/locations/by-id/${locationId}/tags`,
+      `/locations/${locationId}/tags`,
       tag
     ),
 
   /**
    * Remove a tag from a location
-   * DELETE /api/v1/locations/by-id/:locationId/tags/:tagId
+   * DELETE /api/v1/locations/:locationId/tags/:tagId
    *
    * @param locationId - Location ID
    * @param tagId - Tag ID to remove
    * @returns Promise<DeleteResponse> with deleted status
    */
   removeTag: (locationId: number, tagId: number) =>
-    apiClient.delete<DeleteResponse>(`/locations/by-id/${locationId}/tags/${tagId}`),
+    apiClient.delete<DeleteResponse>(`/locations/${locationId}/tags/${tagId}`),
 };
