@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/resend/resend-go/v2"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -84,6 +85,15 @@ func getEnvironmentNotice() string {
 func (c *Client) SendPasswordResetEmail(toEmail, resetURL, token string) error {
 	fullResetURL := fmt.Sprintf("%s?token=%s", resetURL, token)
 
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "password_reset").
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
+
 	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
 		From:    "TrakRF <noreply@trakrf.id>",
 		To:      []string{toEmail},
@@ -108,6 +118,16 @@ func (c *Client) SendPasswordResetEmail(toEmail, resetURL, token string) error {
 // baseURL should be the frontend origin (e.g., "https://app.trakrf.id")
 func (c *Client) SendInvitationEmail(toEmail, orgName, inviterName, role, token, baseURL string) error {
 	acceptURL := fmt.Sprintf("%s/#accept-invite?token=%s", baseURL, token)
+
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "invitation").
+			Str("org", orgName).
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
 
 	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
 		From:    "TrakRF <noreply@trakrf.id>",

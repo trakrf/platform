@@ -98,3 +98,32 @@ func TestIsReservedTestRecipient(t *testing.T) {
 		})
 	}
 }
+
+func TestSendInvitationEmail_StubsReservedDomain(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "invalid-key-should-never-be-used")
+	c := NewClient()
+
+	if err := c.SendInvitationEmail(
+		"fixture@example.com",
+		"Test Org",
+		"Inviter Name",
+		"member",
+		"token-xyz",
+		"https://app.preview.trakrf.id",
+	); err != nil {
+		t.Fatalf("expected nil error for reserved recipient, got %v", err)
+	}
+}
+
+func TestSendPasswordResetEmail_StubsReservedDomain(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "invalid-key-should-never-be-used")
+	c := NewClient()
+
+	if err := c.SendPasswordResetEmail(
+		"fixture@example.com",
+		"https://app.preview.trakrf.id/#reset-password",
+		"token-xyz",
+	); err != nil {
+		t.Fatalf("expected nil error for reserved recipient, got %v", err)
+	}
+}
