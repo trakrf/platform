@@ -437,15 +437,26 @@ func (s *Storage) CountActiveChildLocations(ctx context.Context, orgID, id int) 
 	return count, nil
 }
 
-// CountActiveAssetsAtLocation returns the number of non-deleted assets placed
-// directly at the location. Used by DELETE /locations/{id} to refuse a delete
-// that would leave assets pointing at a soft-deleted location (TRA-644 / BB22
-// F2).
+// CountActiveAssetsAtLocation returns the number of non-deleted assets whose
+// latest scan places them at the location. Used by DELETE /locations/{id} to
+// refuse a delete that would leave assets scanned into a soft-deleted location
+// (TRA-644 / BB22 F2).
 func (s *Storage) CountActiveAssetsAtLocation(ctx context.Context, orgID, locationID int) (int, error) {
+	// TRA-799: count by latest-scan location — the assets.current_location_id
+	// column was dropped (migration 000043). This also restores BB22 F2
+	// intent: since TRA-734 nulled current_location_id for new assets, the
+	// old column-based guard had fired for zero modern assets.
 	query := `
+		WITH latest_scans AS (
+			SELECT DISTINCT ON (s.asset_id) s.asset_id, s.location_id
+			FROM trakrf.asset_scans s
+			WHERE s.org_id = $1
+			ORDER BY s.asset_id, s.timestamp DESC
+		)
 		SELECT COUNT(*)
-		FROM trakrf.assets
-		WHERE org_id = $1 AND current_location_id = $2 AND deleted_at IS NULL
+		FROM trakrf.assets a
+		JOIN latest_scans ls ON ls.asset_id = a.id
+		WHERE a.org_id = $1 AND ls.location_id = $2 AND a.deleted_at IS NULL
 	`
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {

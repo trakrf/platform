@@ -38,26 +38,25 @@ func NewHandler(storage *storage.Storage) *Handler {
 	}
 }
 
-// TRA-734 (BB40 F3): location_id / location_external_key on a POST or PATCH
-// body are rejected with code=read_only. The error detail honestly describes
-// the master-data / scan-data bifurcation and points at the consumption
-// surfaces (GET /assets/{id}, GET /assets/{id}/history, GET /reports/asset-
-// locations) rather than the previous opaque "record a scan event" line.
-// Asset location is collected through ingestion paths separate from the
-// public API: the fixed-reader MQTT pipeline and handheld UI submission.
+// TRA-734 (BB40 F3) / TRA-799: location_id / location_external_key on a POST
+// or PATCH body are rejected with code=read_only. Asset location is
+// scan-derived fact data and is not part of the asset resource — it is
+// collected through ingestion paths separate from the public API (the
+// fixed-reader MQTT pipeline and handheld UI submission) and read through the
+// reporting endpoints.
 //
 // TRA-750 / BB46 F3: the trailing "See https://docs.trakrf.id/..." link
 // was dropped to avoid an env leak — a preview integrator hitting this
 // error otherwise gets routed to production docs. The error envelope's
 // `type` field is the canonical documented entry point per /docs/api/
 // errors; the trailing URL was redundant.
-const assetLocationReadOnlyMessage = "asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API. Read current asset location through GET /api/v1/assets/{id}, GET /api/v1/assets/{id}/history, or GET /api/v1/reports/asset-locations."
+const assetLocationReadOnlyMessage = asset.LocationReadOnlyMessage
 
 // PublicRejectCreateFields names the JSON keys that POST /api/v1/assets
 // rejects pre-decode with 400 validation_error and code=read_only. Same
-// shape as PublicRejectPatchFields on the PATCH side. TRA-734 (BB40 F3):
-// location_id and location_external_key are scan/operational data —
-// they are derived from ingestion, never set by an integrator on the
+// shape as PublicRejectPatchFields on the PATCH side. TRA-734 (BB40 F3) /
+// TRA-799: location_id and location_external_key are scan-derived fact data
+// and are not part of the asset resource — never set by an integrator on the
 // public API.
 var PublicRejectCreateFields = map[string]httputil.FieldRejectPolicy{
 	"location_id":           {Code: "read_only", Message: assetLocationReadOnlyMessage},
@@ -222,7 +221,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update an asset
-// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. Every accepted PATCH — empty body (`{}`), verbatim echo of current values, partial mutation, or full mutation — advances `updated_at` on success (filesystem `touch` semantics). Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400. The rejection `code` splits the two semantic classes: server-managed fields (`id`, `created_at`, `updated_at`, `deleted_at`, `location_id`, `location_external_key`) return `code: read_only` — they have no public mutation path. Fields mutable via a sub-resource verb (`external_key`, `tags`) return `code: invalid_context` and the detail names the correct verb: mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}. The `tags` collection is compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `invalid_context`. Asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API.
+// @Description  Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. Every accepted PATCH — empty body (`{}`), verbatim echo of current values, partial mutation, or full mutation — advances `updated_at` on success (filesystem `touch` semantics). Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400. The rejection `code` splits the two semantic classes: server-managed fields (`id`, `created_at`, `updated_at`, `deleted_at`) return `code: read_only` — they have no public mutation path. Fields mutable via a sub-resource verb (`external_key`, `tags`) return `code: invalid_context` and the detail names the correct verb: mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}. The `tags` collection is compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `invalid_context`. Asset location is not part of the asset resource — it is scan-derived fact data, read through GET /api/v1/reports/asset-locations or GET /api/v1/assets/{asset_id}/history; `location_id` / `location_external_key` in a request body are rejected 400 `read_only`.
 // @Tags         assets,public
 // @ID           assets.update
 // @Accept       json
@@ -321,21 +320,21 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		request.ClearDescription = true
 	}
 
-	// TRA-699 (BB31 §2): natural-key echo check. Three fields are read-only
-	// on PATCH but accept a verbatim echo of the current value as a silent
+	// TRA-699 (BB31 §2): natural-key echo check. external_key is read-only on
+	// PATCH but accepts a verbatim echo of the current value as a silent
 	// no-op so a GET → PATCH round-trip without an explicit strip succeeds.
-	// A differing value is 400 read_only naming the dedicated write path.
-	//
-	//   external_key            → POST /assets/{asset_id}/rename
-	//   location_id             → scan event ingestion (TRA-734 / BB40 F3)
-	//   location_external_key   → scan event ingestion (TRA-734 / BB40 F3)
+	// A differing value is 400 naming the dedicated write path
+	// (POST /assets/{asset_id}/rename).
 	//
 	// TRA-710 (BB33 F2): the same accept-if-matches / reject-if-differs
 	// rule covers the server-managed surrogate id and timestamps (id,
 	// created_at, updated_at, deleted_at) and the `tags` collection. Their
 	// raw body values were peeked above (rawReadOnly) so the comparison
 	// here runs against the current resource state.
-	current, err := handler.storage.GetAssetWithLocationByID(req.Context(), orgID, id)
+	//
+	// TRA-799: location_id / location_external_key are not echo fields — they
+	// are pre-decode-rejected (PublicRejectPatchFields) and never reach here.
+	current, err := handler.storage.GetAssetViewWithTagsByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			err.Error(), reqID)
@@ -428,37 +427,6 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 			})
 		}
 	}
-	if _, present := presentKeys["location_id"]; present {
-		_, bodyNull := explicitNulls["location_id"]
-		curNull := current.LocationID == nil
-		matched := bodyNull && curNull
-		if !bodyNull && !curNull && request.LocationID != nil && *request.LocationID == *current.LocationID {
-			matched = true
-		}
-		if !matched {
-			echoViolations = append(echoViolations, modelerrors.FieldError{
-				Field:   "location_id",
-				Code:    "read_only",
-				Message: assetLocationReadOnlyMessage,
-			})
-		}
-	}
-	if _, present := presentKeys["location_external_key"]; present {
-		_, bodyNull := explicitNulls["location_external_key"]
-		curNull := current.LocationExternalKey == nil
-		matched := bodyNull && curNull
-		if !bodyNull && !curNull && request.LocationExternalKey != nil && current.LocationExternalKey != nil &&
-			*request.LocationExternalKey == *current.LocationExternalKey {
-			matched = true
-		}
-		if !matched {
-			echoViolations = append(echoViolations, modelerrors.FieldError{
-				Field:   "location_external_key",
-				Code:    "read_only",
-				Message: assetLocationReadOnlyMessage,
-			})
-		}
-	}
 	if len(echoViolations) > 0 {
 		// TRA-702 / BB32 D2: detail must echo fields[0].Message — the inline
 		// literal "validation failed" buried the redirect-to-/rename message
@@ -466,18 +434,12 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 		httputil.WriteValidationError(w, req, reqID, echoViolations)
 		return
 	}
-	// Echo passed (or fields absent). Strip the natural-key fields so they
-	// don't reach storage as writable fields, and clear any presence/null
-	// signals so the validator doesn't treat them as required violations.
+	// Echo passed (or field absent). Strip the natural-key echo field so it
+	// doesn't reach storage as a writable field, and clear any presence/null
+	// signals so the validator doesn't treat it as a required violation.
 	request.ExternalKey = nil
-	request.LocationID = nil
-	request.LocationExternalKey = nil
 	delete(presentKeys, "external_key")
-	delete(presentKeys, "location_id")
-	delete(presentKeys, "location_external_key")
 	delete(explicitNulls, "external_key")
-	delete(explicitNulls, "location_id")
-	delete(explicitNulls, "location_external_key")
 
 	if err := validate.Struct(request); err != nil {
 		httputil.RespondValidationErrorWithPresence(w, req, err, reqID, presentKeys, explicitNulls)
@@ -700,8 +662,6 @@ func (handler *Handler) Rename(w http.ResponseWriter, req *http.Request) {
 // @Produce json
 // @Param limit                 query int    false "max 200"   default(50) minimum(1) maximum(200)
 // @Param offset                query int    false "min 0"     default(0) minimum(0)
-// @Param location_id           query []int    false "filter by current location id (canonical, may repeat); mutually exclusive with location_external_key (400 ambiguous_fields if both supplied)" collectionFormat(multi)
-// @Param location_external_key query []string false "filter by current location external_key (may repeat); mutually exclusive with location_id (400 ambiguous_fields if both supplied)" collectionFormat(multi)
 // @Param external_key          query []string false "filter by asset external_key, equality match (may repeat for any-of)" collectionFormat(multi)
 // @Param is_active             query bool   false "filter by active flag"
 // @Param include_deleted       query bool   false "when true, include soft-deleted rows in the response. deleted_at is populated for those rows. Orthogonal to is_active." default(false)
@@ -730,27 +690,12 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 	}
 
 	params, err := httputil.ParseListParams(req, httputil.ListAllowlist{
-		Filters:     []string{"location_id", "location_external_key", "external_key", "is_active", "include_deleted", "q"},
+		Filters:     []string{"external_key", "is_active", "include_deleted", "q"},
 		BoolFilters: []string{"is_active", "include_deleted"},
 		Sorts:       []string{"external_key", "name", "created_at", "updated_at"},
 	})
 	if err != nil {
 		httputil.RespondListParamError(w, req, err, reqID)
-		return
-	}
-
-	// TRA-681: location_id and location_external_key form a oneOf on the
-	// GET filter — reject 400 ambiguous_fields when both are supplied so
-	// integrators get a typed signal rather than a silent winner. OpenAPI 3
-	// can't encode a query-parameter pair constraint, so the rule lives in
-	// the per-parameter description and the handler validation here.
-	_, hasLocID := params.Filters["location_id"]
-	_, hasLocExt := params.Filters["location_external_key"]
-	if hasLocID && hasLocExt {
-		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{
-			{Field: "location_id", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-			{Field: "location_external_key", Code: "ambiguous_fields", Message: "location_id and location_external_key are mutually exclusive; supply exactly one"},
-		})
 		return
 	}
 
@@ -763,32 +708,11 @@ func (handler *Handler) ListAssets(w http.ResponseWriter, req *http.Request) {
 		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
 		return
 	}
-	if fe := httputil.ValidateExternalKeyFilterValues("location_external_key", params.Filters["location_external_key"]); fe != nil {
-		httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{*fe})
-		return
-	}
 
 	f := asset.ListFilter{
-		LocationExternalKeys: params.Filters["location_external_key"],
-		ExternalKeys:         params.Filters["external_key"],
-		Limit:                params.Limit,
-		Offset:               params.Offset,
-	}
-	if vs, ok := params.Filters["location_id"]; ok && len(vs) > 0 {
-		f.LocationIDs = make([]int, 0, len(vs))
-		for _, s := range vs {
-			n, err := strconv.Atoi(s)
-			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
-				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{{
-					Field:   "location_id",
-					Code:    "invalid_value",
-					Message: fmt.Sprintf("location_id %q must be a positive integer ≤ %d", s, httputil.SurrogateIDMax),
-				}})
-
-				return
-			}
-			f.LocationIDs = append(f.LocationIDs, n)
-		}
+		ExternalKeys: params.Filters["external_key"],
+		Limit:        params.Limit,
+		Offset:       params.Offset,
 	}
 	if vs, ok := params.Filters["is_active"]; ok && len(vs) > 0 {
 		b := vs[0] == "true"
@@ -868,7 +792,7 @@ func (handler *Handler) GetAsset(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	view, err := handler.storage.GetAssetWithLocationByID(req.Context(), orgID, id)
+	view, err := handler.storage.GetAssetViewWithTagsByID(req.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, req, http.StatusInternalServerError, modelerrors.ErrInternal,
 			err.Error(), reqID)

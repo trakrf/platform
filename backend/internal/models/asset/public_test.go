@@ -15,13 +15,11 @@ import (
 // When no metadata is supplied, the public view must serialize "metadata": {}
 // (not omit the field), matching the GET list shape.
 func TestToPublicAssetView_NilMetadataSerializesAsEmptyObject(t *testing.T) {
-	in := AssetWithLocation{
-		AssetView: AssetView{
-			Asset: Asset{
-				ExternalKey: "FORK-007",
-				Name:        "Forklift 7",
-				Metadata:    nil,
-			},
+	in := AssetView{
+		Asset: Asset{
+			ExternalKey: "FORK-007",
+			Name:        "Forklift 7",
+			Metadata:    nil,
 		},
 	}
 
@@ -39,13 +37,11 @@ func TestToPublicAssetView_NilMetadataSerializesAsEmptyObject(t *testing.T) {
 }
 
 func TestToPublicAssetView_PopulatedMetadataPreserved(t *testing.T) {
-	in := AssetWithLocation{
-		AssetView: AssetView{
-			Asset: Asset{
-				ExternalKey: "FORK-007",
-				Name:        "Forklift 7",
-				Metadata:    map[string]any{"color": "red"},
-			},
+	in := AssetView{
+		Asset: Asset{
+			ExternalKey: "FORK-007",
+			Name:        "Forklift 7",
+			Metadata:    map[string]any{"color": "red"},
 		},
 	}
 
@@ -63,10 +59,8 @@ func TestToPublicAssetView_PopulatedMetadataPreserved(t *testing.T) {
 // TRA-610 / BB18 §1.8: description is always emitted (null when unset).
 // Supersedes the TRA-547 §2.2 omit-when-empty test.
 func TestPublicAssetView_DescriptionAlwaysEmittedNullWhenEmpty(t *testing.T) {
-	v := ToPublicAssetView(AssetWithLocation{
-		AssetView: AssetView{
-			Asset: Asset{ExternalKey: "A1", Name: "n"},
-		},
+	v := ToPublicAssetView(AssetView{
+		Asset: Asset{ExternalKey: "A1", Name: "n"},
 	})
 
 	data, err := json.Marshal(v)
@@ -81,10 +75,8 @@ func TestPublicAssetView_DescriptionAlwaysEmittedNullWhenEmpty(t *testing.T) {
 }
 
 func TestPublicAssetView_DescriptionEmittedWhenPopulated(t *testing.T) {
-	v := ToPublicAssetView(AssetWithLocation{
-		AssetView: AssetView{
-			Asset: Asset{ExternalKey: "A1", Name: "n", Description: "the description"},
-		},
+	v := ToPublicAssetView(AssetView{
+		Asset: Asset{ExternalKey: "A1", Name: "n", Description: "the description"},
 	})
 
 	data, err := json.Marshal(v)
