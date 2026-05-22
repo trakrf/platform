@@ -3,10 +3,10 @@
 
 // TRA-608 / BB18 §1.7: GET → PATCH round-trip must succeed. The PATCH
 // handler strips the round-trip-safe read-only fields on PublicAssetView
-// (id, created_at, updated_at, deleted_at, location_external_key) from
-// the request body before strict-decoding so a naive read-mutate-write
-// client doesn't trip over schema asymmetry. Typo'd fields not in that
-// drop set still produce a 400 validation_error.
+// (id, created_at, updated_at, deleted_at) from the request body before
+// strict-decoding so a naive read-mutate-write client doesn't trip over
+// schema asymmetry. Typo'd fields not in that drop set still produce a
+// 400 validation_error.
 //
 // TRA-686 / BB29 F7+F8: `tags` (managed via /assets/{id}/tags) is
 // rejected with 400 invalid_value, and `external_key` (managed via
@@ -65,12 +65,11 @@ func seedRoundTripAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, nam
 }
 
 // TRA-608 / TRA-710 acceptance: GET /api/v1/assets/{id} → mutate one
-// field → PATCH succeeds with 200. Under TRA-710 every read-only field —
-// including `tags`, `external_key`, `id`, `created_at`, `updated_at`,
-// `deleted_at`, and the location natural-key references — is accepted on
-// the body when echoed verbatim from the GET (silent strip on the
-// matching path). Integrators no longer need to manually scrub any
-// field; full-document PATCH-back is the supported flow.
+// field → PATCH succeeds with 200. Every read-only field — `tags`,
+// `external_key`, `id`, `created_at`, `updated_at`, `deleted_at` — is
+// accepted on the body when echoed verbatim from the GET (silent strip
+// on the matching path). Integrators no longer need to manually scrub
+// any field; full-document PATCH-back is the supported flow.
 func TestPutAsset_GETBodyRoundTrip_Succeeds(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -200,13 +199,9 @@ func TestGetAsset_OptionalFieldsAlwaysEmittedNullWhenUnset(t *testing.T) {
 	assert.Nil(t, vtRaw, "valid_to must be JSON null when nil (TRA-610)")
 }
 
-// TRA-614 / BB19 §S1 + TRA-699: PATCH with explicit `null` on
-// read-side-nullable fields. `description` and `valid_to` clear the
-// underlying column when sent as null. `location_id` and
-// `location_external_key` are no longer writable on PATCH (TRA-699 supersedes
-// the TRA-614 clear-via-null path for location); a `null` body on those
-// fields is allowed only when the current resource state is already null
-// (matched echo). Mutations to asset location move to the scan-event path.
+// TRA-614 / BB19 §S1: PATCH with explicit `null` on read-side-nullable
+// fields. `description` and `valid_to` clear the underlying column when
+// sent as null.
 func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -215,9 +210,8 @@ func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	// Seed an asset with a populated description, populated valid_to, and
-	// no location (so the natural-key null/null echo case is exercised
-	// alongside the description / valid_to clear paths).
+	// Seed an asset with a populated description and populated valid_to so
+	// the description / valid_to clear paths are exercised.
 	var assetID int
 	vt := time.Now().UTC().Add(24 * time.Hour)
 	err := pool.QueryRow(context.Background(), `
@@ -232,8 +226,6 @@ func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 
 	body := []byte(`{
 		"description": null,
-		"location_id": null,
-		"location_external_key": null,
 		"valid_to": null
 	}`)
 	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", assetID), bytes.NewReader(body))
@@ -249,13 +241,10 @@ func TestPutAsset_NullClearsReadSideNullableFields(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
 	assert.Nil(t, resp.Data["description"], "description cleared")
-	assert.Nil(t, resp.Data["location_id"], "location_id stays null (null/null echo)")
-	assert.Nil(t, resp.Data["location_external_key"], "location_external_key stays null (null/null echo)")
 	assert.Nil(t, resp.Data["valid_to"], "valid_to cleared")
 
 	// Verify storage: valid_to is NULL, description is empty (read-side
-	// projects "" → null per TRA-610). current_location_id was already
-	// null and remains null.
+	// projects "" → null per TRA-610).
 	var dbValidTo *string
 	var dbDesc string
 	err = pool.QueryRow(context.Background(),
@@ -291,11 +280,9 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 		Data map[string]any `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &getResp))
-	// description, location_id, location_external_key, valid_to should be
-	// JSON null (asset was seeded with empty description and no location).
+	// description and valid_to should be JSON null (asset was seeded with
+	// empty description and no valid_to).
 	assert.Nil(t, getResp.Data["description"])
-	assert.Nil(t, getResp.Data["location_id"])
-	assert.Nil(t, getResp.Data["location_external_key"])
 	assert.Nil(t, getResp.Data["valid_to"])
 
 	// PATCH-back of the GET body — the connector flow from §S2.
@@ -311,77 +298,6 @@ func TestPutAsset_GETToPUTRoundTripWithNulls(t *testing.T) {
 	router.ServeHTTP(putRec, patchReq)
 
 	require.Equal(t, http.StatusOK, putRec.Code, "GET → PUT round-trip with explicit nulls must succeed: %s", putRec.Body.String())
-}
-
-// TRA-699 supersedes TRA-681 / TRA-614: location_id and
-// location_external_key are no longer writable on PATCH (record-of-origin
-// posture; mutate via scan events). A body like
-// `{"location_id": null, "location_external_key": "WHS-99"}` on an asset
-// with a current location now returns 400 read_only on BOTH fields:
-// location_id null ≠ non-null current, and location_external_key
-// "WHS-99" ≠ matching current. The FK is not cleared. See
-// patch_natural_key_integration_test.go for the matched-echo 200 path
-// and the differs 400 path.
-func TestPatchAsset_LocationFieldsOnPATCH_NonMatchingDiffers400(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	// Seed an asset that starts with a real location.
-	var locID int
-	err := pool.QueryRow(context.Background(), `
-		INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from, is_active)
-		VALUES ($1, 'LOC-FOR-STRIP', 'loc-for-strip', '', $2, true) RETURNING id
-	`, orgID, time.Now().UTC()).Scan(&locID)
-	require.NoError(t, err)
-
-	var assetID int
-	err = pool.QueryRow(context.Background(), `
-		INSERT INTO trakrf.assets
-		  (org_id, external_key, name, description, current_location_id, valid_from, is_active)
-		VALUES ($1, 'ASSET-STRIP-CLEAR', 'StripClear', '', $2, $3, true) RETURNING id
-	`, orgID, locID, time.Now().UTC()).Scan(&assetID)
-	require.NoError(t, err)
-
-	handler := NewHandler(store)
-	router := setupRoundTripRouter(handler)
-
-	body := []byte(`{"location_id": null, "location_external_key": "WHS-99"}`)
-	patchReq := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/assets/%d", assetID), bytes.NewReader(body))
-	patchReq.Header.Set("Content-Type", "application/json")
-	patchReq = withRoundTripOrgContext(patchReq, orgID)
-	putRec := httptest.NewRecorder()
-	router.ServeHTTP(putRec, patchReq)
-
-	require.Equal(t, http.StatusBadRequest, putRec.Code,
-		"PATCH with differing location_id+external_key must 400 read_only on both: %s", putRec.Body.String())
-
-	var resp struct {
-		Error struct {
-			Type   string `json:"type"`
-			Fields []struct {
-				Field string `json:"field"`
-				Code  string `json:"code"`
-			} `json:"fields"`
-		} `json:"error"`
-	}
-	require.NoError(t, json.Unmarshal(putRec.Body.Bytes(), &resp))
-	require.Len(t, resp.Error.Fields, 2)
-	for _, f := range resp.Error.Fields {
-		assert.Equal(t, "read_only", f.Code, "field %s must carry read_only", f.Field)
-		assert.Contains(t, []string{"location_id", "location_external_key"}, f.Field)
-	}
-
-	// FK unchanged on disk.
-	var dbLoc *int
-	err = pool.QueryRow(context.Background(),
-		`SELECT current_location_id FROM trakrf.assets WHERE id = $1`, assetID).Scan(&dbLoc)
-	require.NoError(t, err)
-	require.NotNil(t, dbLoc)
-	assert.Equal(t, locID, *dbLoc, "FK must not have changed on rejected PATCH")
 }
 
 // TRA-615 / BB19 §S5: external_key with reserved punctuation (space, slash,

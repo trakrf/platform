@@ -51,15 +51,26 @@ func seedLocationDC(t *testing.T, pool *pgxpool.Pool, orgID int, externalKey, na
 	return id
 }
 
+// seedAssetAtLocation seeds a live asset and, when locationID is non-nil, an
+// asset_scans row placing it at that location. TRA-799: the location-delete
+// guard counts assets by their latest scan location, not a denormalized
+// column.
 func seedAssetAtLocation(t *testing.T, pool *pgxpool.Pool, orgID int, externalKey string, locationID *int) int {
 	t.Helper()
 	var id int
 	err := pool.QueryRow(context.Background(), `
 		INSERT INTO trakrf.assets
-			(org_id, external_key, name, description, current_location_id, valid_from, is_active)
-		VALUES ($1, $2, $2, '', $3, $4, true) RETURNING id
-	`, orgID, externalKey, locationID, time.Now().UTC()).Scan(&id)
+			(org_id, external_key, name, description, valid_from, is_active)
+		VALUES ($1, $2, $2, '', $3, true) RETURNING id
+	`, orgID, externalKey, time.Now().UTC()).Scan(&id)
 	require.NoError(t, err)
+	if locationID != nil {
+		_, err = pool.Exec(context.Background(), `
+			INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id)
+			VALUES ($1, $2, $3, $4)
+		`, time.Now().UTC(), orgID, id, *locationID)
+		require.NoError(t, err)
+	}
 	return id
 }
 
@@ -187,6 +198,39 @@ func TestDeleteLocation_SoftDeletedDescendant_DoesNotBlock(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, rec.Code,
 		"DELETE on parent whose only descendant was soft-deleted must be 204 (got %d): %s",
+		rec.Code, rec.Body.String())
+}
+
+// TRA-799: the guard follows the LATEST scan. An asset whose most recent scan
+// moved it to another location no longer blocks deletion of the location it
+// was first scanned into.
+func TestDeleteLocation_AssetScannedAway_DoesNotBlock(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	orgID := testutil.CreateTestAccount(t, pool)
+	defer testutil.CleanupTestAccounts(t, pool)
+
+	locA := seedLocationDC(t, pool, orgID, "wh-from", "From", nil)
+	locB := seedLocationDC(t, pool, orgID, "wh-to", "To", nil)
+
+	// Asset's first scan is at locA; a later scan moves it to locB.
+	assetID := seedAssetAtLocation(t, pool, orgID, "asset-moved", &locA)
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id)
+		VALUES ($1, $2, $3, $4)
+	`, time.Now().UTC().Add(time.Hour), orgID, assetID, locB)
+	require.NoError(t, err)
+
+	router := setupDeleteConflictRouter(NewHandler(store))
+
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/locations/%d", locA), nil)
+	req = withDeleteConflictOrgContext(req, orgID)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNoContent, rec.Code,
+		"DELETE on the prior location of an asset since scanned elsewhere must be 204 (got %d): %s",
 		rec.Code, rec.Body.String())
 }
 

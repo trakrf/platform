@@ -137,13 +137,11 @@ func TestPostAsset_LocationExternalKey_Rejected400_ReadOnly(t *testing.T) {
 		"asset location is collected through scan event ingestion")
 }
 
-// PATCH /api/v1/assets/{id} with a `location_id` that differs from the
-// current resource state returns 400 validation_error / read_only — the
-// field is no longer writable via PATCH (TRA-699 supersedes the prior
-// fk_not_found path, which is no longer reachable on PATCH because the
-// FK is never resolved). Existence of the target row is irrelevant; any
-// value that differs from current state is rejected.
-func TestPatchAsset_DifferingLocationID_Rejected400(t *testing.T) {
+// PATCH /api/v1/assets/{id} carrying `location_id` is pre-decode-rejected
+// 400 validation_error / read_only (PublicRejectPatchFields). TRA-799:
+// location is not part of the asset resource — any presence of the field,
+// regardless of value, is rejected.
+func TestPatchAsset_LocationID_Rejected400_ReadOnly(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
@@ -234,50 +232,3 @@ func TestPostAsset_BothLocationForms_Rejected400_ReadOnly(t *testing.T) {
 		assert.Contains(t, []string{"location_id", "location_external_key"}, fld.Field)
 	}
 }
-
-// GET /api/v1/assets?location_id=N&location_external_key=K is 400
-// validation_error / ambiguous_fields — same oneOf rule as POST body.
-func TestListAssets_BothLocationForms_Rejected400(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	handler := NewHandler(store)
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Get("/api/v1/assets", handler.ListAssets)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?location_id=42&location_external_key=WHS-01", nil)
-	req = withRoundTripOrgContext(req, orgID)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusBadRequest, rec.Code,
-		"both filter forms must be 400 (got %d): %s", rec.Code, rec.Body.String())
-
-	var resp struct {
-		Error struct {
-			Type   string `json:"type"`
-			Fields []struct {
-				Field string `json:"field"`
-				Code  string `json:"code"`
-			} `json:"fields"`
-		} `json:"error"`
-	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "validation_error", resp.Error.Type)
-	require.Len(t, resp.Error.Fields, 2)
-	for _, fld := range resp.Error.Fields {
-		assert.Equal(t, "ambiguous_fields", fld.Code, "field %s should carry ambiguous_fields", fld.Field)
-		assert.Contains(t, []string{"location_id", "location_external_key"}, fld.Field)
-	}
-}
-
-// TRA-699 supersedes the prior silent-strip behavior for
-// location_external_key on PATCH. A *differing* natural key is now 400
-// read_only; a *matching* echo (or null/null) is 200 with the field
-// stripped from the update. See patch_natural_key_integration_test.go
-// for the new accept-if-matches / reject-if-differs coverage.

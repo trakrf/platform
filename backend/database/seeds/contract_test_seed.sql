@@ -49,9 +49,8 @@ ON CONFLICT (org_id, user_id) DO NOTHING;
 --   WHS-01 — example for CreateAssetWithTagsRequest.location_external_key
 --   wh1    — example for CreateLocationWithTagsRequest.parent_external_key
 --
--- LOC-0001 is retained as the asset's current_location for stability with the
--- TRA-671 fixture; nothing in the spec references it, but renaming it would
--- needlessly churn the seed.
+-- LOC-0001 is retained for stability with the TRA-671 fixture; nothing in the
+-- spec references it, but renaming it would needlessly churn the seed.
 INSERT INTO locations (org_id, external_key, name)
 SELECT
     (SELECT id FROM organizations WHERE identifier = 'bb-test-org'),
@@ -67,14 +66,11 @@ WHERE NOT EXISTS (
       AND l.external_key = v.external_key
 );
 
--- 5) Asset (one row with external_key = ASSET-0001, current_location = LOC-0001)
-INSERT INTO assets (org_id, external_key, name, current_location_id)
+-- 5) Asset (one row with external_key = ASSET-0001)
+INSERT INTO assets (org_id, external_key, name)
 SELECT
     (SELECT id FROM organizations WHERE identifier = 'bb-test-org'),
-    'ASSET-0001', 'BB Test Asset',
-    (SELECT id FROM locations
-       WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
-         AND external_key = 'LOC-0001')
+    'ASSET-0001', 'BB Test Asset'
 WHERE NOT EXISTS (
     SELECT 1 FROM assets
     WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
