@@ -120,8 +120,8 @@ current generic `"tag <type>:<value> already exists"` message.
 
 ### Frontend — three changes, applied symmetrically to both forms
 
-Affected: `AssetForm.tsx`, `LocationForm.tsx`, `TagInputRow.tsx`, and the
-location create/update caller.
+Affected: `AssetForm.tsx`, `LocationForm.tsx`, `TagInputRow.tsx`,
+`vitest.config.ts`, and the location create/update caller.
 
 **1. Location 409 parity.**
 Trace the location create/update path that currently swallows the 409 and
@@ -199,8 +199,13 @@ location form too.
 - `AssetForm` / `LocationForm`: onblur fires `lookupApi.byTag` and stamps a
   conflict on a cross-entity hit; clears on `404`; Save disabled while a row
   is conflicted; the location form surfaces a save-time 409 into the error
-  banner. (The form-level vitest files currently excluded from config stay
-  excluded — out of scope; `TagInputRow`-level coverage is sufficient.)
+  banner.
+- **Re-enable the excluded form vitest files.** `AssetForm.test.tsx` and
+  `AssetFormModal.test.tsx` sit in the `vitest.config.ts` exclude list under
+  the `TRA-192: Tests with incomplete store mocks` block. Remove both
+  entries, repair the store mocks so the suites pass, and add the
+  conflict/onblur cases above to `AssetForm.test.tsx`. `LocationForm.test.tsx`
+  already runs (not excluded) — add the same cases there.
 
 **E2E (Playwright, preview):**
 
@@ -226,3 +231,9 @@ location form too.
   every tag-field blur. Acceptable for the form's interaction rate; the
   save-time 409 remains the correctness backstop if a check is slow or
   skipped.
+- **Store-mock repair scope.** `AssetForm.test.tsx` and
+  `AssetFormModal.test.tsx` were excluded (TRA-192) for incomplete store
+  mocks — a pre-existing gap, not caused by this feature. Re-enabling them
+  means repairing those mocks, and the size of that repair is unknown until
+  the suites are run. If it balloons, the mock repair can land as its own
+  commit within the PR.
