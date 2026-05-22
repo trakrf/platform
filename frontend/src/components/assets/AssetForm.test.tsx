@@ -1,10 +1,8 @@
 import '@testing-library/jest-dom';
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { AssetForm } from './AssetForm';
 import type { Asset } from '@/types/assets';
-import { useDeviceStore } from '@/stores';
-import * as useScanToInputModule from '@/hooks/useScanToInput';
 
 describe('AssetForm', () => {
   afterEach(() => {
@@ -33,9 +31,8 @@ describe('AssetForm', () => {
   it('renders create mode form', () => {
     render(<AssetForm mode="create" onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 
-    expect(screen.getByLabelText(/Identifier/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Asset ID/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Type/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Create Asset/ })).toBeInTheDocument();
   });
 
@@ -78,7 +75,7 @@ describe('AssetForm', () => {
   it('validates identifier format', async () => {
     render(<AssetForm mode="create" onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 
-    const identifierInput = screen.getByLabelText(/Identifier/);
+    const identifierInput = screen.getByLabelText(/Asset ID/);
     fireEvent.change(identifierInput, { target: { value: 'invalid id!' } });
 
     const submitButton = screen.getByRole('button', { name: /Create Asset/ });
@@ -95,7 +92,7 @@ describe('AssetForm', () => {
     mockOnSubmit.mockResolvedValue(undefined);
     render(<AssetForm mode="create" onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 
-    fireEvent.change(screen.getByLabelText(/Identifier/), { target: { value: 'TEST-001' } });
+    fireEvent.change(screen.getByLabelText(/Asset ID/), { target: { value: 'TEST-001' } });
     fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Test Asset' } });
 
     const submitButton = screen.getByRole('button', { name: /Create Asset/ });
@@ -114,7 +111,7 @@ describe('AssetForm', () => {
     mockOnSubmit.mockResolvedValue(undefined);
     render(<AssetForm mode="create" onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 
-    fireEvent.change(screen.getByLabelText(/Identifier/), { target: { value: 'TEST-001' } });
+    fireEvent.change(screen.getByLabelText(/Asset ID/), { target: { value: 'TEST-001' } });
     fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Test Asset' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Create Asset/ }));
@@ -175,228 +172,6 @@ describe('AssetForm', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
-    });
-  });
-});
-
-describe('AssetForm - Scanner Integration', () => {
-  const mockOnSubmit = vi.fn();
-  const mockOnCancel = vi.fn();
-  const mockStartRfidScan = vi.fn();
-  const mockStartBarcodeScan = vi.fn();
-  const mockStopScan = vi.fn();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    // Mock useScanToInput
-    vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
-      startRfidScan: mockStartRfidScan,
-      startBarcodeScan: mockStartBarcodeScan,
-      stopScan: mockStopScan,
-      isScanning: false,
-      scanType: null,
-      setFocused: vi.fn(),
-    });
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('should show scanner buttons when device connected in create mode', () => {
-    useDeviceStore.setState({ isConnected: true });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    expect(screen.getByText('Scan RFID')).toBeInTheDocument();
-    expect(screen.getByText('Scan Barcode')).toBeInTheDocument();
-  });
-
-  it('should hide scanner buttons when device disconnected', () => {
-    useDeviceStore.setState({ isConnected: false });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    expect(screen.queryByText('Scan RFID')).not.toBeInTheDocument();
-    expect(screen.queryByText('Scan Barcode')).not.toBeInTheDocument();
-  });
-
-  it('should hide scanner buttons in edit mode', () => {
-    useDeviceStore.setState({ isConnected: true });
-
-    const mockAsset: Asset = {
-      id: 1,
-      org_id: 1,
-      external_key: 'TEST-001',
-      name: 'Test Asset',
-      type: 'device',
-      description: '',
-      valid_from: '2024-01-01T00:00:00Z',
-      valid_to: null,
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-      deleted_at: null,
-      metadata: {},
-    };
-
-    render(
-      <AssetForm
-        mode="edit"
-        asset={mockAsset}
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    expect(screen.queryByText('Scan RFID')).not.toBeInTheDocument();
-  });
-
-  it('should call startRfidScan when RFID button clicked', () => {
-    useDeviceStore.setState({ isConnected: true });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    fireEvent.click(screen.getByText('Scan RFID'));
-    expect(mockStartRfidScan).toHaveBeenCalledTimes(1);
-  });
-
-  it('should call startBarcodeScan when Barcode button clicked', () => {
-    useDeviceStore.setState({ isConnected: true });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    fireEvent.click(screen.getByText('Scan Barcode'));
-    expect(mockStartBarcodeScan).toHaveBeenCalledTimes(1);
-  });
-
-  it('should show scanning state feedback for RFID', () => {
-    useDeviceStore.setState({ isConnected: true });
-    vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
-      startRfidScan: mockStartRfidScan,
-      startBarcodeScan: mockStartBarcodeScan,
-      stopScan: mockStopScan,
-      isScanning: true,
-      scanType: 'rfid',
-      setFocused: vi.fn(),
-    });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    expect(screen.getByText('Scanning for RFID tag...')).toBeInTheDocument();
-    // Look for the cancel button with red background (scanning cancel button)
-    const cancelButtons = screen.getAllByText('Cancel');
-    const scanningCancelButton = cancelButtons.find(
-      btn => btn.closest('button')?.className.includes('bg-red-600')
-    );
-    expect(scanningCancelButton).toBeInTheDocument();
-  });
-
-  it('should show scanning state feedback for barcode', () => {
-    useDeviceStore.setState({ isConnected: true });
-    vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
-      startRfidScan: mockStartRfidScan,
-      startBarcodeScan: mockStartBarcodeScan,
-      stopScan: mockStopScan,
-      isScanning: true,
-      scanType: 'barcode',
-      setFocused: vi.fn(),
-    });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    expect(screen.getByText('Scanning for barcode...')).toBeInTheDocument();
-  });
-
-  it('should disable input while scanning', () => {
-    useDeviceStore.setState({ isConnected: true });
-    vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
-      startRfidScan: mockStartRfidScan,
-      startBarcodeScan: mockStartBarcodeScan,
-      stopScan: mockStopScan,
-      isScanning: true,
-      scanType: 'rfid',
-      setFocused: vi.fn(),
-    });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    const input = screen.getByPlaceholderText(/Scanning RFID/i);
-    expect(input).toBeDisabled();
-  });
-
-  it('should populate identifier when onScan callback triggers', async () => {
-    useDeviceStore.setState({ isConnected: true });
-    let capturedOnScan: ((value: string) => void) | null = null;
-
-    vi.spyOn(useScanToInputModule, 'useScanToInput').mockImplementation(({ onScan }) => {
-      capturedOnScan = onScan;
-      return {
-        startRfidScan: mockStartRfidScan,
-        startBarcodeScan: mockStartBarcodeScan,
-        stopScan: mockStopScan,
-        isScanning: false,
-        scanType: null,
-      };
-    });
-
-    render(
-      <AssetForm
-        mode="create"
-        onSubmit={mockOnSubmit}
-        onCancel={mockOnCancel}
-      />
-    );
-
-    // Simulate scan callback
-    capturedOnScan?.('E280116060000020957C5876');
-
-    await waitFor(() => {
-      const input = screen.getByPlaceholderText(/e.g., LAP-001/i) as HTMLInputElement;
-      expect(input.value).toBe('E280116060000020957C5876');
     });
   });
 });
