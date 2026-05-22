@@ -3,6 +3,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { AssetForm } from './AssetForm';
 import type { Asset } from '@/types/assets';
+import { checkTagConflict } from '@/lib/tags/conflictCheck';
+
+vi.mock('@/lib/tags/conflictCheck');
 
 describe('AssetForm', () => {
   afterEach(() => {
@@ -172,6 +175,72 @@ describe('AssetForm', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe('AssetForm - Tag conflict', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('renders an inline conflict error and disables Save', async () => {
+    vi.mocked(checkTagConflict).mockResolvedValue(
+      'Tag already attached to location "Dock 3" — remove it there before attaching here.',
+    );
+
+    render(<AssetForm mode="create" onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    // Click "Add Tag" to add a tag row (create mode already has one blank row)
+    const addTagButton = screen.getByRole('button', { name: /Add Tag/i });
+    fireEvent.click(addTagButton);
+
+    // Get the first tag input (index 0, already present in create mode)
+    const tagInputs = screen.getAllByPlaceholderText('Enter tag number...');
+    const tagInput = tagInputs[0];
+
+    // Type a value and blur to trigger the conflict check
+    fireEvent.change(tagInput, { target: { value: 'AABBCCDD' } });
+    fireEvent.blur(tagInput);
+
+    // The conflict message should appear
+    await screen.findByText(/already attached to location "Dock 3"/);
+
+    // Save button should be disabled
+    expect(screen.getByRole('button', { name: /create/i })).toBeDisabled();
+  });
+
+  it('clears the conflict when the tag is free', async () => {
+    vi.mocked(checkTagConflict).mockResolvedValue(null);
+
+    render(<AssetForm mode="create" onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    const tagInput = screen.getByPlaceholderText('Enter tag number...');
+    fireEvent.change(tagInput, { target: { value: 'AABBCCDD' } });
+    fireEvent.blur(tagInput);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/already attached/),
+      ).not.toBeInTheDocument();
+    });
+
+    // Save button should NOT be disabled (only by conflict — loading is false)
+    expect(screen.getByRole('button', { name: /create asset/i })).not.toBeDisabled();
+  });
+
+  it('the "Reassign" modal is gone', async () => {
+    vi.mocked(checkTagConflict).mockResolvedValue(null);
+
+    render(<AssetForm mode="create" onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    const tagInput = screen.getByPlaceholderText('Enter tag number...');
+    fireEvent.change(tagInput, { target: { value: 'AABBCCDD' } });
+    fireEvent.blur(tagInput);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Tag Already Assigned')).toBeNull();
     });
   });
 });
