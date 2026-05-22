@@ -133,10 +133,10 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       applyConflict(index, undefined);
       return;
     }
-    // A duplicate of another row in this same form is the local-dedup case,
-    // not a cross-entity conflict — leave it to the existing dedup handling.
+    // A duplicate of another row in this same form is a different kind of
+    // conflict — warn inline rather than firing the cross-entity lookup.
     if (tagInputs.some((t, i) => i !== index && t.value === trimmed)) {
-      applyConflict(index, undefined);
+      applyConflict(index, "This value is already in this form's tag list — remove the duplicate.");
       return;
     }
     const self =

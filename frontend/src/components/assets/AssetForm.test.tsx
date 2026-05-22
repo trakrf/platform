@@ -243,4 +243,26 @@ describe('AssetForm - Tag conflict', () => {
       expect(screen.queryByText('Tag Already Assigned')).toBeNull();
     });
   });
+
+  it('warns inline and disables Save when two rows have the same typed value', async () => {
+    vi.mocked(checkTagConflict).mockResolvedValue(null);
+
+    render(<AssetForm mode="create" onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    // Add a second tag row.
+    fireEvent.click(screen.getByRole('button', { name: /Add Tag/i }));
+
+    // Type the same value into both rows, blurring each to trigger the check.
+    const tagInputs = screen.getAllByPlaceholderText('Enter tag number...');
+    fireEvent.change(tagInputs[0], { target: { value: 'AABBCCDD' } });
+    fireEvent.blur(tagInputs[0]);
+    fireEvent.change(tagInputs[1], { target: { value: 'AABBCCDD' } });
+    fireEvent.blur(tagInputs[1]);
+
+    // The same-form duplicate warning should appear.
+    await screen.findByText(/already in this form's tag list/i);
+
+    // Save button should be disabled.
+    expect(screen.getByRole('button', { name: /create/i })).toBeDisabled();
+  });
 });
