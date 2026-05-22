@@ -97,6 +97,13 @@ func createTestDatabase(ctx context.Context, t *testing.T) error {
 		return fmt.Errorf("failed to create test database: %w", err)
 	}
 
+	// Set the database-level search_path so generate_hashed_id() can find
+	// trakrf-schema sequences (e.g. organization_seq) without schema prefix.
+	_, err = conn.Exec(ctx, "ALTER DATABASE trakrf_test SET search_path TO trakrf, public")
+	if err != nil {
+		return fmt.Errorf("failed to set search_path on test database: %w", err)
+	}
+
 	t.Logf("✅ Created test database: trakrf_test")
 	return nil
 }

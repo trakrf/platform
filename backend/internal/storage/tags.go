@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -98,7 +99,7 @@ func (s *Storage) AddTagToAsset(ctx context.Context, orgID, assetID int, req sha
 	})
 
 	if err != nil {
-		return nil, parseTagError(err, tagType, req.Value)
+		return nil, s.resolveTagError(ctx, orgID, err, tagType, req.Value)
 	}
 
 	return &tag, nil
@@ -121,7 +122,7 @@ func (s *Storage) AddTagToLocation(ctx context.Context, orgID, locationID int, r
 	})
 
 	if err != nil {
-		return nil, parseTagError(err, tagType, req.Value)
+		return nil, s.resolveTagError(ctx, orgID, err, tagType, req.Value)
 	}
 
 	return &tag, nil
@@ -218,6 +219,87 @@ func (s *Storage) GetTagByID(ctx context.Context, orgID, tagID int) (*shared.Tag
 	}
 
 	return &tag, nil
+}
+
+// isTagDuplicateErr reports whether err is the (org_id, type, value)
+// partial-unique-index violation on the tags table.
+func isTagDuplicateErr(err error) bool {
+	if pgErr, ok := err.(*pgconn.PgError); ok {
+		return pgErr.ConstraintName == "tags_org_id_type_value_unique"
+	}
+	return strings.Contains(err.Error(), "duplicate key")
+}
+
+// tagConflict describes the entity a tag value is already attached to.
+type tagConflict struct {
+	EntityType  string // "asset" or "location"
+	Name        string
+	ExternalKey string
+}
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// lookupTagConflict finds the live tag row colliding on (orgID, tagType,
+// value) and returns the asset or location it is attached to. Returns
+// (nil, nil) when no live collision is found — e.g. the conflicting row was
+// soft-deleted between the failed INSERT and this lookup.
+func (s *Storage) lookupTagConflict(ctx context.Context, orgID int, tagType, value string) (*tagConflict, error) {
+	query := `
+		SELECT t.asset_id, t.location_id,
+		       a.name, a.external_key,
+		       l.name, l.external_key
+		  FROM trakrf.tags t
+		  LEFT JOIN trakrf.assets    a ON a.id = t.asset_id
+		  LEFT JOIN trakrf.locations l ON l.id = t.location_id
+		 WHERE t.org_id = $1 AND t.type = $2 AND t.value = $3
+		   AND t.deleted_at IS NULL
+		 LIMIT 1
+	`
+	var assetID, locationID *int
+	var assetName, assetKey, locName, locKey *string
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, orgID, tagType, value).Scan(
+			&assetID, &locationID, &assetName, &assetKey, &locName, &locKey,
+		)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	switch {
+	case assetID != nil:
+		return &tagConflict{EntityType: "asset", Name: derefStr(assetName), ExternalKey: derefStr(assetKey)}, nil
+	case locationID != nil:
+		return &tagConflict{EntityType: "location", Name: derefStr(locName), ExternalKey: derefStr(locKey)}, nil
+	default:
+		return nil, nil
+	}
+}
+
+// resolveTagError converts an INSERT error from AddTagToAsset/AddTagToLocation
+// into a user-facing error. For the (org, type, value) unique-violation it
+// enriches the message by naming the entity already holding the tag;
+// everything else delegates to parseTagError. The enriched message keeps the
+// "already exists" substring the HTTP handlers match to produce a 409.
+func (s *Storage) resolveTagError(ctx context.Context, orgID int, err error, tagType, value string) error {
+	if !isTagDuplicateErr(err) {
+		return parseTagError(err, tagType, value)
+	}
+	conflict, lookupErr := s.lookupTagConflict(ctx, orgID, tagType, value)
+	if lookupErr != nil || conflict == nil {
+		return parseTagError(err, tagType, value) // generic fallback
+	}
+	return fmt.Errorf(
+		"tag %s:%s already exists — it is attached to %s %q (%s); remove it there before attaching here",
+		tagType, value, conflict.EntityType, conflict.Name, conflict.ExternalKey,
+	)
 }
 
 func parseTagError(err error, tagType, value string) error {
