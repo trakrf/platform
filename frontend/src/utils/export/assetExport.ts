@@ -9,15 +9,25 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Asset } from '@/types/assets';
+import type { CurrentLocationItem } from '@/types/reports';
 import type { ExportResult } from '@/types/export';
 import { getDateString, getTimestamp } from '@/utils/shareUtils';
 import { useLocationStore } from '@/stores/locations/locationStore';
 
 /**
- * Resolve location display name from natural key (identifier) via cache.
- * Falls back to the identifier string itself if the location isn't cached.
+ * TRA-799: asset location is fact data, no longer carried on the asset
+ * resource. The assets screen sources it from /reports/asset-locations and
+ * passes the asset-id-keyed map into the export functions.
  */
-function getLocationName(locationIdentifier: string | null | undefined): string {
+export type AssetLocationMap = Map<number, CurrentLocationItem>;
+
+/**
+ * Resolve a location display name for an asset. Looks up the asset's current
+ * location external_key in the supplied map, then resolves the display name
+ * from the location cache (falling back to the external_key itself).
+ */
+function getAssetLocationName(asset: Asset, locationByAssetId: AssetLocationMap): string {
+  const locationIdentifier = locationByAssetId.get(asset.id)?.location_external_key;
   if (!locationIdentifier) return '';
   const location = useLocationStore.getState().cache.byExternalKey.get(locationIdentifier);
   return location?.name || locationIdentifier;
@@ -26,7 +36,10 @@ function getLocationName(locationIdentifier: string | null | undefined): string 
 /**
  * Generate PDF report from assets
  */
-export function generateAssetPDF(assets: Asset[]): ExportResult {
+export function generateAssetPDF(
+  assets: Asset[],
+  locationByAssetId: AssetLocationMap
+): ExportResult {
   const doc = new jsPDF();
 
   // Header
@@ -47,7 +60,7 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
     asset.external_key,
     asset.name || '',
     asset.tags?.map((t) => t.value).join(', ') || '',
-    getLocationName(asset.location_external_key),
+    getAssetLocationName(asset, locationByAssetId),
     asset.is_active ? 'Active' : 'Inactive',
     asset.description || '',
   ]);
@@ -101,7 +114,10 @@ export function generateAssetPDF(assets: Asset[]): ExportResult {
 /**
  * Generate Excel workbook from assets
  */
-export function generateAssetExcel(assets: Asset[]): ExportResult {
+export function generateAssetExcel(
+  assets: Asset[],
+  locationByAssetId: AssetLocationMap
+): ExportResult {
   const wb = XLSX.utils.book_new();
 
   // Main assets sheet
@@ -109,7 +125,7 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
     'Asset ID': asset.external_key,
     Name: asset.name || '',
     'Tag ID(s)': asset.tags?.map((t) => t.value).join(', ') || '',
-    Location: getLocationName(asset.location_external_key),
+    Location: getAssetLocationName(asset, locationByAssetId),
     Status: asset.is_active ? 'Active' : 'Inactive',
     Description: asset.description || '',
     Created: asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
@@ -162,7 +178,10 @@ export function generateAssetExcel(assets: Asset[]): ExportResult {
  * - Tag IDs in rightmost columns, extending right for multi-tag assets
  * - Header repeats "Tag ID" for each tag column
  */
-export function generateAssetCSV(assets: Asset[]): ExportResult {
+export function generateAssetCSV(
+  assets: Asset[],
+  locationByAssetId: AssetLocationMap
+): ExportResult {
   // Calculate max tag count (minimum 1 to always have Tag ID column)
   const maxTags = Math.max(1, ...assets.map((a) => a.tags?.length || 0));
 
@@ -181,7 +200,7 @@ export function generateAssetCSV(assets: Asset[]): ExportResult {
       `"${(asset.description || '').replace(/"/g, '""')}"`,
       asset.is_active ? 'Active' : 'Inactive',
       asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '',
-      `"${getLocationName(asset.location_external_key).replace(/"/g, '""')}"`,
+      `"${getAssetLocationName(asset, locationByAssetId).replace(/"/g, '""')}"`,
     ];
 
     // Tag columns - one per column, pad with empty if fewer tags

@@ -28,18 +28,18 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	// non-pointer asset.Asset.Description (`string`) and surfaces a 500.
 	query := `
 	insert into trakrf.assets
-	(name, external_key, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
-	values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	returning id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
+	(name, external_key, description, valid_from, valid_to, metadata, is_active, org_id)
+	values ($1, $2, $3, $4, $5, $6, $7, $8)
+	returning id, org_id, external_key, name, COALESCE(description, ''), valid_from, valid_to,
 	          metadata, is_active, created_at, updated_at, deleted_at
 	`
 	var asset asset.Asset
 	err := s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, request.Name, request.ExternalKey,
-			request.Description, request.LocationID, request.ValidFrom, request.ValidTo, request.Metadata,
+			request.Description, request.ValidFrom, request.ValidTo, request.Metadata,
 			request.IsActive, request.OrgID,
 		).Scan(&asset.ID, &asset.OrgID, &asset.ExternalKey, &asset.Name,
-			&asset.Description, &asset.LocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
+			&asset.Description, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata,
 			&asset.IsActive, &asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
 	})
@@ -47,9 +47,6 @@ func (s *Storage) CreateAsset(ctx context.Context, request asset.Asset) (*asset.
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, fmt.Errorf("asset with external_key %s already exists", request.ExternalKey)
-		}
-		if strings.Contains(err.Error(), "current_location_id_fkey") {
-			return nil, fmt.Errorf("invalid location_id: location does not exist")
 		}
 		return nil, fmt.Errorf("failed to create asset: %w", err)
 	}
@@ -87,7 +84,7 @@ func GenerateAssetExternalKey(seq int) string {
 	return fmt.Sprintf("ASSET-%04d", seq)
 }
 
-func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.AssetWithLocation, error) {
+func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.UpdateAssetRequest) (*asset.AssetView, error) {
 	setClauses := []string{}
 	args := []any{id, orgID}
 	argPos := 3
@@ -141,13 +138,10 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, fmt.Errorf("asset update conflicts with an existing unique constraint")
 		}
-		if strings.Contains(err.Error(), "current_location_id_fkey") {
-			return nil, fmt.Errorf("invalid location_id: location does not exist")
-		}
 		return nil, fmt.Errorf("failed to update asset: %w", err)
 	}
 
-	return s.getAssetWithLocationByID(ctx, orgID, updatedID)
+	return s.getAssetViewWithTagsByID(ctx, orgID, updatedID)
 }
 
 // RenameAsset mutates the asset's external_key (natural / join key). TRA-664
@@ -156,7 +150,7 @@ func (s *Storage) UpdateAsset(ctx context.Context, orgID, id int, request asset.
 // table's UNIQUE (org_id, external_key) constraint; collisions surface as
 // "already exists" so the handler can map them to 409 conflict, matching
 // CreateAsset's behavior.
-func (s *Storage) RenameAsset(ctx context.Context, orgID, id int, newExternalKey string) (*asset.AssetWithLocation, error) {
+func (s *Storage) RenameAsset(ctx context.Context, orgID, id int, newExternalKey string) (*asset.AssetView, error) {
 	var updatedID int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		var currentKey string
@@ -194,13 +188,13 @@ func (s *Storage) RenameAsset(ctx context.Context, orgID, id int, newExternalKey
 		return nil, fmt.Errorf("failed to rename asset: %w", err)
 	}
 
-	return s.getAssetWithLocationByID(ctx, orgID, updatedID)
+	return s.getAssetViewWithTagsByID(ctx, orgID, updatedID)
 }
 
 func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.Asset, error) {
 	// TRA-674: COALESCE(description, '') — see CreateAsset comment.
 	query := `
-	select id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
+	select id, org_id, external_key, name, COALESCE(description, ''), valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	from trakrf.assets
 	where id = $1 and org_id = $2 and deleted_at is null
@@ -209,7 +203,7 @@ func (s *Storage) GetAssetByID(ctx context.Context, orgID int, id *int) (*asset.
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(&asset.ID, &asset.OrgID,
 			&asset.ExternalKey, &asset.Name, &asset.Description,
-			&asset.LocationID, &asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
+			&asset.ValidFrom, &asset.ValidTo, &asset.Metadata, &asset.IsActive,
 			&asset.CreatedAt, &asset.UpdatedAt, &asset.DeletedAt,
 		)
 	})
@@ -233,7 +227,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 
 	// TRA-674: COALESCE(description, '') — see CreateAsset comment.
 	query := `
-	SELECT id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
+	SELECT id, org_id, external_key, name, COALESCE(description, ''), valid_from, valid_to,
 	       metadata, is_active, created_at, updated_at, deleted_at
 	FROM trakrf.assets
 	WHERE org_id = $1 AND id = ANY($2) AND deleted_at IS NULL
@@ -250,7 +244,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 		for rows.Next() {
 			var a asset.Asset
 			if err := rows.Scan(&a.ID, &a.OrgID, &a.ExternalKey, &a.Name,
-				&a.Description, &a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+				&a.Description, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan asset: %w", err)
@@ -269,7 +263,7 @@ func (s *Storage) GetAssetsByIDs(ctx context.Context, orgID int, ids []int) ([]*
 func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offset int) ([]asset.Asset, error) {
 	// TRA-674: COALESCE(description, '') — see CreateAsset comment.
 	query := `
-		select id, org_id, external_key, name, COALESCE(description, ''), current_location_id, valid_from, valid_to,
+		select id, org_id, external_key, name, COALESCE(description, ''), valid_from, valid_to,
 		       metadata, is_active, created_at, updated_at, deleted_at
 		from trakrf.assets
 		where org_id = $1 and deleted_at is null
@@ -287,7 +281,7 @@ func (s *Storage) ListAllAssets(ctx context.Context, orgID int, limit int, offse
 		for rows.Next() {
 			var a asset.Asset
 			if err := rows.Scan(&a.ID, &a.OrgID, &a.ExternalKey, &a.Name,
-				&a.Description, &a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
+				&a.Description, &a.ValidFrom, &a.ValidTo, &a.Metadata, &a.IsActive,
 				&a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
 			); err != nil {
 				return fmt.Errorf("failed to scan asset: %w", err)
@@ -379,14 +373,14 @@ func (s *Storage) BatchCreateAssets(ctx context.Context, assets []asset.Asset) (
 	// is intentionally out of scope (see TRA-475 spec).
 	query := `
 		INSERT INTO trakrf.assets
-		(name, external_key, description, current_location_id, valid_from, valid_to, metadata, is_active, org_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		(name, external_key, description, valid_from, valid_to, metadata, is_active, org_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
 	err = s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		for i, a := range assets {
 			if _, err := tx.Exec(ctx, query,
-				a.Name, a.ExternalKey, a.Description, a.LocationID,
+				a.Name, a.ExternalKey, a.Description,
 				a.ValidFrom, a.ValidTo, a.Metadata, a.IsActive, a.OrgID,
 			); err != nil {
 				if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -460,10 +454,9 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	} else if req.Description != nil {
 		fields["description"] = *req.Description
 	}
-	// TRA-699 (BB31 §2): current_location_id is no longer writable via PATCH.
-	// The handler strips any incoming location_id / location_external_key
-	// after the echo check, so req.LocationID is always nil here. Mutations
-	// to asset location happen via scan events (TRA-411 record-of-origin).
+	// TRA-799: asset location is not part of the asset resource — it is
+	// scan-derived fact data. location_id / location_external_key are
+	// pre-decode-rejected by the PATCH handler and never reach this struct.
 	if req.ValidFrom != nil && !req.ValidFrom.IsZero() {
 		fields["valid_from"] = req.ValidFrom.ToTime()
 	}
@@ -482,7 +475,7 @@ func mapReqToFields(req asset.UpdateAssetRequest) (map[string]any, error) {
 	return fields, nil
 }
 
-func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateAssetWithTagsRequest) (*asset.AssetWithLocation, error) {
+func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateAssetWithTagsRequest) (*asset.AssetView, error) {
 	// Auto-generate external_key if empty
 	if strings.TrimSpace(request.ExternalKey) == "" {
 		seq, err := s.GetNextAssetSequence(ctx, request.OrgID)
@@ -515,7 +508,7 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 		isActive = *request.IsActive
 	}
 
-	query := `SELECT * FROM trakrf.create_asset_with_tags($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+	query := `SELECT * FROM trakrf.create_asset_with_tags($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
 	var assetID int
 	var tagIDs []int
@@ -525,17 +518,15 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 		description = *request.Description
 	}
 
-	// TRA-734 (BB40 F3): asset location is scan/operational data, not
-	// settable on Create. The CreateAssetRequest struct no longer carries
-	// LocationID; we pass nil to the SQL function so new assets always
-	// start without a current_location_id.
+	// TRA-734 (BB40 F3) / TRA-799: asset location is scan/operational fact
+	// data, not part of the asset resource. create_asset_with_tags no longer
+	// takes a location parameter (migration 000043).
 	err = s.WithOrgTx(ctx, request.OrgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			request.OrgID,
 			request.ExternalKey,
 			request.Name,
 			description,
-			(*int)(nil),
 			validFrom,
 			validTo,
 			isActive,
@@ -548,7 +539,7 @@ func (s *Storage) CreateAssetWithTags(ctx context.Context, request asset.CreateA
 		return nil, parseAssetWithTagsError(err, request.ExternalKey)
 	}
 
-	return s.getAssetWithLocationByID(ctx, request.OrgID, assetID)
+	return s.getAssetViewWithTagsByID(ctx, request.OrgID, assetID)
 }
 
 func (s *Storage) GetAssetViewByID(ctx context.Context, orgID, id int) (*asset.AssetView, error) {
@@ -571,55 +562,33 @@ func (s *Storage) GetAssetViewByID(ctx context.Context, orgID, id int) (*asset.A
 	}, nil
 }
 
-// getAssetWithLocationByID returns an AssetWithLocation by surrogate id,
-// performing the LEFT JOIN on current location and fetching tags. Used by
-// CreateAssetWithTags and UpdateAsset to emit the public write-response
-// shape. Returns (nil, nil) if the asset doesn't exist or is soft-deleted.
-func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
-	// TRA-576: align with ListAssetsFiltered. Latest scan wins; explicit
-	// current_location_id is the fallback (TRA-495). Selecting the
-	// coalesced expression for both the int and the JOIN guarantees the
-	// FK pair is always derived from the same row — current_location_id
-	// and current_location_external_key are populated or null together.
+// getAssetViewWithTagsByID returns an AssetView (asset row + tags) by
+// surrogate id. Used by CreateAssetWithTags / UpdateAsset / RenameAsset to
+// emit the public write-response shape. Returns (nil, nil) if the asset
+// doesn't exist or is soft-deleted.
+func (s *Storage) getAssetViewWithTagsByID(ctx context.Context, orgID, id int) (*asset.AssetView, error) {
 	query := `
-		WITH latest_scan AS (
-			SELECT s.location_id
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $2 AND s.asset_id = $1
-			ORDER BY s.timestamp DESC
-			LIMIT 1
-		)
 		SELECT
 			a.id, a.org_id, a.external_key, a.name, COALESCE(a.description, ''),
-			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
-			a.is_active, a.created_at, a.updated_at, a.deleted_at,
-			l.external_key
+			a.is_active, a.created_at, a.updated_at, a.deleted_at
 		FROM trakrf.assets a
-		LEFT JOIN latest_scan ls ON true
-		LEFT JOIN trakrf.locations l
-			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id
 		WHERE a.id = $1 AND a.org_id = $2 AND a.deleted_at IS NULL
 		LIMIT 1
 	`
-	var (
-		a         asset.Asset
-		locExtKey *string
-	)
+	var a asset.Asset
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id, orgID).Scan(
 			&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
-			&a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+			&a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-			&locExtKey,
 		)
 	})
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get asset with location by id: %w", err)
+		return nil, fmt.Errorf("get asset view by id: %w", err)
 	}
 
 	tags, err := s.GetTagsByAssetID(ctx, orgID, a.ID)
@@ -627,12 +596,9 @@ func (s *Storage) getAssetWithLocationByID(ctx context.Context, orgID, id int) (
 		return nil, err
 	}
 
-	return &asset.AssetWithLocation{
-		AssetView: asset.AssetView{
-			Asset: a,
-			Tags:  tags,
-		},
-		LocationExternalKey: locExtKey,
+	return &asset.AssetView{
+		Asset: a,
+		Tags:  tags,
 	}, nil
 }
 
@@ -672,51 +638,25 @@ func (s *Storage) ListAssetViews(ctx context.Context, orgID, limit, offset int) 
 }
 
 // GetAssetByExternalKey returns the live (non-deleted) asset with the given
-// natural key for the given org, plus the current location's external_key.
-// Returns (nil, nil) if no match.
+// natural key for the given org. Returns (nil, nil) if no match.
 func (s *Storage) GetAssetByExternalKey(
 	ctx context.Context, orgID int, externalKey string,
-) (*asset.AssetWithLocation, error) {
-	// TRA-576: same scan-first / FK-fallback expression as
-	// ListAssetsFiltered and getAssetWithLocationByID, so all read paths
-	// return identical (current_location_id, current_location_external_key)
-	// pairs.
+) (*asset.AssetView, error) {
 	query := `
-		WITH latest_scan AS (
-			SELECT s.location_id
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1 AND s.asset_id = (
-				SELECT id FROM trakrf.assets
-				WHERE org_id = $1 AND external_key = $2 AND deleted_at IS NULL
-				LIMIT 1
-			)
-			ORDER BY s.timestamp DESC
-			LIMIT 1
-		)
 		SELECT
 			a.id, a.org_id, a.external_key, a.name, COALESCE(a.description, ''),
-			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
-			a.is_active, a.created_at, a.updated_at, a.deleted_at,
-			l.external_key
+			a.is_active, a.created_at, a.updated_at, a.deleted_at
 		FROM trakrf.assets a
-		LEFT JOIN latest_scan ls ON true
-		LEFT JOIN trakrf.locations l
-			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id
 		WHERE a.org_id = $1 AND a.external_key = $2 AND a.deleted_at IS NULL
 		LIMIT 1
 	`
-	var (
-		a         asset.Asset
-		locExtKey *string
-	)
+	var a asset.Asset
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, orgID, externalKey).Scan(
 			&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
-			&a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+			&a.ValidFrom, &a.ValidTo, &a.Metadata,
 			&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-			&locExtKey,
 		)
 	})
 	if err != nil {
@@ -731,12 +671,9 @@ func (s *Storage) GetAssetByExternalKey(
 		return nil, err
 	}
 
-	return &asset.AssetWithLocation{
-		AssetView: asset.AssetView{
-			Asset: a,
-			Tags:  tags,
-		},
-		LocationExternalKey: locExtKey,
+	return &asset.AssetView{
+		Asset: a,
+		Tags:  tags,
 	}, nil
 }
 
@@ -788,38 +725,20 @@ func (s *Storage) GetAssetIDsByExternalKeys(
 	return out, nil
 }
 
-// ListAssetsFiltered returns assets matching the filter, joined with their
-// current location's natural key. Sort fields allowlisted by handler.
+// ListAssetsFiltered returns assets matching the filter. Sort fields
+// allowlisted by handler.
 func (s *Storage) ListAssetsFiltered(
 	ctx context.Context, orgID int, f asset.ListFilter,
-) ([]asset.AssetWithLocation, error) {
+) ([]asset.AssetView, error) {
 	where, args := buildAssetsWhere(orgID, f)
 	orderBy := buildAssetsOrderBy(f.Sorts)
 
-	// Latest scan wins (TRA-465: ?location filter follows scans, not the
-	// stale current_location_id column). When an asset has no scan history,
-	// fall back to the explicit FK so create-only assets still surface a
-	// location (TRA-495).
 	query := fmt.Sprintf(`
-		WITH latest_scans AS (
-			SELECT DISTINCT ON (s.asset_id)
-				s.asset_id,
-				s.location_id
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1
-			ORDER BY s.asset_id, s.timestamp DESC
-		)
 		SELECT
 			a.id, a.org_id, a.external_key, a.name, COALESCE(a.description, ''),
-			COALESCE(ls.location_id, a.current_location_id),
 			a.valid_from, a.valid_to, a.metadata,
-			a.is_active, a.created_at, a.updated_at, a.deleted_at,
-			l.external_key
+			a.is_active, a.created_at, a.updated_at, a.deleted_at
 		FROM trakrf.assets a
-		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
-		LEFT JOIN trakrf.locations l
-			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id
 		WHERE %s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
@@ -827,7 +746,7 @@ func (s *Storage) ListAssetsFiltered(
 
 	args = append(args, clampAssetListLimit(f.Limit), f.Offset)
 
-	out := []asset.AssetWithLocation{}
+	out := []asset.AssetView{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
@@ -836,22 +755,15 @@ func (s *Storage) ListAssetsFiltered(
 		defer rows.Close()
 
 		for rows.Next() {
-			var (
-				a         asset.Asset
-				locExtKey *string
-			)
+			var a asset.Asset
 			if err := rows.Scan(
 				&a.ID, &a.OrgID, &a.ExternalKey, &a.Name, &a.Description,
-				&a.LocationID, &a.ValidFrom, &a.ValidTo, &a.Metadata,
+				&a.ValidFrom, &a.ValidTo, &a.Metadata,
 				&a.IsActive, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt,
-				&locExtKey,
 			); err != nil {
 				return fmt.Errorf("scan asset: %w", err)
 			}
-			out = append(out, asset.AssetWithLocation{
-				AssetView:           asset.AssetView{Asset: a, Tags: nil},
-				LocationExternalKey: locExtKey,
-			})
+			out = append(out, asset.AssetView{Asset: a, Tags: nil})
 		}
 		return rows.Err()
 	})
@@ -886,20 +798,8 @@ func (s *Storage) CountAssetsFiltered(
 ) (int, error) {
 	where, args := buildAssetsWhere(orgID, f)
 	query := fmt.Sprintf(`
-		WITH latest_scans AS (
-			SELECT DISTINCT ON (s.asset_id)
-				s.asset_id,
-				s.location_id
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1
-			ORDER BY s.asset_id, s.timestamp DESC
-		)
 		SELECT COUNT(*)
 		FROM trakrf.assets a
-		LEFT JOIN latest_scans ls ON ls.asset_id = a.id
-		LEFT JOIN trakrf.locations l
-			ON l.id = COALESCE(ls.location_id, a.current_location_id)
-			AND l.org_id = a.org_id
 		WHERE %s
 	`, where)
 
@@ -926,24 +826,6 @@ func buildAssetsWhere(orgID int, f asset.ListFilter) (string, []any) {
 		clauses = append(clauses, "a.deleted_at IS NULL")
 	}
 	args := []any{orgID}
-
-	// location_id and location_external_key combine with OR semantics — a row
-	// matches if its current location appears in either set.
-	hasIDs := len(f.LocationIDs) > 0
-	hasExtKeys := len(f.LocationExternalKeys) > 0
-	if hasIDs && hasExtKeys {
-		args = append(args, f.LocationIDs)
-		idIdx := len(args)
-		args = append(args, f.LocationExternalKeys)
-		ekIdx := len(args)
-		clauses = append(clauses, fmt.Sprintf("(l.id = ANY($%d::int[]) OR l.external_key = ANY($%d::text[]))", idIdx, ekIdx))
-	} else if hasIDs {
-		args = append(args, f.LocationIDs)
-		clauses = append(clauses, fmt.Sprintf("l.id = ANY($%d::int[])", len(args)))
-	} else if hasExtKeys {
-		args = append(args, f.LocationExternalKeys)
-		clauses = append(clauses, fmt.Sprintf("l.external_key = ANY($%d::text[])", len(args)))
-	}
 
 	if len(f.ExternalKeys) > 0 {
 		args = append(args, f.ExternalKeys)
@@ -1005,17 +887,12 @@ func parseAssetWithTagsError(err error, externalKey string) error {
 		return fmt.Errorf("one or more tags already exist")
 	}
 
-	if strings.Contains(errStr, "current_location_id_fkey") {
-		return fmt.Errorf("invalid location_id: location does not exist")
-	}
-
 	return fmt.Errorf("failed to create asset with tags: %w", err)
 }
 
-// GetAssetWithLocationByID exposes getAssetWithLocationByID so handlers (and
-// integration tests) can fetch an AssetView joined with the current location's
-// natural key in one round-trip. Used by the PATCH handler's TRA-699 echo
-// check against current state.
-func (s *Storage) GetAssetWithLocationByID(ctx context.Context, orgID, id int) (*asset.AssetWithLocation, error) {
-	return s.getAssetWithLocationByID(ctx, orgID, id)
+// GetAssetViewWithTagsByID exposes getAssetViewWithTagsByID so handlers (and
+// integration tests) can fetch an asset plus its tags in one round-trip. Used
+// by the PATCH handler's echo check against current state.
+func (s *Storage) GetAssetViewWithTagsByID(ctx context.Context, orgID, id int) (*asset.AssetView, error) {
+	return s.getAssetViewWithTagsByID(ctx, orgID, id)
 }

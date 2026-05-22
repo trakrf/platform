@@ -1,27 +1,19 @@
 //go:build integration
 // +build integration
 
-// TRA-699 (BB31 §2): natural-key reference fields on PATCH follow the
-// accept-if-matches, reject-if-differs rule. Five fields across two
-// endpoints share the policy; this file covers PATCH /assets:
+// PATCH /assets natural-key and read-only field handling.
 //
-//   - external_key            (own natural key, managed-via-rename)
-//   - location_external_key   (derived from scan events / current_location_id)
-//   - location_id             (derived from scan events / current_location_id)
+// TRA-699 (BB31 §2): external_key on PATCH follows the accept-if-matches,
+// reject-if-differs rule — a verbatim echo of the current value is stripped
+// from the update and succeeds (200); a differing value fails 400 naming the
+// /rename write path.
 //
-// Behavior:
-//   - if the body value matches the current resource value, the field is
-//     stripped from the update and the request succeeds (200);
-//   - if the body value differs, the request fails with 400
-//     code=read_only and detail naming the proper write path.
-//
-// Pre-TRA-699 behavior these tests supersede:
-//   - external_key was always 400 read_only (pre-decode reject under TRA-686).
-//   - location_external_key was silently stripped on any value (TRA-681).
-//   - location_id was a writable field with null-clear semantics (TRA-614).
-//     The writable / clear flow is gone; integrators that need to mutate
-//     asset location now do so via scan events (record-of-origin posture;
-//     see TRA-411 for the medium-term continuous-aggregate refactor).
+// TRA-799: location_id / location_external_key are no longer part of the
+// asset resource (asset location is scan-derived fact data). They are
+// pre-decode-rejected on PATCH by PublicRejectPatchFields — any presence,
+// regardless of value, returns 400 code=read_only. The former TRA-699 echo
+// tests for location_* are removed; PATCH location rejection is covered by
+// fk_validation_integration_test.go and error_detail_url_integration_test.go.
 
 package assets
 
@@ -42,32 +34,17 @@ import (
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
-// seedNaturalKeyAsset seeds an asset, optionally with a current_location_id,
-// and returns (assetID, locationID-or-zero, locationExternalKey-or-empty).
-func seedNaturalKeyAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, name, locExtKey string) (int, int, string) {
+// seedNaturalKeyAsset seeds a live asset and returns its surrogate id.
+func seedNaturalKeyAsset(t *testing.T, pool *pgxpool.Pool, orgID int, extKey, name string) int {
 	t.Helper()
-	var locID *int
-	if locExtKey != "" {
-		var id int
-		err := pool.QueryRow(context.Background(), `
-			INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from, is_active)
-			VALUES ($1, $2, $2, '', $3, true) RETURNING id
-		`, orgID, locExtKey, time.Now().UTC()).Scan(&id)
-		require.NoError(t, err)
-		locID = &id
-	}
 	var assetID int
 	err := pool.QueryRow(context.Background(), `
 		INSERT INTO trakrf.assets
-		  (org_id, external_key, name, description, current_location_id, valid_from, is_active)
-		VALUES ($1, $2, $3, '', $4, $5, true) RETURNING id
-	`, orgID, extKey, name, locID, time.Now().UTC()).Scan(&assetID)
+		  (org_id, external_key, name, description, valid_from, is_active)
+		VALUES ($1, $2, $3, '', $4, true) RETURNING id
+	`, orgID, extKey, name, time.Now().UTC()).Scan(&assetID)
 	require.NoError(t, err)
-	var lid int
-	if locID != nil {
-		lid = *locID
-	}
-	return assetID, lid, locExtKey
+	return assetID
 }
 
 type patchErrorResp struct {
@@ -100,7 +77,7 @@ func TestPatchAsset_NaturalKey_ExternalKey_Matches200(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-EK-MATCH", "EkMatch", "")
+	id := seedNaturalKeyAsset(t, pool, orgID, "ASSET-EK-MATCH", "EkMatch")
 	router := setupRoundTripRouter(NewHandler(store))
 
 	rec := patch(t, router, orgID, id, `{"external_key":"ASSET-EK-MATCH","name":"renamed via patch"}`)
@@ -124,7 +101,7 @@ func TestPatchAsset_NaturalKey_ExternalKey_Differs400(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-EK-DIFF", "EkDiff", "")
+	id := seedNaturalKeyAsset(t, pool, orgID, "ASSET-EK-DIFF", "EkDiff")
 	router := setupRoundTripRouter(NewHandler(store))
 
 	rec := patch(t, router, orgID, id, `{"external_key":"ASSET-NEW-NAME"}`)
@@ -146,149 +123,6 @@ func TestPatchAsset_NaturalKey_ExternalKey_Differs400(t *testing.T) {
 	assert.Equal(t, "ASSET-EK-DIFF", ek)
 }
 
-// TRA-699 §1.C: location_external_key echoed back (non-null) → 200.
-func TestPatchAsset_NaturalKey_LocationExternalKey_Matches200(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	id, _, lek := seedNaturalKeyAsset(t, pool, orgID, "ASSET-LEK-MATCH", "LekMatch", "WHS-MATCH")
-	router := setupRoundTripRouter(NewHandler(store))
-
-	rec := patch(t, router, orgID, id, fmt.Sprintf(`{"location_external_key":%q,"name":"name2"}`, lek))
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-
-	var resp struct {
-		Data map[string]any `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "name2", resp.Data["name"])
-	assert.Equal(t, lek, resp.Data["location_external_key"])
-}
-
-// TRA-699 §1.D: location_external_key echoed back as null when current is
-// null → 200.
-func TestPatchAsset_NaturalKey_LocationExternalKey_NullNullMatches200(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-LEK-NN", "LekNullNull", "")
-	router := setupRoundTripRouter(NewHandler(store))
-
-	rec := patch(t, router, orgID, id, `{"location_external_key":null,"name":"n2"}`)
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-}
-
-// TRA-699 §1.E: location_external_key differing → 400 read_only.
-func TestPatchAsset_NaturalKey_LocationExternalKey_Differs400(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-LEK-DIFF", "LekDiff", "WHS-CUR")
-	router := setupRoundTripRouter(NewHandler(store))
-
-	rec := patch(t, router, orgID, id, `{"location_external_key":"WHS-OTHER"}`)
-	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
-
-	var resp patchErrorResp
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Error.Fields, 1)
-	assert.Equal(t, "location_external_key", resp.Error.Fields[0].Field)
-	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
-	assert.Contains(t, resp.Error.Fields[0].Message, "scan event",
-		"detail must mention the scan-event mutation path (record-of-origin posture)")
-}
-
-// TRA-699 §1.F: location_id echoed back → 200.
-func TestPatchAsset_NaturalKey_LocationID_Matches200(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	id, locID, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-LID-MATCH", "LidMatch", "WHS-LID-OK")
-	router := setupRoundTripRouter(NewHandler(store))
-
-	rec := patch(t, router, orgID, id, fmt.Sprintf(`{"location_id":%d,"name":"n3"}`, locID))
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-}
-
-// TRA-699 §1.G: location_id differing (non-null → other non-null) → 400.
-func TestPatchAsset_NaturalKey_LocationID_Differs400(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	id, locID, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-LID-DIFF", "LidDiff", "WHS-A")
-	router := setupRoundTripRouter(NewHandler(store))
-
-	// Seed a second location and try to point at it via PATCH.
-	var otherLoc int
-	require.NoError(t, pool.QueryRow(context.Background(), `
-		INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from, is_active)
-		VALUES ($1, 'WHS-B', 'whs-b', '', $2, true) RETURNING id
-	`, orgID, time.Now().UTC()).Scan(&otherLoc))
-	require.NotEqual(t, locID, otherLoc)
-
-	rec := patch(t, router, orgID, id, fmt.Sprintf(`{"location_id":%d}`, otherLoc))
-	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
-
-	var resp patchErrorResp
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Error.Fields, 1)
-	assert.Equal(t, "location_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
-	assert.Contains(t, resp.Error.Fields[0].Message, "scan event",
-		"detail must mention the scan-event mutation path")
-
-	// Storage location unchanged.
-	var curLoc *int
-	require.NoError(t, pool.QueryRow(context.Background(),
-		`SELECT current_location_id FROM trakrf.assets WHERE id = $1`, id).Scan(&curLoc))
-	require.NotNil(t, curLoc)
-	assert.Equal(t, locID, *curLoc)
-}
-
-// TRA-699 §1.H: location_id null vs non-null current is a "differs" case (a
-// clear request that PATCH no longer honors).
-func TestPatchAsset_NaturalKey_LocationID_NullVsNonNullDiffers400(t *testing.T) {
-	store, cleanup := testutil.SetupTestDB(t)
-	defer cleanup()
-	pool := store.Pool().(*pgxpool.Pool)
-	orgID := testutil.CreateTestAccount(t, pool)
-	defer testutil.CleanupTestAccounts(t, pool)
-
-	id, locID, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-LID-CLEAR", "LidClear", "WHS-X")
-	router := setupRoundTripRouter(NewHandler(store))
-
-	rec := patch(t, router, orgID, id, `{"location_id":null}`)
-	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
-
-	var resp patchErrorResp
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Error.Fields, 1)
-	assert.Equal(t, "location_id", resp.Error.Fields[0].Field)
-	assert.Equal(t, "read_only", resp.Error.Fields[0].Code)
-
-	// Storage location unchanged.
-	var curLoc *int
-	require.NoError(t, pool.QueryRow(context.Background(),
-		`SELECT current_location_id FROM trakrf.assets WHERE id = $1`, id).Scan(&curLoc))
-	require.NotNil(t, curLoc)
-	assert.Equal(t, locID, *curLoc)
-}
-
 // TRA-702 / BB32 D2: a single differing read-only field (here external_key,
 // rejected with invalid_context post-TRA-780 F4) must echo fields[0].message
 // verbatim in detail — pre-TRA-702 the inline emit-site wrote the literal
@@ -300,7 +134,7 @@ func TestPatchAsset_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-D2-ECHO", "D2Echo", "")
+	id := seedNaturalKeyAsset(t, pool, orgID, "ASSET-D2-ECHO", "D2Echo")
 	router := setupRoundTripRouter(NewHandler(store))
 
 	rec := patch(t, router, orgID, id, `{"external_key":"ASSET-DIFFERENT"}`)
@@ -315,42 +149,39 @@ func TestPatchAsset_NaturalKey_ReadOnly_DetailEchoesFieldMessage(t *testing.T) {
 		"detail must name the rename endpoint so AI integrators can self-redirect")
 }
 
-// TRA-702 / BB32 D3 / TRA-780 F4: a PATCH body with multiple differing
-// read-only fields must surface one entry per field in fields[] AND a
-// "(and N more validation errors)" suffix in detail. After TRA-780 F4 the
-// rejection code splits: external_key emits invalid_context (mutable via
-// sub-resource); location_external_key and location_id stay read_only
-// (server-managed via scan ingestion).
-func TestPatchAsset_NaturalKey_ReadOnly_MultiField_AllReportedWithSuffix(t *testing.T) {
+// TRA-702 / BB32 D3 + TRA-799: a PATCH body carrying both location_id and
+// location_external_key is pre-decode-rejected (PublicRejectPatchFields) with
+// one entry per field in fields[] AND a "(and N more validation errors)"
+// suffix in detail. Both fields are server-managed scan-derived fact data —
+// code=read_only.
+func TestPatchAsset_ReadOnly_MultiField_AllReportedWithSuffix(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 	pool := store.Pool().(*pgxpool.Pool)
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-D3-MULTI", "D3Multi", "WHS-OWNED")
+	id := seedNaturalKeyAsset(t, pool, orgID, "ASSET-D3-MULTI", "D3Multi")
 	router := setupRoundTripRouter(NewHandler(store))
 
-	// All three natural-key fields differ from the current resource state.
 	rec := patch(t, router, orgID, id,
-		`{"external_key":"ASSET-OTHER","location_external_key":"WHS-OTHER","location_id":99999}`)
+		`{"location_id":99999,"location_external_key":"WHS-OTHER"}`)
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 
 	var resp patchErrorResp
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Error.Fields, 3, "all three differing fields must surface")
+	require.Len(t, resp.Error.Fields, 2, "both location fields must surface")
 
 	fields := map[string]string{}
 	for _, f := range resp.Error.Fields {
 		fields[f.Field] = f.Code
 	}
-	assert.Equal(t, "invalid_context", fields["external_key"])
-	assert.Equal(t, "read_only", fields["location_external_key"])
 	assert.Equal(t, "read_only", fields["location_id"])
+	assert.Equal(t, "read_only", fields["location_external_key"])
 
-	assert.Contains(t, resp.Error.Detail, "(and 2 more validation errors)",
-		"detail must include the plural multi-field suffix")
-	assert.Equal(t, resp.Error.Fields[0].Message+" (and 2 more validation errors)",
+	assert.Contains(t, resp.Error.Detail, "1 more validation error",
+		"detail must include the multi-field suffix")
+	assert.Equal(t, resp.Error.Fields[0].Message+" (and 1 more validation error)",
 		resp.Error.Detail,
 		"detail must echo fields[0].message + suffix verbatim")
 }
@@ -365,7 +196,7 @@ func TestPatchAsset_ExplicitNullOnNonNullable_MultiField_AllReported(t *testing.
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-NULL-MULTI", "NullMulti", "")
+	id := seedNaturalKeyAsset(t, pool, orgID, "ASSET-NULL-MULTI", "NullMulti")
 	router := setupRoundTripRouter(NewHandler(store))
 
 	// Two non-nullable PATCH fields set to null in the same body.
@@ -382,9 +213,10 @@ func TestPatchAsset_ExplicitNullOnNonNullable_MultiField_AllReported(t *testing.
 		"detail must carry the multi-field suffix")
 }
 
-// TRA-699 §1.I: full GET → PATCH back round-trip with all three natural-key
-// fields populated must 200 (each field is a verbatim echo). This is the
-// integrator-facing contract the rule unlocks.
+// TRA-699 §1.I + TRA-799: a verbatim GET → PATCH round-trip must 200. The GET
+// response no longer carries location_id / location_external_key, so the
+// round-tripped body never trips the location pre-decode reject; external_key
+// and the server-managed fields echo through unchanged.
 func TestPatchAsset_NaturalKey_FullGETRoundTrip_200(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -392,7 +224,7 @@ func TestPatchAsset_NaturalKey_FullGETRoundTrip_200(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	defer testutil.CleanupTestAccounts(t, pool)
 
-	id, _, _ := seedNaturalKeyAsset(t, pool, orgID, "ASSET-RT-NK", "RtNk", "WHS-RT")
+	id := seedNaturalKeyAsset(t, pool, orgID, "ASSET-RT-NK", "RtNk")
 	router := setupRoundTripRouter(NewHandler(store))
 
 	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/assets/%d", id), nil)
@@ -405,17 +237,18 @@ func TestPatchAsset_NaturalKey_FullGETRoundTrip_200(t *testing.T) {
 		Data map[string]any `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &getResp))
+	require.NotContains(t, getResp.Data, "location_id",
+		"asset GET response must not carry location_id (TRA-799)")
+	require.NotContains(t, getResp.Data, "location_external_key",
+		"asset GET response must not carry location_external_key (TRA-799)")
 	getResp.Data["name"] = "renamed via round-trip"
-	// TRA-710 brought `tags` under the same echo-or-reject rule, so it can
-	// stay on the body — the verbatim GET echo of `[]` (or any current
-	// shape) is normalized out.
 
 	body, err := json.Marshal(getResp.Data)
 	require.NoError(t, err)
 
 	rec := patch(t, router, orgID, id, string(body))
 	require.Equal(t, http.StatusOK, rec.Code,
-		"full GET → PATCH round-trip with natural keys included must 200: %s", rec.Body.String())
+		"full GET → PATCH round-trip must 200: %s", rec.Body.String())
 
 	var putResp struct {
 		Data map[string]any `json:"data"`

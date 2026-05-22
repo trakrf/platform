@@ -5,10 +5,12 @@ import type {
   SortState,
   PaginationState,
 } from '@/types/assets';
-import { useLocationStore } from '@/stores/locations/locationStore';
 
 /**
- * Filters assets by active status and location
+ * Filters assets by active status.
+ *
+ * TRA-799: asset location is fact data and is no longer an asset attribute,
+ * so the assets screen does not filter by location.
  *
  * @param assets - Array of assets to filter
  * @param filters - Filter criteria
@@ -23,23 +25,6 @@ export function filterAssets(
     if (filters.is_active !== undefined && filters.is_active !== 'all') {
       if (asset.is_active !== filters.is_active) {
         return false;
-      }
-    }
-
-    // Filter by location
-    if (filters.location_id !== undefined && filters.location_id !== 'all') {
-      if (filters.location_id === null) {
-        // Filter for unassigned assets (no location)
-        if (asset.location_external_key !== null && asset.location_external_key !== undefined) {
-          return false;
-        }
-      } else {
-        // Filter for specific location — look up identifier from store by surrogate ID
-        const locById = useLocationStore.getState().cache.byId.get(filters.location_id as number);
-        const filterIdentifier = locById?.external_key;
-        if (asset.location_external_key !== filterIdentifier) {
-          return false;
-        }
       }
     }
 

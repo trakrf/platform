@@ -25,7 +25,7 @@ describe('AssetSearchSort', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     const mockAssetStore = {
-      filters: { search: '', location_id: 'all' },
+      filters: { search: '' },
       setSearchTerm: mockSetSearchTerm,
       setFilters: vi.fn(),
       sort: { field: 'identifier', direction: 'asc' as const },

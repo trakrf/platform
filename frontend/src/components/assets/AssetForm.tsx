@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagInput } from '@/types/assets';
 import { validateDateRange } from '@/lib/asset/validators';
 import { ErrorBanner } from '@/components/shared';
-import { useDeviceStore, useLocationStore } from '@/stores';
-import { useLocations } from '@/hooks/locations';
+import { useDeviceStore } from '@/stores';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { ReaderMode } from '@/worker/types/reader';
 import { lookupApi } from '@/lib/api/lookup';
@@ -23,17 +22,11 @@ interface AssetFormProps {
 }
 
 export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, error, initialIdentifier }: AssetFormProps) {
-  // Resolve location_id from natural key for write path (POST/PUT unchanged)
-  const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const resolvedLocationId = asset?.location_external_key
-    ? (getLocationByIdentifier(asset.location_external_key)?.id ?? null)
-    : null;
-
+  // TRA-799: asset location is fact data, not a writable field on the form.
   const [formData, setFormData] = useState({
     external_key: asset?.external_key || initialIdentifier || '',
     name: asset?.name || '',
     description: asset?.description || '',
-    location_id: resolvedLocationId as number | null,
     valid_from: asset?.valid_from?.split('T')[0] || new Date().toISOString().split('T')[0],
     valid_to: asset?.valid_to?.split('T')[0] || '',
     is_active: asset?.is_active ?? true,
@@ -41,11 +34,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [tagInputs, setTagInputs] = useState<TagInput[]>([]);
-
-  // Load locations for dropdown
-  useLocations({ enabled: true });
-  const locationCache = useLocationStore((state) => state.cache.byId);
-  const locations = useMemo(() => Array.from(locationCache.values()), [locationCache]);
 
   // Barcode scanning for RFID tags
   const isConnected = useDeviceStore((s) => s.isConnected);
@@ -88,9 +76,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         external_key: asset.external_key,
         name: asset.name,
         description: asset.description,
-        location_id: asset.location_external_key
-          ? (getLocationByIdentifier(asset.location_external_key)?.id ?? null)
-          : null,
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
@@ -267,7 +252,6 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       ...(includeExternalKey ? { external_key: formData.external_key } : {}),
       name: formData.name,
       description,
-      location_id: formData.location_id,
       ...(formData.valid_from ? { valid_from: toRFC3339(formData.valid_from) } : {}),
       valid_to: formData.valid_to ? toRFC3339(formData.valid_to) : null,
       is_active: formData.is_active,
@@ -358,43 +342,18 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label htmlFor="location" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Location
-          </label>
-          <select
-            id="location"
-            value={formData.location_id ?? ''}
-            onChange={(e) => handleChange('location_id', e.target.value ? Number(e.target.value) : null)}
-            disabled={loading}
-            className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            <option value="">No location assigned</option>
-            {locations
-              .filter(loc => loc.is_active)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.name}
-                </option>
-              ))}
-          </select>
-        </div>
-
-        <div className="flex items-center pt-8">
-          <input
-            type="checkbox"
-            id="is_active"
-            checked={formData.is_active}
-            onChange={(e) => handleChange('is_active', e.target.checked)}
-            disabled={loading}
-            className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
-          />
-          <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            Active
-          </label>
-        </div>
+      <div className="flex items-center">
+        <input
+          type="checkbox"
+          id="is_active"
+          checked={formData.is_active}
+          onChange={(e) => handleChange('is_active', e.target.checked)}
+          disabled={loading}
+          className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
+        />
+        <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          Active
+        </label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

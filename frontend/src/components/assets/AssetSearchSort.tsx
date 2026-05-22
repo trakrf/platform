@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, X, ArrowUpDown, MapPin, QrCode, Loader2 } from 'lucide-react';
-import { useAssetStore, useLocationStore, useDeviceStore } from '@/stores';
-import { useLocations } from '@/hooks/locations';
+import { Search, X, ArrowUpDown, QrCode, Loader2 } from 'lucide-react';
+import { useAssetStore, useDeviceStore } from '@/stores';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { ReaderMode } from '@/worker/types/reader';
 import type { SortState } from '@/types/assets';
@@ -19,19 +18,12 @@ const SORT_OPTIONS: Array<{ value: SortState['field']; label: string }> = [
 
 export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
   const search = useAssetStore((state) => state.filters.search);
-  const locationFilter = useAssetStore((state) => state.filters.location_id);
   const setSearchTerm = useAssetStore((state) => state.setSearchTerm);
-  const setFilters = useAssetStore((state) => state.setFilters);
   const { field: sortField, direction: sortDirection } = useAssetStore((state) => state.sort);
   const setSort = useAssetStore((state) => state.setSort);
   const cache = useAssetStore((state) => state.cache);
   const filters = useAssetStore((state) => state.filters);
   const sort = useAssetStore((state) => state.sort);
-
-  // Load locations for filter dropdown
-  useLocations({ enabled: true });
-  const locationCache = useLocationStore((state) => state.cache.byId);
-  const locations = useMemo(() => Array.from(locationCache.values()), [locationCache]);
 
   const filteredAssetsCount = useMemo(() => {
     return useAssetStore.getState().getFilteredAssets().length;
@@ -88,17 +80,6 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
     setSort(sortField, newDirection);
   };
 
-  const handleLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    if (value === 'all') {
-      setFilters({ location_id: 'all' });
-    } else if (value === 'unassigned') {
-      setFilters({ location_id: null });
-    } else {
-      setFilters({ location_id: Number(value) });
-    }
-  };
-
   return (
     <div className={`flex flex-col md:flex-row gap-3 md:items-center md:justify-between ${className}`}>
       {/* Search Input with Scan Button */}
@@ -149,28 +130,6 @@ export function AssetSearchSort({ className = '' }: AssetSearchSortProps) {
             )}
           </button>
         )}
-      </div>
-
-      {/* Location Filter */}
-      <div className="flex items-center gap-2">
-        <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-        <select
-          id="location-filter"
-          value={locationFilter === null ? 'unassigned' : locationFilter === 'all' ? 'all' : String(locationFilter)}
-          onChange={handleLocationChange}
-          className="block py-2 pl-3 pr-8 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent text-sm"
-        >
-          <option value="all">All Locations</option>
-          <option value="unassigned">Unassigned</option>
-          {locations
-            .filter(loc => loc.is_active)
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.name}
-              </option>
-            ))}
-        </select>
       </div>
 
       {/* Sort Controls */}

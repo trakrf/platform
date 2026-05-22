@@ -1574,7 +1574,7 @@ func injectDefaultErrorResponse(doc *openapi3.T) {
 // not writable and don't appear on the write side.
 var nullableFields = map[string][]string{
 	// --- read views (response payloads) ---
-	"asset.PublicAssetView":         {"location_id", "location_external_key", "description", "valid_to", "deleted_at"},
+	"asset.PublicAssetView":         {"description", "valid_to", "deleted_at"},
 	"apikey.APIKeyListItem":         {"created_by", "created_by_key_id", "last_used_at"},
 	"report.PublicAssetHistoryItem": {"duration_seconds", "location_id", "location_external_key"},
 	// TRA-732 R4 / BB39 F8: asset_id and asset_external_key are non-nullable
@@ -1595,18 +1595,13 @@ var nullableFields = map[string][]string{
 	// semantics and forced a documented Date Fields asymmetry note that
 	// integrators tripped on. Both sides now reject `null` with
 	// invalid_value.
-	// TRA-681: location_external_key dropped from UpdateAssetRequest — the
-	// asset-side natural-key form is read-only on PATCH.
 	// TRA-719 / BB35 B2: parent_external_key restored to
 	// UpdateLocationRequest now that PATCH dispatches it through the same
 	// FK-resolution path as Create.
-	// TRA-734 (BB40 F3): location_id / location_external_key dropped from
-	// the Create request schemas — asset location is scan/operational data,
-	// never settable on Create. location_id stays on UpdateAssetRequest
-	// because the BB31 §2 echo check decodes it before nilling it out;
-	// the Go field is *int and the spec advertises it as nullable to mirror
-	// that round-trip-safe shape.
-	"asset.UpdateAssetRequest":               {"description", "location_id", "valid_to"},
+	// TRA-799: location_id / location_external_key are not on any asset
+	// request or response schema — asset location is scan-derived fact data,
+	// read through the reporting endpoints.
+	"asset.UpdateAssetRequest":               {"description", "valid_to"},
 	"asset.CreateAssetRequest":               {"description", "valid_to"},
 	"asset.CreateAssetWithTagsRequest":       {"description", "valid_to", "tags"},
 	"location.UpdateLocationRequest":         {"description", "parent_id", "parent_external_key", "valid_to"},
@@ -1645,7 +1640,7 @@ var requiredFields = map[string][]string{
 	"shared.Tag": {"id", "tag_type", "value"},
 
 	// asset
-	"asset.PublicAssetView": {"id", "external_key", "name", "description", "location_id", "location_external_key", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},
+	"asset.PublicAssetView": {"id", "external_key", "name", "description", "metadata", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},
 
 	// location
 	"location.PublicLocationView": {"id", "external_key", "name", "description", "parent_id", "parent_external_key", "is_active", "valid_from", "valid_to", "created_at", "updated_at", "deleted_at", "tags"},
@@ -1713,16 +1708,17 @@ var internalOnlyRequiredFields = map[string][]string{
 // request") matches the runtime rule for both categories, so the annotation
 // covers them uniformly even though the runtime code differs.
 //
-// TRA-780 F1 added `location_id`, `location_external_key`, and `tags` to
-// AssetView, and `tags` to LocationView. Strict-typed generators now omit
-// these fields from PATCH request constructions so SDK consumers see the
-// constraint at compile time rather than runtime; clients that do send them
-// still get a structured rejection (per the runtime code split above).
+// TRA-780 F1 added `tags` to AssetView and LocationView as read-only.
+// Strict-typed generators omit these fields from PATCH request constructions
+// so SDK consumers see the constraint at compile time rather than runtime;
+// clients that do send them still get a structured rejection (per the
+// runtime code split above). TRA-799: location_id / location_external_key
+// are no longer on the asset schema at all.
 //
 // markReadOnlyFields errors if a configured schema or field is missing from
 // the spec — keeps this map honest as struct fields rename or move.
 var readOnlyFields = map[string][]string{
-	"asset.PublicAssetView":            {"id", "created_at", "updated_at", "deleted_at", "location_id", "location_external_key", "tags"},
+	"asset.PublicAssetView":            {"id", "created_at", "updated_at", "deleted_at", "tags"},
 	"location.PublicLocationView":      {"id", "created_at", "updated_at", "deleted_at", "tags"},
 	"org.OrgMeView":                    {"id"},
 	"shared.Tag":                       {"id"},

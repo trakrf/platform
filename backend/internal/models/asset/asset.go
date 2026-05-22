@@ -15,7 +15,6 @@ type Asset struct {
 	ExternalKey string     `json:"external_key"`
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
-	LocationID  *int       `json:"location_id"`
 	ValidFrom   time.Time  `json:"valid_from"`
 	ValidTo     *time.Time `json:"valid_to"`
 	Metadata    any        `json:"metadata"`
@@ -25,13 +24,20 @@ type Asset struct {
 	DeletedAt   *time.Time `json:"deleted_at"`
 }
 
-// TRA-734 (BB40 F3): location_id and location_external_key are no longer
-// on CreateAssetRequest. Asset location is scan/operational data — collected
-// through the ingestion paths (fixed-reader MQTT pipeline + handheld UI
-// submission), never set through the public API. The handler rejects the
-// fields pre-decode with code=read_only naming the consumption paths
-// (GET /assets/{id}, GET /assets/{id}/history, GET /reports/asset-locations).
-// See PublicRejectCreateFields in the assets handler.
+// LocationReadOnlyMessage is the detail returned when a caller tries to set
+// location_id / location_external_key on asset create or update. Asset
+// location is scan-derived fact data and is not part of the asset resource
+// (TRA-799); it is read through the reporting endpoints. Shared by
+// PublicRejectCreateFields (assets handler) and PublicRejectPatchFields.
+const LocationReadOnlyMessage = "asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not part of the asset resource. Read current asset location through GET /api/v1/reports/asset-locations or GET /api/v1/assets/{asset_id}/history."
+
+// TRA-734 (BB40 F3) / TRA-799: location_id and location_external_key are not
+// on CreateAssetRequest. Asset location is scan/operational fact data —
+// collected through the ingestion paths (fixed-reader MQTT pipeline +
+// handheld UI submission), never set through the public API, and not part of
+// the asset resource. The handler rejects the fields pre-decode with
+// code=read_only (see PublicRejectCreateFields / PublicRejectPatchFields and
+// LocationReadOnlyMessage).
 type CreateAssetRequest struct {
 	OrgID int `json:"-" swaggerignore:"true"`
 	// external_key is optional. Omit to receive a server-assigned key in the
@@ -63,9 +69,10 @@ type CreateAssetRequest struct {
 // fields are not decoded into UpdateAssetRequest at all (no Go destination
 // for them); the echo check fires in addition, against the raw body.
 //
-// TRA-699 (BB31 §2): `external_key`, `location_external_key`, and
-// `location_id` are NOT on this list. They are policed by the same
-// post-decode echo check via dedicated decode targets.
+// TRA-699 (BB31 §2): `external_key` is NOT on this list — it is policed by
+// the post-decode echo check via a dedicated decode target. TRA-799:
+// `location_id` / `location_external_key` left the asset resource entirely
+// and are pre-decode-rejected (see PublicRejectPatchFields).
 //
 // TRA-710 also moved `tags` off PublicRejectPatchFields onto the echo
 // check (same rule). `tags` is not in this list because it is decoded
@@ -90,29 +97,25 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // because Go's json decoder treats `null` and "omitted" the same on
 // pointer fields.
 //
-// TRA-699 (BB31 §2): three natural-key reference fields are decoded into
-// dedicated pointers but policed by the post-decode echo check in the
-// PATCH handler — accept the value if it matches the current resource
-// state (silent no-op); reject if it differs (400 read_only naming the
-// proper write path). Fields:
-//   - ExternalKey (own natural key) → POST /assets/{id}/rename
-//   - LocationExternalKey, LocationID (TRA-734 / BB40 F3 — scan/operational
-//     data, collected through ingestion paths, never settable on the public
-//     API)
+// TRA-699 (BB31 §2): ExternalKey (own natural key) is decoded into a
+// dedicated pointer but policed by the post-decode echo check in the PATCH
+// handler — accept the value if it matches the current resource state
+// (silent no-op); reject if it differs (400 redirecting to
+// POST /assets/{asset_id}/rename). It carries no validation tags because the
+// value is never written by PATCH; the handler nils it out after the echo
+// check passes.
 //
-// None of these three fields carry validation tags because the value is
-// never written by PATCH; the only valid use is to echo the current value
-// back. The handler nils them out after the echo check passes.
+// TRA-799: location_id / location_external_key are no longer part of the
+// asset resource — they are pre-decode-rejected by PublicRejectPatchFields,
+// so they never reach this struct.
 type UpdateAssetRequest struct {
 	Name        *string              `json:"name" validate:"omitempty,min=1,max=255,display_name" example:"Forklift 3"`
 	Description *string              `json:"description" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-01-01T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-01-01T00:00:00Z"`
-	// TRA-699 natural-key echo fields. Decoded so the handler can compare
+	// TRA-699 natural-key echo field. Decoded so the handler can compare
 	// against current state, then nilled before storage update.
-	ExternalKey         *string `json:"external_key" swaggerignore:"true"`
-	LocationID          *int    `json:"location_id" swaggerignore:"true"`
-	LocationExternalKey *string `json:"location_external_key" swaggerignore:"true"`
+	ExternalKey *string `json:"external_key" swaggerignore:"true"`
 	// Set by the PATCH handler when the body had an explicit `null` for the
 	// corresponding read-side-nullable field, to request a column-clear
 	// (TRA-614 / TRA-468). Not decoded from JSON directly.
@@ -136,11 +139,15 @@ type UpdateAssetRequest struct {
 // TRA-699 (BB31 §2): `external_key` moved off this map under the same
 // rule.
 //
-// Kept exported as a (currently empty) map so existing handler call sites
-// remain compile-stable; future fields that need pre-decode reject (i.e.
-// fields whose mere presence is invalid regardless of value) can be added
-// here.
-var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{}
+// TRA-799: location_id / location_external_key are pre-decode-rejected here.
+// Asset location left the resource entirely — it is scan-derived fact data,
+// read through the reporting endpoints. Mere presence of either field is
+// invalid regardless of value, which is exactly what this pre-decode reject
+// map is for. Symmetric with PublicRejectCreateFields on POST.
+var PublicRejectPatchFields = map[string]httputil.FieldRejectPolicy{
+	"location_id":           {Code: "read_only", Message: LocationReadOnlyMessage},
+	"location_external_key": {Code: "read_only", Message: LocationReadOnlyMessage},
+}
 
 // RenameAssetRequest is the body of POST /api/v1/assets/{asset_id}/rename
 // (TRA-664 / BB26 D7). The dedicated operation makes external_key mutation
@@ -170,21 +177,8 @@ type AssetViewListResponse struct {
 	Pagination shared.Pagination `json:"pagination"`
 }
 
-// AssetWithLocation is AssetView plus the resolved location natural key.
-// Populated by GetAssetByExternalKey / list-with-join storage methods;
-// returned to HTTP handlers which then project it to PublicAssetView.
-// Wire field renamed in TRA-580 C-3.
-type AssetWithLocation struct {
-	AssetView
-	LocationExternalKey *string `json:"location_external_key,omitempty"`
-}
-
 // ListFilter carries the optional filters the assets list endpoint supports.
 type ListFilter struct {
-	// OR semantics within and across LocationIDs / LocationExternalKeys —
-	// a row matches if its current location appears in either set.
-	LocationIDs          []int
-	LocationExternalKeys []string
 	// Equality match on a.external_key (any-of). Single value yields the
 	// natural-key lookup that lives on the collection per TRA-600.
 	ExternalKeys []string

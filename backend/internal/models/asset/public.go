@@ -5,10 +5,11 @@ import (
 )
 
 // PublicAssetView is the HTTP shape emitted by read endpoints. It drops
-// org_id and exposes the asset's location as both the canonical int FK and
-// its natural-key external_key (TRA-555). The wire fields are `location_id`
-// and `location_external_key` (TRA-580 C-3 dropped the `current_` prefix
-// that conflicted with the report row shape).
+// org_id and carries only the asset's dimension attributes.
+//
+// TRA-799: the asset's current location is NOT on this shape. Location is
+// scan-derived fact data — read it through GET /api/v1/reports/asset-locations
+// or GET /api/v1/assets/{asset_id}/history.
 //
 // description and valid_to are always emitted (null when unset) per
 // TRA-610 / BB18 §1.8 audit alignment with PublicLocationView.
@@ -20,24 +21,22 @@ import (
 // prefixed `asset_deleted_at` is retained only in cross-resource report
 // shapes (PublicCurrentLocationItem) where disambiguation matters.
 type PublicAssetView struct {
-	ID                  int                `json:"id"`
-	ExternalKey         string             `json:"external_key"`
-	Name                string             `json:"name"`
-	Description         *string            `json:"description"`
-	LocationID          *int               `json:"location_id"`
-	LocationExternalKey *string            `json:"location_external_key"`
-	Metadata            any                `json:"metadata"`
-	IsActive            bool               `json:"is_active"`
-	ValidFrom           shared.PublicTime  `json:"valid_from"`
-	ValidTo             *shared.PublicTime `json:"valid_to"`
-	CreatedAt           shared.PublicTime  `json:"created_at"`
-	UpdatedAt           shared.PublicTime  `json:"updated_at"`
-	DeletedAt           *shared.PublicTime `json:"deleted_at"`
-	Tags                []shared.Tag       `json:"tags"`
+	ID          int                `json:"id"`
+	ExternalKey string             `json:"external_key"`
+	Name        string             `json:"name"`
+	Description *string            `json:"description"`
+	Metadata    any                `json:"metadata"`
+	IsActive    bool               `json:"is_active"`
+	ValidFrom   shared.PublicTime  `json:"valid_from"`
+	ValidTo     *shared.PublicTime `json:"valid_to"`
+	CreatedAt   shared.PublicTime  `json:"created_at"`
+	UpdatedAt   shared.PublicTime  `json:"updated_at"`
+	DeletedAt   *shared.PublicTime `json:"deleted_at"`
+	Tags        []shared.Tag       `json:"tags"`
 }
 
-// ToPublicAssetView projects an AssetWithLocation to the public HTTP shape.
-func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
+// ToPublicAssetView projects an AssetView to the public HTTP shape.
+func ToPublicAssetView(a AssetView) PublicAssetView {
 	// Normalize nil metadata to {} so POST and GET emit the same shape.
 	metadata := a.Metadata
 	if metadata == nil {
@@ -49,19 +48,17 @@ func ToPublicAssetView(a AssetWithLocation) PublicAssetView {
 		desc = &s
 	}
 	return PublicAssetView{
-		ID:                  a.ID,
-		ExternalKey:         a.ExternalKey,
-		Name:                a.Name,
-		Description:         desc,
-		LocationID:          a.LocationID,
-		LocationExternalKey: a.LocationExternalKey,
-		Metadata:            metadata,
-		IsActive:            a.IsActive,
-		ValidFrom:           shared.NewPublicTime(a.ValidFrom),
-		ValidTo:             shared.PublicTimePtr(a.ValidTo),
-		CreatedAt:           shared.NewPublicTime(a.CreatedAt),
-		UpdatedAt:           shared.NewPublicTime(a.UpdatedAt),
-		DeletedAt:           shared.PublicTimePtr(a.DeletedAt),
-		Tags:                a.Tags,
+		ID:          a.ID,
+		ExternalKey: a.ExternalKey,
+		Name:        a.Name,
+		Description: desc,
+		Metadata:    metadata,
+		IsActive:    a.IsActive,
+		ValidFrom:   shared.NewPublicTime(a.ValidFrom),
+		ValidTo:     shared.PublicTimePtr(a.ValidTo),
+		CreatedAt:   shared.NewPublicTime(a.CreatedAt),
+		UpdatedAt:   shared.NewPublicTime(a.UpdatedAt),
+		DeletedAt:   shared.PublicTimePtr(a.DeletedAt),
+		Tags:        a.Tags,
 	}
 }

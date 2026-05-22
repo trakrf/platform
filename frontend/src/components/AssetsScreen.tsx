@@ -16,6 +16,7 @@ import { GlobalUploadAlert } from '@/components/shared/GlobalUploadAlert';
 import { ShareButton } from '@/components/ShareButton';
 import { ExportModal } from '@/components/export';
 import { useExport } from '@/hooks/useExport';
+import { useAssetLocations } from '@/hooks/reports';
 import { generateAssetCSV, generateAssetExcel, generateAssetPDF } from '@/utils/export';
 import type { Asset } from '@/types/assets';
 import type { ExportFormat, ExportResult } from '@/types/export';
@@ -32,6 +33,8 @@ export default function AssetsScreen() {
   const { isLoading } = useAssets();
   const { delete: deleteAsset } = useAssetMutations();
   const { isModalOpen: isExportModalOpen, selectedFormat, openExport, closeExport } = useExport();
+  // TRA-799: current location is fact data sourced from the reports endpoint.
+  const { byAssetId: assetLocations } = useAssetLocations();
 
   const cache = useAssetStore((state) => state.cache);
   const filters = useAssetStore((state) => state.filters);
@@ -54,8 +57,7 @@ export default function AssetsScreen() {
 
   const hasActiveFilters =
     (filters.is_active !== 'all' && filters.is_active !== undefined) ||
-    (filters.search && filters.search.trim() !== '') ||
-    (filters.location_id !== 'all' && filters.location_id !== undefined);
+    (filters.search && filters.search.trim() !== '');
 
   const handleViewAsset = (asset: Asset) => {
     setViewingAsset(asset);
@@ -83,7 +85,7 @@ export default function AssetsScreen() {
   };
 
   const handleClearFilters = () => {
-    setFilters({ is_active: 'all', search: '', location_id: 'all' });
+    setFilters({ is_active: 'all', search: '' });
   };
 
   const handleCreateClick = () => {
@@ -98,16 +100,16 @@ export default function AssetsScreen() {
     (format: ExportFormat): ExportResult => {
       switch (format) {
         case 'csv':
-          return generateAssetCSV(filteredAssets);
+          return generateAssetCSV(filteredAssets, assetLocations);
         case 'xlsx':
-          return generateAssetExcel(filteredAssets);
+          return generateAssetExcel(filteredAssets, assetLocations);
         case 'pdf':
-          return generateAssetPDF(filteredAssets);
+          return generateAssetPDF(filteredAssets, assetLocations);
         default:
           throw new Error(`Unsupported format: ${format}`);
       }
     },
-    [filteredAssets]
+    [filteredAssets, assetLocations]
   );
 
   return (

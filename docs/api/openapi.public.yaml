@@ -170,15 +170,6 @@ components:
                     type: integer
                 is_active:
                     type: boolean
-                location_external_key:
-                    nullable: true
-                    readOnly: true
-                    type: string
-                location_id:
-                    format: int64
-                    nullable: true
-                    readOnly: true
-                    type: integer
                 metadata:
                     additionalProperties: true
                     type: object
@@ -209,8 +200,6 @@ components:
                 - external_key
                 - name
                 - description
-                - location_id
-                - location_external_key
                 - metadata
                 - is_active
                 - valid_from
@@ -996,30 +985,6 @@ paths:
                     maximum: 2147483647
                     minimum: 0
                     type: integer
-                - description: filter by current location id (canonical, may repeat); mutually exclusive with location_external_key (400 ambiguous_fields if both supplied)
-                  explode: true
-                  in: query
-                  name: location_id
-                  schema:
-                    default: []
-                    items:
-                        format: int64
-                        maximum: 2147483647
-                        minimum: 1
-                        type: integer
-                    type: array
-                  style: form
-                - description: filter by current location external_key (may repeat); mutually exclusive with location_id (400 ambiguous_fields if both supplied)
-                  explode: true
-                  in: query
-                  name: location_external_key
-                  schema:
-                    default: []
-                    items:
-                        pattern: ^[A-Za-z0-9-]+$
-                        type: string
-                    type: array
-                  style: form
                 - description: filter by asset external_key, equality match (may repeat for any-of)
                   explode: true
                   in: query
@@ -1743,7 +1708,7 @@ paths:
             description: |-
                 **Required scope:** `assets:write`
 
-                Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. Every accepted PATCH — empty body (`{}`), verbatim echo of current values, partial mutation, or full mutation — advances `updated_at` on success (filesystem `touch` semantics). Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400. The rejection `code` splits the two semantic classes: server-managed fields (`id`, `created_at`, `updated_at`, `deleted_at`, `location_id`, `location_external_key`) return `code: read_only` — they have no public mutation path. Fields mutable via a sub-resource verb (`external_key`, `tags`) return `code: invalid_context` and the detail names the correct verb: mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}. The `tags` collection is compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `invalid_context`. Asset location is collected through scan event ingestion (fixed-reader MQTT pipeline or handheld UI submission) and is not directly settable through the public API.
+                Apply a JSON Merge Patch (RFC 7396) to an asset. Only fields included in the request body are changed; fields set to `null` clear the corresponding nullable column. Omitted fields are left unchanged. Every accepted PATCH — empty body (`{}`), verbatim echo of current values, partial mutation, or full mutation — advances `updated_at` on success (filesystem `touch` semantics). Read-only fields are uniformly governed by the accept-if-matches, reject-if-differs rule: a value matching the current resource state is silently normalized out (so a verbatim GET → PATCH round-trip succeeds without manual scrubbing), and a differing value returns 400. The rejection `code` splits the two semantic classes: server-managed fields (`id`, `created_at`, `updated_at`, `deleted_at`) return `code: read_only` — they have no public mutation path. Fields mutable via a sub-resource verb (`external_key`, `tags`) return `code: invalid_context` and the detail names the correct verb: mutate `external_key` via POST /assets/{asset_id}/rename; mutate `tags` via POST /assets/{asset_id}/tags and DELETE /assets/{asset_id}/tags/{tag_id}. The `tags` collection is compared as a set on full tag content — array ordering is not significant; differing set membership or differing field values on a matching id returns 400 `invalid_context`. Asset location is not part of the asset resource — it is scan-derived fact data, read through GET /api/v1/reports/asset-locations or GET /api/v1/assets/{asset_id}/history; `location_id` / `location_external_key` in a request body are rejected 400 `read_only`.
             operationId: updateAsset
             parameters:
                 - description: Asset id (canonical)

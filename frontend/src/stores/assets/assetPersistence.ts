@@ -41,11 +41,12 @@ export function createAssetPersistence(
               if (now - deserializedCache.lastFetched < deserializedCache.ttl) {
                 parsed.state.cache = deserializedCache;
               } else {
-                // Expired - return empty cache
+                // Expired - return empty cache. Shape must match AssetCache /
+                // serializeCache exactly (byExternalKey, not the pre-rename
+                // byIdentifier/byType) or the next persist write throws.
                 parsed.state.cache = {
                   byId: new Map(),
-                  byIdentifier: new Map(),
-                  byType: new Map(),
+                  byExternalKey: new Map(),
                   activeIds: new Set(),
                   allIds: [],
                   lastFetched: 0,

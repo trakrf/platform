@@ -18,8 +18,6 @@ export interface Asset {
   external_key: string; // Customer-supplied or auto-generated ASSET-NNNN
   name: string;
   description: string;
-  location_id: number | null; // Canonical FK to current location (TRA-555 / TRA-580 C-3)
-  location_external_key: string | null; // Natural-key alternate for current location (TRA-555 / TRA-580 C-3)
   valid_from: string; // ISO 8601 string
   valid_to: string | null; // ISO 8601 or null
   metadata: Record<string, any>;
@@ -33,15 +31,14 @@ export interface Asset {
 
 /**
  * Create request - matches backend CreateAssetRequest.
- * Either location_id (canonical) or location_external_key may be provided;
- * mismatch is rejected.
+ *
+ * TRA-799: asset location is not part of the asset resource. It is
+ * scan-derived fact data — read it from GET /api/v1/reports/asset-locations.
  */
 export interface CreateAssetRequest {
   external_key?: string; // optional - auto-generated as ASSET-XXXX if omitted
   name: string; // required, max 255
   description?: string | null; // optional, max 1024; null clears the column
-  location_id?: number | null;
-  location_external_key?: string | null;
   valid_from: string;
   valid_to: string | null;
   is_active: boolean;
@@ -58,8 +55,6 @@ export interface CreateAssetRequest {
 export interface UpdateAssetRequest {
   name?: string;
   description?: string | null;
-  location_id?: number | null;
-  location_external_key?: string | null;
   valid_from?: string;
   valid_to?: string | null;
   is_active?: boolean;
@@ -149,7 +144,6 @@ export interface BulkErrorDetail {
 export interface AssetFilters {
   is_active?: boolean | 'all';
   search?: string;
-  location_id?: number | null | 'all'; // null = unassigned, 'all' = all locations
 }
 
 /**

@@ -136,7 +136,6 @@ export function createCacheActions(
         filters: {
           is_active: 'all',
           search: '',
-          location_id: 'all',
         },
         pagination: {
           currentPage: 1,
