@@ -113,12 +113,18 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
 
       onClose();
     } catch (err: any) {
+      const apiError = err.response?.data?.error?.detail;
+
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
         setError('Cannot connect to server. Please check your connection and try again.');
       } else if (err.response?.status === 404) {
         setError('Location API endpoint not found. The backend may not be running.');
+      } else if (err.response?.status === 409) {
+        setError(apiError || 'A tag on this location is already attached elsewhere.');
       } else if (err.response?.status >= 500) {
-        setError('Server error. Please try again later.');
+        setError(apiError || 'Server error. Please try again later.');
+      } else if (err.response?.status >= 400) {
+        setError(apiError || err.message || 'Invalid request. Please check your input.');
       } else {
         setError(err.message || 'An error occurred. Please try again.');
       }
