@@ -120,15 +120,18 @@ current generic `"tag <type>:<value> already exists"` message.
 
 ### Frontend — three changes, applied symmetrically to both forms
 
-Affected: `AssetForm.tsx`, `LocationForm.tsx`, `TagInputRow.tsx`,
-`vitest.config.ts`, and the location create/update caller.
+Affected: `AssetForm.tsx`, `LocationForm.tsx`, `LocationFormModal.tsx`,
+the `TagInput` type (`types/assets`), and `vitest.config.ts`.
 
 **1. Location 409 parity.**
-Trace the location create/update path that currently swallows the 409 and
-surface it into the form's `error` prop, matching how the asset path feeds
-`<ErrorBanner error={error} />` (`AssetForm.tsx:278`). After this, a
-save-time collision on the location form shows the same banner the asset
-form already shows.
+`LocationFormModal.tsx`'s create/update `catch` block (lines 115-127) has no
+`409` branch and no generic `>= 400` branch, and never reads
+`err.response.data.error.detail` — so a conflict falls through to the final
+`else` and shows the generic Axios string `"Request failed with status code
+409"`. Add the `409` and `>= 400` branches plus the `detail` extraction,
+mirroring `AssetFormModal.tsx` (lines 139-156). After this, a save-time
+collision on the location form shows the backend's enriched detail, the way
+the asset form already does.
 
 **2. Onblur conflict check (both forms).**
 Each tag row already has an `onBlur` handler (`AssetForm.tsx:478`,
@@ -146,28 +149,21 @@ a different message; do not conflate the two.
 
 **3. Remove the "Reassign" modal; inline conflict error instead.**
 Delete from both forms: the `confirmModal` state, `handleConfirmReassign`,
-and the `ConfirmModal` JSX block (`AssetForm.tsx:518-`,
-`LocationForm.tsx:597-`). The barcode-scan path that currently opens the
-modal sets the same inline conflict state instead.
+and the `ConfirmModal` JSX block. The barcode-scan path that currently opens
+the modal sets the inline conflict state instead.
 
-`TagInputRow` gains a `conflict` prop:
+`TagInputRow` already has an `error?: string` prop that renders a red border
+plus a message below the row — fully wired, but unused by either form. Reuse
+it; no new prop. Each tag row carries an optional conflict message: add a
+`conflict?: string` field to the form's `TagInput` items and pass it through
+as `<TagInputRow error={tagInput.conflict} />`. The message names the
+conflicting entity, e.g.:
 
-```ts
-conflict?: {
-  entityType: 'asset' | 'location';
-  name: string;
-  externalKey: string;
-};
-```
+> Tag already attached to location "Conference Room A" (LOC-CONF-A) —
+> remove it there before attaching here.
 
-When set, the row renders red-bordered with a message naming the conflicting
-entity, e.g.:
-
-> ⚠ Tag already attached to location "Conference Room A" (LOC-CONF-A).
-> Remove it from there before attaching here.
-
-The Save button is disabled while any row carries an unresolved conflict —
-the same disabled treatment as existing field-validation errors.
+The Save button is disabled while any row carries a conflict message — the
+same disabled treatment as existing field-validation errors.
 
 **4. Save-time 409 catch (race backstop).**
 Even with the onblur check, a concurrent attach from another session can
@@ -179,26 +175,29 @@ location form too.
 
 **Backend (Go):**
 
-- `storage/tags_test.go`:
-  - `TestAddTagToAsset_CrossAssetConflict` — value X on asset A, retry on
-    asset B → enriched error names A.
-  - `TestAddTagToAsset_CrossLocationConflict` — value X on location L,
-    retry on asset B → enriched error names location L.
-  - `TestAddTagToLocation_CrossEntityConflict` — mirror for the location
-    handler.
-  - `TestAddTagToAsset_SoftDeletedRowNotBlocking` — attach + soft-delete X
-    on A, then attach X on B → success.
-- Handler integration test (`handlers/assets/` and `handlers/locations/`):
-  POST a colliding tag → 409, `detail` names the conflicting entity.
+- `storage/tags_test.go` (pgxmock unit tests): update the existing
+  `TestAddTagToAsset_Duplicate` / `TestAddTagToLocation_Duplicate` cases to
+  script the new follow-up lookup query and assert the enriched message.
+  This keeps the no-DB unit suite green and drives the storage change.
+- `storage/tags_conflict_integration_test.go` (new, `//go:build integration`,
+  real DB):
+  - cross-asset conflict — value X on asset A, retry on asset B → enriched
+    error names A.
+  - cross-location conflict — value X on location L, retry on asset B →
+    enriched error names location L.
+  - soft-deleted row not blocking — attach + soft-delete X on A, then attach
+    X on B → success.
+- Handler integration test (`handlers/assets/`, `handlers/locations/`): POST
+  a colliding tag → 409, `detail` names the conflicting entity. The handler
+  code itself does not change — the enriched message still contains the
+  `"already exist"` substring its 409 branch matches.
 
 **Frontend (Vitest):**
 
-- `TagInputRow.test.tsx`: renders the `conflict` prop as a red-bordered
-  error with entity name and external key; `conflict` precedence over a
-  plain `error`.
 - `AssetForm` / `LocationForm`: onblur fires `lookupApi.byTag` and stamps a
-  conflict on a cross-entity hit; clears on `404`; Save disabled while a row
-  is conflicted; the location form surfaces a save-time 409 into the error
+  conflict message on a cross-entity hit (rendered red-bordered via the
+  `TagInputRow` `error` prop); clears on `404`; Save disabled while a row is
+  conflicted; the location form surfaces a save-time 409 into the error
   banner.
 - **Re-enable the excluded form vitest files.** `AssetForm.test.tsx` and
   `AssetFormModal.test.tsx` sit in the `vitest.config.ts` exclude list under
@@ -224,9 +223,6 @@ location form too.
 
 ## Open risks
 
-- **Locating the swallowed location 409.** The exact caller that drops the
-  location save error is not yet pinned (parent component or store action).
-  The implementation plan resolves this; it does not change the design.
 - **Onblur lookup latency.** `lookupApi.byTag` is a network round-trip on
   every tag-field blur. Acceptable for the form's interaction rate; the
   save-time 409 remains the correctness backstop if a check is slow or
