@@ -89,6 +89,7 @@ export interface TagInput {
   id?: number;
   type: 'rfid';
   value: string;
+  conflict?: string; // Cross-entity conflict message; set/cleared by the forms
 }
 
 export interface LocationFilters {

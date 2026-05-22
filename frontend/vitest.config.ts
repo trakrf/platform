@@ -52,8 +52,6 @@ export default defineConfig({
       '**/tmp/**',  // Exclude tmp directory
       // TRA-192: Tests with incomplete store mocks - fix and remove from this list
       '**/src/components/assets/AssetCard.test.tsx',
-      '**/src/components/assets/AssetForm.test.tsx',
-      '**/src/components/assets/AssetFormModal.test.tsx',
       '**/src/components/assets/AssetSearchSort.test.tsx',
       '**/src/components/assets/AssetTable.test.tsx',
       '**/src/components/AssetsScreen.test.tsx',

@@ -68,6 +68,7 @@ export interface TagInput {
   id?: number; // Present if existing tag, undefined if new
   type: 'rfid';
   value: string;
+  conflict?: string; // Cross-entity conflict message; set/cleared by the forms
 }
 
 /**

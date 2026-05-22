@@ -3,10 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { AssetFormModal } from './AssetFormModal';
 import { useAssetStore } from '@/stores';
+import * as useScanToInputModule from '@/hooks/useScanToInput';
 import { assetsApi } from '@/lib/api/assets';
 import type { Asset } from '@/types/assets';
 
-vi.mock('@/stores');
 vi.mock('@/lib/api/assets');
 
 describe('AssetFormModal', () => {
@@ -15,8 +15,6 @@ describe('AssetFormModal', () => {
   });
 
   const mockOnClose = vi.fn();
-  const mockAddAsset = vi.fn();
-  const mockUpdateCachedAsset = vi.fn();
 
   const mockAsset: Asset = {
     id: 1,
@@ -36,11 +34,25 @@ describe('AssetFormModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const mockStore = {
-      addAsset: mockAddAsset,
-      updateCachedAsset: mockUpdateCachedAsset,
-    };
-    (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
+
+    // Spy on useScanToInput so the real useBarcodeStore path is bypassed
+    vi.spyOn(useScanToInputModule, 'useScanToInput').mockReturnValue({
+      startRfidScan: vi.fn(),
+      startBarcodeScan: vi.fn(),
+      stopScan: vi.fn(),
+      isScanning: false,
+      scanType: null,
+      setFocused: vi.fn(),
+    });
+
+    // Seed real asset store with spy methods so the modal's selectors resolve
+    useAssetStore.setState({
+      addAsset: vi.fn(),
+      updateCachedAsset: vi.fn(),
+    } as any);
+
+    // Mock the assetsApi.get for edit-mode prefetch
+    (assetsApi.get as any).mockResolvedValue({ data: { data: mockAsset } });
   });
 
   it('does not render when isOpen is false', () => {
@@ -97,7 +109,7 @@ describe('AssetFormModal', () => {
   it('renders AssetForm inside modal', () => {
     render(<AssetFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
-    expect(screen.getByLabelText(/Identifier/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Asset ID/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
   });
 

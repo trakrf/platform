@@ -5,8 +5,7 @@ import { useLocationStore } from '@/stores/locations/locationStore';
 import type { Location, TagInput } from '@/types/locations';
 import { useScanToInput } from '@/hooks/useScanToInput';
 import { useDeviceStore } from '@/stores';
-import { lookupApi } from '@/lib/api/lookup';
-import { ConfirmModal } from '@/components/shared/modals/ConfirmModal';
+import { checkTagConflict } from '@/lib/tags/conflictCheck';
 import { Plus, QrCode, Loader2, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { TagInputRow } from '@/components/assets';
@@ -82,11 +81,6 @@ export function LocationForm({
 
   // Barcode scanning for tags
   const isConnected = useDeviceStore((s) => s.isConnected);
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    epc: string;
-    assignedTo: string;
-  } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [focusedTagIndex, setFocusedTagIndex] = useState<number | null>(null);
   const [autoFocusIndex, setAutoFocusIndex] = useState<number | null>(null);
@@ -141,85 +135,65 @@ export function LocationForm({
   // Handle barcode scan for tags
   const handleBarcodeScan = async (epc: string) => {
     setIsScanning(false);
-
-    // Validate EPC is non-empty (can happen if scanner returns only AIM identifier)
     if (!epc || epc.trim() === '') {
       toast.error('No tag data received from scanner');
       return;
     }
 
-    // If a tag row is focused (trigger scan), update that row's value
+    // Trigger scan into the focused row.
     if (focusedTagIndex !== null && tagInputs[focusedTagIndex]) {
-      // Local duplicate check (excluding current row)
       if (tagInputs.some((t, i) => i !== focusedTagIndex && t.value === epc)) {
         toast.error('This tag is already in the list');
         return;
       }
-
-      // Cross-entity duplicate check
-      try {
-        const response = await lookupApi.byTag('rfid', epc);
-        const result = response.data.data;
-        const name =
-          result.asset?.name || result.location?.name || `${result.entity_type} #${result.entity_id}`;
-        setConfirmModal({ isOpen: true, epc, assignedTo: name });
-      } catch (error: unknown) {
-        const axiosError = error as { response?: { status: number } };
-        if (axiosError.response?.status === 404) {
-          // Not found = no duplicate, update focused row directly
-          const updated = [...tagInputs];
-          updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: epc };
-          setTagInputs(updated);
-          toast.success('Tag updated');
-        } else {
-          toast.error('Failed to check tag assignment');
-        }
-      }
+      const index = focusedTagIndex;
+      setTagInputs((prev) =>
+        prev.map((t, i) => (i === index ? { ...t, value: epc, conflict: undefined } : t)),
+      );
+      void runConflictCheck(index, epc);
       return;
     }
 
-    // Original behavior: append new row (button-initiated scan)
-    // Local duplicate check
+    // Button-initiated scan: append a new row.
     if (tagInputs.some((t) => t.value === epc)) {
       toast.error('This tag is already in the list');
       return;
     }
-
-    // Cross-entity duplicate check via lookup API
-    try {
-      const response = await lookupApi.byTag('rfid', epc);
-      // 200 = found, show reassign confirmation
-      const result = response.data.data;
-      const name =
-        result.asset?.name || result.location?.name || `${result.entity_type} #${result.entity_id}`;
-      setConfirmModal({ isOpen: true, epc, assignedTo: name });
-    } catch (error: unknown) {
-      const axiosError = error as { response?: { status: number } };
-      if (axiosError.response?.status === 404) {
-        // Not found = no duplicate, add directly
-        setTagInputs([...tagInputs, { type: 'rfid', value: epc }]);
-        toast.success('Tag added');
-      } else {
-        toast.error('Failed to check tag assignment');
-      }
-    }
+    const newIndex = tagInputs.length;
+    setTagInputs([...tagInputs, { type: 'rfid', value: epc }]);
+    void runConflictCheck(newIndex, epc);
   };
 
-  const handleConfirmReassign = () => {
-    if (confirmModal) {
-      if (focusedTagIndex !== null && tagInputs[focusedTagIndex]) {
-        // Update focused row
-        const updated = [...tagInputs];
-        updated[focusedTagIndex] = { ...updated[focusedTagIndex], value: confirmModal.epc };
-        setTagInputs(updated);
-        toast.success('Tag updated (will be reassigned on save)');
-      } else {
-        // Original: append new row
-        setTagInputs([...tagInputs, { type: 'rfid', value: confirmModal.epc }]);
-        toast.success('Tag added (will be reassigned on save)');
-      }
+  const applyConflict = (index: number, message: string | undefined) => {
+    setTagInputs((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, conflict: message } : t)),
+    );
+  };
+
+  const runConflictCheck = async (index: number, value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      applyConflict(index, undefined);
+      return;
     }
-    setConfirmModal(null);
+    // A duplicate of another row in this same form is a different kind of
+    // conflict — warn inline rather than firing the cross-entity lookup.
+    if (tagInputs.some((t, i) => i !== index && t.value === trimmed)) {
+      applyConflict(index, "This value is already in this form's tag list — remove the duplicate.");
+      return;
+    }
+    const self =
+      mode === 'edit' && location?.id != null
+        ? { entityType: 'location' as const, entityId: location.id }
+        : undefined;
+    const message = await checkTagConflict(trimmed, self);
+    applyConflict(index, message ?? undefined);
+  };
+
+  const handleTagBlur = (index: number) => {
+    setFocusedTagIndex(null);
+    const input = tagInputs[index];
+    if (input) void runConflictCheck(index, input.value);
   };
 
   const handleStartScan = () => {
@@ -554,7 +528,7 @@ export function LocationForm({
                   setFocusedTagIndex(index);
                   setAutoFocusIndex(null); // Clear after focus fires
                 }}
-                onBlur={() => setFocusedTagIndex(null)}
+                onBlur={() => handleTagBlur(index)}
                 isFocused={focusedTagIndex === index}
                 onTypeChange={(type) => {
                   const updated = [...tagInputs];
@@ -562,14 +536,15 @@ export function LocationForm({
                   setTagInputs(updated);
                 }}
                 onValueChange={(value) => {
-                  const updated = [...tagInputs];
-                  updated[index] = { ...updated[index], value };
-                  setTagInputs(updated);
+                  setTagInputs((prev) =>
+                    prev.map((t, i) => (i === index ? { ...t, value, conflict: undefined } : t)),
+                  );
                 }}
                 onRemove={() => {
                   setTagInputs(tagInputs.filter((_, i) => i !== index));
                 }}
                 disabled={loading}
+                error={tagInput.conflict}
               />
             ))}
           </div>
@@ -587,24 +562,13 @@ export function LocationForm({
         </button>
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || tagInputs.some((t) => t.conflict)}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
         >
           {loading ? 'Saving...' : mode === 'create' ? 'Create Location' : 'Update Location'}
         </button>
       </div>
 
-      {/* Reassign confirmation modal */}
-      {confirmModal && (
-        <ConfirmModal
-          isOpen={confirmModal.isOpen}
-          title="Tag Already Assigned"
-          message={`This tag is currently assigned to "${confirmModal.assignedTo}". Do you want to reassign it to this location?`}
-          confirmText="Reassign"
-          onConfirm={handleConfirmReassign}
-          onCancel={() => setConfirmModal(null)}
-        />
-      )}
     </form>
   );
 }

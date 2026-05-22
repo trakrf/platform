@@ -212,6 +212,8 @@ func TestAddTagToAsset_Duplicate(t *testing.T) {
 		WillReturnError(errors.New("duplicate key value violates unique constraint"))
 	mock.ExpectRollback()
 
+	// resolveTagError attempts a follow-up lookup here; with no further mock
+	// expectations scripted it errors and falls back to the generic message.
 	result, err := storage.AddTagToAsset(context.Background(), orgID, assetID, req)
 
 	assert.Error(t, err)
