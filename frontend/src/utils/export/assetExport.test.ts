@@ -34,7 +34,6 @@ const mockAssets: Asset[] = [
     name: 'Laptop Dell XPS',
     type: 'device',
     description: 'Development laptop',
-    location_external_key: 'WH-A',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     metadata: {},
@@ -53,7 +52,6 @@ const mockAssets: Asset[] = [
     name: 'Office Chair',
     type: 'asset',
     description: 'Ergonomic chair',
-    location_external_key: 'OFF-B',
     valid_from: '2024-01-01T00:00:00Z',
     valid_to: null,
     metadata: {},
@@ -69,7 +67,6 @@ const mockAssets: Asset[] = [
     name: 'Asset without location',
     type: 'inventory',
     description: '',
-    location_external_key: null,
     valid_from: '2024-02-01T00:00:00Z',
     valid_to: null,
     metadata: {},
@@ -79,6 +76,32 @@ const mockAssets: Asset[] = [
     tags: [{ id: 3, tag_type: 'rfid', value: 'E280009999999999' }],
   },
 ];
+
+// TRA-799: current location is sourced from /reports/asset-locations and
+// passed into the export functions as an asset-id-keyed map. Asset 3 is
+// intentionally absent — it has no current location.
+const mockAssetLocations = new Map([
+  [
+    1,
+    {
+      asset_id: 1,
+      asset_external_key: 'ASSET-001',
+      location_id: 1,
+      location_external_key: 'WH-A',
+      last_seen: '2024-01-01T00:00:00Z',
+    },
+  ],
+  [
+    2,
+    {
+      asset_id: 2,
+      asset_external_key: 'ASSET-002',
+      location_id: 2,
+      location_external_key: 'OFF-B',
+      last_seen: '2024-01-15T00:00:00Z',
+    },
+  ],
+]);
 
 // Helper to read blob content in jsdom environment
 async function readBlobAsText(blob: Blob): Promise<string> {
@@ -97,7 +120,7 @@ describe('assetExport', () => {
 
   describe('generateAssetCSV', () => {
     it('returns blob with correct MIME type', () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
 
       expect(result.mimeType).toBe('text/csv');
       expect(result.filename).toBe('assets_2025-01-18.csv');
@@ -106,7 +129,7 @@ describe('assetExport', () => {
     });
 
     it('includes correct headers in new column order', async () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
       const content = await readBlobAsText(result.blob);
       const headers = content.split('\n')[0];
 
@@ -125,7 +148,7 @@ describe('assetExport', () => {
     });
 
     it('has correct column order: identity, state, tags', async () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
       const content = await readBlobAsText(result.blob);
       const headers = content.split('\n')[0].split(',');
 
@@ -142,7 +165,7 @@ describe('assetExport', () => {
     });
 
     it('includes asset data in rows', async () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
       const content = await readBlobAsText(result.blob);
 
       expect(content).toContain('ASSET-001');
@@ -154,7 +177,7 @@ describe('assetExport', () => {
     });
 
     it('separates multiple tags into columns', async () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
       const content = await readBlobAsText(result.blob);
       const lines = content.split('\n');
 
@@ -168,7 +191,7 @@ describe('assetExport', () => {
     });
 
     it('pads empty columns for assets with fewer tags', async () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
       const content = await readBlobAsText(result.blob);
       const lines = content.split('\n');
 
@@ -188,7 +211,7 @@ describe('assetExport', () => {
         ...mockAssets[1],
         tags: [],
       };
-      const result = generateAssetCSV([noTagAsset]);
+      const result = generateAssetCSV([noTagAsset], mockAssetLocations);
       const content = await readBlobAsText(result.blob);
       const headers = content.split('\n')[0].split(',');
 
@@ -198,7 +221,7 @@ describe('assetExport', () => {
     });
 
     it('resolves location names from store', async () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
       const content = await readBlobAsText(result.blob);
 
       expect(content).toContain('Warehouse A');
@@ -206,7 +229,7 @@ describe('assetExport', () => {
     });
 
     it('handles assets without location', async () => {
-      const result = generateAssetCSV(mockAssets);
+      const result = generateAssetCSV(mockAssets, mockAssetLocations);
       const content = await readBlobAsText(result.blob);
       const lines = content.split('\n');
 
@@ -216,7 +239,7 @@ describe('assetExport', () => {
     });
 
     it('handles empty asset array', () => {
-      const result = generateAssetCSV([]);
+      const result = generateAssetCSV([], mockAssetLocations);
 
       expect(result.blob.size).toBeGreaterThan(0); // Should still have headers
       expect(result.mimeType).toBe('text/csv');
@@ -229,7 +252,7 @@ describe('assetExport', () => {
         description: 'Description with "quotes"',
       };
 
-      const result = generateAssetCSV([assetWithQuotes]);
+      const result = generateAssetCSV([assetWithQuotes], mockAssetLocations);
       const content = await readBlobAsText(result.blob);
 
       // Quotes should be escaped as double quotes
@@ -239,7 +262,7 @@ describe('assetExport', () => {
 
   describe('generateAssetExcel', () => {
     it('returns blob with correct MIME type', () => {
-      const result = generateAssetExcel(mockAssets);
+      const result = generateAssetExcel(mockAssets, mockAssetLocations);
 
       expect(result.mimeType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       expect(result.filename).toBe('assets_2025-01-18.xlsx');
@@ -247,14 +270,14 @@ describe('assetExport', () => {
     });
 
     it('generates non-empty blob', () => {
-      const result = generateAssetExcel(mockAssets);
+      const result = generateAssetExcel(mockAssets, mockAssetLocations);
 
       // Excel files are binary and should be reasonably sized
       expect(result.blob.size).toBeGreaterThan(1000);
     });
 
     it('handles empty asset array', () => {
-      const result = generateAssetExcel([]);
+      const result = generateAssetExcel([], mockAssetLocations);
 
       expect(result.blob.size).toBeGreaterThan(0);
       expect(result.mimeType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -263,7 +286,7 @@ describe('assetExport', () => {
 
   describe('generateAssetPDF', () => {
     it('returns blob with correct MIME type', () => {
-      const result = generateAssetPDF(mockAssets);
+      const result = generateAssetPDF(mockAssets, mockAssetLocations);
 
       expect(result.mimeType).toBe('application/pdf');
       expect(result.filename).toBe('assets_2025-01-18.pdf');
@@ -271,14 +294,14 @@ describe('assetExport', () => {
     });
 
     it('generates non-empty blob', () => {
-      const result = generateAssetPDF(mockAssets);
+      const result = generateAssetPDF(mockAssets, mockAssetLocations);
 
       // PDF files should be reasonably sized
       expect(result.blob.size).toBeGreaterThan(1000);
     });
 
     it('handles empty asset array', () => {
-      const result = generateAssetPDF([]);
+      const result = generateAssetPDF([], mockAssetLocations);
 
       expect(result.blob.size).toBeGreaterThan(0);
       expect(result.mimeType).toBe('application/pdf');

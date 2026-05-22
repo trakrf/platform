@@ -3,6 +3,7 @@ import { X, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
+import { useAssetLocations } from '@/hooks/reports';
 import { TagList } from './TagList';
 
 interface AssetDetailsModalProps {
@@ -15,7 +16,10 @@ interface AssetDetailsModalProps {
 export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetailsModalProps) {
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
-  const location = asset?.location_external_key ? getLocationByIdentifier(asset.location_external_key) : null;
+  // TRA-799: current location is fact data sourced from the reports endpoint.
+  const { byAssetId } = useAssetLocations();
+  const locExtKey = asset ? (byAssetId.get(asset.id)?.location_external_key ?? null) : null;
+  const location = locExtKey ? getLocationByIdentifier(locExtKey) : null;
 
   const [localTags, setLocalTags] = useState<Tag[]>([]);
 

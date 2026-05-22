@@ -64,7 +64,6 @@ describe('AssetTable', () => {
         type: 'all',
         is_active: 'all',
         search: '',
-        location_id: 'all',
       },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
@@ -115,7 +114,6 @@ describe('AssetTable', () => {
         type: 'all',
         is_active: 'all',
         search: '',
-        location_id: 'all',
       },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
@@ -148,7 +146,6 @@ describe('AssetTable', () => {
         type: 'all',
         is_active: 'all',
         search: '',
-        location_id: 'all',
       },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));
@@ -190,7 +187,6 @@ describe('AssetTable', () => {
         type: 'all',
         is_active: 'all',
         search: '',
-        location_id: 'all',
       },
     };
     (useAssetStore as any).mockImplementation((selector: any) => selector(mockStore));

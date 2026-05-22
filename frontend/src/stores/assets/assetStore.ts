@@ -90,7 +90,6 @@ const initialCache: AssetCache = {
 const initialFilters: AssetFilters = {
   is_active: 'all',
   search: '',
-  location_id: 'all',
 };
 
 /**

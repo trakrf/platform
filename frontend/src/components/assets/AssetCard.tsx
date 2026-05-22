@@ -3,6 +3,7 @@ import { Pencil, Trash2, Package, MapPin } from 'lucide-react';
 import type { Asset } from '@/types/assets';
 import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
+import { useAssetLocations } from '@/hooks/reports';
 import { TagCountBadge } from './TagCountBadge';
 import { TagsModal } from './TagsModal';
 import { LocateTagPopover } from './LocateTagPopover';
@@ -26,9 +27,12 @@ export function AssetCard({
   showActions = true,
   className = '',
 }: AssetCardProps) {
+  // TRA-799: current location is fact data sourced from the reports endpoint.
   const getLocationByIdentifier = useLocationStore((state) => state.getLocationByIdentifier);
-  const locationData = asset.location_external_key ? getLocationByIdentifier(asset.location_external_key) : null;
-  const locationName = locationData?.name ?? asset.location_external_key ?? undefined;
+  const { byAssetId } = useAssetLocations();
+  const locExtKey = byAssetId.get(asset.id)?.location_external_key ?? null;
+  const locationData = locExtKey ? getLocationByIdentifier(locExtKey) : null;
+  const locationName = locationData?.name ?? locExtKey ?? undefined;
 
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
   const [localTags, setLocalTags] = useState<Tag[]>(asset.tags || []);
