@@ -23,7 +23,7 @@ export function CurrentLocationCard({ item, onClick }: CurrentLocationCardProps)
             {item.asset_external_key ?? ''}
           </p>
         </div>
-        <FreshnessBadge lastSeen={item.last_seen} />
+        <FreshnessBadge lastSeen={item.asset_last_seen} />
       </div>
 
       <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-2">
@@ -34,8 +34,8 @@ export function CurrentLocationCard({ item, onClick }: CurrentLocationCardProps)
       </div>
       <div className="flex items-center gap-1 text-sm">
         <Clock className="w-4 h-4 text-gray-400" />
-        <span className="text-gray-900 dark:text-gray-100">{formatTimestampForExport(item.last_seen)}</span>
-        <span className="text-gray-500 dark:text-gray-400">({formatRelativeTime(item.last_seen)})</span>
+        <span className="text-gray-900 dark:text-gray-100">{formatTimestampForExport(item.asset_last_seen)}</span>
+        <span className="text-gray-500 dark:text-gray-400">({formatRelativeTime(item.asset_last_seen)})</span>
       </div>
     </div>
   );

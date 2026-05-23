@@ -55,12 +55,12 @@ export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): Export
   doc.text(`Generated: ${getTimestamp()}`, 14, 30);
   doc.text(`Total Assets: ${data.length}`, 14, 36);
 
-  const liveCount = data.filter((d) => getFreshnessStatus(d.last_seen) === 'live').length;
+  const liveCount = data.filter((d) => getFreshnessStatus(d.asset_last_seen) === 'live').length;
   const todayCount = data.filter((d) => {
-    const status = getFreshnessStatus(d.last_seen);
+    const status = getFreshnessStatus(d.asset_last_seen);
     return status === 'live' || status === 'today';
   }).length;
-  const staleCount = data.filter((d) => getFreshnessStatus(d.last_seen) === 'stale').length;
+  const staleCount = data.filter((d) => getFreshnessStatus(d.asset_last_seen) === 'stale').length;
 
   doc.text(`Live (< 15 min): ${liveCount}`, 14, 42);
   doc.text(`Seen Today: ${todayCount}`, 14, 48);
@@ -72,8 +72,8 @@ export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): Export
     item.asset_external_key ?? '',
     item.asset_external_key ?? '',
     item.location_external_key || 'Unknown',
-    formatRelativeTime(item.last_seen),
-    getFreshnessLabel(item.last_seen),
+    formatRelativeTime(item.asset_last_seen),
+    getFreshnessLabel(item.asset_last_seen),
   ]);
 
   // Add table
@@ -132,8 +132,8 @@ export function generateCurrentLocationsExcel(data: CurrentLocationItem[]): Expo
     'Asset ID': item.asset_external_key ?? '',
     Name: item.asset_external_key ?? '',
     Location: item.location_external_key || 'Unknown',
-    'Last Seen': formatTimestampForExport(item.last_seen),
-    Status: getFreshnessLabel(item.last_seen),
+    'Last Seen': formatTimestampForExport(item.asset_last_seen),
+    Status: getFreshnessLabel(item.asset_last_seen),
   }));
 
   const ws = XLSX.utils.json_to_sheet(sheetData);
@@ -148,12 +148,12 @@ export function generateCurrentLocationsExcel(data: CurrentLocationItem[]): Expo
   XLSX.utils.book_append_sheet(wb, ws, 'Locations History');
 
   // Summary sheet
-  const liveCount = data.filter((d) => getFreshnessStatus(d.last_seen) === 'live').length;
+  const liveCount = data.filter((d) => getFreshnessStatus(d.asset_last_seen) === 'live').length;
   const todayCount = data.filter((d) => {
-    const status = getFreshnessStatus(d.last_seen);
+    const status = getFreshnessStatus(d.asset_last_seen);
     return status === 'live' || status === 'today';
   }).length;
-  const staleCount = data.filter((d) => getFreshnessStatus(d.last_seen) === 'stale').length;
+  const staleCount = data.filter((d) => getFreshnessStatus(d.asset_last_seen) === 'stale').length;
 
   const summaryData = [
     { Metric: 'Report Generated', Value: getTimestamp() },
@@ -192,8 +192,8 @@ export function generateCurrentLocationsCSV(data: CurrentLocationItem[]): Export
       `"${key.replace(/"/g, '""')}"`,
       `"${key.replace(/"/g, '""')}"`,
       `"${(item.location_external_key || 'Unknown').replace(/"/g, '""')}"`,
-      formatTimestampForExport(item.last_seen),
-      getFreshnessLabel(item.last_seen),
+      formatTimestampForExport(item.asset_last_seen),
+      getFreshnessLabel(item.asset_last_seen),
     ];
     content += row.join(',') + '\n';
   });
@@ -237,7 +237,7 @@ export function generateAssetHistoryPDF(
 
   // Table data
   const tableData = data.map((item) => [
-    formatTimestampForExport(item.timestamp),
+    formatTimestampForExport(item.event_observed_at),
     item.location_external_key || 'Unknown',
     item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   ]);
@@ -298,7 +298,7 @@ export function generateAssetHistoryExcel(
 
   // Main data sheet
   const sheetData = data.map((item) => ({
-    Timestamp: formatTimestampForExport(item.timestamp),
+    Timestamp: formatTimestampForExport(item.event_observed_at),
     Location: item.location_external_key || 'Unknown',
     Duration: item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   }));
@@ -355,7 +355,7 @@ export function generateAssetHistoryCSV(
   data.forEach((item) => {
     const row = [
       `"${assetName.replace(/"/g, '""')}"`,
-      formatTimestampForExport(item.timestamp),
+      formatTimestampForExport(item.event_observed_at),
       `"${(item.location_external_key || 'Unknown').replace(/"/g, '""')}"`,
       item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
     ];
