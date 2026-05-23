@@ -44,9 +44,9 @@ type InventoryAccessError struct {
 
 	// Per-bucket breakdowns of which AssetIDs failed and why. Populated only
 	// for Reason == "assets". For logging; never serialised to the wire.
-	MissingAssetIDs    []int `json:"-"`
+	MissingAssetIDs     []int `json:"-"`
 	SoftDeletedAssetIDs []int `json:"-"`
-	CrossOrgAssetIDs   []int `json:"-"`
+	CrossOrgAssetIDs    []int `json:"-"`
 }
 
 func (e *InventoryAccessError) Error() string {

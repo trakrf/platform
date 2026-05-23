@@ -32,6 +32,16 @@ describe('checkTagConflict', () => {
     expect(await checkTagConflict('E2-OWN', { entityType: 'asset', entityId: 42 })).toBeNull();
   });
 
+  it('returns a no-access message when the entity name is missing (TRA-816 orphan)', async () => {
+    vi.mocked(lookupApi.byTag).mockResolvedValue({
+      data: { data: { entity_type: 'asset', entity_id: 558328969 } },
+    } as never);
+    const msg = await checkTagConflict('E2-ORPHAN');
+    expect(msg).toContain('no longer have access');
+    expect(msg).not.toContain('#558328969');
+    expect(msg).not.toContain('asset "asset');
+  });
+
   it('returns null on an unexpected error (best-effort)', async () => {
     vi.mocked(lookupApi.byTag).mockRejectedValue({ response: { status: 500 } });
     expect(await checkTagConflict('E2-ERR')).toBeNull();

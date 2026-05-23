@@ -24,8 +24,13 @@ export async function checkTagConflict(
     if (self && result.entity_type === self.entityType && result.entity_id === self.entityId) {
       return null;
     }
-    const name =
-      result.asset?.name ?? result.location?.name ?? `${result.entity_type} #${result.entity_id}`;
+    // TRA-816: the lookup may surface a tag whose parent has been soft-deleted
+    // (orphan). The asset/location envelope is then missing — never show the
+    // surrogate `${type} #${id}` string, the user has no UI path to that row.
+    const name = result.asset?.name ?? result.location?.name;
+    if (!name) {
+      return `Tag already attached to a ${result.entity_type} you no longer have access to — contact support to release it.`;
+    }
     return `Tag already attached to ${result.entity_type} "${name}" — remove it there before attaching here.`;
   } catch (err: unknown) {
     // 404 = not attached anywhere; any other error = best-effort skip.
