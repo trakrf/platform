@@ -188,6 +188,16 @@ test-contract:
     OUT_DIR="$REPO_ROOT/backend/contract-tests" \
         "$PY" "$REPO_ROOT/backend/contract-tests/explicit_error_cases.py"
 
+    # 7c. Run deterministic multi-step scenarios that Schemathesis can't
+    # compose (cross-endpoint flows like "scan asset into location then DELETE
+    # that location"). Closes the BB coverage gap that let the
+    # CountActiveAssetsAtLocation guard regress silently for ~30 BB cycles
+    # after TRA-734 nulled current_location_id. TRA-800.
+    echo "🧪 Running deterministic multi-step scenarios (TRA-800)..."
+    BASE_URL="http://localhost:8081" \
+    API_KEY="$KEY" \
+        "$PY" "$REPO_ROOT/backend/contract-tests/deterministic_scenarios.py"
+
     # 8. Run Schemathesis (docker, v4 CLI)
     #
     # The image runs as a non-root user; with a host bind mount the container

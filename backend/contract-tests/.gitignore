@@ -5,6 +5,7 @@
 *
 !.gitignore
 !explicit_error_cases.py
+!deterministic_scenarios.py
 !check_field_error_coverage.py
 !test_check_field_error_coverage.py
 !requirements.txt
