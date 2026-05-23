@@ -27,7 +27,7 @@ export function AssetHistoryCard({ item, isFirst = false }: AssetHistoryCardProp
       <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
         <div className="flex items-center gap-1">
           <Clock className="w-4 h-4" />
-          <span>{formatRelativeTime(item.timestamp)}</span>
+          <span>{formatRelativeTime(item.event_observed_at)}</span>
         </div>
         <div>
           <span className="text-gray-400">Duration: </span>

@@ -22,7 +22,7 @@ type TableItem = CurrentLocationItem & { id: string };
 const columns: Column<TableItem>[] = [
   { key: 'asset_external_key', label: 'Asset', sortable: true },
   { key: 'location_external_key', label: 'Location', sortable: true },
-  { key: 'last_seen', label: 'Last Seen', sortable: true },
+  { key: 'asset_last_seen', label: 'Last Seen', sortable: true },
   { key: 'status', label: 'Status', sortable: false },
 ];
 
@@ -96,15 +96,15 @@ export function CurrentLocationsTable({
             </td>
             <td className="px-4 py-3">
               <div className="text-gray-900 dark:text-gray-100">
-                {formatTimestampForExport(item.last_seen)}
+                {formatTimestampForExport(item.asset_last_seen)}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400">
-                {formatRelativeTime(item.last_seen)}
+                {formatRelativeTime(item.asset_last_seen)}
               </div>
             </td>
             <td className="px-4 py-3">
               <div className="flex items-center justify-between">
-                <FreshnessBadge lastSeen={item.last_seen} />
+                <FreshnessBadge lastSeen={item.asset_last_seen} />
                 <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 ml-2" />
               </div>
             </td>

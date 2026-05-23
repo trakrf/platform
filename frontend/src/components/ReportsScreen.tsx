@@ -71,7 +71,7 @@ export default function ReportsScreen() {
     let stale = 0;
 
     allData.forEach((item) => {
-      const status = getFreshnessStatus(item.last_seen);
+      const status = getFreshnessStatus(item.asset_last_seen);
       if (status === 'live' || status === 'today') {
         seenToday++;
       }

@@ -168,7 +168,7 @@ export function groupTimelineByDate(data: AssetHistoryItem[]): GroupedTimelineIt
   let currentDate = '';
 
   data.forEach((item) => {
-    const itemDate = new Date(item.timestamp);
+    const itemDate = new Date(item.event_observed_at);
     const dateKey = itemDate.toDateString();
 
     if (dateKey !== currentDate) {
@@ -202,7 +202,7 @@ export function calculateDurationProgress(durationSeconds: number | null, isOngo
 // ============================================
 
 /**
- * Determine freshness status based on last_seen timestamp
+ * Determine freshness status based on asset_last_seen timestamp
  * - live: < 15 minutes ago
  * - today: < 24 hours ago
  * - recent: < 7 days ago

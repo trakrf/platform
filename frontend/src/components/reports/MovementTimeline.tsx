@@ -87,7 +87,7 @@ export function MovementTimeline({
                   groupIndex === groupedData.length - 1 && isLastInGroup;
                 const showLine = !isLastInGroup || hasMore || !isLastOverall;
 
-                const startTime = new Date(item.timestamp);
+                const startTime = new Date(item.event_observed_at);
                 const endTime = getEndTime(startTime, item.duration_seconds);
                 const isOngoing = isFirstOverall && !endTime;
                 const progressPercent = calculateDurationProgress(
@@ -96,7 +96,7 @@ export function MovementTimeline({
                 );
 
                 return (
-                  <div key={`${item.timestamp}-${itemIndex}`} className="flex gap-3">
+                  <div key={`${item.event_observed_at}-${itemIndex}`} className="flex gap-3">
                     {/* Timeline connector */}
                     <div className="flex flex-col items-center">
                       <div

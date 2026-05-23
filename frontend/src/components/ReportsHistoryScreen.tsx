@@ -149,7 +149,7 @@ export default function ReportsHistoryScreen() {
               ) : (
                 data.map((item, index) => (
                   <AssetHistoryCard
-                    key={`${item.timestamp}-${index}`}
+                    key={`${item.event_observed_at}-${index}`}
                     item={item}
                     isFirst={index === 0}
                   />

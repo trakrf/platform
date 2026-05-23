@@ -35,6 +35,8 @@ export const reportsApi = {
     const params = new URLSearchParams();
     if (options.limit !== undefined) params.append('limit', String(options.limit));
     if (options.offset !== undefined) params.append('offset', String(options.offset));
+    appendRepeatable(params, 'asset_id', options.asset_id);
+    appendRepeatable(params, 'asset_external_key', options.asset_external_key);
     appendRepeatable(params, 'location_id', options.location_id);
     appendRepeatable(params, 'location_external_key', options.location_external_key);
     if (options.q) params.append('q', options.q);
@@ -60,6 +62,7 @@ export const reportsApi = {
     if (options.offset !== undefined) params.append('offset', String(options.offset));
     if (options.from) params.append('from', options.from);
     if (options.to) params.append('to', options.to);
+    if (options.sort) params.append('sort', options.sort);
 
     const queryString = params.toString();
     const url = queryString

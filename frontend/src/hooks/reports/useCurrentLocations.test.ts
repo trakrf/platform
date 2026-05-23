@@ -21,7 +21,8 @@ const mockData: CurrentLocationItem[] = [
     asset_external_key: 'AST-001',
     location_id: 1,
     location_external_key: 'ROOM-101',
-    last_seen: '2025-01-27T10:30:00Z',
+    asset_last_seen: '2025-01-27T10:30:00Z',
+    asset_deleted_at: null,
   },
 ];
 
@@ -104,7 +105,8 @@ describe('useCurrentLocations', () => {
         asset_external_key: `AST-${startId + i}`,
         location_id: 1,
         location_external_key: 'ROOM-101',
-        last_seen: '2025-01-27T10:30:00Z',
+        asset_last_seen: '2025-01-27T10:30:00Z',
+        asset_deleted_at: null,
       }));
     }
 
