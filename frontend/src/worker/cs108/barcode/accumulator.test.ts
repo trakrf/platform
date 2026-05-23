@@ -41,4 +41,25 @@ describe('BarcodeAccumulator', () => {
     expect(records[0]).toEqual(recordA);
     expect(records[1]).toEqual(recordB);
   });
+
+  it('assembles one record from a data-split across two payloads', () => {
+    // DATA_SPLIT_2PKT canonical: head ends mid-data with no 0x0D;
+    // tail completes the data and adds suffix + 0x0D.
+    const head = hex(
+      '06 02 00 07 10 17 13 51 5D 51 31 37 31 32 41 43 31 32 46 31 30 30 ' +
+      '37 30 30 30 30 30 30 32 32 34 34 30'
+    );
+    const tail = hex('31 05 01 11 16 03 04 0D');
+    const expected = new Uint8Array(head.length + tail.length);
+    expected.set(head);
+    expected.set(tail, head.length);
+
+    const acc = new BarcodeAccumulator();
+    const firstRecords = acc.appendAndExtract(head);
+    expect(firstRecords).toHaveLength(0);
+
+    const secondRecords = acc.appendAndExtract(tail);
+    expect(secondRecords).toHaveLength(1);
+    expect(secondRecords[0]).toEqual(expected);
+  });
 });
