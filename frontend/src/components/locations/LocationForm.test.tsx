@@ -309,6 +309,50 @@ describe('LocationForm - Tag conflict', () => {
     });
   });
 
+  describe('tag identity is immutable in edit mode', () => {
+    it('renders existing server-sourced tag values as read-only text', () => {
+      const locationWithTag: Location = {
+        id: 1,
+        external_key: 'loc-1',
+        name: 'Test Location',
+        description: '',
+        parent_id: null,
+        valid_from: '2025-01-01T00:00:00Z',
+        valid_to: null,
+        is_active: true,
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        tags: [{ id: 99, tag_type: 'rfid', value: 'AABBCCDD11223344AABBCCDD' }],
+      } as Location;
+
+      const { container } = render(
+        <LocationForm
+          mode="edit"
+          location={locationWithTag}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('AABBCCDD11223344AABBCCDD')).toHaveAttribute(
+        'aria-readonly',
+        'true',
+      );
+      expect(screen.getByPlaceholderText('Enter tag number...')).toBeInTheDocument();
+      expect(container.querySelectorAll('[aria-label="Remove tag"]').length).toBeGreaterThan(0);
+    });
+
+    it('renders newly-added tag rows as editable, not read-only', () => {
+      render(<LocationForm mode="create" onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+      const inputs = screen.getAllByPlaceholderText('Enter tag number...');
+      expect(inputs).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole('button', { name: /Add Tag/i }));
+      expect(screen.getAllByPlaceholderText('Enter tag number...')).toHaveLength(2);
+    });
+  });
+
   it('warns inline and disables Save when two rows have the same typed value', async () => {
     vi.mocked(checkTagConflict).mockResolvedValue(null);
 

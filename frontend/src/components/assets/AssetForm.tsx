@@ -444,6 +444,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
                 key={tagInput.id ?? `new-${index}`}
                 type={tagInput.type}
                 value={tagInput.value}
+                readOnly={tagInput.id !== undefined}
                 autoFocus={index === autoFocusIndex}
                 onFocus={() => {
                   setFocusedTagIndex(index);
