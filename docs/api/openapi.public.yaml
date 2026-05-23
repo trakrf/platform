@@ -1191,7 +1191,6 @@ paths:
                             $ref: '#/components/schemas/CreateAssetWithTagsRequest'
                 description: Asset to create with optional tags
                 required: true
-                x-originalParamName: request
             responses:
                 "201":
                     content:
@@ -1727,7 +1726,6 @@ paths:
                             $ref: '#/components/schemas/UpdateAssetRequest'
                 description: Fields to merge-patch
                 required: true
-                x-originalParamName: request
             responses:
                 "200":
                     content:
@@ -2142,7 +2140,6 @@ paths:
                             $ref: '#/components/schemas/RenameAssetRequest'
                 description: New external_key
                 required: true
-                x-originalParamName: request
             responses:
                 "200":
                     content:
@@ -2347,7 +2344,6 @@ paths:
                             $ref: '#/components/schemas/TagRequest'
                 description: Tag to attach
                 required: true
-                x-originalParamName: request
             responses:
                 "201":
                     content:
@@ -2959,7 +2955,6 @@ paths:
                             $ref: '#/components/schemas/CreateLocationWithTagsRequest'
                 description: Location to create with optional tags
                 required: true
-                x-originalParamName: request
             responses:
                 "201":
                     content:
@@ -3510,7 +3505,6 @@ paths:
                             $ref: '#/components/schemas/UpdateLocationRequest'
                 description: Fields to merge-patch
                 required: true
-                x-originalParamName: request
             responses:
                 "200":
                     content:
@@ -4262,7 +4256,6 @@ paths:
                             $ref: '#/components/schemas/RenameLocationRequest'
                 description: New external_key
                 required: true
-                x-originalParamName: request
             responses:
                 "200":
                     content:
@@ -4463,7 +4456,6 @@ paths:
                             $ref: '#/components/schemas/TagRequest'
                 description: Tag to attach
                 required: true
-                x-originalParamName: request
             responses:
                 "201":
                     content:

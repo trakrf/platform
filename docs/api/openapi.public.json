@@ -1595,8 +1595,7 @@
             }
           },
           "description": "Asset to create with optional tags",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "201": {
@@ -2427,8 +2426,7 @@
             }
           },
           "description": "Fields to merge-patch",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "200": {
@@ -3059,8 +3057,7 @@
             }
           },
           "description": "New external_key",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "200": {
@@ -3378,8 +3375,7 @@
             }
           },
           "description": "Tag to attach",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "201": {
@@ -4305,8 +4301,7 @@
             }
           },
           "description": "Location to create with optional tags",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "201": {
@@ -5161,8 +5156,7 @@
             }
           },
           "description": "Fields to merge-patch",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "200": {
@@ -6323,8 +6317,7 @@
             }
           },
           "description": "New external_key",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "200": {
@@ -6642,8 +6635,7 @@
             }
           },
           "description": "Tag to attach",
-          "required": true,
-          "x-originalParamName": "request"
+          "required": true
         },
         "responses": {
           "201": {
