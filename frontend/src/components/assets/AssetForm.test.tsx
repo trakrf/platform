@@ -244,6 +244,50 @@ describe('AssetForm - Tag conflict', () => {
     });
   });
 
+  describe('tag identity is immutable in edit mode', () => {
+    it('renders existing server-sourced tag values as read-only text', () => {
+      const assetWithTag: Asset = {
+        id: 1,
+        external_key: 'LAP-001',
+        name: 'Test Laptop',
+        description: '',
+        valid_from: '2024-01-01T00:00:00Z',
+        valid_to: null,
+        metadata: {},
+        is_active: true,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+        tags: [{ id: 42, tag_type: 'rfid', value: 'AABBCCDD11223344AABBCCDD' }],
+      };
+
+      const { container } = render(
+        <AssetForm mode="edit" asset={assetWithTag} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      );
+
+      // Existing tag value renders as an aria-readonly span, not an editable input.
+      expect(screen.getByText('AABBCCDD11223344AABBCCDD')).toHaveAttribute(
+        'aria-readonly',
+        'true',
+      );
+      // The trailing blank row keeps an editable input.
+      expect(screen.getByPlaceholderText('Enter tag number...')).toBeInTheDocument();
+      // Remove button is still available for the existing tag row.
+      expect(container.querySelectorAll('[aria-label="Remove tag"]').length).toBeGreaterThan(0);
+    });
+
+    it('renders newly-added tag rows as editable, not read-only', () => {
+      render(<AssetForm mode="create" onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+      // Create mode starts with a single blank editable row.
+      const inputs = screen.getAllByPlaceholderText('Enter tag number...');
+      expect(inputs).toHaveLength(1);
+
+      // Click Add Tag — another editable row appears, no readonly text node.
+      fireEvent.click(screen.getByRole('button', { name: /Add Tag/i }));
+      expect(screen.getAllByPlaceholderText('Enter tag number...')).toHaveLength(2);
+    });
+  });
+
   it('warns inline and disables Save when two rows have the same typed value', async () => {
     vi.mocked(checkTagConflict).mockResolvedValue(null);
 

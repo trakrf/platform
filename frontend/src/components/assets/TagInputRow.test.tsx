@@ -101,4 +101,57 @@ describe('TagInputRow', () => {
     expect(input?.className).toContain('border-gray-300');
     expect(input?.className).not.toContain('border-red-500');
   });
+
+  describe('readOnly mode (tag identity is immutable)', () => {
+    it('renders value as text, not an input, when readOnly is true', () => {
+      const { container } = render(
+        <TagInputRow {...defaultProps} value="TAG-12345" readOnly={true} />,
+      );
+
+      expect(container.querySelector('input')).not.toBeInTheDocument();
+      expect(screen.getByText('TAG-12345')).toBeInTheDocument();
+    });
+
+    it('marks the read-only value with aria-readonly', () => {
+      render(<TagInputRow {...defaultProps} value="TAG-12345" readOnly={true} />);
+
+      expect(screen.getByText('TAG-12345')).toHaveAttribute('aria-readonly', 'true');
+    });
+
+    it('still renders the remove button when readOnly', () => {
+      const onRemove = vi.fn();
+      render(
+        <TagInputRow
+          {...defaultProps}
+          value="TAG-12345"
+          readOnly={true}
+          onRemove={onRemove}
+        />,
+      );
+
+      expect(screen.getByLabelText('Remove tag')).toBeInTheDocument();
+    });
+
+    it('calls onRemove when the remove button is clicked in readOnly mode', () => {
+      const onRemove = vi.fn();
+      render(
+        <TagInputRow
+          {...defaultProps}
+          value="TAG-12345"
+          readOnly={true}
+          onRemove={onRemove}
+        />,
+      );
+
+      fireEvent.click(screen.getByLabelText('Remove tag'));
+
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders an editable input when readOnly is false or omitted', () => {
+      render(<TagInputRow {...defaultProps} value="TAG-12345" />);
+
+      expect(screen.getByDisplayValue('TAG-12345')).toBeInTheDocument();
+    });
+  });
 });

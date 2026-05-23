@@ -42,6 +42,12 @@ interface TagInputRowProps {
   isFocused?: boolean;
   /** Auto-focus this input on mount */
   autoFocus?: boolean;
+  /**
+   * Existing tag: renders value as immutable text with a delete button.
+   * Tag identity is immutable on the public API (POST + DELETE only, no
+   * PATCH); to change a value the user must remove and re-add.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -57,6 +63,7 @@ export function TagInputRow({
   onBlur,
   isFocused = false,
   autoFocus = false,
+  readOnly = false,
 }: TagInputRowProps) {
   const warning = ENABLE_EPC_VALIDATION ? validateEPC(value) : undefined;
 
@@ -68,26 +75,35 @@ export function TagInputRow({
           RFID
         </span>
 
-        {/* Value input */}
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onValueChange(e.target.value)}
-          onFocus={onFocus}
-          onBlur={onBlur}
-          disabled={disabled}
-          autoFocus={autoFocus}
-          placeholder="Enter tag number..."
-          className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 ${
-            error
-              ? 'border-red-500 focus:ring-red-500'
-              : warning
-                ? 'border-yellow-500 focus:ring-yellow-500'
-                : isFocused
-                  ? 'border-green-500 focus:ring-green-500'
-                  : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
-          }`}
-        />
+        {/* Value: editable input for new tags, immutable text for existing */}
+        {readOnly ? (
+          <span
+            className="flex-1 px-3 py-2 text-sm font-mono border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 select-text"
+            aria-readonly="true"
+          >
+            {value}
+          </span>
+        ) : (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onValueChange(e.target.value)}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            disabled={disabled}
+            autoFocus={autoFocus}
+            placeholder="Enter tag number..."
+            className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50 ${
+              error
+                ? 'border-red-500 focus:ring-red-500'
+                : warning
+                  ? 'border-yellow-500 focus:ring-yellow-500'
+                  : isFocused
+                    ? 'border-green-500 focus:ring-green-500'
+                    : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+            }`}
+          />
+        )}
 
         {/* Remove button */}
         {onRemove && (

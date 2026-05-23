@@ -523,6 +523,7 @@ export function LocationForm({
                 key={tagInput.id ?? `new-${index}`}
                 type={tagInput.type}
                 value={tagInput.value}
+                readOnly={tagInput.id !== undefined}
                 autoFocus={index === autoFocusIndex}
                 onFocus={() => {
                   setFocusedTagIndex(index);
