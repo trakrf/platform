@@ -16,7 +16,18 @@ interface LocationFormModalProps {
   onClose: () => void;
 }
 
-export function LocationFormModal({ isOpen, mode, location, parentLocationId, onClose }: LocationFormModalProps) {
+// TRA-817: outer gate returns null when closed so the stateful body unmounts
+// each cycle. Keeps the TRA-813 tag-diff baseline (`location.tags`) tied to
+// the current open's prop instead of any state that could survive across
+// open/close cycles when a parent keeps the modal mounted.
+export function LocationFormModal(props: LocationFormModalProps) {
+  if (!props.isOpen) {
+    return null;
+  }
+  return <LocationFormModalBody {...props} />;
+}
+
+function LocationFormModalBody({ isOpen, mode, location, parentLocationId, onClose }: LocationFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -159,10 +170,6 @@ export function LocationFormModal({ isOpen, mode, location, parentLocationId, on
       onClose();
     }
   };
-
-  if (!isOpen) {
-    return null;
-  }
 
   return (
     <div

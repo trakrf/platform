@@ -15,11 +15,24 @@ interface AssetFormModalProps {
   initialIdentifier?: string;
 }
 
-export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier }: AssetFormModalProps) {
+// TRA-817: The outer component is a thin gate that returns null when closed,
+// guaranteeing the stateful body (AssetFormModalBody) unmounts on close. This
+// keeps `freshAsset`/`loadingAsset`/tag-diff baselines from leaking across
+// open cycles when a parent keeps the modal mounted via an `isOpen` prop
+// (e.g. InventoryTableRow). A leaked baseline can drive phantom DELETEs via
+// the TRA-813 tag-diff path and brief stale renders of the prior edit's tags.
+export function AssetFormModal(props: AssetFormModalProps) {
+  if (!props.isOpen) {
+    return null;
+  }
+  return <AssetFormModalBody {...props} />;
+}
+
+function AssetFormModalBody({ isOpen, mode, asset, onClose, initialIdentifier }: AssetFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [freshAsset, setFreshAsset] = useState<Asset | undefined>(asset);
-  const [loadingAsset, setLoadingAsset] = useState(false);
+  const [loadingAsset, setLoadingAsset] = useState(mode === 'edit' && asset?.id != null);
 
   // Fetch fresh asset data when modal opens in edit mode
   useEffect(() => {
@@ -185,10 +198,6 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
       onClose();
     }
   };
-
-  if (!isOpen) {
-    return null;
-  }
 
   return (
     <div
