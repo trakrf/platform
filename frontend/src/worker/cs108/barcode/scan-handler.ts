@@ -17,26 +17,6 @@ import { BarcodeAccumulator } from './accumulator';
 import { parseBarcodeData } from './parser';
 
 /**
- * Barcode symbology mapping
- */
-const SYMBOLOGY_NAMES: Record<number, string> = {
-  0x01: 'Code 128',
-  0x02: 'Code 39',
-  0x03: 'Code 93',
-  0x04: 'Codabar',
-  0x05: 'Interleaved 2 of 5',
-  0x06: 'EAN-8',
-  0x07: 'EAN-13',
-  0x08: 'UPC-A',
-  0x09: 'UPC-E',
-  0x0A: 'QR Code',
-  0x0B: 'Data Matrix',
-  0x0C: 'PDF417',
-  0x0D: 'Aztec',
-  0x0E: 'MaxiCode',
-};
-
-/**
  * Handler for barcode data notifications (0x9100)
  */
 export class BarcodeDataHandler implements NotificationHandler {
@@ -96,7 +76,7 @@ export class BarcodeDataHandler implements NotificationHandler {
         type: WorkerEventType.BARCODE_READ,
         payload: {
           barcode: parsed.data,
-          symbology: this.normalizeSymbology(parsed.symbology),
+          symbology: parsed.symbology,
           rawData: parsed.rawData
             ? Array.from(parsed.rawData).map(b => b.toString(16).padStart(2, '0')).join('')
             : undefined,
@@ -122,16 +102,6 @@ export class BarcodeDataHandler implements NotificationHandler {
   private isDuplicate(value: string, now: number): boolean {
     if (!this.lastBarcode) return false;
     return value === this.lastBarcode && (now - this.lastScanTime) < this.DUPLICATE_WINDOW_MS;
-  }
-
-  /**
-   * `parseBarcodeData` already returns a human-readable symbology string
-   * (e.g., "QR Code", "Code 128") for recognized AIM IDs. Numeric IDs
-   * from older parsers are mapped through SYMBOLOGY_NAMES.
-   */
-  private normalizeSymbology(symbology: string): string {
-    if (typeof symbology === 'string') return symbology;
-    return SYMBOLOGY_NAMES[symbology as number] ?? `Unknown (0x${(symbology as number).toString(16)})`;
   }
 
   getStats(): { scansProcessed: number; lastScanTime: number; lastBarcode: string | null } {

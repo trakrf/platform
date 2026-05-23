@@ -96,7 +96,9 @@ describe('BarcodeAccumulator', () => {
       // a fresh record and do NOT join the discarded head.
       const standaloneTerminator = hex('0D');
       const records = acc.appendAndExtract(standaloneTerminator);
-      // Just the terminator, with NO head bytes prepended.
+      // Just the terminator, with NO head bytes prepended. (The handler's
+      // empty-data guard will swallow this 1-byte record; this assertion is
+      // about accumulator-level isolation, not user-visible emission.)
       expect(records).toHaveLength(1);
       expect(records[0]).toEqual(standaloneTerminator);
     } finally {
