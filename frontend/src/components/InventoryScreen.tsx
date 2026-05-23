@@ -131,9 +131,15 @@ export default function InventoryScreen() {
     return detectionMethod;
   }, [manualLocationId, detectionMethod]);
 
-  // Count of saveable assets (asset type tags only)
+  // Count of unique saveable assets. Multiple tags can point to the same
+  // asset (multi-tag asset support), so we count distinct identifiers — one
+  // save row per asset, not per tag. (TRA-812)
   const saveableCount = useMemo(() => {
-    return tags.filter(t => t.type === 'asset' && t.assetIdentifier).length;
+    const seen = new Set<string>();
+    for (const t of tags) {
+      if (t.type === 'asset' && t.assetIdentifier) seen.add(t.assetIdentifier);
+    }
+    return seen.size;
   }, [tags]);
 
   const filteredTags = useMemo(() => {
@@ -238,10 +244,18 @@ export default function InventoryScreen() {
 
     if (!resolvedLocation) return;
 
-    // Get saveable asset identifiers (asset type tags only)
-    const saveableAssetIdentifiers = tags
-      .filter(t => t.type === 'asset' && t.assetIdentifier)
-      .map(t => t.assetIdentifier!);
+    // Get saveable asset identifiers. Multiple tags can point to the same
+    // asset (multi-tag asset support, e.g. a tagged crate that also carries
+    // a second redundant tag), so dedup before sending — one save row per
+    // asset, not per tag. Backend `SaveInventoryScans` validates with
+    // `COUNT(*) WHERE id = ANY(...)` (semi-join, deduped by Postgres) against
+    // the input length, so a duplicate identifier turns into a false 403
+    // claiming an org-mismatch that isn't real. (TRA-812)
+    const saveableAssetIdentifiers = Array.from(new Set(
+      tags
+        .filter(t => t.type === 'asset' && t.assetIdentifier)
+        .map(t => t.assetIdentifier!)
+    ));
 
     if (saveableAssetIdentifiers.length === 0) return;
 

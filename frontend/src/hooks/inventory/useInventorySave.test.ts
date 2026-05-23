@@ -4,21 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useInventorySave } from './useInventorySave';
 import { inventoryApi } from '@/lib/api/inventory';
-import { ensureOrgContext, refreshOrgToken } from '@/lib/auth/orgContext';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 import toast from 'react-hot-toast';
 
 vi.mock('@/lib/api/inventory');
 vi.mock('@/lib/auth/orgContext');
 vi.mock('react-hot-toast');
-
-// Central invalidation is the DRY sink for org-context drift (TRA-318).
-// The hook delegates to it on storage-path 403 rather than clearing tags
-// itself.
-const mockInvalidateAllOrgScopedData = vi.fn().mockResolvedValue(undefined);
-vi.mock('@/lib/cache/orgScopedCache', () => ({
-  invalidateAllOrgScopedData: (...args: unknown[]) =>
-    mockInvalidateAllOrgScopedData(...args),
-}));
 
 const mockResponse = {
   count: 5,
@@ -86,10 +77,7 @@ describe('useInventorySave', () => {
     expect(callOrder).toEqual(['ensureOrgContext', 'inventoryApi.save']);
   });
 
-  it('does not auto-retry on a bare 403 (no access-denied detail)', async () => {
-    // A 403 without the storage-path detail is not the drift signal — surface
-    // it once and let the caller handle it. (TRA-812: dropped the auto-retry
-    // that previously fired here; it always resubmitted the same payload.)
+  it('does not auto-retry on 403 (TRA-812: the prior retry path resubmitted the same payload that just failed)', async () => {
     const error403 = Object.assign(new Error('Request failed with status code 403'), {
       response: { status: 403 },
     });
@@ -101,7 +89,6 @@ describe('useInventorySave', () => {
 
     await expect(result.current.save(mockRequest)).rejects.toThrow(error403);
     expect(inventoryApi.save).toHaveBeenCalledTimes(1);
-    expect(refreshOrgToken).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith('Failed to save inventory');
   });
 
@@ -146,29 +133,28 @@ describe('useInventorySave', () => {
     });
   });
 
-  it('on 403 access-denied: invalidates caches, refreshes token, and surfaces rescan toast (TRA-812)', async () => {
-    // The submitted identifiers don't belong to the caller's current org.
-    // Tags were assembled from caches that are now stale — clear them so the
-    // user gets a clean slate, realign the JWT with the profile, and let the
-    // error bubble up to the rescan toast. We do NOT retry: the in-flight
-    // payload was assembled from those same stale caches.
+  it('on 403 access-denied: surfaces the backend detail directly, no "org mismatch" rewrite (TRA-812)', async () => {
+    // The backend now returns an accurate, generic detail naming the actual
+    // failure ("N of M assets are unavailable"). The hook should pass it
+    // straight through — it must not rewrite every 403 into a misleading
+    // "no longer match your current organization" toast like it used to.
     const access403 = Object.assign(new Error('Request failed with status code 403'), {
       response: {
         status: 403,
-        data: { error: { detail: 'assets not found or access denied (org_id=7, valid=2/3)' } },
+        data: { error: { detail: '2 of 3 assets are unavailable; refresh and try again' } },
       },
     });
     vi.mocked(inventoryApi.save).mockRejectedValue(access403);
-    vi.mocked(refreshOrgToken).mockResolvedValue(true);
 
     const { result } = renderHook(() => useInventorySave(), { wrapper: createWrapper() });
     await expect(result.current.save(mockRequest)).rejects.toThrow(access403);
 
-    expect(mockInvalidateAllOrgScopedData).toHaveBeenCalledOnce();
-    expect(refreshOrgToken).toHaveBeenCalledOnce();
     expect(inventoryApi.save).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith(
-      'Some scans no longer match your current organization. Please clear and rescan.',
+      '2 of 3 assets are unavailable; refresh and try again',
+    );
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringMatching(/no longer match your current organization/i),
     );
   });
 
