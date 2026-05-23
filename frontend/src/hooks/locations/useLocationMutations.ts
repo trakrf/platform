@@ -67,37 +67,15 @@ export function useLocationMutations() {
     },
   });
 
-  const moveMutation = useMutation({
-    mutationFn: async ({
-      id,
-      newParentId,
-    }: {
-      id: number;
-      newParentId: number | null;
-    }) => {
-      await ensureOrgContext();
-      const response = await locationsApi.move(id, { new_parent_id: newParentId });
-      return normalizeLocation(response.data.data);
-    },
-    onSuccess: (location) => {
-      useLocationStore.getState().updateLocation(location.id, location);
-      queryClient.invalidateQueries({ queryKey: ['locations'] });
-      queryClient.invalidateQueries({ queryKey: ['location', location.id] });
-    },
-  });
-
   return {
     create: createMutation.mutateAsync,
     update: updateMutation.mutateAsync,
     delete: deleteMutation.mutateAsync,
-    move: moveMutation.mutateAsync,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
-    isMoving: moveMutation.isPending,
     createError: createMutation.error,
     updateError: updateMutation.error,
     deleteError: deleteMutation.error,
-    moveError: moveMutation.error,
   };
 }
