@@ -77,6 +77,40 @@ WHERE NOT EXISTS (
       AND external_key = 'ASSET-0001'
 );
 
+-- 6a) Scan placing ASSET-0001 at LOC-0001 (TRA-800).
+--
+-- The location-delete guard (CountActiveAssetsAtLocation) counts assets by
+-- their latest-scan location. Without this row the recurring suite has no
+-- populated case to fire DELETE /api/v1/locations/{id} → 409 against — which
+-- is exactly the gap that let TRA-734 silently disable the guard for ~30 BB
+-- cycles. The deterministic scenario at
+-- backend/contract-tests/deterministic_scenarios.py asserts the 409.
+--
+-- LOC-0001 is intentionally NOT a spec example (WHS-01 and wh1 are), so
+-- planting a scan here doesn't change Schemathesis's behavior against the
+-- example surface — DELETE on this id was already free to 204 OR 409 per the
+-- declared response set.
+INSERT INTO asset_scans (timestamp, org_id, asset_id, location_id)
+SELECT
+    NOW(),
+    (SELECT id FROM organizations WHERE identifier = 'bb-test-org'),
+    (SELECT id FROM assets
+       WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
+         AND external_key = 'ASSET-0001'),
+    (SELECT id FROM locations
+       WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
+         AND external_key = 'LOC-0001')
+WHERE NOT EXISTS (
+    SELECT 1 FROM asset_scans
+    WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
+      AND asset_id = (SELECT id FROM assets
+                        WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
+                          AND external_key = 'ASSET-0001')
+      AND location_id = (SELECT id FROM locations
+                           WHERE org_id = (SELECT id FROM organizations WHERE identifier = 'bb-test-org')
+                             AND external_key = 'LOC-0001')
+);
+
 -- 6) Tag (RFID, attached to ASSET-0001)
 INSERT INTO tags (org_id, type, value, asset_id)
 SELECT
