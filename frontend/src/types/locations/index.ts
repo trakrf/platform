@@ -66,10 +66,6 @@ export interface UpdateLocationRequest {
   metadata?: Record<string, any>;
 }
 
-export interface MoveLocationRequest {
-  new_parent_id: number | null;
-}
-
 export interface LocationResponse {
   data: Location;
 }

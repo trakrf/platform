@@ -106,36 +106,6 @@ describe('useLocationMutations', () => {
     expect(cached).toBeUndefined();
   });
 
-  it('should move location', async () => {
-    // Pre-populate parent location so normalizeLocation can resolve parent_location_id
-    const parentLocation: Location = {
-      ...apiLocation,
-      id: 2,
-      id: 2,
-      external_key: 'parent-loc',
-      parent_external_key: null,
-      parent_id: null,
-    } as Location;
-    useLocationStore.getState().addLocation(parentLocation);
-
-    const moved = { ...apiLocation, parent_external_key: 'parent-loc', tree_path: 'parent-loc.usa' };
-    vi.mocked(locationsApi.move).mockResolvedValue({
-      data: { data: moved },
-    } as any);
-
-    useLocationStore.getState().addLocation(mockLocation);
-
-    const { result } = renderHook(() => useLocationMutations(), {
-      wrapper: createWrapper(),
-    });
-
-    await result.current.move({ id: 1, newParentId: 2 });
-
-    expect(locationsApi.move).toHaveBeenCalledWith(1, { new_parent_id: 2 });
-    const cached = useLocationStore.getState().getLocationById(1);
-    expect(cached?.parent_id).toBe(2);
-  });
-
   it('should expose loading states', () => {
     const { result } = renderHook(() => useLocationMutations(), {
       wrapper: createWrapper(),
@@ -144,7 +114,6 @@ describe('useLocationMutations', () => {
     expect(result.current.isCreating).toBe(false);
     expect(result.current.isUpdating).toBe(false);
     expect(result.current.isDeleting).toBe(false);
-    expect(result.current.isMoving).toBe(false);
   });
 
   it('should expose error states', () => {
@@ -155,6 +124,5 @@ describe('useLocationMutations', () => {
     expect(result.current.createError).toBe(null);
     expect(result.current.updateError).toBe(null);
     expect(result.current.deleteError).toBe(null);
-    expect(result.current.moveError).toBe(null);
   });
 });

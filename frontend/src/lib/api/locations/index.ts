@@ -12,7 +12,6 @@ import type {
   LocationResponse,
   CreateLocationRequest,
   UpdateLocationRequest,
-  MoveLocationRequest,
   DeleteResponse,
   ListLocationsResponse,
 } from '@/types/locations';
@@ -124,17 +123,6 @@ export const locationsApi = {
    */
   getChildren: (id: number) =>
     apiClient.get<ListLocationsResponse>(`/locations/${id}/children`),
-
-  /**
-   * Move a location to a new parent
-   * PUT /api/v1/locations/:id/move
-   *
-   * @param id - Location ID to move
-   * @param data - Move request with new_parent_id
-   * @returns Promise<LocationResponse> with updated location
-   */
-  move: (id: number, data: MoveLocationRequest) =>
-    apiClient.put<LocationResponse>(`/locations/${id}/move`, data),
 
   /**
    * Add a tag to a location
