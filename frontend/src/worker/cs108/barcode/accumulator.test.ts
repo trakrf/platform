@@ -103,4 +103,27 @@ describe('BarcodeAccumulator', () => {
       vi.useRealTimers();
     }
   });
+
+  it('reset() clears the buffer and any pending idle timeout', () => {
+    vi.useFakeTimers();
+    try {
+      const acc = new BarcodeAccumulator();
+      const head = hex('06 02 00 07 10 17 13');
+      expect(acc.appendAndExtract(head)).toHaveLength(0);
+
+      acc.reset();
+
+      // The pending idle timeout must NOT fire after reset. If it did,
+      // the next test would observe spurious state. Advance time and
+      // assert nothing happens.
+      vi.advanceTimersByTime(1000);
+
+      // Subsequent bytes must NOT include the cleared head.
+      const records = acc.appendAndExtract(hex('41 0D'));
+      expect(records).toHaveLength(1);
+      expect(records[0]).toEqual(hex('41 0D'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
