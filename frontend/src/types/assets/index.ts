@@ -17,7 +17,7 @@ export interface Asset {
   id: number; // Canonical surrogate id (obfuscated int)
   external_key: string; // Customer-supplied or auto-generated ASSET-NNNN
   name: string;
-  description: string;
+  description: string | null; // null when column is empty (backend *string)
   valid_from: string; // ISO 8601 string
   valid_to: string | null; // ISO 8601 or null
   metadata: Record<string, any>;
