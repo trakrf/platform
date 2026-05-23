@@ -158,6 +158,55 @@ describe('AssetForm', () => {
     expect(screen.getByText('Test error message')).toBeInTheDocument();
   });
 
+  // TRA-820: when the backend returns description: null (column empty),
+  // edit-mode useEffect previously assigned it raw into formData.description,
+  // causing `null.trim()` to throw inside handleSubmit before onSubmit ran.
+  // The throw was a console-only promise rejection — silent failure to the
+  // user. Asset.description must be string | null in the type, and the form
+  // must coerce null to ''.
+  it('submits without throwing when asset.description is null (TRA-820)', async () => {
+    mockOnSubmit.mockResolvedValue(undefined);
+    const assetWithNullDesc: Asset = {
+      ...mockAsset,
+      description: null,
+    };
+    render(
+      <AssetForm
+        mode="edit"
+        asset={assetWithNullDesc}
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Update Asset/ }));
+
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalled();
+    });
+
+    const submitted = mockOnSubmit.mock.calls[0]![0] as { description: string | null };
+    expect(submitted.description).toBeNull();
+  });
+
+  // TRA-820: a synchronous throw in handleSubmit's payload-build path (before
+  // onSubmit is awaited) used to escape as an unhandled promise rejection
+  // because the modal's catch only sees errors thrown inside onSubmit. The
+  // form must catch its own pre-submit throws and surface them.
+  it('surfaces a submit-time throw as a visible error banner (TRA-820)', async () => {
+    const boom = vi.fn().mockImplementation(() => {
+      throw new Error('boom from onSubmit');
+    });
+    render(<AssetForm mode="create" onSubmit={boom} onCancel={mockOnCancel} />);
+
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Test Asset' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create Asset/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('boom from onSubmit')).toBeInTheDocument();
+    });
+  });
+
   it('clears field error when user starts typing', async () => {
     render(<AssetForm mode="create" onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 

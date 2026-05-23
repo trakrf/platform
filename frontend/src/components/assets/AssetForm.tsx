@@ -32,6 +32,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [tagInputs, setTagInputs] = useState<TagInput[]>([]);
 
   // Barcode scanning for RFID tags
@@ -69,7 +70,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
       setFormData({
         external_key: asset.external_key,
         name: asset.name,
-        description: asset.description,
+        description: asset.description ?? '',
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
@@ -190,50 +191,61 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
 
     if (!validateForm()) {
       return;
     }
 
-    const toRFC3339 = (dateStr: string): string => {
-      if (!dateStr.includes('T')) {
-        return `${dateStr}T00:00:00Z`;
-      }
-      return dateStr;
-    };
+    // Wrap payload build + onSubmit so any synchronous throw (e.g. a null
+    // coercion bug like TRA-820's `null.trim()`) surfaces as a visible
+    // banner instead of an unhandled promise rejection swallowed by the
+    // browser console. The outer modal's try/catch only sees errors thrown
+    // *inside* onSubmit; pre-onSubmit throws need their own surface.
+    try {
+      const toRFC3339 = (dateStr: string): string => {
+        if (!dateStr.includes('T')) {
+          return `${dateStr}T00:00:00Z`;
+        }
+        return dateStr;
+      };
 
-    // Filter out empty tags and include in request
-    const validTags = tagInputs.filter((id) => id.value.trim() !== '');
+      // Filter out empty tags and include in request
+      const validTags = tagInputs.filter((id) => id.value.trim() !== '');
 
-    // Omit external_key entirely when blank on create — the backend
-    // auto-mints ASSET-NNNN only on absence; an explicit empty string is
-    // rejected as 400 too_short (TRA-650 / BB23 F3).
-    //
-    // On edit, external_key is immutable on PATCH (TRA-664 / BB26 D7) — the
-    // backend returns 400 immutable_field if it appears in the body. Omit
-    // it from the update payload; the rename operation is the dedicated
-    // path for mutating the natural key.
-    const trimmedExternalKey = formData.external_key.trim();
-    const includeExternalKey = mode === 'create' && trimmedExternalKey !== '';
-    // TRA-649 / BB23 F2: the body date validator now rejects empty strings.
-    // Omit valid_from when blank so the backend applies its server default;
-    // send valid_to as null when blank to clear the column.
-    // description: nullable + minLength:1 server-side. Send null when the
-    // form is blank so create succeeds and PATCH explicitly clears the
-    // column; never send an empty string.
-    const description = formData.description.trim() === '' ? null : formData.description;
-    const data: CreateAssetRequest | UpdateAssetRequest = {
-      ...(includeExternalKey ? { external_key: formData.external_key } : {}),
-      name: formData.name,
-      description,
-      ...(formData.valid_from ? { valid_from: toRFC3339(formData.valid_from) } : {}),
-      valid_to: formData.valid_to ? toRFC3339(formData.valid_to) : null,
-      is_active: formData.is_active,
-      metadata: {},
-    };
+      // Omit external_key entirely when blank on create — the backend
+      // auto-mints ASSET-NNNN only on absence; an explicit empty string is
+      // rejected as 400 too_short (TRA-650 / BB23 F3).
+      //
+      // On edit, external_key is immutable on PATCH (TRA-664 / BB26 D7) — the
+      // backend returns 400 immutable_field if it appears in the body. Omit
+      // it from the update payload; the rename operation is the dedicated
+      // path for mutating the natural key.
+      const trimmedExternalKey = formData.external_key.trim();
+      const includeExternalKey = mode === 'create' && trimmedExternalKey !== '';
+      // TRA-649 / BB23 F2: the body date validator now rejects empty strings.
+      // Omit valid_from when blank so the backend applies its server default;
+      // send valid_to as null when blank to clear the column.
+      // description: nullable + minLength:1 server-side. Send null when the
+      // form is blank so create succeeds and PATCH explicitly clears the
+      // column; never send an empty string.
+      const description = formData.description.trim() === '' ? null : formData.description;
+      const data: CreateAssetRequest | UpdateAssetRequest = {
+        ...(includeExternalKey ? { external_key: formData.external_key } : {}),
+        name: formData.name,
+        description,
+        ...(formData.valid_from ? { valid_from: toRFC3339(formData.valid_from) } : {}),
+        valid_to: formData.valid_to ? toRFC3339(formData.valid_to) : null,
+        is_active: formData.is_active,
+        metadata: {},
+      };
 
-    // Include tags for the modal to handle (modal extracts and processes separately)
-    await onSubmit({ ...data, tags: validTags } as unknown as CreateAssetRequest | UpdateAssetRequest);
+      // Include tags for the modal to handle (modal extracts and processes separately)
+      await onSubmit({ ...data, tags: validTags } as unknown as CreateAssetRequest | UpdateAssetRequest);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save asset';
+      setSubmitError(message);
+    }
   };
 
   const handleChange = (field: string, value: any) => {
@@ -249,7 +261,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {error && <ErrorBanner error={error} />}
+      <ErrorBanner error={submitError ?? error ?? null} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
