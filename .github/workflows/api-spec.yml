@@ -1,13 +1,17 @@
 name: API Spec
 
+# This workflow is a required status check on main. It must report the
+# `api-spec` check on every PR — including workflow-only and docs-only PRs
+# that don't touch the backend or the committed spec. Otherwise GitHub waits
+# forever for a check that will never report, and the PR sits BLOCKED until
+# someone admin-merges. (TRA-802 — surfaced via PR #385.)
+#
+# Mirrors the docker-build.yml pattern: trigger on every PR, then detect
+# changes via dorny/paths-filter and short-circuit to a fast no-op when the
+# heavy work is unnecessary.
+
 on:
   pull_request:
-    paths:
-      - 'backend/**'
-      - 'docs/api/**'
-      - '.spectral.yaml'
-      - 'functions/**'
-      - '.github/workflows/api-spec.yml'
   push:
     branches: [main]
 
@@ -19,13 +23,45 @@ permissions:
   contents: read
 
 jobs:
-  api-spec:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      spec: ${{ steps.filter.outputs.spec }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            spec:
+              - 'backend/**'
+              - 'docs/api/**'
+              - '.spectral.yaml'
+              - 'functions/**'
+              - '.github/workflows/api-spec.yml'
+
+  api-spec:
+    needs: changes
+    runs-on: ubuntu-latest
+    # Always runs so the required check reports. When the spec inputs are
+    # unchanged the job short-circuits to a fast no-op (push events skip the
+    # gate so main always exercises the full pipeline).
+    env:
+      should_run: ${{ needs.changes.outputs.spec == 'true' || github.event_name == 'push' }}
+    steps:
+      - name: No-op (spec inputs unchanged)
+        if: env.should_run != 'true'
+        run: echo "No spec-relevant changes — skipping api-spec checks."
+
+      - name: Checkout
+        if: env.should_run == 'true'
+        uses: actions/checkout@v4
+
       - name: Set up Go
+        if: env.should_run == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
@@ -33,9 +69,11 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Set up pnpm
+        if: env.should_run == 'true'
         uses: pnpm/action-setup@v4
 
       - name: Set up Node
+        if: env.should_run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -43,17 +81,21 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install just
+        if: env.should_run == 'true'
         uses: taiki-e/install-action@just
 
       - name: Install swag CLI
+        if: env.should_run == 'true'
         run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Stub backend/frontend/dist (satisfies go:embed in main.go during swag parse)
+        if: env.should_run == 'true'
         run: |
           mkdir -p backend/frontend/dist
           echo "stub for CI" > backend/frontend/dist/index.html
 
       - name: Regenerate public + internal specs
+        if: env.should_run == 'true'
         run: just backend api-spec
 
       - name: Drift check — committed public spec must match regeneration
@@ -63,6 +105,7 @@ jobs:
         # generated downstream by trakrf/docs's scripts/refresh-openapi.sh, which
         # pulls openapi.public.{json,yaml} from this repo and regenerates the
         # Postman collection there.
+        if: env.should_run == 'true'
         run: |
           if ! git diff --exit-code docs/api/openapi.public.json docs/api/openapi.public.yaml; then
             echo "::error::docs/api/openapi.public.{json,yaml} is stale. Run 'just backend api-spec' locally and commit the result."
@@ -70,17 +113,20 @@ jobs:
           fi
 
       - name: Redocly lint
+        if: env.should_run == 'true'
         run: pnpm --package=@redocly/cli dlx redocly lint docs/api/openapi.public.yaml --extends=recommended
 
       - name: Install workspace deps (Spectral + ruleset resolution)
         # Spectral resolves `extends` strings against node_modules adjacent to
         # the ruleset file. `pnpm dlx` won't surface @baloise/spectral-rules to
         # the workspace root, so the package must be installed locally.
+        if: env.should_run == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Spectral lint (Zalando + TrakRF custom rules)
         # Blocking as of TRA-678 — Phase-3 fix-wave (TRA-672..677) drove findings to zero.
         # See .spectral.yaml for rule traceability to historical BB findings (BB13/BB16/BB18/BB27).
+        if: env.should_run == 'true'
         run: pnpm exec spectral lint docs/api/openapi.public.yaml --ruleset .spectral.yaml --format pretty
 
       - name: openapi-generator-cli validate — structural contract check for codegen consumers
@@ -88,10 +134,11 @@ jobs:
         # specific constraints SDK generators enforce (referenced schemas resolve,
         # security-scheme names match types, path params are declared, etc.).
         # Running both keeps TRA-480-class contract gaps from landing again.
+        if: env.should_run == 'true'
         run: pnpm --package=@openapitools/openapi-generator-cli dlx openapi-generator-cli validate -i docs/api/openapi.public.yaml
 
       - name: Upload specs as artifact
-        if: always()
+        if: env.should_run == 'true' && always()
         uses: actions/upload-artifact@v4
         with:
           name: openapi-specs
