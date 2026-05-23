@@ -1,10 +1,11 @@
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { LocationFormModal } from './LocationFormModal';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import * as useScanToInputModule from '@/hooks/useScanToInput';
 import { locationsApi } from '@/lib/api/locations';
+import type { Location } from '@/types/locations';
 
 vi.mock('@/lib/api/locations');
 
@@ -66,5 +67,46 @@ describe('LocationFormModal', () => {
 
     // Expect the real detail message to appear, not the generic axios string
     await screen.findByText(/attached to asset "Forklift 7"/);
+  });
+
+  it('fires DELETE for tags removed during edit (TRA-813)', async () => {
+    const locationWithTags: Location = {
+      id: 7,
+      external_key: 'WH-1',
+      name: 'Warehouse 1',
+      description: '',
+      parent_id: null,
+      parent_external_key: null,
+      valid_from: '2024-01-01T00:00:00Z',
+      valid_to: null,
+      is_active: true,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+      tags: [
+        { id: 101, tag_type: 'rfid', value: 'LOC-TAG-A' },
+        { id: 102, tag_type: 'rfid', value: 'LOC-TAG-B' },
+      ],
+    };
+
+    (locationsApi.update as any).mockResolvedValue({ data: { data: locationWithTags } });
+    (locationsApi.get as any).mockResolvedValue({ data: { data: locationWithTags } });
+    (locationsApi.removeTag as any).mockResolvedValue({ data: { data: { deleted: true } } });
+    (locationsApi.addTag as any).mockResolvedValue({ data: { data: {} } });
+
+    render(
+      <LocationFormModal isOpen={true} mode="edit" location={locationWithTags} onClose={mockOnClose} />
+    );
+
+    const removeButtons = await screen.findAllByLabelText('Remove tag');
+    expect(removeButtons.length).toBeGreaterThanOrEqual(2);
+
+    fireEvent.click(removeButtons[0]); // remove LOC-TAG-A (id=101)
+
+    fireEvent.click(screen.getByText('Update Location'));
+
+    await waitFor(() => {
+      expect(locationsApi.removeTag).toHaveBeenCalledWith(locationWithTags.id, 101);
+    });
+    expect(locationsApi.removeTag).not.toHaveBeenCalledWith(locationWithTags.id, 102);
   });
 });

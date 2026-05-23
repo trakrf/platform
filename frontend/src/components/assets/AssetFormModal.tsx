@@ -100,6 +100,18 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         const allTags = (data as UpdateAssetRequest & { tags?: TagInput[] }).tags || [];
         const newTags = allTags.filter(t => !t.id);
 
+        // TRA-813: diff original tag IDs against surviving (id-bearing) tags
+        // to detect removals. The submit path previously only fired POSTs for
+        // new tags, so a removed read-only row silently dropped from the UI
+        // without a DELETE.
+        const originalTags = (freshAsset ?? asset).tags || [];
+        const survivingIds = new Set(
+          allTags.filter(t => t.id != null).map(t => t.id as number),
+        );
+        const removedTagIds = originalTags
+          .map(t => t.id)
+          .filter(id => !survivingIds.has(id));
+
         const { tags: _, ...updateData } = data as UpdateAssetRequest & { tags?: TagInput[] };
 
         const response = await assetsApi.update(asset.id, updateData);
@@ -111,6 +123,15 @@ export function AssetFormModal({ isOpen, mode, asset, onClose, initialIdentifier
         const normalized = normalizeAsset(raw);
         if (!normalized.id) {
           throw new Error('Invalid response from server. Asset API may not be available.');
+        }
+
+        for (const tagId of removedTagIds) {
+          try {
+            await assetsApi.removeTag(asset.id, tagId);
+          } catch (tagErr: any) {
+            console.error('Failed to remove tag:', tagErr);
+            toast.error(`Failed to remove tag: ${tagErr.message || 'Unknown error'}`);
+          }
         }
 
         for (const tag of newTags) {
