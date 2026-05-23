@@ -32,7 +32,7 @@ export default function LocationsScreen() {
 
   // Fetch locations data
   useLocations();
-  const { delete: deleteLocation } = useLocationMutations();
+  const { delete: deleteLocation, move: moveLocation } = useLocationMutations();
   const { setActiveTab } = useUIStore();
   const getLocationById = useLocationStore((state) => state.getLocationById);
   const cache = useLocationStore((state) => state.cache);
@@ -98,13 +98,11 @@ export default function LocationsScreen() {
     if (!location) return;
 
     try {
-      await useLocationStore.getState().updateLocation(locationId, {
-        parent_id: newParentId,
-      });
+      await moveLocation({ id: locationId, newParentId });
       toast.success(`Location "${location.external_key}" moved successfully`);
     } catch (error: any) {
       console.error('Move error:', error);
-      throw new Error(error.message || 'Failed to move location');
+      throw new Error(getApiErrorMessage(error, 'Failed to move location'));
     }
   };
 
