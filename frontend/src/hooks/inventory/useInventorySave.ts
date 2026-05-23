@@ -25,23 +25,25 @@ function extractDetail(error: unknown): string | null {
 /**
  * Hook for saving scanned inventory to the database.
  *
- * - Verifies the JWT has a valid current_org_id before sending (TRA-332).
- * - On 403 with "not found or access denied" (storage-path 403 from
- *   inventory.Save), runs the central invalidateAllOrgScopedData (TRA-318)
- *   to drop stale caches, then refreshes the JWT and retries once. This
- *   recovers from the "JWT says org B but tagStore was enriched against
- *   org A" scenario — the usual culprit is a cross-tab org switch that
- *   updated the token in localStorage without firing central invalidation
- *   in this tab's in-memory stores.
- * - Surfaces the backend's RFC 7807 detail in toast + console on final
- *   failure so future 403s stop being opaque (TRA-426).
+ * - Verifies the JWT has a valid current_org_id matching the profile's
+ *   current_org before sending. ensureOrgContext realigns the token if
+ *   they have drifted (TRA-332, TRA-812).
+ * - On 403 with "not found or access denied" the submitted identifiers
+ *   genuinely don't belong to the current org. Runs the central
+ *   invalidateAllOrgScopedData (TRA-318) to drop the stale tag buffer
+ *   and asset/location caches, refreshes the JWT, then surfaces the
+ *   "clear and rescan" toast (TRA-426). No auto-retry: the in-flight
+ *   payload was assembled from the same stale caches we just cleared,
+ *   so resubmitting it would just trip the same guard. Once the caller
+ *   rescans against the realigned token the next save will land.
  */
 export function useInventorySave() {
   const queryClient = useQueryClient();
 
   const saveMutation = useMutation({
     mutationFn: async (data: SaveInventoryRequest): Promise<SaveInventoryResponse> => {
-      // Guard: verify JWT has org context before sending
+      // Guard: verify JWT has org context AND that it matches the profile's
+      // current_org. Refreshes the token if they have drifted (TRA-812).
       await ensureOrgContext();
 
       try {
@@ -57,20 +59,9 @@ export function useInventorySave() {
             asset_identifiers_count: data.asset_identifiers.length,
           });
 
-          // Storage-path 403 ("not found or access denied") means the
-          // submitted IDs don't belong to the caller's current org. That
-          // only happens when this tab's org-scoped caches drifted from
-          // the token's current_org_id. Hand off to the single DRY sink
-          // for org-context change (TRA-318) rather than re-scattering
-          // clear logic into the save hook.
           if (detail && detail.includes('not found or access denied')) {
             await invalidateAllOrgScopedData(queryClient);
-          }
-
-          const refreshed = await refreshOrgToken();
-          if (refreshed) {
-            const retryResponse = await inventoryApi.save(data);
-            return retryResponse.data.data;
+            await refreshOrgToken();
           }
         }
         throw error;

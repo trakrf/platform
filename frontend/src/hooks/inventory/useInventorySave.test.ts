@@ -86,39 +86,22 @@ describe('useInventorySave', () => {
     expect(callOrder).toEqual(['ensureOrgContext', 'inventoryApi.save']);
   });
 
-  it('retries once after refreshOrgToken on 403', async () => {
-    const error403 = Object.assign(new Error('Request failed with status code 403'), {
-      response: { status: 403 },
-    });
-    vi.mocked(inventoryApi.save)
-      .mockRejectedValueOnce(error403)
-      .mockResolvedValueOnce({ data: { data: mockResponse } } as any);
-    vi.mocked(refreshOrgToken).mockResolvedValue(true);
-
-    const { result } = renderHook(() => useInventorySave(), {
-      wrapper: createWrapper(),
-    });
-
-    await result.current.save(mockRequest);
-
-    expect(refreshOrgToken).toHaveBeenCalledOnce();
-    expect(inventoryApi.save).toHaveBeenCalledTimes(2);
-    expect(toast.success).toHaveBeenCalledWith('5 assets saved to Warehouse A');
-  });
-
-  it('throws error when 403 refresh fails', async () => {
+  it('does not auto-retry on a bare 403 (no access-denied detail)', async () => {
+    // A 403 without the storage-path detail is not the drift signal — surface
+    // it once and let the caller handle it. (TRA-812: dropped the auto-retry
+    // that previously fired here; it always resubmitted the same payload.)
     const error403 = Object.assign(new Error('Request failed with status code 403'), {
       response: { status: 403 },
     });
     vi.mocked(inventoryApi.save).mockRejectedValueOnce(error403);
-    vi.mocked(refreshOrgToken).mockResolvedValue(false);
 
     const { result } = renderHook(() => useInventorySave(), {
       wrapper: createWrapper(),
     });
 
     await expect(result.current.save(mockRequest)).rejects.toThrow(error403);
-    expect(refreshOrgToken).toHaveBeenCalledOnce();
+    expect(inventoryApi.save).toHaveBeenCalledTimes(1);
+    expect(refreshOrgToken).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith('Failed to save inventory');
   });
 
@@ -163,27 +146,12 @@ describe('useInventorySave', () => {
     });
   });
 
-  it('on 403 access-denied: calls central invalidation, then retries (TRA-426)', async () => {
-    const access403 = Object.assign(new Error('Request failed with status code 403'), {
-      response: {
-        status: 403,
-        data: { error: { detail: 'assets not found or access denied (org_id=7, valid=2/3)' } },
-      },
-    });
-    vi.mocked(inventoryApi.save)
-      .mockRejectedValueOnce(access403)
-      .mockResolvedValueOnce({ data: { data: mockResponse } } as any);
-    vi.mocked(refreshOrgToken).mockResolvedValue(true);
-
-    const { result } = renderHook(() => useInventorySave(), { wrapper: createWrapper() });
-    await result.current.save(mockRequest);
-
-    expect(mockInvalidateAllOrgScopedData).toHaveBeenCalledOnce();
-    expect(inventoryApi.save).toHaveBeenCalledTimes(2);
-    expect(toast.success).toHaveBeenCalledWith('5 assets saved to Warehouse A');
-  });
-
-  it('surfaces backend detail in toast when 403 retry still fails (TRA-426)', async () => {
+  it('on 403 access-denied: invalidates caches, refreshes token, and surfaces rescan toast (TRA-812)', async () => {
+    // The submitted identifiers don't belong to the caller's current org.
+    // Tags were assembled from caches that are now stale — clear them so the
+    // user gets a clean slate, realign the JWT with the profile, and let the
+    // error bubble up to the rescan toast. We do NOT retry: the in-flight
+    // payload was assembled from those same stale caches.
     const access403 = Object.assign(new Error('Request failed with status code 403'), {
       response: {
         status: 403,
@@ -196,6 +164,9 @@ describe('useInventorySave', () => {
     const { result } = renderHook(() => useInventorySave(), { wrapper: createWrapper() });
     await expect(result.current.save(mockRequest)).rejects.toThrow(access403);
 
+    expect(mockInvalidateAllOrgScopedData).toHaveBeenCalledOnce();
+    expect(refreshOrgToken).toHaveBeenCalledOnce();
+    expect(inventoryApi.save).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith(
       'Some scans no longer match your current organization. Please clear and rescan.',
     );
