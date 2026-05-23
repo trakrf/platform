@@ -125,6 +125,55 @@ describe('LocationBar', () => {
     expect(await screen.findByText(/Use detected: Warehouse A/)).toBeInTheDocument();
   });
 
+  it('shows a clear affordance when a manual selection is active', () => {
+    // TRA-819: users must be able to deselect a manual location without
+    // leaving the page.
+    render(
+      <LocationBar
+        {...defaultProps}
+        detectedLocation={null}
+        detectionMethod="manual"
+        selectedLocationId={1}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /clear location/i })).toBeInTheDocument();
+  });
+
+  it('clear affordance calls onLocationChange(null)', () => {
+    // TRA-819: clearing should drop the manual selection so auto-detect
+    // and manual selection both function from a clean state again.
+    const onLocationChange = vi.fn();
+    render(
+      <LocationBar
+        {...defaultProps}
+        onLocationChange={onLocationChange}
+        detectedLocation={null}
+        detectionMethod="manual"
+        selectedLocationId={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /clear location/i }));
+
+    expect(onLocationChange).toHaveBeenCalledWith(null);
+  });
+
+  it('hides clear affordance when no manual selection is active', () => {
+    // TRA-819: clear is only meaningful when the user has a manual
+    // override to drop. Detected-only state needs no clear control.
+    render(
+      <LocationBar
+        {...defaultProps}
+        detectedLocation={{ id: 1, name: 'Warehouse A' }}
+        detectionMethod="tag"
+        selectedLocationId={null}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /clear location/i })).not.toBeInTheDocument();
+  });
+
   it('sorts locations by parent_id-derived tree order in dropdown', async () => {
     // TRA-684: tree_path is gone; depth-first order is derived client-side
     // from the parent_id chain. Provide locations in non-sorted order to
