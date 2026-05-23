@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BarcodeAccumulator } from './accumulator';
 
 // Helper: hex string to Uint8Array. Accepts space-separated hex bytes.
@@ -77,5 +77,30 @@ describe('BarcodeAccumulator', () => {
     const followupRecords = acc.appendAndExtract(followup);
     expect(followupRecords).toHaveLength(1);
     expect(followupRecords[0]).toEqual(followup);
+  });
+
+  it('discards an incomplete buffer after the idle timeout fires', () => {
+    vi.useFakeTimers();
+    try {
+      const acc = new BarcodeAccumulator();
+      const head = hex(
+        '06 02 00 07 10 17 13 51 5D 51 31 37 31 32 41 43 31 32 46 31 30 30 ' +
+        '37 30 30 30 30 30 30 32 32 34 34 30'
+      );
+      expect(acc.appendAndExtract(head)).toHaveLength(0);
+
+      // Advance past the idle timeout (500 ms).
+      vi.advanceTimersByTime(500);
+
+      // Buffer must be empty: bytes that arrive after the timeout start
+      // a fresh record and do NOT join the discarded head.
+      const standaloneTerminator = hex('0D');
+      const records = acc.appendAndExtract(standaloneTerminator);
+      // Just the terminator, with NO head bytes prepended.
+      expect(records).toHaveLength(1);
+      expect(records[0]).toEqual(standaloneTerminator);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

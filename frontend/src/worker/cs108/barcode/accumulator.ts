@@ -24,9 +24,6 @@ export class BarcodeAccumulator {
    * Schedules an idle-timeout flush if bytes remain in the buffer.
    */
   appendAndExtract(payload: Uint8Array): Uint8Array[] {
-    // Filter pure status pings — a single 0x06 byte sometimes arrives as a
-    // 0x9100 payload (e.g., echo of the Newland ESC-stop ACK). It carries
-    // no barcode data and must not be appended to the buffer.
     if (payload.length === 1 && payload[0] === STATUS_PING_BYTE) {
       return [];
     }
@@ -43,7 +40,32 @@ export class BarcodeAccumulator {
       this.buffer = this.buffer.slice(crIndex + 1);
       crIndex = this.buffer.indexOf(RECORD_TERMINATOR);
     }
+
+    if (this.buffer.length > 0) {
+      this.scheduleIdleFlush();
+    } else {
+      this.cancelIdleFlush();
+    }
+
     return records;
+  }
+
+  private scheduleIdleFlush(): void {
+    this.cancelIdleFlush();
+    this.idleTimeoutHandle = setTimeout(() => {
+      // Discard any incomplete buffer. We deliberately do not emit a
+      // half-formed record — better to lose a read than silently store
+      // a truncated identifier.
+      this.buffer = new Uint8Array(0);
+      this.idleTimeoutHandle = null;
+    }, IDLE_TIMEOUT_MS);
+  }
+
+  private cancelIdleFlush(): void {
+    if (this.idleTimeoutHandle !== null) {
+      clearTimeout(this.idleTimeoutHandle);
+      this.idleTimeoutHandle = null;
+    }
   }
 
   /**
