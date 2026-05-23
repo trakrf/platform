@@ -374,17 +374,28 @@ describe('Notification System Integration', () => {
   });
 
   describe('barcode notifications', () => {
-    // NOTE(TRA-821 Task 7): This test is broken by the accumulator rewrite and needs
-    // a separate fix. The packet below was built for the OLD payload-based path:
-    //   - `rawData` is wrong field name (CS108Packet has `rawPayload`)
-    //   - `rawPayload` (the correct field) is absent, so the new handler exits early
-    //   - `payload.data/symbology` was the old pre-parsed object path, now unused
-    // Do NOT silently fix here — this test needs a dedicated update in a follow-up task
-    // that supplies a real `rawPayload` with a 0x0D-terminated barcode record.
-    it.skip('should process barcode data in BARCODE mode', () => {
+    it('should process barcode data in BARCODE mode', () => {
       currentMode = ReaderMode.BARCODE;
+      // currentState stays CONNECTED so auto-stop does not fire (BARCODE_READ only)
+
+      // CLEAN_SINGLE shape: 42 bytes, produces barcode "712AC12F1007000000224401" (QR Code)
+      const rawPayload = new Uint8Array([
+        0x06, 0x02, 0x00, 0x07, 0x10, 0x17, 0x13, 0x51, 0x5D, 0x51,
+        0x31, 0x37, 0x31, 0x32, 0x41, 0x43, 0x31, 0x32, 0x46, 0x31,
+        0x30, 0x30, 0x37, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x32,
+        0x32, 0x34, 0x34, 0x30, 0x31, 0x05, 0x01, 0x11, 0x16, 0x03,
+        0x04, 0x0D,
+      ]);
 
       const packet: CS108Packet = {
+        prefix: 0xA7B3,
+        transport: 0xB3,
+        length: rawPayload.length + 2,
+        module: 0x6A,
+        reserve: 0x82,
+        direction: 0x9E,
+        crc: 0,
+        eventCode: 0x9100,
         event: {
           name: 'BARCODE_DATA',
           eventCode: 0x9100,
@@ -392,12 +403,10 @@ describe('Notification System Integration', () => {
           isCommand: false,
           isNotification: true,
         } as CS108Event,
-        payload: {
-          data: '123456789012',
-          symbology: 0x08, // UPC-A
-        },
-        rawData: new Uint8Array([]),
-        timestamp: Date.now(),
+        rawPayload,
+        payload: undefined,
+        totalExpected: 10 + rawPayload.length,
+        isComplete: true,
       };
 
       router.handleNotification(packet);
@@ -406,11 +415,11 @@ describe('Notification System Integration', () => {
       expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
         type: 'BARCODE_READ',
         payload: expect.objectContaining({
-          barcode: '123456789012',
-          symbology: 'UPC-A',
-          timestamp: expect.any(Number)
+          barcode: '712AC12F1007000000224401',
+          symbology: 'QR Code',
+          timestamp: expect.any(Number),
         }),
-        timestamp: expect.any(Number)
+        timestamp: expect.any(Number),
       }));
     });
 
