@@ -316,16 +316,31 @@ func (s *Storage) CountAllAssets(ctx context.Context, orgID int) (int, error) {
 	return count, nil
 }
 
+// DeleteAsset soft-deletes an asset and cascades the same deleted_at to any
+// attached tag rows in one transaction. TRA-816: without the cascade the
+// orphan tag row keeps the (org_id, type, value) unique slot occupied, so the
+// value cannot be reattached elsewhere.
 func (s *Storage) DeleteAsset(ctx context.Context, orgID, id int) (bool, error) {
-	query := `update trakrf.assets set deleted_at = now() where id = $1 and org_id = $2 and deleted_at is null`
 	var rowsAffected int64
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		result, err := tx.Exec(ctx, query, id, orgID)
+		result, err := tx.Exec(ctx, `
+			UPDATE trakrf.assets
+			   SET deleted_at = NOW()
+			 WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+		`, id, orgID)
 		if err != nil {
 			return err
 		}
 		rowsAffected = result.RowsAffected()
-		return nil
+		if rowsAffected == 0 {
+			return nil
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE trakrf.tags
+			   SET deleted_at = (SELECT deleted_at FROM trakrf.assets WHERE id = $1 AND org_id = $2)
+			 WHERE asset_id = $1 AND org_id = $2 AND deleted_at IS NULL
+		`, id, orgID)
+		return err
 	})
 	if err != nil {
 		return false, fmt.Errorf("could not delete asset: %w", err)

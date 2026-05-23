@@ -99,3 +99,97 @@ func TestAddTag_SoftDeletedRowNotBlocking(t *testing.T) {
 	_, err = store.AddTagToAsset(ctx, orgID, assetB.ID, rfidReq(value))
 	require.NoError(t, err)
 }
+
+// TRA-816: DeleteAsset must cascade the soft-delete to the asset's tags so
+// the (org_id, type, value) unique slot is freed and the value can be
+// attached to another entity in the same org.
+func TestDeleteAsset_CascadesTagSoftDelete(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	assetA := testutil.CreateTestAsset(t, pool, orgID, "AST-CASCADE-A")
+	assetB := testutil.CreateTestAsset(t, pool, orgID, "AST-CASCADE-B")
+
+	value := "E2000000CASCADE01"
+	tag, err := store.AddTagToAsset(ctx, orgID, assetA.ID, rfidReq(value))
+	require.NoError(t, err)
+
+	deleted, err := store.DeleteAsset(ctx, orgID, assetA.ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	var tagDeletedAt *time.Time
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT deleted_at FROM trakrf.tags WHERE id = $1`, tag.ID,
+	).Scan(&tagDeletedAt))
+	require.NotNil(t, tagDeletedAt, "tag must be soft-deleted alongside its asset")
+
+	// Cascade frees the (org, type, value) slot: reattach to a sibling asset.
+	_, err = store.AddTagToAsset(ctx, orgID, assetB.ID, rfidReq(value))
+	require.NoError(t, err, "value must be reusable once cascade soft-deletes the orphan")
+}
+
+// TRA-816: same contract for locations.
+func TestDeleteLocation_CascadesTagSoftDelete(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	locA := seedLocation(t, pool, orgID, "LOC-CASCADE-A", "Dock A")
+	locB := seedLocation(t, pool, orgID, "LOC-CASCADE-B", "Dock B")
+
+	value := "E2000000CASCADE02"
+	tag, err := store.AddTagToLocation(ctx, orgID, locA, rfidReq(value))
+	require.NoError(t, err)
+
+	deleted, err := store.DeleteLocation(ctx, orgID, locA)
+	require.NoError(t, err)
+	require.True(t, deleted)
+
+	var tagDeletedAt *time.Time
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT deleted_at FROM trakrf.tags WHERE id = $1`, tag.ID,
+	).Scan(&tagDeletedAt))
+	require.NotNil(t, tagDeletedAt, "tag must be soft-deleted alongside its location")
+
+	_, err = store.AddTagToLocation(ctx, orgID, locB, rfidReq(value))
+	require.NoError(t, err, "value must be reusable once cascade soft-deletes the orphan")
+}
+
+// TRA-816: defense-in-depth — if a tag whose parent is soft-deleted somehow
+// remains live (e.g. inserted directly, sweep migration not yet run), the
+// duplicate-conflict path must not leak the parent's name. Generic 409 only.
+func TestAddTag_OrphanParentDoesNotLeakName(t *testing.T) {
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	orgID := testutil.CreateTestAccount(t, pool)
+	assetA := testutil.CreateTestAsset(t, pool, orgID, "AST-ORPHAN-PARENT")
+	assetB := testutil.CreateTestAsset(t, pool, orgID, "AST-ORPHAN-SIBLING")
+
+	value := "E2000000ORPHAN01"
+	_, err := store.AddTagToAsset(ctx, orgID, assetA.ID, rfidReq(value))
+	require.NoError(t, err)
+
+	// Soft-delete the parent asset directly, bypassing the cascade, leaving
+	// the tag row live — same shape as the preview orphans before the sweep.
+	_, err = pool.Exec(ctx,
+		`UPDATE trakrf.assets SET deleted_at = now() WHERE id = $1`, assetA.ID)
+	require.NoError(t, err)
+
+	_, err = store.AddTagToAsset(ctx, orgID, assetB.ID, rfidReq(value))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists",
+		"handler keys its 409 on this substring")
+	assert.NotContains(t, err.Error(), "AST-ORPHAN-PARENT",
+		"must not surface the soft-deleted parent's external_key")
+	assert.NotContains(t, err.Error(), "attached to asset",
+		"must fall back to the generic message, not the enriched one")
+}

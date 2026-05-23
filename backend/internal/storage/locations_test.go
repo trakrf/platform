@@ -557,6 +557,9 @@ func TestDeleteLocation(t *testing.T) {
 	mock.ExpectExec(`UPDATE trakrf.locations SET deleted_at`).
 		WithArgs(locationID, orgID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec(`UPDATE trakrf.tags`).
+		WithArgs(locationID, orgID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	mock.ExpectCommit()
 
 	result, err := storage.DeleteLocation(context.Background(), orgID, locationID)

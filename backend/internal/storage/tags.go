@@ -248,14 +248,21 @@ func derefStr(s *string) string {
 // value) and returns the asset or location it is attached to. Returns
 // (nil, nil) when no live collision is found — e.g. the conflicting row was
 // soft-deleted between the failed INSERT and this lookup.
+//
+// TRA-816: the asset/location join filters deleted_at so that a tag whose
+// parent is soft-deleted does not surface that parent's name in the 409
+// message. With the DeleteAsset / DeleteLocation cascade now soft-deleting
+// attached tags, this code path should not produce a hit for an orphan; the
+// defense in depth covers the window between deploy and the sweep migration
+// running, and any future code path that bypasses the cascade.
 func (s *Storage) lookupTagConflict(ctx context.Context, orgID int, tagType, value string) (*tagConflict, error) {
 	query := `
 		SELECT t.asset_id, t.location_id,
 		       a.name, a.external_key,
 		       l.name, l.external_key
 		  FROM trakrf.tags t
-		  LEFT JOIN trakrf.assets    a ON a.id = t.asset_id
-		  LEFT JOIN trakrf.locations l ON l.id = t.location_id
+		  LEFT JOIN trakrf.assets    a ON a.id = t.asset_id    AND a.deleted_at IS NULL
+		  LEFT JOIN trakrf.locations l ON l.id = t.location_id AND l.deleted_at IS NULL
 		 WHERE t.org_id = $1 AND t.type = $2 AND t.value = $3
 		   AND t.deleted_at IS NULL
 		 LIMIT 1
@@ -274,11 +281,16 @@ func (s *Storage) lookupTagConflict(ctx context.Context, orgID int, tagType, val
 		return nil, err
 	}
 	switch {
-	case assetID != nil:
+	case assetID != nil && assetName != nil:
 		return &tagConflict{EntityType: "asset", Name: derefStr(assetName), ExternalKey: derefStr(assetKey)}, nil
-	case locationID != nil:
+	case locationID != nil && locName != nil:
 		return &tagConflict{EntityType: "location", Name: derefStr(locName), ExternalKey: derefStr(locKey)}, nil
 	default:
+		// Tag row exists but parent is soft-deleted (or no parent). Fall back
+		// to the generic "already exists" message via resolveTagError — we
+		// must not leak a soft-deleted entity's name to the caller, and the
+		// generic message is a server-side data-integrity miss to fix at the
+		// cascade layer, not a user-fixable conflict (TRA-816).
 		return nil, nil
 	}
 }
