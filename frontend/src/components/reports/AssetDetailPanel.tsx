@@ -49,7 +49,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
         </div>
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
-          <FreshnessBadge lastSeen={asset.last_seen} />
+          <FreshnessBadge lastSeen={asset.asset_last_seen} />
         </div>
       </div>
 

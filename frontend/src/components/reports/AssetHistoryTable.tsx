@@ -20,7 +20,7 @@ type TableItem = AssetHistoryItem & { id: string };
 
 const columns: Column<TableItem>[] = [
   {
-    key: 'timestamp',
+    key: 'event_observed_at',
     label: 'Time',
     sortable: false,
   },
@@ -47,7 +47,7 @@ export function AssetHistoryTable({
 }: AssetHistoryTableProps) {
   // Transform data to include id field for DataTable
   const tableData: TableItem[] = useMemo(
-    () => data.map((item, index) => ({ ...item, id: `${item.timestamp}-${index}` })),
+    () => data.map((item, index) => ({ ...item, id: `${item.event_observed_at}-${index}` })),
     [data]
   );
 
@@ -67,7 +67,7 @@ export function AssetHistoryTable({
       renderRow={(item, _index, props) => (
         <tr key={item.id} className={props.className}>
           <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-            {formatRelativeTime(item.timestamp)}
+            {formatRelativeTime(item.event_observed_at)}
           </td>
           <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
             {item.location_external_key || (

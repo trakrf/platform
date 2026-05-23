@@ -88,7 +88,8 @@ const mockAssetLocations = new Map([
       asset_external_key: 'ASSET-001',
       location_id: 1,
       location_external_key: 'WH-A',
-      last_seen: '2024-01-01T00:00:00Z',
+      asset_last_seen: '2024-01-01T00:00:00Z',
+      asset_deleted_at: null,
     },
   ],
   [
@@ -98,7 +99,8 @@ const mockAssetLocations = new Map([
       asset_external_key: 'ASSET-002',
       location_id: 2,
       location_external_key: 'OFF-B',
-      last_seen: '2024-01-15T00:00:00Z',
+      asset_last_seen: '2024-01-15T00:00:00Z',
+      asset_deleted_at: null,
     },
   ],
 ]);

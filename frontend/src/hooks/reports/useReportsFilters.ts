@@ -60,7 +60,7 @@ export function useReportsFilters({
   // 4. Apply client-side time range filter
   const filteredData = useMemo(() => {
     if (selectedTimeRange === 'all') return data;
-    return data.filter((item) => matchesTimeRange(item.last_seen, selectedTimeRange));
+    return data.filter((item) => matchesTimeRange(item.asset_last_seen, selectedTimeRange));
   }, [data, selectedTimeRange]);
 
   // 5. Helper: check if any filters are active
