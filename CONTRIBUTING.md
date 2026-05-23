@@ -182,6 +182,57 @@ cd tests/api && pnpm test
 3. Update repository interfaces
 4. Consider TimescaleDB features (continuous aggregates, compression)
 
+## Cutting a Release
+
+TrakRF uses `git describe` for the platform version (TRA-485). A release is
+a single tag push; CI does the rest. See
+[`docs/adr/0001-platform-vs-api-versioning.md`](docs/adr/0001-platform-vs-api-versioning.md)
+for the three-axis versioning rationale (platform vs API contract vs spec).
+
+### Steps
+
+1. Update `CHANGELOG.md` — move items from `## [Unreleased]` to a new
+   `## [vX.Y.Z] - YYYY-MM-DD` section.
+2. Tag and push:
+   ```bash
+   git tag vX.Y.Z
+   git push --tags
+   ```
+3. CI (`.github/workflows/docker-build.yml`) computes
+   `git describe --tags --always --dirty`, bakes it into the backend binary
+   (`-X main.version`) and the frontend bundle (`VITE_APP_VERSION`), and
+   publishes `ghcr.io/trakrf/backend:sha-<short>` plus the standard tag set.
+4. Deploy:
+   - **Railway prod** — pinned to a semver tag. The tag push triggers
+     Railway's auto-rebuild from source. No further action.
+   - **GKE prod** (post TRA-351 cutover) — bump the image tag in
+     `trakrf-infra/helm/trakrf-backend/values-gke.yaml` and merge; ArgoCD
+     syncs. Two-repo dance is automatable via Option 1 (auto-PR from tag
+     push) per TRA-485 — until then it is manual.
+5. Verify post-deploy:
+   ```bash
+   curl https://app.trakrf.id/health | jq '.version, .commit, .tag'
+   curl https://app.trakrf.id/version.json
+   # Both should report vX.Y.Z; UI nav header should match.
+   ```
+
+### What gets versioned
+
+| Axis | Source | Bumped when |
+|---|---|---|
+| Platform release | `git tag vX.Y.Z` → `git describe` | A new build is shipped |
+| API contract | URL path `/api/v1/` | Breaking change to customer-facing API |
+| OpenAPI spec | `info.version` in `docs/api/openapi.public.{json,yaml}` | Breaking change to spec shape (TRA-672) |
+
+These three numbers move independently. Platform can ship many releases
+inside one `/api/v1/`; spec can ship many revisions inside one platform
+release. Do not couple them.
+
+### Conventional Commits
+
+Optional. The git-log readability convention (`feat:`, `fix:`, `chore:`,
+`docs:`) is encouraged but no tool depends on it — bumps are manual.
+
 ## Getting Help
 
 - **Questions?** Open a GitHub Discussion

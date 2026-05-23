@@ -65,7 +65,7 @@ export function initOpenReplay(): void {
     if (userId) {
       tracker.setUserID(userId);
     }
-    tracker.setMetadata('app_version', import.meta.env.VITE_APP_VERSION || '1.0.0');
+    tracker.setMetadata('app_version', import.meta.env.VITE_APP_VERSION || 'dev');
     tracker.setMetadata('platform', 'handheld');
     tracker.event('openreplay_initialized', {
       timestamp: new Date().toISOString(),

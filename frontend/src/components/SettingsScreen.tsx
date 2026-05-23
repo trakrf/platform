@@ -4,7 +4,7 @@ import { ReaderState } from '@/worker/types/reader';
 import { Bluetooth, Zap, Settings2, Info, RefreshCw, ChevronDown, ChevronUp, Smartphone, WifiOff, Battery, Bug } from 'lucide-react';
 import { ConnectIcon } from '@/components/icons/ConnectIcon';
 import toast from 'react-hot-toast';
-import { version } from '../../package.json';
+import { appVersion } from '@/version';
 
 export default function SettingsScreen() {
   // Set active tab when component mounts - standard React pattern
@@ -372,7 +372,7 @@ export default function SettingsScreen() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">App Version</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">TrakRF Web v{version}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">TrakRF Web {appVersion}</p>
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Compatible Devices</h4>
@@ -460,7 +460,7 @@ export default function SettingsScreen() {
             <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
               <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">About</h3>
               <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <p>TrakRF Web v{version}</p>
+                <p>TrakRF Web {appVersion}</p>
                 <p>A web application for CS108 RFID readers using Web Bluetooth technology.</p>
                 <p className="text-xs text-gray-500 dark:text-gray-500">© 2025 TrakRF</p>
               </div>

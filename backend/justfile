@@ -344,15 +344,18 @@ vendor:
     go mod vendor
 
 # Build backend binary with version + build metadata injection (regenerates
-# internal spec first). commit, tag, and build_time surface at /health so
-# operators can tell which SHA is running — see TRA-481.
+# internal spec first). version, commit, tag, and build_time surface at /health
+# so operators can tell which SHA is running — see TRA-481, TRA-485.
+# Platform version (main.version) is derived from `git describe` so local
+# builds report the same shape as CI builds; no hardcoded literal to drift.
 build: api-spec
     #!/usr/bin/env bash
     set -euo pipefail
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     TAG=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+    APP_VERSION="${TAG}"
     BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    go build -ldflags "-X main.version=0.1.0-dev -X main.commit=${COMMIT} -X main.tag=${TAG} -X main.buildTime=${BUILD_TIME}" -o bin/trakrf .
+    go build -ldflags "-X main.version=${APP_VERSION} -X main.commit=${COMMIT} -X main.tag=${TAG} -X main.buildTime=${BUILD_TIME}" -o bin/trakrf .
 
 # Generate OpenAPI 3.0 specs (public → docs/api/ + embedded; internal → embedded only)
 api-spec:

@@ -61,6 +61,19 @@ jobs:
       - name: Checkout
         if: env.should_build == 'true'
         uses: actions/checkout@v4
+        with:
+          # Full history + tags so `git describe` can resolve the platform
+          # version (TRA-485). Shallow clones drop tag refs and ancestor
+          # commits, leaving describe with nothing to report.
+          fetch-depth: 0
+
+      - name: Compute platform version
+        if: env.should_build == 'true' && matrix.image == 'backend'
+        id: version
+        run: |
+          version=$(git describe --tags --always --dirty)
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Platform version: ${version}"
 
       - name: Set up Buildx
         if: env.should_build == 'true'
@@ -106,4 +119,5 @@ jobs:
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             BUILD_TAG=${{ steps.meta.outputs.version }}
+            APP_VERSION=${{ steps.version.outputs.version }}
             VITE_ENVIRONMENT=${{ startsWith(github.ref, 'refs/tags/v') && '' || 'preview' }}

@@ -1,20 +1,28 @@
 # Stage 0: Build Metadata
-# Resolves the deployed commit and tag from one of two sources:
-#   1. Explicit caller --build-arg COMMIT_SHA / BUILD_TAG (GHA path, see
-#      .github/workflows/docker-build.yml — passes github.sha + meta tag).
+# Resolves the deployed commit, tag, and platform version from one of two sources:
+#   1. Explicit caller --build-arg COMMIT_SHA / BUILD_TAG / APP_VERSION (GHA path,
+#      see .github/workflows/docker-build.yml — passes github.sha, meta tag, and
+#      `git describe --tags --always --dirty`).
 #   2. Railway-provided RAILWAY_GIT_COMMIT_SHA / RAILWAY_GIT_BRANCH. Railway
 #      injects these into the build environment for any ARG declared with a
 #      matching name (per https://docs.railway.com/guides/dockerfiles), so no
 #      railway.json dockerBuildArgs indirection is needed.
 # Explicit args win; Railway args are the fallback; "unknown"/"dev" if neither.
-# TRA-760 F2.
+# Platform version (TRA-485): APP_VERSION is the single source of truth, fed
+# into both the Go binary (-X main.version) and the frontend (VITE_APP_VERSION).
+# Railway can't run `git describe` during build (only env vars are injected),
+# so we fall back to RAILWAY_GIT_BRANCH — preview UI then shows the branch
+# name instead of a full describe, which is acceptable for non-prod surfaces.
+# TRA-760 F2, TRA-485.
 FROM alpine:3.20 AS build-meta
 ARG COMMIT_SHA=
 ARG BUILD_TAG=
+ARG APP_VERSION=
 ARG RAILWAY_GIT_COMMIT_SHA=
 ARG RAILWAY_GIT_BRANCH=
 RUN printf '%s' "${COMMIT_SHA:-${RAILWAY_GIT_COMMIT_SHA:-unknown}}" > /commit && \
-    printf '%s' "${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}" > /tag
+    printf '%s' "${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}" > /tag && \
+    printf '%s' "${APP_VERSION:-${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}}" > /version
 
 # Stage 1: Frontend Builder
 FROM node:24-alpine AS frontend-builder
@@ -27,8 +35,9 @@ ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
 
 # Build metadata — same values passed to the backend stage. Exposed as VITE_*
-# so the Vite plugin can emit dist/version.json for curl-able drift detection.
-COPY --from=build-meta /commit /tag /tmp/buildinfo/
+# so the Vite plugin can emit dist/version.json for curl-able drift detection
+# and the nav header can render the platform version (TRA-485).
+COPY --from=build-meta /commit /tag /version /tmp/buildinfo/
 
 # Install pnpm — major-pinned to 9.x. `pnpm@latest` resolved to 10.x in
 # May 2026, which gates installs on explicit build-script approval
@@ -49,6 +58,7 @@ RUN pnpm install --frozen-lockfile
 COPY frontend/ ./frontend/
 RUN VITE_COMMIT_SHA=$(cat /tmp/buildinfo/commit) \
     VITE_BUILD_TAG=$(cat /tmp/buildinfo/tag) \
+    VITE_APP_VERSION=$(cat /tmp/buildinfo/version) \
     pnpm --filter frontend run build
 # Output: /app/frontend/dist
 
@@ -57,9 +67,11 @@ FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
 
 # Build-time metadata injected via -ldflags so /health can report the
-# deployed commit. Values come from build-meta. TRA-760 F2.
-ARG VERSION=0.1.0-preview
-COPY --from=build-meta /commit /tag /tmp/buildinfo/
+# deployed commit + platform version. Values come from build-meta;
+# main.version is sourced from /version (git-describe at CI time per
+# TRA-485) so /health and the frontend nav header stay in sync.
+# TRA-760 F2, TRA-485.
+COPY --from=build-meta /commit /tag /version /tmp/buildinfo/
 
 # Copy go.mod for layer caching
 COPY backend/go.mod backend/go.sum ./
@@ -102,8 +114,9 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 RUN BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && \
     COMMIT_SHA=$(cat /tmp/buildinfo/commit) && \
     BUILD_TAG=$(cat /tmp/buildinfo/tag) && \
+    APP_VERSION=$(cat /tmp/buildinfo/version) && \
     CGO_ENABLED=0 GOOS=linux go build \
-        -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT_SHA} -X main.tag=${BUILD_TAG} -X main.buildTime=${BUILD_TIME}" \
+        -ldflags "-X main.version=${APP_VERSION} -X main.commit=${COMMIT_SHA} -X main.tag=${BUILD_TAG} -X main.buildTime=${BUILD_TIME}" \
         -o server .
 
 # Stage 3: Production
