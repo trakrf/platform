@@ -1,12 +1,11 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   inventoryApi,
   type SaveInventoryRequest,
   type SaveInventoryResponse,
 } from '@/lib/api/inventory';
-import { ensureOrgContext, refreshOrgToken } from '@/lib/auth/orgContext';
-import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
+import { ensureOrgContext } from '@/lib/auth/orgContext';
 
 type RFC7807 = { detail?: string; title?: string };
 type AxiosLikeError = {
@@ -25,25 +24,20 @@ function extractDetail(error: unknown): string | null {
 /**
  * Hook for saving scanned inventory to the database.
  *
- * - Verifies the JWT has a valid current_org_id matching the profile's
- *   current_org before sending. ensureOrgContext realigns the token if
- *   they have drifted (TRA-332, TRA-812).
- * - On 403 with "not found or access denied" the submitted identifiers
- *   genuinely don't belong to the current org. Runs the central
- *   invalidateAllOrgScopedData (TRA-318) to drop the stale tag buffer
- *   and asset/location caches, refreshes the JWT, then surfaces the
- *   "clear and rescan" toast (TRA-426). No auto-retry: the in-flight
- *   payload was assembled from the same stale caches we just cleared,
- *   so resubmitting it would just trip the same guard. Once the caller
- *   rescans against the realigned token the next save will land.
+ * - Verifies the JWT has a valid current_org_id before sending (TRA-332).
+ * - On 403 (storage-path access-denied from inventory.Save) logs the backend
+ *   detail and surfaces it directly via the onError toast. The backend
+ *   returns an accurate, generic message naming the real failure cause
+ *   (TRA-812 — the prior "not found or access denied" wording was a single
+ *   blanket message covering four distinct causes, and this hook used to
+ *   re-translate it into a misleading "org mismatch" toast on top of that).
+ *   No auto-retry: the in-flight payload that tripped the guard would just
+ *   trip it again.
  */
 export function useInventorySave() {
-  const queryClient = useQueryClient();
-
   const saveMutation = useMutation({
     mutationFn: async (data: SaveInventoryRequest): Promise<SaveInventoryResponse> => {
-      // Guard: verify JWT has org context AND that it matches the profile's
-      // current_org. Refreshes the token if they have drifted (TRA-812).
+      // Guard: verify JWT has org context before sending
       await ensureOrgContext();
 
       try {
@@ -52,17 +46,11 @@ export function useInventorySave() {
       } catch (error: unknown) {
         const axiosError = error as AxiosLikeError;
         if (axiosError.response?.status === 403) {
-          const detail = extractDetail(error);
           console.warn('[InventorySave] 403 from inventory/save', {
-            detail,
+            detail: extractDetail(error),
             location_identifier: data.location_identifier,
             asset_identifiers_count: data.asset_identifiers.length,
           });
-
-          if (detail && detail.includes('not found or access denied')) {
-            await invalidateAllOrgScopedData(queryClient);
-            await refreshOrgToken();
-          }
         }
         throw error;
       }
@@ -75,12 +63,12 @@ export function useInventorySave() {
         toast.error(error.message);
         return;
       }
-      const detail = extractDetail(error);
-      if (detail && detail.includes('not found or access denied')) {
-        toast.error('Some scans no longer match your current organization. Please clear and rescan.');
-        return;
-      }
-      toast.error(detail || 'Failed to save inventory');
+      // Surface the backend's RFC 7807 detail directly. The backend message
+      // names a real cause (e.g. "N of M assets are unavailable"); this hook
+      // used to re-translate every storage-path 403 into a hard-coded "org
+      // mismatch" toast, which was wrong for the duplicate, soft-deleted, and
+      // nonexistent failure paths. (TRA-812)
+      toast.error(extractDetail(error) || 'Failed to save inventory');
     },
   });
 

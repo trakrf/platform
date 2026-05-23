@@ -2,9 +2,9 @@ package inventory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -147,18 +147,29 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		errStr := err.Error()
-		if strings.Contains(errStr, "not found or access denied") {
+		var accessErr *storage.InventoryAccessError
+		if errors.As(err, &accessErr) {
+			// Log the structured bucket breakdown so a real cross-org leak or
+			// concurrent soft-delete is distinguishable from the duplicate-id
+			// path in the access log. The wire response stays generic (the
+			// error string from accessErr.Error() does not include bucket IDs)
+			// so callers cannot probe other orgs. (TRA-812)
 			logger.Get().Warn().
 				Int("org_id", orgID).
 				Int("location_id", locationID).
 				Ints("asset_ids", assetIDs).
+				Str("reason", accessErr.Reason).
+				Int("valid_count", accessErr.ValidCount).
+				Int("total_count", accessErr.TotalCount).
+				Ints("missing_asset_ids", accessErr.MissingAssetIDs).
+				Ints("soft_deleted_asset_ids", accessErr.SoftDeletedAssetIDs).
+				Ints("cross_org_asset_ids", accessErr.CrossOrgAssetIDs).
 				Str("request_id", requestID).
-				Str("error", errStr).
-				Msg("Inventory save denied: org context mismatch")
+				Str("error", accessErr.Error()).
+				Msg("Inventory save denied")
 
 			httputil.WriteJSONError(w, r, http.StatusForbidden, modelerrors.ErrForbidden,
-				errStr, requestID)
+				accessErr.Error(), requestID)
 
 			return
 		}

@@ -343,6 +343,10 @@ func TestAccessDeniedErrorDetection(t *testing.T) {
 }
 
 func TestSave_AccessErrorDetection(t *testing.T) {
+	// The handler now uses errors.As to detect *storage.InventoryAccessError,
+	// not a substring match on the error string — the string moved to a
+	// generic count-only message that names a real cause (TRA-812). Mirror
+	// that here.
 	tests := []struct {
 		name            string
 		err             error
@@ -377,10 +381,11 @@ func TestSave_AccessErrorDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errStr := tt.err.Error()
-			isForbidden := strings.Contains(errStr, "not found or access denied")
+			var accessErr *storage.InventoryAccessError
+			isForbidden := errors.As(tt.err, &accessErr)
 			assert.Equal(t, tt.expectForbidden, isForbidden)
 			// Sanitize check: InventoryAccessError must not expose integer surrogate IDs.
+			errStr := tt.err.Error()
 			assert.NotContains(t, errStr, "org_id=",
 				"InventoryAccessError.Error() must not leak org_id surrogate")
 			assert.NotContains(t, errStr, "location_id=",
@@ -491,13 +496,18 @@ func TestSave_LocationAccessDenied(t *testing.T) {
 }
 
 func TestSave_AssetAccessDenied(t *testing.T) {
+	// Surface a typed InventoryAccessError with a populated bucket so the
+	// handler emits a 403 and the response carries the new generic detail.
+	// (TRA-812 changed the wording from "not found or access denied" to a
+	// count-only phrasing that names a real cause.)
 	mock := &mockInventoryStorage{
 		saveError: &storage.InventoryAccessError{
-			Reason:     "assets",
-			OrgID:      1,
-			AssetIDs:   []int{1, 2, 3},
-			ValidCount: 2,
-			TotalCount: 3,
+			Reason:              "assets",
+			OrgID:               1,
+			AssetIDs:            []int{1, 2, 3},
+			ValidCount:          2,
+			TotalCount:          3,
+			SoftDeletedAssetIDs: []int{3},
 		},
 		locationByIdentifier: map[string]*location.LocationWithParent{
 			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
@@ -515,7 +525,11 @@ func TestSave_AssetAccessDenied(t *testing.T) {
 	handler.Save(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "not found or access denied")
+	assert.Contains(t, w.Body.String(), "1 of 3 assets are unavailable")
+	// The bucket IDs go to the log, never the wire — caller cannot probe
+	// other orgs by ID through the response body.
+	assert.NotContains(t, w.Body.String(), "soft_deleted")
+	assert.NotContains(t, w.Body.String(), "cross_org")
 }
 
 func TestSave_InternalStorageError(t *testing.T) {
