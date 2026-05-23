@@ -19,10 +19,12 @@ const (
 // ListAllowlist declares which filter and sort fields the endpoint accepts.
 // limit, offset, and sort are always allowed.
 //
-// BoolFilters is a subset of Filters; values for declared boolean filters are
-// validated case-insensitively against true/false and normalized to lowercase
-// before being stored in Filters. Anything else produces a validation_error
-// with the field set to the offending parameter name.
+// BoolFilters is a subset of Filters; values for declared boolean filters
+// must be exact lowercase `true` or `false`. Mixed-case variants (True, TRUE,
+// tRuE, ...) are rejected with the same validation_error envelope as other
+// non-boolean strings (yes, no, 1, 0). The rejection message and the
+// pagination-filtering-sorting docs both specify lowercase, and the parser
+// honors that contract (TRA-811 / BB71 F1).
 type ListAllowlist struct {
 	Filters     []string
 	BoolFilters []string
@@ -172,19 +174,15 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 				}}}
 			}
 			if _, isBool := boolAllow[key]; isBool {
-				normalized := make([]string, len(values))
-				for i, v := range values {
-					lower := strings.ToLower(v)
-					if lower != "true" && lower != "false" {
+				for _, v := range values {
+					if v != "true" && v != "false" {
 						return out, &ListParamError{Fields: []apierrors.FieldError{{
 							Field:   key,
 							Code:    "invalid_value",
 							Message: fmt.Sprintf("%s must be 'true' or 'false'", key),
 						}}}
 					}
-					normalized[i] = lower
 				}
-				values = normalized
 			}
 			out.Filters[key] = values
 		}
