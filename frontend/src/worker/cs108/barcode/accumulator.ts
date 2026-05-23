@@ -24,6 +24,13 @@ export class BarcodeAccumulator {
    * Schedules an idle-timeout flush if bytes remain in the buffer.
    */
   appendAndExtract(payload: Uint8Array): Uint8Array[] {
+    // Filter pure status pings — a single 0x06 byte sometimes arrives as a
+    // 0x9100 payload (e.g., echo of the Newland ESC-stop ACK). It carries
+    // no barcode data and must not be appended to the buffer.
+    if (payload.length === 1 && payload[0] === STATUS_PING_BYTE) {
+      return [];
+    }
+
     const combined = new Uint8Array(this.buffer.length + payload.length);
     combined.set(this.buffer);
     combined.set(payload, this.buffer.length);

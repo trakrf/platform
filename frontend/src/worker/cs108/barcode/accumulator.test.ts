@@ -62,4 +62,20 @@ describe('BarcodeAccumulator', () => {
     expect(secondRecords).toHaveLength(1);
     expect(secondRecords[0]).toEqual(expected);
   });
+
+  it('ignores a payload that is just the status byte 0x06', () => {
+    const acc = new BarcodeAccumulator();
+    const records = acc.appendAndExtract(hex('06'));
+    expect(records).toHaveLength(0);
+
+    // Buffer must still be empty: a subsequent real record must not be
+    // contaminated by the 0x06.
+    const followup = hex(
+      '06 02 00 07 10 17 13 51 5D 51 31 37 31 32 41 43 31 32 46 31 30 30 ' +
+      '37 30 30 30 30 30 30 32 32 34 34 30 31 05 01 11 16 03 04 0D'
+    );
+    const followupRecords = acc.appendAndExtract(followup);
+    expect(followupRecords).toHaveLength(1);
+    expect(followupRecords[0]).toEqual(followup);
+  });
 });
