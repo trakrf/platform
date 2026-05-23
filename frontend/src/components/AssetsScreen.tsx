@@ -3,6 +3,7 @@ import { Plus, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAssets, useAssetMutations } from '@/hooks/assets';
 import { useAssetStore } from '@/stores';
+import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { FloatingActionButton, EmptyState, NoResults, ConfirmModal } from '@/components/shared';
 import { AssetStats } from '@/components/assets/AssetStats';
 import { AssetSearchSort } from '@/components/assets/AssetSearchSort';
@@ -79,7 +80,7 @@ export default function AssetsScreen() {
         setDeletingAsset(null);
       } catch (error: any) {
         console.error('Delete error:', error);
-        toast.error(error.message || 'Failed to delete asset');
+        toast.error(getApiErrorMessage(error, 'Failed to delete asset'));
       }
     }
   };
