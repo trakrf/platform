@@ -4,7 +4,7 @@ volumes:
 
 services:
   timescaledb:
-    image: timescale/timescaledb:latest-pg17
+    image: timescale/timescaledb-ha:pg17.9-ts2.26.4
     container_name: timescaledb
     ports:
       - "5432:5432"
