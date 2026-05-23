@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLocations, useLocationMutations } from '@/hooks/locations';
 import { useLocationStore } from '@/stores/locations/locationStore';
+import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { FloatingActionButton, ConfirmModal } from '@/components/shared';
@@ -49,7 +50,7 @@ export default function LocationsScreen() {
         setDeletingLocation(null);
       } catch (error: any) {
         console.error('Delete error:', error);
-        toast.error(error.message || 'Failed to delete location');
+        toast.error(getApiErrorMessage(error, 'Failed to delete location'));
       }
     }
   };
