@@ -10,163 +10,101 @@ import type {
   NotificationContext,
 } from '../notification/types';
 import { logger } from '../../utils/logger.js';
-import type { BarcodeData, ParsedBarcodePayload } from './types';
 import type { CS108Packet } from '../type';
 import { ReaderMode, ReaderState } from '../../types/reader';
 import { postWorkerEvent, WorkerEventType } from '../../types/events';
-
-/**
- * Barcode symbology mapping
- */
-const SYMBOLOGY_NAMES: Record<number, string> = {
-  0x01: 'Code 128',
-  0x02: 'Code 39',
-  0x03: 'Code 93',
-  0x04: 'Codabar',
-  0x05: 'Interleaved 2 of 5',
-  0x06: 'EAN-8',
-  0x07: 'EAN-13',
-  0x08: 'UPC-A',
-  0x09: 'UPC-E',
-  0x0A: 'QR Code',
-  0x0B: 'Data Matrix',
-  0x0C: 'PDF417',
-  0x0D: 'Aztec',
-  0x0E: 'MaxiCode',
-};
+import { BarcodeAccumulator } from './accumulator';
+import { parseBarcodeData } from './parser';
 
 /**
  * Handler for barcode data notifications (0x9100)
  */
 export class BarcodeDataHandler implements NotificationHandler {
+  private accumulator = new BarcodeAccumulator();
+  private lastBarcode: string | null = null;
   private lastScanTime = 0;
   private scanCount = 0;
-  private readonly DUPLICATE_WINDOW_MS = 500; // Ignore duplicates within 500ms
-  private lastBarcode: string | null = null;
+  private readonly DUPLICATE_WINDOW_MS = 500;
 
   /**
-   * Check if we should handle this packet
-   * Only handle in BARCODE mode with valid data
+   * Accept any 0x9100 packet while in BARCODE mode. We no longer require
+   * `packet.payload` to be a pre-parsed object; the accumulator works on
+   * `packet.rawPayload` directly.
    */
-  canHandle(packet: CS108Packet, context: NotificationContext): boolean {
-    // Must be in barcode mode
-    if (context.currentMode !== ReaderMode.BARCODE) {
-      return false;
-    }
-
-    // Must have barcode data
-    if (!packet.payload || typeof packet.payload !== 'object') {
-      return false;
-    }
-
-    // Check for required fields
-    const payload = packet.payload as ParsedBarcodePayload;
-    return payload && 'data' in payload && 'symbology' in payload;
+  canHandle(_packet: CS108Packet, context: NotificationContext): boolean {
+    return context.currentMode === ReaderMode.BARCODE;
   }
 
   /**
-   * Handle barcode data notification
-   * Formats and emits barcode scan event
-   * Auto-stops scanning and provides vibrator feedback
+   * Feed the 0x9100 raw payload into the accumulator and emit a
+   * BARCODE_READ for each complete record returned. Auto-stop fires at
+   * most once per call, after the first emit, so it does not interrupt
+   * the firmware mid-stream.
    */
   async handle(packet: CS108Packet, context: NotificationContext): Promise<void> {
-    const payload = packet.payload as ParsedBarcodePayload;
+    const rawPayload = packet.rawPayload;
+    if (!rawPayload || rawPayload.length === 0) {
+      return;
+    }
+
+    const records = this.accumulator.appendAndExtract(rawPayload);
+    if (records.length === 0) {
+      return;
+    }
+
+    let emittedThisCall = false;
     const now = Date.now();
 
-    // Extract barcode data
-    const barcodeData: BarcodeData = {
-      data: payload.data,
-      symbology: this.getSymbologyName(payload.symbology),
-      rawData: payload.rawData,
-      timestamp: now,
-    };
-
-    // Ignore empty barcode data - the module may send status/empty notifications
-    // when entering continuous reading mode. Don't auto-stop on these.
-    if (!barcodeData.data || barcodeData.data.trim() === '') {
-      logger.debug('[BarcodeHandler] Ignoring empty barcode notification (no data)');
-      return;
-    }
-
-    // Check for duplicate scan
-    if (this.isDuplicate(barcodeData, now)) {
-      if (context.metadata?.debug) {
-        logger.debug('[BarcodeHandler] Ignoring duplicate scan');
+    for (const record of records) {
+      const parsed = parseBarcodeData(record);
+      if (!parsed.data || parsed.data.trim() === '') {
+        continue;
       }
-      return;
+
+      if (this.isDuplicate(parsed.data, now)) {
+        if (context.metadata?.debug) {
+          logger.debug('[BarcodeHandler] Ignoring duplicate scan');
+        }
+        continue;
+      }
+
+      this.lastBarcode = parsed.data;
+      this.lastScanTime = now;
+      this.scanCount++;
+
+      postWorkerEvent({
+        type: WorkerEventType.BARCODE_READ,
+        payload: {
+          barcode: parsed.data,
+          symbology: parsed.symbology,
+          rawData: parsed.rawData
+            ? Array.from(parsed.rawData).map(b => b.toString(16).padStart(2, '0')).join('')
+            : undefined,
+          timestamp: now,
+        },
+      });
+
+      emittedThisCall = true;
     }
 
-    // Update tracking
-    this.lastBarcode = barcodeData.data;
-    this.lastScanTime = now;
-    this.scanCount++;
-
-    // Emit barcode read event
-    postWorkerEvent({
-      type: WorkerEventType.BARCODE_READ,
-      payload: {
-        barcode: barcodeData.data,
-        symbology: barcodeData.symbology,
-        rawData: barcodeData.rawData ? Array.from(barcodeData.rawData).map(b => b.toString(16).padStart(2, '0')).join('') : undefined,
-        timestamp: barcodeData.timestamp,
-      },
-    });
-
-    // Auto-stop scanning if we're currently scanning
-    if (context.readerState === ReaderState.SCANNING) {
-      logger.debug('[BarcodeHandler] Auto-stopping barcode scan after successful read');
-
-      // Emit auto-stop request through the callback so it can be intercepted
+    if (emittedThisCall && context.readerState === ReaderState.SCANNING) {
+      logger.debug('[BarcodeHandler] Auto-stop requested after assembled read');
       context.emitNotificationEvent({
         type: WorkerEventType.BARCODE_AUTO_STOP_REQUEST,
         payload: {
-          barcode: barcodeData.data,
-          reason: 'Barcode successfully scanned'
+          barcode: this.lastBarcode!,
+          reason: 'Barcode successfully scanned',
         },
       });
     }
-
-    // Log in debug mode
-    if (context.metadata?.debug) {
-      logger.debug(
-        `[BarcodeHandler] Scanned: ${barcodeData.data} ` +
-        `(${barcodeData.symbology}), Total: ${this.scanCount}`
-      );
-    }
   }
 
-  /**
-   * Check if this is a duplicate scan
-   */
-  private isDuplicate(barcode: BarcodeData, now: number): boolean {
-    if (!this.lastBarcode) {
-      return false;
-    }
-
-    const timeSinceLastScan = now - this.lastScanTime;
-    return barcode.data === this.lastBarcode &&
-           timeSinceLastScan < this.DUPLICATE_WINDOW_MS;
+  private isDuplicate(value: string, now: number): boolean {
+    if (!this.lastBarcode) return false;
+    return value === this.lastBarcode && (now - this.lastScanTime) < this.DUPLICATE_WINDOW_MS;
   }
 
-  /**
-   * Get human-readable symbology name
-   */
-  private getSymbologyName(symbology: number | string): string {
-    if (typeof symbology === 'string') {
-      return symbology;
-    }
-
-    return SYMBOLOGY_NAMES[symbology] || `Unknown (0x${symbology.toString(16)})`;
-  }
-
-  /**
-   * Get handler statistics
-   */
-  getStats(): {
-    scansProcessed: number;
-    lastScanTime: number;
-    lastBarcode: string | null;
-  } {
+  getStats(): { scansProcessed: number; lastScanTime: number; lastBarcode: string | null } {
     return {
       scansProcessed: this.scanCount,
       lastScanTime: this.lastScanTime,
@@ -174,11 +112,10 @@ export class BarcodeDataHandler implements NotificationHandler {
     };
   }
 
-  /**
-   * Cleanup when handler is unregistered
-   */
   cleanup(): void {
+    this.accumulator.reset();
     this.lastBarcode = null;
+    this.lastScanTime = 0;
     this.scanCount = 0;
   }
 }
