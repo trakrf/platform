@@ -87,6 +87,18 @@ function LocationFormModalBody({ isOpen, mode, location, parentLocationId, onClo
         const allTags = (data as UpdateLocationRequest & { tags?: TagInput[] }).tags || [];
         const newTags = allTags.filter(t => !t.id);
 
+        // TRA-813: diff original tag IDs against surviving (id-bearing) tags
+        // to detect removals. The submit path previously only fired POSTs for
+        // new tags, so a removed read-only row silently dropped from the UI
+        // without a DELETE.
+        const originalTags = location.tags || [];
+        const survivingIds = new Set(
+          allTags.filter(t => t.id != null).map(t => t.id as number),
+        );
+        const removedTagIds = originalTags
+          .map(t => t.id)
+          .filter(id => !survivingIds.has(id));
+
         // Backend doesn't support tags in update request
         const { tags: _, ...updateData } = data as UpdateLocationRequest & { tags?: TagInput[] };
 
@@ -99,6 +111,15 @@ function LocationFormModalBody({ isOpen, mode, location, parentLocationId, onClo
         const normalized = normalizeLocation(raw);
         if (!normalized.id) {
           throw new Error('Invalid response from server. Location API may not be available.');
+        }
+
+        for (const tagId of removedTagIds) {
+          try {
+            await locationsApi.removeTag(location.id, tagId);
+          } catch (tagErr: any) {
+            console.error('Failed to remove tag:', tagErr);
+            toast.error(`Failed to remove tag: ${tagErr.message || 'Unknown error'}`);
+          }
         }
 
         for (const tag of newTags) {
