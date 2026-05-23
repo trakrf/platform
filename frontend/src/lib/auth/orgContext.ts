@@ -68,16 +68,37 @@ export async function refreshOrgToken(): Promise<boolean> {
 }
 
 /**
- * Ensure the JWT has a valid current_org_id claim.
+ * Ensure the JWT has a valid current_org_id claim AND that it matches the
+ * profile's current_org. Refreshes the token to realign when either:
+ *   - the claim is missing entirely, or
+ *   - the claim disagrees with the profile (TRA-812 — JWT/profile drift).
  *
- * Checks the token first; if the claim is missing, attempts
- * a token refresh. Throws if org context cannot be established.
+ * Drift can arise when the persisted token survives a backend change to the
+ * caller's last_org_id (cross-tab switch, server-side current-org rotation,
+ * cache eviction order, etc.). Without realigning here the scan/lookup path
+ * and the save path silently key off different orgs and the backend rejects
+ * the save with "not found or access denied".
+ *
+ * Throws if org context cannot be established.
  */
 export async function ensureOrgContext(): Promise<number> {
-  const orgId = getTokenOrgId();
-  if (orgId) return orgId;
+  const tokenOrgId = getTokenOrgId();
+  const profileOrgId = useAuthStore.getState().profile?.current_org?.id ?? null;
 
-  console.warn('[OrgContext] JWT missing org_id claim, refreshing token');
+  // Happy path: token org matches the profile (or the profile hasn't been
+  // loaded yet, in which case the token is the only source of truth).
+  if (tokenOrgId && (profileOrgId === null || tokenOrgId === profileOrgId)) {
+    return tokenOrgId;
+  }
+
+  if (tokenOrgId && profileOrgId && tokenOrgId !== profileOrgId) {
+    console.warn('[OrgContext] JWT/profile drift detected, refreshing token', {
+      tokenOrgId, profileOrgId,
+    });
+  } else {
+    console.warn('[OrgContext] JWT missing org_id claim, refreshing token');
+  }
+
   const refreshed = await refreshOrgToken();
   if (!refreshed) {
     throw new Error('No organization context. Please select an organization and try again.');
