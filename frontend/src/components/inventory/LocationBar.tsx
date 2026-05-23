@@ -3,7 +3,7 @@
  */
 
 import { Menu } from '@headlessui/react';
-import { MapPin, ChevronDown, Check, Radio, RotateCcw } from 'lucide-react';
+import { MapPin, ChevronDown, Check, Radio, RotateCcw, X } from 'lucide-react';
 import type { Location } from '@/types/locations';
 
 interface LocationBarProps {
@@ -87,7 +87,21 @@ export function LocationBar({
         </div>
 
         {isAuthenticated && (
-          <Menu as="div" className="relative ml-4">
+          <div className="flex items-center ml-4 flex-shrink-0">
+            {selectedLocationId !== null && (
+              // TRA-819: clear control for manual selection. Manual is
+              // local page state, so clearing reverts to detected (if any)
+              // or empty.
+              <button
+                type="button"
+                aria-label="Clear location"
+                onClick={() => onLocationChange(null)}
+                className="mr-2 p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-500 dark:hover:text-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+            <Menu as="div" className="relative">
             <Menu.Button className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center">
               {hasLocation ? 'Change' : 'Select'}
               <ChevronDown className="w-3 h-3 ml-1" />
@@ -159,6 +173,7 @@ export function LocationBar({
               </div>
             </Menu.Items>
           </Menu>
+          </div>
         )}
       </div>
     </div>

@@ -115,6 +115,26 @@ export default function InventoryScreen() {
     return 'tag' as const; // Always 'tag' for auto-detected
   }, [detectedLocation]);
 
+  // TRA-819: most-recent-signal-wins. When the scanned-tag detection
+  // resolves to a NEW location id that differs from the manual override,
+  // drop the manual pick so the bar (and the save flow) follow the scan.
+  // The user can still re-pick manually after; until then the scan owns
+  // the selection.
+  const prevDetectedIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    const newId = detectedLocation?.id ?? null;
+    const prevId = prevDetectedIdRef.current;
+    if (
+      newId !== null &&
+      newId !== prevId &&
+      manualLocationId !== null &&
+      newId !== manualLocationId
+    ) {
+      setManualLocationId(null);
+    }
+    prevDetectedIdRef.current = newId;
+  }, [detectedLocation, manualLocationId]);
+
   // Resolved location = manual override OR detected
   // Includes identifier for the natural-key save API (TRA-533)
   const resolvedLocation = useMemo(() => {
