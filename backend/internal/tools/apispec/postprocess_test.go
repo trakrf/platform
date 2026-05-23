@@ -1947,3 +1947,126 @@ func TestMarkDisplayNameFields_AppliesStricterPatternThanPrintable(t *testing.T)
 		doc.Components.Schemas["asset.UpdateAssetRequest"].Value.Properties["name"].Value.Pattern,
 		"explicit existing pattern must be preserved")
 }
+
+// TRA-809: kin-openapi's openapi2conv attaches x-originalParamName to every
+// converted requestBody. apispec never round-trips back to v2, so the
+// extension is dead weight. stripGeneratorArtifacts removes it from every
+// operation requestBody on both public and internal pipelines, while
+// preserving caller-authored extensions on the same object.
+func TestStripGeneratorArtifacts_RemovesXOriginalParamName(t *testing.T) {
+	makeDoc := func() *openapi3.T {
+		paths := openapi3.NewPaths()
+		paths.Set("/widgets", &openapi3.PathItem{
+			Post: &openapi3.Operation{
+				RequestBody: &openapi3.RequestBodyRef{
+					Value: &openapi3.RequestBody{
+						Extensions: map[string]any{
+							"x-originalParamName": "request",
+							"x-keep-me":           "custom",
+						},
+					},
+				},
+			},
+		})
+		paths.Set("/widgets/{id}", &openapi3.PathItem{
+			Patch: &openapi3.Operation{
+				RequestBody: &openapi3.RequestBodyRef{
+					Value: &openapi3.RequestBody{
+						Extensions: map[string]any{"x-originalParamName": "patch_body"},
+					},
+				},
+			},
+			// No requestBody on GET — must not panic.
+			Get: &openapi3.Operation{},
+		})
+		return &openapi3.T{Paths: paths}
+	}
+
+	t.Run("direct call strips the extension and preserves siblings", func(t *testing.T) {
+		doc := makeDoc()
+		stripGeneratorArtifacts(doc)
+
+		post := doc.Paths.Find("/widgets").Post.RequestBody.Value
+		_, hasArtifact := post.Extensions["x-originalParamName"]
+		assert.False(t, hasArtifact, "x-originalParamName must be removed from POST /widgets")
+		assert.Equal(t, "custom", post.Extensions["x-keep-me"],
+			"caller-authored extensions on the same requestBody must survive")
+
+		patch := doc.Paths.Find("/widgets/{id}").Patch.RequestBody.Value
+		_, hasArtifact = patch.Extensions["x-originalParamName"]
+		assert.False(t, hasArtifact, "x-originalParamName must be removed from PATCH /widgets/{id}")
+	})
+
+	t.Run("idempotent — second pass is a no-op", func(t *testing.T) {
+		doc := makeDoc()
+		stripGeneratorArtifacts(doc)
+		stripGeneratorArtifacts(doc)
+
+		post := doc.Paths.Find("/widgets").Post.RequestBody.Value
+		_, hasArtifact := post.Extensions["x-originalParamName"]
+		assert.False(t, hasArtifact)
+		assert.Equal(t, "custom", post.Extensions["x-keep-me"])
+	})
+
+	t.Run("nil-safe", func(t *testing.T) {
+		stripGeneratorArtifacts(&openapi3.T{}) // no Paths
+
+		paths := openapi3.NewPaths()
+		paths.Set("/x", &openapi3.PathItem{Post: &openapi3.Operation{}}) // no requestBody
+		stripGeneratorArtifacts(&openapi3.T{Paths: paths})
+
+		paths2 := openapi3.NewPaths()
+		paths2.Set("/y", &openapi3.PathItem{Post: &openapi3.Operation{
+			RequestBody: &openapi3.RequestBodyRef{}, // nil Value
+		}})
+		stripGeneratorArtifacts(&openapi3.T{Paths: paths2})
+	})
+}
+
+// TRA-809: both postprocess pipelines must run the strip so neither the
+// public nor the internal spec leaks the generator artifact.
+func TestPostprocess_StripsXOriginalParamNameOnBothPipelines(t *testing.T) {
+	withEmptyRequiredFields(t)
+
+	seedBody := func(doc *openapi3.T) {
+		paths := doc.Paths
+		if paths == nil {
+			paths = openapi3.NewPaths()
+			doc.Paths = paths
+		}
+		paths.Set("/seeded", &openapi3.PathItem{
+			Post: &openapi3.Operation{
+				Tags: []string{"public", "internal"},
+				RequestBody: &openapi3.RequestBodyRef{
+					Value: &openapi3.RequestBody{
+						Extensions: map[string]any{"x-originalParamName": "request"},
+						Content: openapi3.Content{
+							"application/json": &openapi3.MediaType{
+								Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeObject}}},
+							},
+						},
+					},
+				},
+				Responses: openapi3.NewResponses(),
+			},
+		})
+	}
+
+	t.Run("public", func(t *testing.T) {
+		doc := loadAndConvert(t, "testdata/minimal-v2.json")
+		seedBody(doc)
+		require.NoError(t, postprocessPublic(doc))
+		rb := doc.Paths.Find("/seeded").Post.RequestBody.Value
+		_, has := rb.Extensions["x-originalParamName"]
+		assert.False(t, has, "public spec must not carry x-originalParamName")
+	})
+
+	t.Run("internal", func(t *testing.T) {
+		doc := loadAndConvert(t, "testdata/minimal-v2.json")
+		seedBody(doc)
+		require.NoError(t, postprocessInternal(doc))
+		rb := doc.Paths.Find("/seeded").Post.RequestBody.Value
+		_, has := rb.Extensions["x-originalParamName"]
+		assert.False(t, has, "internal spec must not carry x-originalParamName")
+	})
+}

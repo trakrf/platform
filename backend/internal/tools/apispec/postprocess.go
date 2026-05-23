@@ -70,6 +70,7 @@ func markExternalKeyPattern(doc *openapi3.T) {
 // generated clients default to preview during integration testing
 // (TRA-517 AC12).
 func postprocessPublic(doc *openapi3.T) error {
+	stripGeneratorArtifacts(doc)
 	rewriteBearerSchemes(doc)
 	consolidateSchemaNamespaces(doc)
 	inlinePublicTimeRefs(doc)
@@ -168,6 +169,7 @@ func postprocessPublic(doc *openapi3.T) error {
 // postprocessInternal is the same but labels the doc as internal and
 // uses a local development server URL.
 func postprocessInternal(doc *openapi3.T) error {
+	stripGeneratorArtifacts(doc)
 	rewriteBearerSchemes(doc)
 	consolidateSchemaNamespaces(doc)
 	inlinePublicTimeRefs(doc)
@@ -496,6 +498,31 @@ func rewriteBearerSchemes(doc *openapi3.T) {
 			Scheme:       "bearer",
 			BearerFormat: "JWT",
 			Description:  desc,
+		}
+	}
+}
+
+// stripGeneratorArtifacts removes kin-openapi's openapi2conv-internal
+// `x-originalParamName` extension from every operation requestBody
+// (TRA-809). The library writes the original Swagger 2.0 body-parameter
+// name onto the converted v3 RequestBody so it can round-trip back to v2;
+// apispec never round-trips, so the extension is dead weight that leaks
+// into the published spec on all 8 requestBody objects. Harmless for known
+// codegens, but a generator artifact in customer-facing output. Safe to
+// call when the extension is absent — no-ops in that case.
+func stripGeneratorArtifacts(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil || op.RequestBody == nil || op.RequestBody.Value == nil {
+				continue
+			}
+			delete(op.RequestBody.Value.Extensions, "x-originalParamName")
 		}
 	}
 }
