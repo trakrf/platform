@@ -95,7 +95,7 @@ describe('TRA-821 fixture replay', () => {
   beforeAll(async () => {
     const fixturesPath = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
-      '../../fixtures/cs108/tra-821/curated.json'
+      '../../../../tests/fixtures/cs108/tra-821/curated.json'
     );
     curated = JSON.parse(await readFile(fixturesPath, 'utf8')) as CuratedFixture;
   });
