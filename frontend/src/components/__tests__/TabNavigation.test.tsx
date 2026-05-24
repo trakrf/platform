@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import TabNavigation from '@/components/TabNavigation';
 import { useUIStore, useDeviceStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { version } from '../../../package.json';
+import { appVersion } from '@/version';
 
 describe('TabNavigation', () => {
   beforeEach(() => {
@@ -118,7 +118,7 @@ describe('TabNavigation', () => {
     render(<TabNavigation />);
     expect(screen.getByText('TrakRF')).toBeInTheDocument();
     expect(screen.getByText('Handheld Tag Reader')).toBeInTheDocument();
-    expect(screen.getByText(`v${version}`)).toBeInTheDocument();
+    expect(screen.getByText(appVersion)).toBeInTheDocument();
   });
 
   it('should apply correct styling for dark mode', () => {

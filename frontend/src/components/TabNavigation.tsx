@@ -3,7 +3,7 @@ import { useUIStore, useDeviceStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3 } from 'lucide-react';
-import { version } from '../../package.json';
+import { appVersion } from '@/version';
 
 interface NavItemProps {
   id: TabType;
@@ -115,7 +115,7 @@ export default function TabNavigation() {
             <div>
               <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">TrakRF</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">Handheld Tag Reader</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">v{version}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{appVersion}</p>
             </div>
           </div>
 

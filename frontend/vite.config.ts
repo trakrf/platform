@@ -13,15 +13,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const certExists = fs.existsSync('./.cert/localhost.pem') && fs.existsSync('./.cert/localhost-key.pem');
 
 // Emit dist/version.json at build time so `curl app.trakrf.id/version.json`
-// reports the deployed SPA commit. Mirrors the backend /health payload —
-// see TRA-481. Values come from the VITE_COMMIT_SHA / VITE_BUILD_TAG build
-// args wired through the Dockerfile.
+// reports the deployed SPA commit + platform version. Mirrors the backend
+// /health payload — see TRA-481, TRA-485. Values come from VITE_COMMIT_SHA /
+// VITE_BUILD_TAG / VITE_APP_VERSION build args wired through the Dockerfile.
 function emitVersionJsonPlugin(env: Record<string, string>) {
   return {
     name: 'emit-version-json',
     apply: 'build' as const,
     generateBundle(this: { emitFile: (opts: { type: 'asset'; fileName: string; source: string }) => void }) {
       const payload = {
+        version: env.VITE_APP_VERSION || 'dev',
         commit: env.VITE_COMMIT_SHA || 'unknown',
         tag: env.VITE_BUILD_TAG || 'dev',
         build_time: new Date().toISOString()

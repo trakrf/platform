@@ -1,4 +1,9 @@
-# Development stage (with Air hot-reload)
+# Development image used by docker-compose `backend` service for the
+# Air hot-reload loop. The real production image is the root Dockerfile —
+# CI (`.github/workflows/docker-build.yml`) and Railway (`railway.json`)
+# both build from it. This file is intentionally development-only;
+# the previous `production` target here was unused and drifted (stale
+# `0.1.0-dev` version literal) — removed in TRA-485.
 FROM golang:1.25-alpine AS development
 WORKDIR /app
 
@@ -28,37 +33,3 @@ RUN go build -o ./tmp/server .
 
 # Run Air (reads .air.toml config)
 CMD ["air", "-c", ".air.toml"]
-
-# Production stage (standalone binary)
-FROM golang:1.25-alpine AS builder
-WORKDIR /app
-
-# Copy go.mod and go.sum for dependency management
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Install swag CLI for spec generation
-RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
-
-# Copy source and build
-COPY . .
-
-# Generate OpenAPI specs — required by //go:embed in internal/handlers/swaggerspec
-RUN swag init -g main.go --parseDependency --parseInternal && \
-    mkdir -p internal/handlers/swaggerspec && \
-    go run ./internal/tools/apispec \
-        --in docs/swagger.json \
-        --public-out internal/handlers/swaggerspec/openapi.public \
-        --internal-out internal/handlers/swaggerspec/openapi.internal
-
-RUN go build -ldflags "-X main.version=0.1.0-dev" -o server .
-
-# Final production image
-FROM alpine:3.20 AS production
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-
-# Copy server binary (migrations are embedded via go:embed)
-COPY --from=builder /app/server .
-EXPOSE 8080
-CMD ["./server"]
