@@ -11,7 +11,7 @@ export interface UseAssetsOptions {
 }
 
 export function useAssets(options: UseAssetsOptions = {}) {
-  const { enabled = true, refetchOnMount = false } = options;
+  const { enabled = true, refetchOnMount = true } = options;
 
   const pagination = useAssetStore((state) => state.pagination);
   const currentOrg = useOrgStore((state) => state.currentOrg);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagInput } from '@/types/assets';
 import { AssetForm } from './AssetForm';
 import { assetsApi } from '@/lib/api/assets';
@@ -60,6 +61,7 @@ function AssetFormModalBody({ isOpen, mode, asset, onClose, initialIdentifier }:
 
   const addAsset = useAssetStore((state) => state.addAsset);
   const updateCachedAsset = useAssetStore((state) => state.updateCachedAsset);
+  const queryClient = useQueryClient();
 
   const handleSubmit = async (data: CreateAssetRequest | UpdateAssetRequest) => {
     setLoading(true);
@@ -168,6 +170,12 @@ function AssetFormModalBody({ isOpen, mode, asset, onClose, initialIdentifier }:
 
         toast.success(`Asset "${normalized.external_key}" updated successfully`);
       }
+
+      // TRA-824: this modal calls assetsApi directly instead of going through
+      // useAssetMutations, so TanStack's ['assets'] cache is not invalidated
+      // automatically. Invalidate here so other screens (Inventory) refetch
+      // on next mount rather than serving stale list data until a hard refresh.
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
 
       onClose(true);
     } catch (err: any) {
