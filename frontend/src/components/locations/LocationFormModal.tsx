@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Location, CreateLocationRequest, UpdateLocationRequest, TagInput } from '@/types/locations';
 import { LocationForm } from './LocationForm';
 import { locationsApi } from '@/lib/api/locations';
@@ -33,6 +34,7 @@ function LocationFormModalBody({ isOpen, mode, location, parentLocationId, onClo
 
   const addLocation = useLocationStore((state) => state.addLocation);
   const updateLocation = useLocationStore((state) => state.updateLocation);
+  const queryClient = useQueryClient();
 
   useEscapeToClose(isOpen, onClose, loading);
 
@@ -142,6 +144,13 @@ function LocationFormModalBody({ isOpen, mode, location, parentLocationId, onClo
 
         toast.success(`Location "${normalized.external_key}" updated successfully`);
       }
+
+      // TRA-824: this modal calls locationsApi directly instead of going
+      // through useLocationMutations, so TanStack's ['locations'] cache is
+      // not invalidated automatically. Invalidate here so other screens
+      // (Inventory, Reports) refetch on next mount rather than serving
+      // stale list data until a hard refresh.
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
 
       onClose();
     } catch (err: any) {

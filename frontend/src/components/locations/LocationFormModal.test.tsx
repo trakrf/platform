@@ -1,6 +1,15 @@
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import {
+  render as rtlRender,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+  type RenderOptions,
+} from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement, ReactNode } from 'react';
 import { LocationFormModal } from './LocationFormModal';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import * as useScanToInputModule from '@/hooks/useScanToInput';
@@ -11,6 +20,18 @@ vi.mock('@/lib/api/locations');
 vi.mock('@/lib/tags/conflictCheck', () => ({
   checkTagConflict: vi.fn().mockResolvedValue(null),
 }));
+
+// TRA-824: the modal now reads queryClient via useQueryClient to invalidate
+// ['locations'] on save. Tests must mount the modal under a provider; shadow
+// render() so existing call sites need no per-site changes.
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+});
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+);
+const render = (ui: ReactElement, options?: Omit<RenderOptions, 'wrapper'>) =>
+  rtlRender(ui, { wrapper, ...options });
 
 describe('LocationFormModal', () => {
   afterEach(() => {

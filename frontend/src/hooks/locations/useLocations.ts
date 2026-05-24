@@ -72,7 +72,7 @@ async function fetchAllLocations(): Promise<{ data: Location[]; total_count: num
 }
 
 export function useLocations(options: UseLocationsOptions = {}) {
-  const { enabled = true, refetchOnMount = false } = options;
+  const { enabled = true, refetchOnMount = true } = options;
   const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const query = useQuery({
