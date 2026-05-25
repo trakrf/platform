@@ -3,7 +3,13 @@ name: Docker Build and Push
 on:
   pull_request:
   push:
-    branches: [main]
+    # `preview` is the PR-stacked composition built by sync-preview.yml. It is
+    # force-rewritten on every PR open/sync/close, so expect frequent builds —
+    # intended. Each push publishes `ghcr.io/trakrf/backend:sha-<short>` keyed
+    # on the preview-branch HEAD; the GKE auto-track (TRA-483) watches that
+    # tag shape. Only `main` pushes get the floating `latest` tag — preview
+    # stays sha-only so nothing accidentally promotes it to a stable ref.
+    branches: [main, preview]
 
 concurrency:
   group: docker-build-${{ github.ref }}
