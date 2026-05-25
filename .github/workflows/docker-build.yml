@@ -5,10 +5,13 @@ on:
   push:
     # `preview` is the PR-stacked composition built by sync-preview.yml. It is
     # force-rewritten on every PR open/sync/close, so expect frequent builds —
-    # intended. Each push publishes `ghcr.io/trakrf/backend:sha-<short>` keyed
-    # on the preview-branch HEAD; the GKE auto-track (TRA-483) watches that
-    # tag shape. Only `main` pushes get the floating `latest` tag — preview
-    # stays sha-only so nothing accidentally promotes it to a stable ref.
+    # intended. Each push publishes two tags:
+    #   - `ghcr.io/trakrf/backend:sha-<short>`  — immutable, for traceability
+    #   - `ghcr.io/trakrf/backend:preview`      — floating, for the GKE
+    #     auto-track (TRA-483, ArgoCD Image Updater w/ digest strategy)
+    # The `latest` tag stays gated on the default branch; the floating
+    # `preview` tag is gated on `refs/heads/preview`. Prod uses semver tags
+    # — no path for `preview` to promote into a stable ref.
     branches: [main, preview]
 
 concurrency:
@@ -99,8 +102,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/trakrf/${{ matrix.image }}
+          # `preview` is given priority=50 (below `sha`'s default 100) so the
+          # immutable `sha-<short>` remains the primary version output — that
+          # keeps BUILD_TAG/VITE_BUILD_TAG pinned to a real commit instead of
+          # the floating label, so /health and /version.json stay honest.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=preview,enable=${{ github.ref == 'refs/heads/preview' }},priority=50
             type=sha,prefix=sha-,format=short
 
       - name: Build and push
