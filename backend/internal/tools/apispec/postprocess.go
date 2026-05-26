@@ -104,7 +104,6 @@ func postprocessPublic(doc *openapi3.T) error {
 	}
 	markIntegerFormats(doc)
 	markQueryIntegerBounds(doc)
-	markSurrogateIDsInt64(doc)
 	markQueryStringPatterns(doc)
 	flattenSortQueryToString(doc)
 	markDateTimeExamples(doc)
@@ -1148,14 +1147,14 @@ func markQueryStringPatterns(doc *openapi3.T) {
 	}
 }
 
-// markQueryIntegerBounds applies int4 surrogate-id bounds to query
-// parameters whose name matches a surrogate-id (suffix `_id`) and to
-// pagination's `offset` (TRA-678). The server rejects 0 on id-keyed
-// query filters and overflows on offset values that exceed int4, so the
-// spec must advertise the runtime bounds.
+// markQueryIntegerBounds applies pagination bounds to the `offset` query
+// parameter (TRA-678). The server rejects offset values that overflow int4,
+// so the spec must advertise the runtime bound.
 //
-// Array-typed id filters (e.g. `location_id` as `array<integer>` with
-// repeat semantics) are walked into Items. Scalar `offset` is set as-is.
+// TRA-720: surrogate-ID query filters (`_id`-suffixed params) previously had
+// an int32 ceiling applied here (BB35 B7 / wire-vs-storage divergence). That
+// ceiling is removed now that storage has migrated to bigint — the cap was a
+// temporary measure and is no longer enforced at runtime.
 //
 // The pass is idempotent and does not clobber bounds that are already
 // declared at a non-default value.
@@ -1164,19 +1163,7 @@ func markQueryIntegerBounds(doc *openapi3.T) {
 		return
 	}
 	intMax := float64(2147483647)
-	one := float64(1)
 	zero := float64(0)
-	applyIDBounds := func(s *openapi3.Schema) {
-		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
-			return
-		}
-		if s.Min == nil {
-			s.Min = &one
-		}
-		if s.Max == nil {
-			s.Max = &intMax
-		}
-	}
 	applyOffsetBounds := func(s *openapi3.Schema) {
 		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
 			return
@@ -1193,15 +1180,8 @@ func markQueryIntegerBounds(doc *openapi3.T) {
 			return
 		}
 		s := p.Schema.Value
-		switch {
-		case p.Name == "offset":
+		if p.Name == "offset" {
 			applyOffsetBounds(s)
-		case strings.HasSuffix(p.Name, "_id"):
-			if s.Type.Is(openapi3.TypeArray) && s.Items != nil && s.Items.Value != nil {
-				applyIDBounds(s.Items.Value)
-			} else {
-				applyIDBounds(s)
-			}
 		}
 	}
 	for _, item := range doc.Paths.Map() {
@@ -1307,167 +1287,6 @@ func setIntegerFormatRecursive(s *openapi3.Schema) {
 	}
 }
 
-// isSurrogateIDName reports whether `name` denotes a surrogate primary or
-// foreign key — `id` exactly, or any field ending in `_id` (snake). Used
-// to gate the int64 width promotion in markSurrogateIDsInt64 (TRA-719 /
-// BB35 B7). The public spec uses snake-case throughout; camelCase
-// path-param variants (`userId`, `inviteId`, `jobId`) live on the
-// internal surface only, so a snake-only check covers the customer
-// contract without false positives on unrelated camel names.
-func isSurrogateIDName(name string) bool {
-	return name == "id" || strings.HasSuffix(name, "_id")
-}
-
-// markSurrogateIDsInt64 promotes every integer surrogate PK/FK to
-// `format: int64` and removes the `maximum: 2147483647` upper bound that
-// markIntegerFormats / markQueryIntegerBounds installed by default
-// (TRA-719 / BB35 B7).
-//
-// IDs across the public surface are randomly distributed across the int32
-// namespace. Service-side ID generation stays within int32 for v1 — this
-// is a wire-type declaration only — but pinning the spec width at int64
-// pre-launch avoids the breaking-client change when the namespace
-// eventually outgrows int32 (Java/Kotlin Integer→Long, OpenAPI codegen
-// targets that distinguish int32/int64 in their wrappers).
-//
-// Walks both Components.Schemas properties and operation parameters; runs
-// AFTER markIntegerFormats and markQueryIntegerBounds so it sees the
-// post-default state and can confidently drop the int32 ceiling.
-// Idempotent: re-running on already-promoted fields is a no-op.
-//
-// Inputs vs. responses (TRA-726 / BB37 F2): the int32 ceiling is dropped
-// only on response schema properties — those are descriptive of what the
-// server emits, so a hard cap would lock the wire forward unnecessarily.
-// On request-shape surfaces — path and query parameters — the runtime
-// cap is real (server returns `400 validation_error / too_large` above
-// int32 max while storage stays int32) and must remain encoded so typed
-// clients surface the boundary instead of discovering it via runtime 400.
-// This temporary cap on inputs lifts when TRA-720 (bigint storage
-// migration) lands; both call sites are flagged so the removal is a
-// single coordinated edit.
-func markSurrogateIDsInt64(doc *openapi3.T) {
-	intMax := float64(2147483647)
-	promote := func(s *openapi3.Schema) {
-		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
-			return
-		}
-		s.Format = "int64"
-		// Drop the int32 ceiling — the wire type already bounds the value
-		// and a literal Max keeps strict generators rejecting valid int64
-		// payloads. Min is left intact (1 for FKs, retains the no-zero-FK
-		// invariant).
-		if s.Max != nil && *s.Max == float64(2147483647) {
-			s.Max = nil
-		}
-	}
-	// promoteInput is the request-shape variant: format goes to int64 (so
-	// the wire type matches the response side), but the int32 maximum is
-	// preserved (or re-applied) because the server actually enforces it
-	// at runtime. TRA-720 / BB37 F2: remove this cap when storage moves
-	// to bigint.
-	promoteInput := func(s *openapi3.Schema) {
-		if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
-			return
-		}
-		s.Format = "int64"
-		if s.Max == nil {
-			max := intMax
-			s.Max = &max
-		}
-	}
-
-	if doc.Components != nil && doc.Components.Schemas != nil {
-		var walk func(s *openapi3.Schema)
-		visited := map[*openapi3.Schema]bool{}
-		walk = func(s *openapi3.Schema) {
-			if s == nil || visited[s] {
-				return
-			}
-			visited[s] = true
-			for propName, propRef := range s.Properties {
-				if propRef == nil || propRef.Value == nil {
-					continue
-				}
-				if isSurrogateIDName(propName) {
-					promote(propRef.Value)
-					// Array-typed FK collections (rare today, but cheap to
-					// cover) carry the integer in Items.
-					if propRef.Value.Items != nil && propRef.Value.Items.Value != nil {
-						promote(propRef.Value.Items.Value)
-					}
-				}
-				walk(propRef.Value)
-			}
-			if s.Items != nil && s.Items.Value != nil {
-				walk(s.Items.Value)
-			}
-			for _, r := range s.AllOf {
-				if r != nil {
-					walk(r.Value)
-				}
-			}
-			for _, r := range s.OneOf {
-				if r != nil {
-					walk(r.Value)
-				}
-			}
-			for _, r := range s.AnyOf {
-				if r != nil {
-					walk(r.Value)
-				}
-			}
-		}
-		for _, ref := range doc.Components.Schemas {
-			if ref != nil {
-				walk(ref.Value)
-			}
-		}
-	}
-
-	if doc.Paths != nil {
-		walkParam := func(p *openapi3.Parameter) {
-			if p == nil || p.Schema == nil || p.Schema.Value == nil {
-				return
-			}
-			if !isSurrogateIDName(p.Name) {
-				return
-			}
-			// Path and query carry request inputs subject to the int32
-			// runtime cap; header/cookie surrogate IDs (none today) would
-			// fall through to the response-style promote.
-			fn := promote
-			if p.In == "path" || p.In == "query" {
-				fn = promoteInput
-			}
-			s := p.Schema.Value
-			if s.Type != nil && s.Type.Is(openapi3.TypeArray) && s.Items != nil && s.Items.Value != nil {
-				fn(s.Items.Value)
-			} else {
-				fn(s)
-			}
-		}
-		for _, item := range doc.Paths.Map() {
-			if item == nil {
-				continue
-			}
-			for _, pRef := range item.Parameters {
-				if pRef != nil {
-					walkParam(pRef.Value)
-				}
-			}
-			for _, op := range item.Operations() {
-				if op == nil {
-					continue
-				}
-				for _, pRef := range op.Parameters {
-					if pRef != nil {
-						walkParam(pRef.Value)
-					}
-				}
-			}
-		}
-	}
-}
 
 // dateTimeExample / dateExample are the RFC 3339 stand-in values inserted
 // onto schema properties whose `format` is `date-time` / `date` and which
