@@ -79,4 +79,4 @@ COMMENT ON TABLE api_keys IS 'API keys for public API authentication';
 COMMENT ON COLUMN api_keys.jti IS 'JWT ID — revocation handle referenced by api_key JWTs';
 COMMENT ON COLUMN api_keys.created_by IS 'User who minted this key via session auth. Mutually exclusive with created_by_key_id.';
 COMMENT ON COLUMN api_keys.created_by_key_id IS 'Parent API key that minted this key via keys:admin scope. Mutually exclusive with created_by.';
-COMMENT ON COLUMN api_keys.scopes IS 'Subset of: assets:read, assets:write, locations:read, locations:write, scans:read, scans:write, keys:admin';
+COMMENT ON COLUMN api_keys.scopes IS 'Subset of: assets:read, assets:write, locations:read, locations:write, tracking:read, scans:write, keys:admin';

@@ -17,8 +17,10 @@ CREATE TABLE assets (
     metadata        JSONB DEFAULT '{}',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at      TIMESTAMPTZ,
-    UNIQUE(org_id, external_key, valid_from)
+    deleted_at      TIMESTAMPTZ
+    -- Note: legacy 000031 (TRA-475) explicitly dropped the 3-column
+    -- UNIQUE(org_id, external_key, valid_from) in favor of the partial
+    -- unique index below. Do NOT re-add it here.
 );
 
 CREATE INDEX idx_assets_org ON assets(org_id);
