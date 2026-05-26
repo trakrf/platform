@@ -15,26 +15,26 @@ import (
 )
 
 const (
-	BlockBits = 50
-	HalfBits  = 25
-	Rounds    = 6
-	Mask25    = (uint64(1) << HalfBits) - 1
-	HighBit   = uint64(1) << BlockBits
+	blockBits = 50
+	halfBits  = 25
+	rounds    = 6
+	mask25    = (uint64(1) << halfBits) - 1
+	highBit   = uint64(1) << blockBits
 )
 
 // Encrypt maps a sequence value into a 51-bit obfuscated ID. seqValue must be
 // less than 2^50 (the Feistel block size).
 func Encrypt(masterKey []byte, seqValue uint64) (uint64, error) {
-	if seqValue >= HighBit {
-		return 0, fmt.Errorf("sequence overflow: %d >= 2^%d", seqValue, BlockBits)
+	if seqValue >= highBit {
+		return 0, fmt.Errorf("sequence overflow: %d >= 2^%d", seqValue, blockBits)
 	}
-	L := (seqValue >> HalfBits) & Mask25
-	R := seqValue & Mask25
-	for i := 1; i <= Rounds; i++ {
+	L := (seqValue >> halfBits) & mask25
+	R := seqValue & mask25
+	for i := 1; i <= rounds; i++ {
 		rk := roundKey(masterKey, i)
 		L, R = R, L^f(rk, R)
 	}
-	return ((L << HalfBits) | R) | HighBit, nil
+	return ((L << halfBits) | R) | highBit, nil
 }
 
 func roundKey(masterKey []byte, round int) []byte {
@@ -43,12 +43,12 @@ func roundKey(masterKey []byte, round int) []byte {
 	return h.Sum(nil)
 }
 
-func f(roundKey []byte, x uint64) uint64 {
-	h := hmac.New(sha256.New, roundKey)
+func f(rk []byte, x uint64) uint64 {
+	h := hmac.New(sha256.New, rk)
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], x)
 	h.Write(buf[:])
 	sum := h.Sum(nil)
 	// Take first 4 bytes as big-endian uint32, then mask to 25 bits.
-	return uint64(binary.BigEndian.Uint32(sum[0:4])) & Mask25
+	return uint64(binary.BigEndian.Uint32(sum[0:4])) & mask25
 }
