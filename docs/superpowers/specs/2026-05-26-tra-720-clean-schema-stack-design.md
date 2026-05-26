@@ -46,7 +46,7 @@ This design captures TRA-720's contribution: a new, clean 10-file migration stac
 | Generator function shape | Collapse the two legacy functions into a single `trakrf.generate_obfuscated_id` (keyed Feistel) used by all 9 obfuscated-PK tables. |
 | Feistel block width | 52 bits (2 × 26-bit halves). Pure Feistel output range `[0, 2^52)`. |
 | Feistel rounds | 6. |
-| Round function | `pgcrypto.hmac(data, round_key, 'sha256')` truncated to 25 bits. |
+| Round function | `pgcrypto.hmac(data, round_key, 'sha256')` truncated to 26 bits. |
 | Key plumbing | Database-level GUC: `ALTER DATABASE trakrf SET app.obfuscation_key = '<64-hex-char secret>'`. Function reads via `current_setting('app.obfuscation_key')`. |
 | Tier 2 SERIAL PKs | Widen `password_reset_tokens.id` and `org_invitations.id` to `BIGSERIAL` (BIGINT IDENTITY) for schema uniformity. |
 | Migration stack numbering | Restart at `000001`. |
