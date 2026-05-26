@@ -39,7 +39,18 @@ BEGIN
         RAISE EXCEPTION 'Feistel input overflow: % >= 2^50', seq_value;
     END IF;
 
-    master_key := decode(current_setting('app.obfuscation_key'), 'hex');
+    -- Two-arg current_setting returns NULL on missing instead of erroring;
+    -- explicit empty-string check guards against silent corruption (decode('','hex')
+    -- yields a zero-length bytea, and hmac() accepts it, producing deterministic-
+    -- but-wrong outputs).
+    DECLARE
+        key_hex TEXT := current_setting('app.obfuscation_key', true);
+    BEGIN
+        IF key_hex IS NULL OR key_hex = '' THEN
+            RAISE EXCEPTION 'app.obfuscation_key is not set on this database. Run: ALTER DATABASE <db> SET app.obfuscation_key = ''<64-hex-char-secret>''';
+        END IF;
+        master_key := decode(key_hex, 'hex');
+    END;
 
     L := (seq_value >> 25) & MASK25;
     R := seq_value & MASK25;
