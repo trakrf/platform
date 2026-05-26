@@ -1254,7 +1254,6 @@ func setIntegerFormatRecursive(s *openapi3.Schema) {
 	}
 }
 
-
 // dateTimeExample / dateExample are the RFC 3339 stand-in values inserted
 // onto schema properties whose `format` is `date-time` / `date` and which
 // lack an `example`. Zalando's

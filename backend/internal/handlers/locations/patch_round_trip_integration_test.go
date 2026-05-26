@@ -1421,32 +1421,34 @@ func TestPatchLocation_TagsSetEqualityEcho(t *testing.T) {
 		requireTagsRejection(t, patchTags(t, wrongValueJSON))
 	})
 
+	// Match by id (not row order) — bigint surrogate IDs are
+	// Feistel-permuted, so "ORDER BY id" does not match the
+	// seed-insertion order.
 	rows, err := pool.Query(context.Background(), `
 		SELECT id, type, value FROM trakrf.tags
 		WHERE location_id = $1 AND deleted_at IS NULL
-		ORDER BY id
 	`, id)
 	require.NoError(t, err)
 	defer rows.Close()
-	var persisted []struct {
-		ID    int
+	persisted := make(map[int]struct {
 		Type  string
 		Value string
-	}
+	})
 	for rows.Next() {
-		var r struct {
-			ID    int
+		var rid int
+		var rtype, rvalue string
+		require.NoError(t, rows.Scan(&rid, &rtype, &rvalue))
+		persisted[rid] = struct {
 			Type  string
 			Value string
-		}
-		require.NoError(t, rows.Scan(&r.ID, &r.Type, &r.Value))
-		persisted = append(persisted, r)
+		}{Type: rtype, Value: rvalue}
 	}
 	require.NoError(t, rows.Err())
 	require.Len(t, persisted, 3, "tag set must be unchanged after echo PATCHes")
 	for i, want := range seeded {
-		assert.Equal(t, ids[i], persisted[i].ID)
-		assert.Equal(t, want.tagType, persisted[i].Type)
-		assert.Equal(t, want.value, persisted[i].Value)
+		row, ok := persisted[ids[i]]
+		require.True(t, ok, "persisted tag with id %d (seed index %d) not found", ids[i], i)
+		assert.Equal(t, want.tagType, row.Type)
+		assert.Equal(t, want.value, row.Value)
 	}
 }

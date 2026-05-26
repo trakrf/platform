@@ -1230,7 +1230,7 @@ func buildLocationsWhere(orgID int, f location.ListFilter) (string, []any) {
 
 	if len(f.ParentIDs) > 0 {
 		args = append(args, f.ParentIDs)
-		clauses = append(clauses, fmt.Sprintf("p.id = ANY($%d::int[])", len(args)))
+		clauses = append(clauses, fmt.Sprintf("p.id = ANY($%d::bigint[])", len(args)))
 	}
 	if len(f.ParentExternalKeys) > 0 {
 		args = append(args, f.ParentExternalKeys)

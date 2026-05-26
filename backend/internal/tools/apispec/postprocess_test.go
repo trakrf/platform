@@ -1751,7 +1751,6 @@ func TestAppendNullableCodegenPolicyDescription_Idempotent(t *testing.T) {
 	assert.Equal(t, first, doc.Info.Description, "second call must be a no-op")
 }
 
-
 // Post-consolidateSchemaNamespaces, the component name is bare
 // `PublicTime` (no `shared.` prefix). The rewrite must match that form
 // too.

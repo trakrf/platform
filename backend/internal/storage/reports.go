@@ -117,7 +117,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 		FROM latest_scans ls
 		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
-		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
+		WHERE ($2::bigint[]  IS NULL OR l.id           = ANY($2::bigint[]))
 		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
@@ -125,7 +125,7 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $5::bool)
-		  AND ($6::int[]  IS NULL OR a.id           = ANY($6::int[]))
+		  AND ($6::bigint[]  IS NULL OR a.id           = ANY($6::bigint[]))
 		  AND ($7::text[] IS NULL OR a.external_key = ANY($7::text[]))
 	`
 
@@ -204,7 +204,7 @@ func buildCurrentLocationsQueryDistinctOn(orderBy string) string {
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
-		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
+		WHERE ($2::bigint[]  IS NULL OR l.id           = ANY($2::bigint[]))
 		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
@@ -212,7 +212,7 @@ func buildCurrentLocationsQueryDistinctOn(orderBy string) string {
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
-		  AND ($8::int[]  IS NULL OR a.id           = ANY($8::int[]))
+		  AND ($8::bigint[]  IS NULL OR a.id           = ANY($8::bigint[]))
 		  AND ($9::text[] IS NULL OR a.external_key = ANY($9::text[]))
 		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
@@ -242,7 +242,7 @@ func buildCurrentLocationsQueryTimescale(orderBy string) string {
 		FROM latest_scans ls
 		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
 		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
-		WHERE ($2::int[]  IS NULL OR l.id           = ANY($2::int[]))
+		WHERE ($2::bigint[]  IS NULL OR l.id           = ANY($2::bigint[]))
 		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
 		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
 			   OR EXISTS (
@@ -250,7 +250,7 @@ func buildCurrentLocationsQueryTimescale(orderBy string) string {
 				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
 			   ))
 		  AND (a.deleted_at IS NULL OR $7::bool)
-		  AND ($8::int[]  IS NULL OR a.id           = ANY($8::int[]))
+		  AND ($8::bigint[]  IS NULL OR a.id           = ANY($8::bigint[]))
 		  AND ($9::text[] IS NULL OR a.external_key = ANY($9::text[]))
 		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
