@@ -551,6 +551,12 @@ db-pull-nk source-url target-url *flags='':
     TGT_URL="{{target-url}}"
     FLAGS="{{flags}}"
 
+    # Force search_path on every connection so the per-table triggers
+    # (`trakrf.generate_obfuscated_id`) can resolve un-qualified sequence
+    # names like `organization_seq`. The function declaration doesn't
+    # bake search_path in, so callers must set it.
+    export PGOPTIONS='-c search_path=trakrf,public'
+
     SRC_HOST=$(python3 -c "import urllib.parse,sys;u=urllib.parse.urlparse(sys.argv[1]);print(u.hostname)" "$SRC_URL")
     SRC_PORT=$(python3 -c "import urllib.parse,sys;u=urllib.parse.urlparse(sys.argv[1]);print(u.port or 5432)" "$SRC_URL")
     SRC_DB=$(python3 -c   "import urllib.parse,sys;u=urllib.parse.urlparse(sys.argv[1]);print(u.path.lstrip('/'))" "$SRC_URL")
