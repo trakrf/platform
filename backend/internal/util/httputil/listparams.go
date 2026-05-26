@@ -140,18 +140,6 @@ func ParseListParams(r *http.Request, allow ListAllowlist) (ListParams, error) {
 					Params:  map[string]any{"min": float64(0)},
 				}}}
 			}
-			// Upper-bound to int4 max (TRA-678). The downstream LIMIT/OFFSET
-			// binding goes through pgx as int4, and the spec advertises
-			// `maximum: 2147483647` on the offset query parameter; reject the
-			// boundary case here instead of leaking the pgx encoder error.
-			if int64(n) > SurrogateIDMax {
-				return out, &ListParamError{Fields: []apierrors.FieldError{{
-					Field:   "offset",
-					Code:    "too_large",
-					Message: fmt.Sprintf("offset must be ≤ %d", SurrogateIDMax),
-					Params:  map[string]any{"max": float64(SurrogateIDMax)},
-				}}}
-			}
 			out.Offset = n
 		case "sort":
 			parsed, err := parseSort(values[0], sortAllow)

@@ -964,11 +964,11 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		f.ParentIDs = make([]int, 0, len(vs))
 		for _, s := range vs {
 			n, err := strconv.Atoi(s)
-			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
+			if err != nil || n < 1 {
 				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{{
 					Field:   "parent_id",
 					Code:    "invalid_value",
-					Message: fmt.Sprintf("parent_id %q must be a positive integer ≤ %d", s, httputil.SurrogateIDMax),
+					Message: fmt.Sprintf("parent_id %q must be a positive integer", s),
 				}})
 				return
 			}

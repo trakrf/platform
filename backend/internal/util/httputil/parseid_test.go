@@ -20,10 +20,8 @@ import (
 // validation_error + fields[] (matching limit-too-large), not bad_request.
 
 func TestParseSurrogateID_ValidValues(t *testing.T) {
-	// TRA-673: path-param max tightened to int32 max to match the
-	// underlying Postgres int4 surrogate column. Values above this
-	// previously reached pgx and produced a 500 with driver internals
-	// in error.detail. They now reject as 400 too_large at the parser.
+	// TRA-720: storage is now bigint; parser bound is now math.MaxInt64.
+	// Values previously rejected as int32-overflow are now valid.
 	cases := []struct {
 		raw  string
 		want int
@@ -31,7 +29,9 @@ func TestParseSurrogateID_ValidValues(t *testing.T) {
 		{"1", 1},
 		{"42", 42},
 		{strconv.Itoa(math.MaxInt32), math.MaxInt32},
-		{strconv.FormatInt(httputil.SurrogateIDMax, 10), int(httputil.SurrogateIDMax)},
+		// Former int32-overflow values are now accepted (bigint storage).
+		{"2147483648", 2147483648},
+		{strconv.FormatInt(math.MaxInt64, 10), math.MaxInt64},
 	}
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {
@@ -54,11 +54,6 @@ func TestParseSurrogateID_FieldParamErrors(t *testing.T) {
 		{"empty", "", "asset_id", "invalid_value", ""},
 		{"zero below min", "0", "asset_id", "too_small", "min"},
 		{"negative below min", "-1", "asset_id", "too_small", "min"},
-		{"one above SurrogateIDMax (int32 max + 1)", strconv.FormatInt(httputil.SurrogateIDMax+1, 10), "asset_id", "too_large", "max"},
-		// TRA-668 / BB27 F1 reproducer: int4-overflow value that previously
-		// reached pgx and produced a 500 now rejects at the parser as
-		// 400 too_large.
-		{"int4 overflow reproducer", "2147483648", "asset_id", "too_large", "max"},
 		// strconv.ParseInt(_, 10, 64) returns ErrRange for values that
 		// don't fit in int64; surfaces as invalid_value via the parse path.
 		{"above int64 max", "9999999999999999999999", "asset_id", "invalid_value", ""},
@@ -82,8 +77,6 @@ func TestParseSurrogateID_FieldParamErrors(t *testing.T) {
 
 func TestRespondPathParamError_ValidationEnvelopeWithFields(t *testing.T) {
 	// Build a too-small failure to exercise the validation_error envelope.
-	// Out-of-int32 values now also trip too_large (TRA-673 reversal of
-	// the TRA-657 widening).
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/assets/0", nil)
 
