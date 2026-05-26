@@ -43,10 +43,9 @@ services:
     restart: unless-stopped
 
   ingester:
-    build:
-      context: ./ingester
-      dockerfile: Dockerfile
+    image: docker.redpanda.com/redpandadata/connect
     container_name: ingester
+    command: ["/redpanda-connect", "run", "/connect.yaml"]
     volumes:
       - ./ingester/connect.yaml:/connect.yaml
     ports:
