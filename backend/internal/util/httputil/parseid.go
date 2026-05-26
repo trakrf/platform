@@ -65,7 +65,7 @@ func ParsePathInt(field, raw string, min, max int64) (int, error) {
 //
 // TRA-720: storage is now bigint; the former int32 ceiling (SurrogateIDMax /
 // TRA-673 / BB35 B7) is obsolete and has been removed. Feistel IDs in the
-// [2^50, 2^51) range are now valid.
+// [0, 2^52) range are now valid.
 //
 // Returns *FieldParamError on validation failure; pair with
 // RespondPathParamError to render a 400 validation_error envelope.

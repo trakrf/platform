@@ -9,15 +9,13 @@
 --   * trakrf.generate_obfuscated_id() — the TRIGGER function that wraps
 --     _feistel_encrypt and pulls seq_value from nextval(TG_ARGV[0]).
 --
--- Construction: 50-bit block (2 x 25-bit halves), 6 rounds, HMAC-SHA256
--- round function truncated to 25 bits, output OR'd with (1::bigint << 50)
--- so values land in [2^50, 2^51) — disjoint from migrated 31-bit IDs from
--- the legacy generate_hashed_id / generate_permuted_id stack.
+-- Construction: pure 52-bit Feistel cipher (2 x 26-bit halves), 6 rounds,
+-- HMAC-SHA256 round function truncated to 26 bits. Output range: [0, 2^52).
 --
 -- Master key is set per database via:
 --   ALTER DATABASE <db> SET app.obfuscation_key = '<64-hex-char-secret>';
 --
--- Sequence overflow guard: a sequence reaching 2^50 means 1.1 quadrillion
+-- Sequence overflow guard: a sequence reaching 2^52 means 4.5 quadrillion
 -- inserts on a single table — unreachable in practice. The exception is
 -- defensive.
 
@@ -33,10 +31,10 @@ DECLARE
     round_idx INT;
     round_key BYTEA;
     f_out BIGINT;
-    MASK25 CONSTANT BIGINT := (1::bigint << 25) - 1;
+    MASK26 CONSTANT BIGINT := (1::bigint << 26) - 1;
 BEGIN
-    IF seq_value >= (1::bigint << 50) THEN
-        RAISE EXCEPTION 'Feistel input overflow: % >= 2^50', seq_value;
+    IF seq_value >= (1::bigint << 52) THEN
+        RAISE EXCEPTION 'Feistel input overflow: % >= 2^52', seq_value;
     END IF;
 
     -- Two-arg current_setting returns NULL on missing instead of erroring;
@@ -52,22 +50,23 @@ BEGIN
         master_key := decode(key_hex, 'hex');
     END;
 
-    L := (seq_value >> 25) & MASK25;
-    R := seq_value & MASK25;
+    L := (seq_value >> 26) & MASK26;
+    R := seq_value & MASK26;
 
     FOR round_idx IN 1..6 LOOP
         round_key := hmac(('round-' || round_idx)::bytea, master_key, 'sha256');
         -- Take first 4 bytes of HMAC(int8send(R), round_key), interpret as
-        -- big-endian uint32, mask to 25 bits.
+        -- big-endian uint32, mask to 26 bits.
         f_out := ('x' || encode(substring(
                     hmac(int8send(R), round_key, 'sha256')
-                    FROM 1 FOR 4), 'hex'))::bit(32)::bigint & MASK25;
+                    FROM 1 FOR 4), 'hex'))::bit(32)::bigint & MASK26;
         L_new := R;
         R := L # f_out;
         L := L_new;
     END LOOP;
 
-    RETURN ((L << 25) | R) | (1::bigint << 50);
+    -- Pure Feistel output in [0, 2^52). Probability of NEW.id = 0 is 1/2^52 ≈ 2e-16; not handled, see TRA-720 design.
+    RETURN (L << 26) | R;
 END;
 $$;
 

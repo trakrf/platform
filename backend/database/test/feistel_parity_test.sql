@@ -29,7 +29,10 @@ BEGIN
             (12345::BIGINT, 0::BIGINT),
             (16777216::BIGINT, 0::BIGINT),
             (33554432::BIGINT, 0::BIGINT),
-            (562949953421312::BIGINT, 0::BIGINT)
+            (67108864::BIGINT, 0::BIGINT),
+            (562949953421312::BIGINT, 0::BIGINT),
+            (2251799813685248::BIGINT, 0::BIGINT),
+            (4503599627370495::BIGINT, 0::BIGINT)
         ) AS v(s, e)
     LOOP
         got := trakrf._feistel_encrypt(seq);

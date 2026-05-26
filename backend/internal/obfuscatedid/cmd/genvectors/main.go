@@ -27,7 +27,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("decode hex: %v", err)
 	}
-	seqs := []uint64{1, 2, 100, 12345, 1 << 24, 1 << 25, (1 << 49)}
+	seqs := []uint64{1, 2, 100, 12345, 1 << 24, 1 << 25, 1 << 26, 1 << 49, 1 << 51, (1 << 52) - 1}
 	vectors := make([]Vector, 0, len(seqs))
 	for _, s := range seqs {
 		id, err := obfuscatedid.Encrypt(key, s)

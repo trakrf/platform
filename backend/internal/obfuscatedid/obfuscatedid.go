@@ -2,9 +2,8 @@
 // trakrf.generate_obfuscated_id() in the database. This Go implementation is
 // the reference oracle for test vectors and the PL/pgSQL parity check.
 //
-// Construction: 50-bit Feistel (2 x 25-bit halves), 6 rounds, HMAC-SHA256 round
-// function truncated to 25 bits, output OR'd with (1 << 50) so the value lands
-// in [2^50, 2^51) — disjoint from the migrated 31-bit ID range.
+// Construction: 52-bit Feistel (2 x 26-bit halves), 6 rounds, HMAC-SHA256 round
+// function truncated to 26 bits. Output range: [0, 2^52).
 package obfuscatedid
 
 import (
@@ -15,26 +14,25 @@ import (
 )
 
 const (
-	blockBits = 50
-	halfBits  = 25
+	blockBits = 52
+	halfBits  = 26
 	rounds    = 6
-	mask25    = (uint64(1) << halfBits) - 1
-	highBit   = uint64(1) << blockBits
+	mask26    = (uint64(1) << halfBits) - 1
 )
 
-// Encrypt maps a sequence value into a 51-bit obfuscated ID. seqValue must be
-// less than 2^50 (the Feistel block size).
+// Encrypt maps a sequence value into a 52-bit obfuscated ID. seqValue must be
+// less than 2^52 (the Feistel block size).
 func Encrypt(masterKey []byte, seqValue uint64) (uint64, error) {
-	if seqValue >= highBit {
+	if seqValue >= (uint64(1) << blockBits) {
 		return 0, fmt.Errorf("sequence overflow: %d >= 2^%d", seqValue, blockBits)
 	}
-	L := (seqValue >> halfBits) & mask25
-	R := seqValue & mask25
+	L := (seqValue >> halfBits) & mask26
+	R := seqValue & mask26
 	for i := 1; i <= rounds; i++ {
 		rk := roundKey(masterKey, i)
 		L, R = R, L^f(rk, R)
 	}
-	return ((L << halfBits) | R) | highBit, nil
+	return (L << halfBits) | R, nil
 }
 
 func roundKey(masterKey []byte, round int) []byte {
@@ -49,6 +47,6 @@ func f(rk []byte, x uint64) uint64 {
 	binary.BigEndian.PutUint64(buf[:], x)
 	h.Write(buf[:])
 	sum := h.Sum(nil)
-	// Take first 4 bytes as big-endian uint32, then mask to 25 bits.
-	return uint64(binary.BigEndian.Uint32(sum[0:4])) & mask25
+	// Take first 4 bytes as big-endian uint32, then mask to 26 bits.
+	return uint64(binary.BigEndian.Uint32(sum[0:4])) & mask26
 }

@@ -19,27 +19,24 @@ func mustDecodeHex(t *testing.T, s string) []byte {
 	return b
 }
 
-func TestEncrypt_HighBitAlwaysSet(t *testing.T) {
+func TestEncrypt_OutputInBlockRange(t *testing.T) {
 	key := mustDecodeHex(t, testMasterKeyHex)
-	for _, seq := range []uint64{1, 2, 100, 1 << 24, (1 << 50) - 1} {
+	for _, seq := range []uint64{1, 2, 100, 1 << 24, (1 << 52) - 1} {
 		id, err := Encrypt(key, seq)
 		if err != nil {
 			t.Fatalf("Encrypt(%d): unexpected error %v", seq, err)
 		}
-		if id < (1 << 50) {
-			t.Errorf("Encrypt(%d) = %d, expected >= 2^50", seq, id)
-		}
-		if id >= (1 << 51) {
-			t.Errorf("Encrypt(%d) = %d, expected < 2^51", seq, id)
+		if id >= (1 << 52) {
+			t.Errorf("Encrypt(%d) = %d, expected < 2^52", seq, id)
 		}
 	}
 }
 
 func TestEncrypt_OverflowError(t *testing.T) {
 	key := mustDecodeHex(t, testMasterKeyHex)
-	_, err := Encrypt(key, 1<<50)
+	_, err := Encrypt(key, 1<<52)
 	if err == nil {
-		t.Error("Encrypt(2^50) should return overflow error")
+		t.Error("Encrypt(2^52) should return overflow error")
 	}
 }
 

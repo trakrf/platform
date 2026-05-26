@@ -23,7 +23,7 @@ This design captures TRA-720's contribution: a new, clean 10-file migration stac
 ### Goals
 
 - Surrogate PK/FK columns are `BIGINT` throughout. Wire format matches storage; no runtime cap, no `markSurrogateIDsInt64` postprocess, no int32 ceiling anywhere in the system.
-- A single, correct, keyed-Feistel ID generator that replaces both legacy functions. Bijective by construction (no PK retry path), keyed by a real secret (Kerckhoffs-respecting), output range disjoint from migrated existing IDs.
+- A single, correct, keyed-Feistel ID generator that replaces both legacy functions. Bijective by construction (no PK retry path), keyed by a real secret (Kerckhoffs-respecting).
 - `tag_scans` gains a surrogate `id` to eliminate burst-rate PK collisions (TRA-836 fold-in).
 - Migration stack reads as schema design (10 files organized by concern) rather than schema chronology (44 files preserving every dead end).
 - All necessary Go-side cleanup (drop `SurrogateIDMax`, validate caps, swag annotations, `markSurrogateIDsInt64`) lands in the same PR; the new stack and the cleaned Go binary deploy together against CNPG.
@@ -34,7 +34,7 @@ This design captures TRA-720's contribution: a new, clean 10-file migration stac
 - The cutover orchestration (maintenance window, connect-string flip, Cloud decommission).
 - Provisioning of CNPG databases (handled by infra, tracked under TRA-351).
 - Setting `app.obfuscation_key` on the CNPG databases (handled at provisioning time by infra).
-- Re-minting existing IDs through the new Feistel. Existing IDs preserved verbatim during data move; new IDs from the new generator land in a disjoint range.
+- Re-minting existing IDs through the new Feistel. TRA-810 adopted a natural-key FDW pull strategy: surrogate IDs are regenerated on the target side rather than preserved, so the source/target ID spaces are independent by construction.
 - Ingester architecture redesign. Trigger-driven `process_tag_scans()` is a known interim approach, deferred until customer traffic justifies redesign.
 
 ---
@@ -44,7 +44,7 @@ This design captures TRA-720's contribution: a new, clean 10-file migration stac
 | Decision | Choice |
 |---|---|
 | Generator function shape | Collapse the two legacy functions into a single `trakrf.generate_obfuscated_id` (keyed Feistel) used by all 9 obfuscated-PK tables. |
-| Feistel block width | 50 bits (2 × 25-bit halves). Output OR'd with `(1::bigint << 50)` so new IDs land in `[2^50, 2^51)`, disjoint from migrated 31-bit IDs. |
+| Feistel block width | 52 bits (2 × 26-bit halves). Pure Feistel output range `[0, 2^52)`. |
 | Feistel rounds | 6. |
 | Round function | `pgcrypto.hmac(data, round_key, 'sha256')` truncated to 25 bits. |
 | Key plumbing | Database-level GUC: `ALTER DATABASE trakrf SET app.obfuscation_key = '<64-hex-char secret>'`. Function reads via `current_setting('app.obfuscation_key')`. |
@@ -53,7 +53,7 @@ This design captures TRA-720's contribution: a new, clean 10-file migration stac
 | Seed data | Drop the `sample_data` migration; move dev seeds to a separate recipe outside the migration directory. |
 | Down migrations | None for the foundational 10 files (up-only). Post-cutover migrations (`000011_…`) follow the existing up+down convention. |
 | TRA-836 fold-in | `tag_scans` gains `id BIGINT GENERATED ALWAYS AS IDENTITY`; PK changes from `(created_at, message_topic)` to `(created_at, id)`. |
-| Collision handling | Disjoint domains via the bit-50 OR. No retry path needed; bijection guaranteed by Feistel construction. |
+| Collision handling | No retry path needed; bijection guaranteed by Feistel construction. |
 | Ticket scope split | TRA-720 owns clean schema stack + Go cleanup. TRA-810 owns data transport, cutover, decommission. |
 | Old migrations | Deleted from the directory. Git tag `pre-tra-720` preserves history. New `backend/migrations/README.md` references the tag and documents the up-only foundation convention. |
 
@@ -127,7 +127,7 @@ The new schema uses three distinct ID strategies, each fit to its use case:
 
 | Strategy | Used by | Why |
 |---|---|---|
-| **Keyed Feistel (obfuscated, disjoint domain `[2^50, 2^51)`)** | `organizations`, `users`, `locations`, `scan_devices`, `scan_points`, `assets`, `tags`, `bulk_import_jobs`, `api_keys` | Wire-exposed entities. Need pseudo-random spread (no enumeration via incrementing) AND bijective output (no PK retry). |
+| **Keyed Feistel (obfuscated, output range `[0, 2^52)`)** | `organizations`, `users`, `locations`, `scan_devices`, `scan_points`, `assets`, `tags`, `bulk_import_jobs`, `api_keys` | Wire-exposed entities. Need pseudo-random spread (no enumeration via incrementing) AND bijective output (no PK retry). |
 | **`BIGINT GENERATED ALWAYS AS IDENTITY` (monotonic)** | `tag_scans` | Internal append-only hypertable, high insert rate, never wire-exposed. Sequence-backed is cheapest. |
 | **No surrogate (composite content PK)** | `asset_scans` | Derived hypertable; dedup-by-content is intentional. Multiple raw tag reads of the same asset in the same µs collapse to one logical asset-scan event. PK is `(timestamp, org_id, asset_id)`. |
 
@@ -143,13 +143,13 @@ These tables don't need obfuscation (internal, short-lived, never URL-routed). M
 
 | Parameter | Value | Rationale |
 |---|---|---|
-| Block size | 50 bits (2 × 25-bit halves) | Leaves bit 50 for the disjoint-domain marker. Output range `[2^50, 2^51)`. Stays below SPA's 2^53 f64 mantissa limit. |
+| Block size | 52 bits (2 × 26-bit halves) | Output range `[0, 2^52)`. Stays below SPA's 2^53 f64 mantissa limit. |
 | Rounds | 6 | Provably indistinguishable from a random permutation after 4 rounds (Luby–Rackoff); 6 is conventional safety margin for format-preserving encryption. |
-| Round function | `pgcrypto.hmac(data, round_key, 'sha256')` truncated to 25 bits | Standard PRF, C-implemented in pgcrypto. |
+| Round function | `pgcrypto.hmac(data, round_key, 'sha256')` truncated to 26 bits | Standard PRF, C-implemented in pgcrypto. |
 | Round keys | `HMAC-SHA256(master_key, 'round-' \|\| round_index)` | Derived per-round from the master key. No explicit KDF needed; pgcrypto's HMAC is sufficient. |
 | Master key | 32-byte secret in hex, read from `current_setting('app.obfuscation_key')` | Set once per environment via `ALTER DATABASE`. Decoded to bytea via `decode(…, 'hex')`. |
-| Output transform | `((L << 25) \| R) \| (1::bigint << 50)` | Combines halves; ORs bit 50 = 1 to land in `[2^50, 2^51)`. |
-| Overflow guard | `RAISE EXCEPTION` if `nextval()` returns ≥ 2^50 | Defensive. Unreachable in practice (1.1 quadrillion per table). |
+| Output transform | `(L << 26) \| R` | Pure Feistel: combine halves. Probability of id=0 is 1/2^52 ≈ 2e-16 per insert (not handled; bigint 0 is a valid PG value). |
+| Overflow guard | `RAISE EXCEPTION` if `nextval()` returns ≥ 2^52 | Defensive. Unreachable in practice (4.5 quadrillion per table). |
 
 ### Why HMAC-SHA256, not AES
 
@@ -170,29 +170,29 @@ DECLARE
     round_idx INT;
     round_key BYTEA;
     f_out BIGINT;
-    MASK25 CONSTANT BIGINT := (1::bigint << 25) - 1;
+    MASK26 CONSTANT BIGINT := (1::bigint << 26) - 1;
 BEGIN
     seq_id := nextval(seq_name);
-    IF seq_id >= (1::bigint << 50) THEN
-        RAISE EXCEPTION 'Sequence % overflow: % >= 2^50', seq_name, seq_id;
+    IF seq_id >= (1::bigint << 52) THEN
+        RAISE EXCEPTION 'Sequence % overflow: % >= 2^52', seq_name, seq_id;
     END IF;
 
     master_key := decode(current_setting('app.obfuscation_key'), 'hex');
 
-    L := (seq_id >> 25) & MASK25;
-    R := seq_id & MASK25;
+    L := (seq_id >> 26) & MASK26;
+    R := seq_id & MASK26;
 
     FOR round_idx IN 1..6 LOOP
         round_key := hmac(('round-' || round_idx)::bytea, master_key, 'sha256');
         f_out := ('x' || encode(substring(
                     hmac(int8send(R), round_key, 'sha256')
-                    FROM 1 FOR 4), 'hex'))::bit(32)::bigint & MASK25;
+                    FROM 1 FOR 4), 'hex'))::bit(32)::bigint & MASK26;
         L_new := R;
         R := L # f_out;
         L := L_new;
     END LOOP;
 
-    NEW.id := ((L << 25) | R) | (1::bigint << 50);
+    NEW.id := (L << 26) | R;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -208,9 +208,9 @@ Function is `STABLE` (reads GUC, advances sequence — not `IMMUTABLE`).
 package obfuscatedid
 
 const (
-    blockBits = 50
-    halfBits  = 25
-    mask25    = (uint64(1) << halfBits) - 1
+    blockBits = 52
+    halfBits  = 26
+    mask26    = (uint64(1) << halfBits) - 1
     rounds    = 6
 )
 
@@ -218,13 +218,13 @@ func Encrypt(masterKey []byte, seqValue uint64) uint64 {
     if seqValue >= (1 << blockBits) {
         panic("sequence overflow")
     }
-    L := (seqValue >> halfBits) & mask25
-    R := seqValue & mask25
+    L := (seqValue >> halfBits) & mask26
+    R := seqValue & mask26
     for i := 1; i <= rounds; i++ {
         rk := roundKey(masterKey, i)
         L, R = R, L ^ f(rk, R)
     }
-    return ((L << halfBits) | R) | (1 << blockBits)
+    return (L << halfBits) | R
 }
 ```
 
@@ -291,7 +291,7 @@ All current indexes ported forward with their current names. Notable: every enti
 
 ### Level 1 — Feistel correctness
 
-Hardcoded test vectors in `backend/internal/obfuscatedid/testdata/vectors.json`, byte-equal verification between Go and PL/pgSQL. Bijection sample over `[1, 10_000]` (assert no collisions). Disjoint-domain check (every output in `[2^50, 2^51)`). Key sensitivity (avalanche check on neighbouring keys).
+Hardcoded test vectors in `backend/internal/obfuscatedid/testdata/vectors.json`, byte-equal verification between Go and PL/pgSQL. Bijection sample over `[1, 10_000]` (assert no collisions). Output-range check (every output in `[0, 2^52)`). Key sensitivity (avalanche check on neighbouring keys).
 
 ### Level 2 — Schema-equivalence to current Cloud
 
@@ -338,9 +338,9 @@ Post-FDW move:
 - Row count parity per table (Cloud → CNPG).
 - Sample ID-keyed lookups byte-identical between source and target.
 - Two `BIGSERIAL` sequences (`password_reset_tokens_id_seq`, `org_invitations_id_seq`) advanced past max migrated ID via `setval()`. These are monotonic, so collision-avoidance requires explicit advancement.
-- The 9 Feistel sequences do **not** need `setval()` advancement. Disjoint domains mean fresh sequences starting from 1 produce outputs in `[2^50, 2^51)`, never colliding with migrated `[1, 2^31)` IDs.
+- The 9 Feistel sequences do **not** need `setval()` advancement. TRA-810's natural-key FDW pull regenerates surrogate IDs on the target, so source/target ID spaces are independent — fresh sequences from 1 are correct.
 - `app.obfuscation_key` GUC verified set on target DB before any new insert hits a Feistel trigger.
-- No row in any entity table has `id` outside `[1, 2^31)` — confirms no stray pre-cutover Feistel-range writes that would indicate the obfuscation key was set too early.
+- Every entity row on the target has `id` in `[0, 2^52)` — confirms IDs were minted by the new Feistel rather than copied across or otherwise corrupted.
 
 ---
 
