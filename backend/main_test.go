@@ -11,7 +11,7 @@ func TestParseCommand(t *testing.T) {
 		want    command
 		wantErr bool
 	}{
-		{"no args -> combined default", []string{}, cmdCombined, false},
+		{"no args -> serve default", []string{}, cmdServe, false},
 		{"serve explicit", []string{"serve"}, cmdServe, false},
 		{"migrate explicit", []string{"migrate"}, cmdMigrate, false},
 		{"-h prints usage", []string{"-h"}, cmdHelp, false},

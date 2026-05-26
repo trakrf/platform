@@ -45,3 +45,27 @@ any insert hits a Feistel trigger:
 
 This is normally handled at CNPG provisioning time; see TRA-810 for the
 data cutover sequence.
+
+## Role separation (TRA-85)
+
+Production environments use **two distinct database roles** for least-privilege
+defense in depth. The platform binary respects this split:
+
+| Role | DDL | DML | Used by |
+|---|---|---|---|
+| `trakrf-migrate-<env>` | yes (owns all schema objects) | yes | `./server migrate` (helm migrate-job) |
+| `trakrf-app-<env>` | no (USAGE on schema, EXECUTE on functions, CRUD on tables only) | yes | `./server serve` (helm backend deployment) |
+
+The bare `./server` invocation defaults to `serve` (no DDL needed at runtime).
+Migrations must be run explicitly via `./server migrate` under the migrate role.
+
+GRANT flow lives in `trakrf-infra` chart `helm/trakrf-db/templates/init-grants-job.yaml`
+(`post-install,post-upgrade` Helm hook, hook-weight 5). It:
+1. Re-applies grants on existing objects (recovers from `DROP SCHEMA CASCADE`).
+2. Sets `ALTER DEFAULT PRIVILEGES FOR ROLE <migrate-role> IN SCHEMA trakrf` so
+   migrate-created tables/sequences/functions inherit app-role grants.
+
+The default-privileges policy is per-schema and gets dropped along with the
+schema. If you rebuild the schema (e.g., during M3 cutover), re-run the
+init-grants Job — or manually issue the GRANT block from a CNPG superuser
+session.
