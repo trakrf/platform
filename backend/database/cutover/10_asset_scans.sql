@@ -37,8 +37,21 @@ WHERE src_org.deleted_at   IS NULL
   AND (src_loc.id IS NULL OR src_loc.deleted_at IS NULL)
   AND (src_sp.id  IS NULL OR src_sp.deleted_at IS NULL);
 
+-- Expected-row count must apply the same filter as the INSERT above:
+-- a source scan is migratable only if its asset (required FK) is still live
+-- on target. Scans whose source asset was soft-deleted have nowhere to go on
+-- the new schema and are dropped by design (consistent with the tombstone
+-- filter applied to entity tables).
 DO $$ DECLARE src_n BIGINT; tgt_n BIGINT; BEGIN
-    SELECT count(*) INTO src_n FROM cloud_src.asset_scans;
+    SELECT count(*) INTO src_n FROM cloud_src.asset_scans s
+        JOIN cloud_src.organizations o ON o.id = s.org_id   AND o.deleted_at IS NULL
+        JOIN cloud_src.assets        a ON a.id = s.asset_id AND a.deleted_at IS NULL
+        WHERE (s.location_id IS NULL
+               OR EXISTS (SELECT 1 FROM cloud_src.locations l
+                            WHERE l.id = s.location_id AND l.deleted_at IS NULL))
+          AND (s.scan_point_id IS NULL
+               OR EXISTS (SELECT 1 FROM cloud_src.scan_points sp
+                            WHERE sp.id = s.scan_point_id AND sp.deleted_at IS NULL));
     SELECT count(*) INTO tgt_n FROM trakrf.asset_scans;
     IF src_n <> tgt_n THEN RAISE EXCEPTION 'asset_scans mismatch: src=% tgt=%', src_n, tgt_n; END IF;
     RAISE NOTICE 'asset_scans OK: % rows', tgt_n;
