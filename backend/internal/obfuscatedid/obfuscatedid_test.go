@@ -2,6 +2,9 @@ package obfuscatedid
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -53,5 +56,43 @@ func TestEncrypt_Bijection(t *testing.T) {
 			t.Fatalf("collision: Encrypt(%d) == Encrypt(%d) == %d", seq, prev, id)
 		}
 		seen[id] = seq
+	}
+}
+
+type testVector struct {
+	Seq      uint64 `json:"seq"`
+	Expected uint64 `json:"expected"`
+}
+
+type testBundle struct {
+	MasterKeyHex string       `json:"master_key_hex"`
+	Vectors      []testVector `json:"vectors"`
+}
+
+func loadTestBundle(t *testing.T) testBundle {
+	t.Helper()
+	path := filepath.Join("testdata", "vectors.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read vectors: %v", err)
+	}
+	var b testBundle
+	if err := json.Unmarshal(data, &b); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	return b
+}
+
+func TestEncrypt_AgainstBlessedVectors(t *testing.T) {
+	b := loadTestBundle(t)
+	key := mustDecodeHex(t, b.MasterKeyHex)
+	for _, v := range b.Vectors {
+		got, err := Encrypt(key, v.Seq)
+		if err != nil {
+			t.Fatalf("Encrypt(%d): %v", v.Seq, err)
+		}
+		if got != v.Expected {
+			t.Errorf("Encrypt(%d) = %d, want %d", v.Seq, got, v.Expected)
+		}
 	}
 }
