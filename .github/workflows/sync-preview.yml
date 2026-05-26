@@ -18,11 +18,25 @@ jobs:
       pull-requests: write
 
     steps:
+      # Mint an installation token from the trakrf-preview-sync GitHub App so
+      # the push to `preview` is attributed to the App, not `github-actions[bot]`.
+      # Pushes authenticated with the default GITHUB_TOKEN do not trigger
+      # downstream workflows (GitHub's anti-recursion safeguard), which left
+      # docker-build.yml's `push: branches: [preview]` trigger permanently
+      # inert. App-minted tokens are not subject to that gate, so the chain
+      # sync-preview → docker-build → :preview tag now fires end-to-end.
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.PREVIEW_SYNC_APP_ID }}
+          private-key: ${{ secrets.PREVIEW_SYNC_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure Git
         run: |
