@@ -116,6 +116,9 @@ test-contract:
     psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${SCHEMA_DB};"
     psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
         "ALTER DATABASE ${SCHEMA_DB} SET search_path = trakrf, public;"
+    # Set obfuscation key required by trakrf.generate_obfuscated_id() (TRA-720).
+    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
+        "ALTER DATABASE ${SCHEMA_DB} SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465';"
     # Pre-create the trakrf schema so CURRENT_SCHEMA() on the first migrate
     # connection resolves to 'trakrf'. Without this the migration library would
     # put schema_migrations in 'public' on the first run, then look for it in
