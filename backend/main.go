@@ -50,8 +50,12 @@ var (
 type command int
 
 const (
-	cmdCombined command = iota // no arg: migrate then serve
-	cmdServe
+	// Bare `server` (no args) defaults to `serve` — no DDL at runtime.
+	// Migrations run explicitly via the `migrate` subcommand under a separate
+	// role with DDL rights. See backend/migrations/README.md for role-separation
+	// rationale (TRA-85). Production helm explicitly invokes both subcommands;
+	// this default matters for local docker / ad-hoc runs.
+	cmdServe command = iota
 	cmdMigrate
 	cmdHelp
 	cmdUnknown
@@ -61,7 +65,7 @@ const usage = "usage: server [serve|migrate]"
 
 func parseCommand(args []string) (command, error) {
 	if len(args) == 0 {
-		return cmdCombined, nil
+		return cmdServe, nil
 	}
 	if len(args) > 1 {
 		return cmdUnknown, fmt.Errorf("unexpected extra arguments: %v", args[1:])
@@ -118,11 +122,6 @@ func run(ctx context.Context, cmd command, info buildinfo.Info) error {
 	case cmdMigrate:
 		return migrate.Run(ctx, info)
 	case cmdServe:
-		return serve.Run(ctx, info, frontendFS)
-	case cmdCombined:
-		if err := migrate.Run(ctx, info); err != nil {
-			return err
-		}
 		return serve.Run(ctx, info, frontendFS)
 	}
 	return fmt.Errorf("unreachable command: %v", cmd)

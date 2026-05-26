@@ -129,15 +129,12 @@ def main() -> int:
     )
     record(observed, "POST /locations parent_id=0 → too_small on parent_id", status, body)
 
-    # --- too_large: numeric above max=2147483647. TRA-734 (BB40 F3) moved
-    # this off POST /assets; POST /locations parent_id carries the same
-    # max=int32. ---
-    status, body = call(
-        "POST",
-        "/api/v1/locations",
-        body={"name": "TRA-692 too_large probe", "parent_id": 9999999999},
-    )
-    record(observed, "POST /locations parent_id=9999999999 → too_large on parent_id", status, body)
+    # --- too_large: list-param `limit` above its hard ceiling. TRA-720
+    # removed the int32 cap on surrogate id columns, so parent_id no
+    # longer carries an upper bound; the surviving numeric `max`
+    # constraint that emits too_large is the maxListLimit on GET ?limit=.
+    status, body = call("GET", "/api/v1/assets?limit=99999")
+    record(observed, "GET /assets?limit=99999 → too_large on limit", status, body)
 
     # --- invalid_value: bad RFC 3339 valid_from ---
     status, body = call(

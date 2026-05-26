@@ -97,11 +97,18 @@ func createTestDatabase(ctx context.Context, t *testing.T) error {
 		return fmt.Errorf("failed to create test database: %w", err)
 	}
 
-	// Set the database-level search_path so generate_hashed_id() can find
-	// trakrf-schema sequences (e.g. organization_seq) without schema prefix.
+	// Set the database-level search_path so trakrf.generate_obfuscated_id() can
+	// find trakrf-schema sequences (e.g. organization_seq) without schema prefix.
 	_, err = conn.Exec(ctx, "ALTER DATABASE trakrf_test SET search_path TO trakrf, public")
 	if err != nil {
 		return fmt.Errorf("failed to set search_path on test database: %w", err)
+	}
+
+	// Set the obfuscation key required by trakrf.generate_obfuscated_id().
+	// This is a fixed test key — production sets its own via ALTER DATABASE.
+	_, err = conn.Exec(ctx, "ALTER DATABASE trakrf_test SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465'")
+	if err != nil {
+		return fmt.Errorf("failed to set obfuscation_key on test database: %w", err)
 	}
 
 	t.Logf("✅ Created test database: trakrf_test")

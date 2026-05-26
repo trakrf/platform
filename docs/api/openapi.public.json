@@ -84,7 +84,7 @@
             "type": "string"
           },
           "location_id": {
-            "format": "int64",
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           }
@@ -142,7 +142,7 @@
             "type": "string"
           },
           "asset_id": {
-            "format": "int64",
+            "format": "int32",
             "type": "integer"
           },
           "asset_last_seen": {
@@ -155,7 +155,7 @@
             "type": "string"
           },
           "location_id": {
-            "format": "int64",
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           }
@@ -225,7 +225,7 @@
             "type": "string"
           },
           "id": {
-            "format": "int64",
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -285,7 +285,7 @@
         "description": "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Read direction is open; write direction is closed.** The open-enumeration semantic applies to **response handling**: if a `GET` returns a `tag_type` value your client doesn't recognize, pass the row through untouched rather than rejecting it (additive variants may appear in minor revisions). The **write surface is closed**: `POST /tags` and the natural-key tuple `(tag_type, value)` accept only the currently-defined variants (`rfid`, `ble`, `barcode`). Writes carrying an unrecognized `tag_type` are rejected with `400 validation_error` / `code: invalid_value` / `params.allowed_values: [...]`. The asymmetry is intentional — forward-compatibility on read, strict validation on write — and is expected to be retired in a future migration that surfaces `x-extensible-enum: true` natively (currently emitted as a vendor extension on `tag_type`).\n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail.",
         "properties": {
           "id": {
-            "format": "int64",
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -338,7 +338,7 @@
         "description": "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Read direction is open; write direction is closed.** The open-enumeration semantic applies to **response handling**: if a `GET` returns a `tag_type` value your client doesn't recognize, pass the row through untouched rather than rejecting it (additive variants may appear in minor revisions). The **write surface is closed**: `POST /tags` and the natural-key tuple `(tag_type, value)` accept only the currently-defined variants (`rfid`, `ble`, `barcode`). Writes carrying an unrecognized `tag_type` are rejected with `400 validation_error` / `code: invalid_value` / `params.allowed_values: [...]`. The asymmetry is intentional — forward-compatibility on read, strict validation on write — and is expected to be retired in a future migration that surfaces `x-extensible-enum: true` natively (currently emitted as a vendor extension on `tag_type`).\n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail.",
         "properties": {
           "id": {
-            "format": "int64",
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -507,7 +507,7 @@
           },
           "parent_id": {
             "example": 42,
-            "format": "int64",
+            "format": "int32",
             "minimum": 1,
             "nullable": true,
             "type": "integer"
@@ -865,7 +865,7 @@
             "type": "string"
           },
           "id": {
-            "format": "int64",
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -880,7 +880,7 @@
             "type": "string"
           },
           "parent_id": {
-            "format": "int64",
+            "format": "int32",
             "nullable": true,
             "type": "integer"
           },
@@ -935,7 +935,7 @@
           },
           "id": {
             "example": 42,
-            "format": "int64",
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -1032,7 +1032,7 @@
         "description": "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: `RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; `tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). \n\n`tag_type` is an **open** enumeration per the versioning policy — new variants may be added in additive minor revisions without a `/api/v2` cut. Integrators should treat unknown `tag_type` values as forward-compatible: pass the row through untouched rather than rejecting it. \n\n**Read direction is open; write direction is closed.** The open-enumeration semantic applies to **response handling**: if a `GET` returns a `tag_type` value your client doesn't recognize, pass the row through untouched rather than rejecting it (additive variants may appear in minor revisions). The **write surface is closed**: `POST /tags` and the natural-key tuple `(tag_type, value)` accept only the currently-defined variants (`rfid`, `ble`, `barcode`). Writes carrying an unrecognized `tag_type` are rejected with `400 validation_error` / `code: invalid_value` / `params.allowed_values: [...]`. The asymmetry is intentional — forward-compatibility on read, strict validation on write — and is expected to be retired in a future migration that surfaces `x-extensible-enum: true` natively (currently emitted as a vendor extension on `tag_type`).\n\n**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail.",
         "properties": {
           "id": {
-            "format": "int64",
+            "format": "int32",
             "readOnly": true,
             "type": "integer"
           },
@@ -1206,7 +1206,7 @@
           },
           "parent_id": {
             "example": 42,
-            "format": "int64",
+            "format": "int32",
             "minimum": 1,
             "nullable": true,
             "type": "integer"
@@ -1251,7 +1251,7 @@
       "email": "support@trakrf.id",
       "name": "TrakRF Support"
     },
-    "description": "TrakRF public REST API. See /api for the customer-facing reference.\n\nSpec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).\n\nHTTP method coverage (HEAD, OPTIONS, 405 / Allow): /docs/api/http-method-coverage\n\nSurrogate ID width: declared `format: int64` on the wire so SDK regeneration does not break when the ID namespace eventually outgrows int32. Service-side ID generation stays within int32 (2^31-1) during v1; values above that bound are rejected with 400 validation_error / `too_large`. The wider wire type is a long-horizon contract, not a claim that current values exceed int32.\n\nNullable field interpretation: OpenAPI 3.0's `nullable: true` keyword is interpreted differently across codegen targets. Verified-working: `openapi-typescript@7.x` emits `string | null` correctly, and the `openapi-generator-cli` python target emits `Optional[StrictStr]` correctly — both round-trip CRUD against null-bearing responses unmodified. Known-broken: `datamodel-codegen@0.57.0` emits `nullable: true` read-shape fields as non-Optional required fields, so Pydantic validation fails on every nullable field that is actually null. Integrators using `datamodel-codegen` should either switch to the `openapi-generator-cli` python target or apply `--use-annotated --use-union-operator` with a custom post-processing pass.",
+    "description": "TrakRF public REST API. See /api for the customer-facing reference.\n\nSpec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).\n\nHTTP method coverage (HEAD, OPTIONS, 405 / Allow): /docs/api/http-method-coverage\n\nNullable field interpretation: OpenAPI 3.0's `nullable: true` keyword is interpreted differently across codegen targets. Verified-working: `openapi-typescript@7.x` emits `string | null` correctly, and the `openapi-generator-cli` python target emits `Optional[StrictStr]` correctly — both round-trip CRUD against null-bearing responses unmodified. Known-broken: `datamodel-codegen@0.57.0` emits `nullable: true` read-shape fields as non-Optional required fields, so Pydantic validation fails on every nullable field that is actually null. Integrators using `datamodel-codegen` should either switch to the `openapi-generator-cli` python target or apply `--use-annotated --use-union-operator` with a custom post-processing pass.",
     "license": {
       "name": "Business Source License 1.1",
       "url": "https://github.com/trakrf/platform/blob/main/LICENSE"
@@ -1904,7 +1904,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -2154,7 +2153,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -2411,7 +2409,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -2729,7 +2726,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3042,7 +3038,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3360,7 +3355,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3684,7 +3678,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3696,7 +3689,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -3971,9 +3963,6 @@
             "schema": {
               "default": [],
               "items": {
-                "format": "int64",
-                "maximum": 2147483647,
-                "minimum": 1,
                 "type": "integer"
               },
               "type": "array"
@@ -4610,7 +4599,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -4884,7 +4872,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5141,7 +5128,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5459,7 +5445,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -5740,7 +5725,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -6021,7 +6005,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -6302,7 +6285,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -6620,7 +6602,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -6944,7 +6925,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -6956,7 +6936,6 @@
             "required": true,
             "schema": {
               "format": "int64",
-              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             }
@@ -7474,9 +7453,6 @@
             "schema": {
               "default": [],
               "items": {
-                "format": "int64",
-                "maximum": 2147483647,
-                "minimum": 1,
                 "type": "integer"
               },
               "type": "array"
@@ -7506,9 +7482,6 @@
             "schema": {
               "default": [],
               "items": {
-                "format": "int64",
-                "maximum": 2147483647,
-                "minimum": 1,
                 "type": "integer"
               },
               "type": "array"

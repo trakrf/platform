@@ -18,7 +18,7 @@ import (
 // @ID org_members.list
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1) maximum(2147483647) format(int32)
+// @Param id path int true "Organization id" minimum(1) format(int64)
 // @Success 200 {object} map[string]any "data: []organization.Member"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -50,8 +50,8 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 // @ID org_members.update_role
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1) maximum(2147483647) format(int32)
-// @Param userId path int true "User id" minimum(1) maximum(2147483647) format(int32)
+// @Param id path int true "Organization id" minimum(1) format(int64)
+// @Param userId path int true "User id" minimum(1) format(int64)
 // @Param request body organization.UpdateMemberRoleRequest true "New role"
 // @Success 200 {object} map[string]any "message: Role updated"
 // @Failure 400 {object} modelerrors.ErrorResponse
@@ -125,8 +125,8 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 // @ID org_members.remove
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1) maximum(2147483647) format(int32)
-// @Param userId path int true "User id" minimum(1) maximum(2147483647) format(int32)
+// @Param id path int true "Organization id" minimum(1) format(int64)
+// @Param userId path int true "User id" minimum(1) format(int64)
 // @Success 200 {object} map[string]any "message: Member removed"
 // @Failure 400 {object} modelerrors.ErrorResponse "Self-removal or last-admin"
 // @Failure 401 {object} modelerrors.ErrorResponse

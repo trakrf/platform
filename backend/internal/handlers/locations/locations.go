@@ -310,7 +310,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @ID           locations.update
 // @Accept       json
 // @Produce      json
-// @Param        location_id path  int                              true  "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param        location_id path  int                              true  "Location ID" minimum(1) format(int64)
 // @Param        request  body  location.UpdateLocationRequest   true  "Fields to merge-patch"
 // @Success      200  {object}  locations.UpdateLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -684,7 +684,7 @@ func (handler *Handler) doUpdate(w http.ResponseWriter, req *http.Request, orgID
 // @ID locations.delete
 // @Accept json
 // @Produce json
-// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param location_id path int true "Location ID" minimum(1) format(int64)
 // @Success 204 "deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"
@@ -799,7 +799,7 @@ type RenameLocationResponse struct {
 // @ID           locations.rename
 // @Accept       json
 // @Produce      json
-// @Param        location_id path  int                              true  "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param        location_id path  int                              true  "Location ID" minimum(1) format(int64)
 // @Param        request     body  location.RenameLocationRequest   true  "New external_key"
 // @Success      200  {object}  locations.RenameLocationResponse
 // @Failure      400  {object}  modelerrors.ErrorResponse     "bad_request"
@@ -964,11 +964,11 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 		f.ParentIDs = make([]int, 0, len(vs))
 		for _, s := range vs {
 			n, err := strconv.Atoi(s)
-			if err != nil || n < 1 || int64(n) > httputil.SurrogateIDMax {
+			if err != nil || n < 1 {
 				httputil.WriteValidationError(w, req, reqID, []modelerrors.FieldError{{
 					Field:   "parent_id",
 					Code:    "invalid_value",
-					Message: fmt.Sprintf("parent_id %q must be a positive integer ≤ %d", s, httputil.SurrogateIDMax),
+					Message: fmt.Sprintf("parent_id %q must be a positive integer", s),
 				}})
 				return
 			}
@@ -1024,7 +1024,7 @@ func (handler *Handler) ListLocations(w http.ResponseWriter, req *http.Request) 
 // @Description Path-addressed retrieval bypasses the temporal-validity filter applied on list endpoints — any non-deleted location is returned regardless of its `valid_from` / `valid_to` values. Use this endpoint when you have an id and need the row even if its effective window has elapsed.
 // @Tags locations,public
 // @ID locations.get
-// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param location_id path int true "Location ID" minimum(1) format(int64)
 // @Success 200 {object} locations.GetLocationResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -1077,7 +1077,7 @@ func (handler *Handler) GetLocation(w http.ResponseWriter, req *http.Request) {
 // @Description Sort order is fixed: ancestors are returned root first (walking up the `parent_id` chain), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the natural order toward the root is the only meaningful order for this list.
 // @Tags locations,public
 // @ID locations.ancestors
-// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param location_id path  int    true  "Location ID" minimum(1) format(int64)
 // @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
 // @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListAncestorsResponse
@@ -1141,7 +1141,7 @@ func (handler *Handler) GetAncestors(w http.ResponseWriter, req *http.Request) {
 // @Description Sort order is fixed: descendants are returned in depth-first tree order (each level sorted by lowercased `external_key`), with `id` ascending as a deterministic tiebreaker. No `sort` query parameter is exposed because the depth-first tree walk is the only meaningful order for this list.
 // @Tags locations,public
 // @ID locations.descendants
-// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param location_id path  int    true  "Location ID" minimum(1) format(int64)
 // @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
 // @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListDescendantsResponse
@@ -1205,7 +1205,7 @@ func (handler *Handler) GetDescendants(w http.ResponseWriter, req *http.Request)
 // @Description Sort order is fixed: immediate children are returned ordered alphabetically by `name` ascending, with `id` ascending as a deterministic tiebreaker when sibling names collide. No `sort` query parameter is exposed because alphabetical-by-name is the only meaningful order for a single level of siblings.
 // @Tags locations,public
 // @ID locations.children
-// @Param location_id path  int    true  "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param location_id path  int    true  "Location ID" minimum(1) format(int64)
 // @Param limit  query int    false "max 200"  default(50) minimum(1) maximum(200)
 // @Param offset query int    false "min 0"   default(0) minimum(0)
 // @Success 200 {object} locations.ListChildrenResponse
@@ -1298,7 +1298,7 @@ type AddTagResponse struct {
 // @Tags locations,public
 // @ID locations.tags.add
 // @Accept json
-// @Param location_id path int               true "Location ID" minimum(1) maximum(2147483647) format(int32)
+// @Param location_id path int               true "Location ID" minimum(1) format(int64)
 // @Param request body shared.TagRequest true "Tag to attach"
 // @Success 201 {object} locations.AddTagResponse "tag attached"
 // @Header  201 {string} Location "Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)"
@@ -1370,8 +1370,8 @@ func (handler *Handler) doAddLocationTag(w http.ResponseWriter, r *http.Request,
 // @Description First successful removal returns 204; repeated calls return 404 — consistent with top-level resource DELETE semantics. The cross-location / cross-org case (a tag that exists but is not attached to this location, or belongs to a different org) also surfaces as 404.
 // @Tags locations,public
 // @ID locations.tags.remove
-// @Param location_id path int true "Location ID" minimum(1) maximum(2147483647) format(int32)
-// @Param tag_id      path int true "Tag ID" minimum(1) maximum(2147483647) format(int32)
+// @Param location_id path int true "Location ID" minimum(1) format(int64)
+// @Param tag_id      path int true "Tag ID" minimum(1) format(int64)
 // @Success 204 "deleted"
 // @Failure 400 {object} modelerrors.ErrorResponse "bad_request"
 // @Failure 401 {object} modelerrors.ErrorResponse "unauthorized"

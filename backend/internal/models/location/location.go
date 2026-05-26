@@ -39,7 +39,7 @@ type CreateLocationRequest struct {
 	// format LOC-NNNN (per-organization sequence), parallel to assets'
 	// ASSET-NNNN behavior. When supplied, must satisfy the external_key_pattern.
 	ExternalKey       string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
-	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
+	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	Description       *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Main warehouse location"`
 	ValidFrom         *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
@@ -103,7 +103,7 @@ var PublicReadOnlyFields = []string{"id", "created_at", "updated_at", "deleted_a
 // reconciliation block in handlers/locations.
 type UpdateLocationRequest struct {
 	Name        *string              `json:"name,omitempty" validate:"omitempty,min=1,max=255,display_name" example:"Warehouse 1"`
-	ParentID    *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1,max=2147483647" example:"42"`
+	ParentID    *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
 	Description *string              `json:"description,omitempty" validate:"omitempty,min=1,max=1024,no_control_chars" example:"Updated description"`
 	ValidFrom   *shared.FlexibleDate `json:"valid_from,omitempty" swaggertype:"string" example:"2025-12-14T00:00:00Z"`
 	ValidTo     *shared.FlexibleDate `json:"valid_to,omitempty" swaggertype:"string" example:"2026-12-14T00:00:00Z"`
