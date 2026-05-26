@@ -471,3 +471,57 @@ migrate-create name:
 migrate-force version:
     @echo "⚠️  Forcing migration version to {{version}}"
     docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" force {{version}}'
+
+# TRA-720: schema-diff between the legacy 44-migration stack (pre-tra-720 tag)
+# and the new 10-file stack. Both are applied to ephemeral databases;
+# pg_dump --schema-only outputs are diffed.
+#
+# Requires the pre-tra-720 git tag to exist (Task 13 Step 1 creates it).
+# Requires PG_URL_LOCAL to be a Postgres URL pointing at the local docker DB,
+# with sufficient privileges to CREATE/DROP databases.
+#
+# Usage: just backend db-diff-old-vs-new
+db-diff-old-vs-new:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    OLD_DB="trakrf_diff_old"
+    NEW_DB="trakrf_diff_new"
+    LEGACY_WORKTREE="/tmp/tra-720-legacy-migrations"
+
+    if ! git -C "$REPO_ROOT" rev-parse pre-tra-720 >/dev/null 2>&1; then
+        echo "ERROR: pre-tra-720 tag not found. Create it: git tag pre-tra-720 <sha>" >&2
+        exit 1
+    fi
+
+    # Derive per-DB URLs by string-replacing the dbname in PG_URL_LOCAL.
+    # PG_URL_LOCAL format: postgres://user:pwd@host:port/<dbname>?<query>
+    # Use sed -E with a host-anchored pattern so we don't accidentally
+    # replace the username (which may equal the dbname, e.g. "postgres").
+    OLD_URL=$(echo "$PG_URL_LOCAL" | sed -E "s|^(postgres://[^@]+@[^/]+/)[^?]+|\1${OLD_DB}|")
+    NEW_URL=$(echo "$PG_URL_LOCAL" | sed -E "s|^(postgres://[^@]+@[^/]+/)[^?]+|\1${NEW_DB}|")
+
+    psql "$PG_URL_LOCAL" -c "DROP DATABASE IF EXISTS $OLD_DB;"
+    psql "$PG_URL_LOCAL" -c "DROP DATABASE IF EXISTS $NEW_DB;"
+    psql "$PG_URL_LOCAL" -c "CREATE DATABASE $OLD_DB;"
+    psql "$PG_URL_LOCAL" -c "CREATE DATABASE $NEW_DB;"
+    psql "$PG_URL_LOCAL" -c "ALTER DATABASE $NEW_DB SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465';"
+
+    # Extract legacy migrations to a sibling worktree.
+    rm -rf "$LEGACY_WORKTREE"
+    git -C "$REPO_ROOT" worktree add --detach "$LEGACY_WORKTREE" pre-tra-720
+
+    migrate -path "$LEGACY_WORKTREE/backend/migrations" -database "$OLD_URL" up
+    migrate -path "$REPO_ROOT/backend/migrations" -database "$NEW_URL" up
+
+    pg_dump --schema-only --no-owner --no-privileges -d "$OLD_URL" > /tmp/old_schema.sql
+    pg_dump --schema-only --no-owner --no-privileges -d "$NEW_URL" > /tmp/new_schema.sql
+    diff -u /tmp/old_schema.sql /tmp/new_schema.sql > /tmp/schema_diff.txt || true
+
+    git -C "$REPO_ROOT" worktree remove --force "$LEGACY_WORKTREE"
+
+    echo
+    echo "Diff saved to /tmp/schema_diff.txt ($(wc -l < /tmp/schema_diff.txt) lines)"
+    echo "Allowlist at $REPO_ROOT/backend/database/test/expected_diff_allowlist.txt"
+    echo
+    echo "Review the diff manually. Any line outside the allowlist categories is a regression."

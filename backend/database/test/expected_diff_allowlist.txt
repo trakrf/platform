@@ -1,0 +1,69 @@
+TRA-720 SCHEMA DIFF — EXPECTED CATEGORIES OF CHANGE
+====================================================
+
+The following categories are intentional and pass review. Anything OUTSIDE
+these categories represents a regression that requires investigation.
+
+1. integer → bigint
+   Every surrogate PK / FK column on entity tables widens from int4 to int8.
+   Affected: organizations.id, users.id+last_org_id, org_users.org_id+user_id,
+   org_invitations.id+org_id+invited_by, password_reset_tokens.id+user_id,
+   locations.id+org_id+parent_location_id, scan_devices.id+org_id,
+   scan_points.id+org_id+scan_device_id+location_id,
+   assets.id+org_id, tags.id+org_id+asset_id+location_id,
+   bulk_import_jobs.id+org_id, api_keys.id+org_id+created_by+created_by_key_id,
+   asset_scans.org_id+asset_id+location_id+scan_point_id.
+
+2. Removed: public.generate_hashed_id
+3. Removed: trakrf.generate_permuted_id
+4. Added:   trakrf.generate_obfuscated_id (TRIGGER), trakrf._feistel_encrypt (pure)
+5. Added:   trakrf.update_updated_at_column body unchanged but now also lives in trakrf schema only
+6. RLS policy quals: (current_setting(...))::integer → (current_setting(...))::bigint
+7. Added column: tag_scans.id BIGINT IDENTITY (TRA-836 fold-in)
+   PK shape change: (created_at, message_topic) → (created_at, id)
+8. Added extension: pgcrypto (was implicit on Cloud, explicit here)
+9. Removed extension: ltree
+10. Function bodies (process_tag_scans, create_asset_with_tags, create_location_with_tags):
+    INT params/locals → BIGINT params/locals. Return TABLE column types BIGINT.
+11. ID-related comments mention "keyed Feistel" instead of "hashed ID" / "permuted ID".
+
+12. Whitespace/formatting changes inside stored-procedure bodies (process_tag_scans,
+    create_asset_with_tags, create_location_with_tags, update_updated_at_column):
+    multi-line WHERE/LOOP/INSERT/JOIN clauses collapsed to single lines; trailing
+    column-alias annotations like "AS timestamp" / "AS asset_id" removed.
+    Semantically equivalent SQL — keep these terse rewrites.
+
+13. Many COMMENT ON COLUMN statements dropped/condensed:
+    Legacy carried verbose per-column docstrings on every entity table; new stack
+    keeps only id-comments (category 11) and a handful of high-value column
+    comments. Dropped comments are doc-only — not regressions.
+
+14. Trigger function reference rename in CREATE TRIGGER ... EXECUTE FUNCTION:
+    generate_hashed_id / generate_permuted_id → generate_obfuscated_id on every
+    entity table. Follows from categories 2-4 (functions renamed).
+
+15. FK constraint name rename: identifiers_*_fkey → tags_*_fkey on the tags table
+    (legacy carried the original identifiers_* prefix from before the rename
+    migration; new stack uses tags_* by virtue of CREATE TABLE tags …).
+
+16. Column order in CREATE TABLE differs for tables touched by later legacy ALTERs
+    (api_keys, bulk_import_jobs, users): new stack defines all columns inline in
+    the canonical order; legacy interleaves ALTER TABLE ADD COLUMN at the end.
+    PostgreSQL physical column order — does not affect query semantics.
+
+17. CREATE SEQUENCE ... AS integer dropped on org_invitations_id_seq and
+    password_reset_tokens_id_seq: implicit BIGINT in new stack (default is
+    bigint in PG 10+). Same intent as category 1.
+
+18. TimescaleDB chunk artifacts (_hyper_2_1_chunk and its indexes/FKs/constraints):
+    appear only on legacy side because legacy 000016_sample_data inserts test rows
+    into asset_scans, triggering chunk creation. New stack ships no sample data;
+    empty hypertable has no chunks. Clean-schema correct.
+
+19. assets_org_id_external_key_valid_from_key is absent from BOTH stacks.
+    Legacy 000031 (TRA-475) explicitly dropped that constraint in favor of the
+    partial unique index assets_org_id_external_key_unique WHERE deleted_at IS NULL.
+    The new 000006_assets.up.sql must NOT recreate it (was a regression caught
+    and fixed during Task 13 verification).
+
+Diff lines NOT covered by these categories are regressions.
