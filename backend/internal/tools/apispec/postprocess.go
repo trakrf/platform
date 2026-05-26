@@ -113,7 +113,6 @@ func postprocessPublic(doc *openapi3.T) error {
 	stripSessionAuthScheme(doc)
 	appendSpecVariantsDescription(doc)
 	appendMethodPolicyDescription(doc)
-	appendIDWidthPolicyDescription(doc)
 	appendNullableCodegenPolicyDescription(doc)
 	rewriteMergePatchContentType(doc)
 	annotateReadOnlyTags(doc)
@@ -752,38 +751,6 @@ func appendNullableCodegenPolicyDescription(doc *openapi3.T) {
 		"`openapi-generator-cli` python target or apply " +
 		"`--use-annotated --use-union-operator` with a custom " +
 		"post-processing pass."
-	if doc.Info.Description == "" {
-		doc.Info.Description = policy
-	} else {
-		doc.Info.Description = doc.Info.Description + "\n\n" + policy
-	}
-}
-
-// appendIDWidthPolicyDescription documents the surrogate-ID wire/storage
-// divergence on info.description so integrators reading the Redoc page
-// (or generated SDK class docstrings) understand the contract.
-//
-// Wire format is int64 across every surrogate PK/FK (BB35 B7) to avoid
-// a future-breaking SDK regen when the namespace eventually outgrows
-// int32. Service-side ID generation stays within int32 for v1 — the
-// underlying Postgres column is `int4` — and the parser rejects values
-// above 2^31-1 with a 400 validation_error / `too_large`. The wider
-// declared wire type is for SDK type-safety on the long horizon, not a
-// claim that today's service handles values above 2^31-1.
-//
-// Site-relative-paths follow the same rationale as
-// appendMethodPolicyDescription (preview vs production isolation).
-func appendIDWidthPolicyDescription(doc *openapi3.T) {
-	const marker = "Surrogate ID width"
-	if strings.Contains(doc.Info.Description, marker) {
-		return
-	}
-	policy := "Surrogate ID width: declared `format: int64` on the wire " +
-		"so SDK regeneration does not break when the ID namespace eventually " +
-		"outgrows int32. Service-side ID generation stays within int32 (2^31-1) " +
-		"during v1; values above that bound are rejected with 400 " +
-		"validation_error / `too_large`. The wider wire type is a long-horizon " +
-		"contract, not a claim that current values exceed int32."
 	if doc.Info.Description == "" {
 		doc.Info.Description = policy
 	} else {
