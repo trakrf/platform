@@ -37,7 +37,7 @@ type ListAPIKeysResponse struct {
 // @ID api_keys.create
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1)
+// @Param id path int true "Organization id" minimum(1) format(int64)
 // @Param request body apikey.CreateAPIKeyRequest true "Key creation payload"
 // @Success 201 {object} orgs.CreateAPIKeyResponse
 // @Failure 400 {object} modelerrors.ErrorResponse
@@ -153,7 +153,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 // @ID api_keys.list
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1)
+// @Param id path int true "Organization id" minimum(1) format(int64)
 // @Param limit query int false "max 200"   default(50) minimum(1) maximum(200)
 // @Param offset query int false "min 0"    default(0) minimum(0)
 // @Success 200 {object} orgs.ListAPIKeysResponse
@@ -222,8 +222,8 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @ID api_keys.revoke
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1)
-// @Param key_id path int true "API key id (canonical)" minimum(1)
+// @Param id path int true "Organization id" minimum(1) format(int64)
+// @Param key_id path int true "API key id (canonical)" minimum(1) format(int64)
 // @Success 204 "No Content"
 // @Failure 400 {object} modelerrors.ErrorResponse
 // @Failure 401 {object} modelerrors.ErrorResponse
@@ -268,7 +268,7 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 // @ID api_keys.revoke_by_jti
 // @Accept json
 // @Produce json
-// @Param id path int true "Organization id" minimum(1)
+// @Param id path int true "Organization id" minimum(1) format(int64)
 // @Param jti path string true "API key jti (UUID)" format(uuid)
 // @Success 204 "No Content"
 // @Failure 400 {object} modelerrors.ErrorResponse

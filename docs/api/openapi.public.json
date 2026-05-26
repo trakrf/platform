@@ -1903,6 +1903,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -2151,6 +2152,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -2406,6 +2408,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -2722,6 +2725,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -3033,6 +3037,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -3349,6 +3354,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -3671,6 +3677,7 @@
             "name": "asset_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -3681,6 +3688,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -4590,6 +4598,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -4862,6 +4871,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -5117,6 +5127,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -5433,6 +5444,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -5712,6 +5724,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -5991,6 +6004,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -6270,6 +6284,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -6586,6 +6601,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -6908,6 +6924,7 @@
             "name": "location_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }
@@ -6918,6 +6935,7 @@
             "name": "tag_id",
             "required": true,
             "schema": {
+              "format": "int64",
               "minimum": 1,
               "type": "integer"
             }

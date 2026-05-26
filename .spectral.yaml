@@ -119,19 +119,15 @@ rules:
   trakrf-int64-id-path-params:
     description: >
       Path parameters named like `*_id` (or bare `id`) must declare
-      `format: int64` AND `maximum: 2147483647`. BB35 B7 / TRA-719
-      promoted surrogate IDs to int64 on the wire (so SDK consumers
-      don't have to absorb a future int32→int64 type break);
-      BB37 F2 / TRA-726 re-encodes the int32 runtime cap on
-      *request inputs* so typed clients surface the
-      `400 validation_error / too_large` boundary at compile time
-      instead of via runtime rejection. Response schema id/FK fields
-      stay unconstrained int64 (descriptive of what the server emits),
-      which is why this rule scopes to path params only. The
-      `maximum: 2147483647` constraint lifts when TRA-720 (bigint
-      storage migration) lands; remove it from this rule and from
-      `markSurrogateIDsInt64`'s `promoteInput` branch in the same PR.
-    message: "*_id path params must declare format:int64 and maximum:2147483647 — BB37 F2 / TRA-726 (lifts with TRA-720)"
+      `format: int64`. BB35 B7 / TRA-719 promoted surrogate IDs to
+      int64 on the wire so SDK consumers don't get int32 Java/Kotlin
+      types by default. TRA-720 (bigint storage migration) made this
+      descriptive of storage as well, and lifted the
+      `maximum: 2147483647` cap that previously paired with the
+      format (BB37 F2 / TRA-726). Response schema id/FK fields stay
+      unconstrained int64 (descriptive of what the server emits),
+      which is why this rule scopes to path params only.
+    message: "*_id path params must declare format:int64 — BB35 B7 / TRA-719"
     severity: error
     # NOTE for future rule authors: Spectral uses the nimma JSONPath engine for
     # `given` evaluation. nimma does NOT support `=~` (jsonpath-plus regex
@@ -149,11 +145,8 @@ rules:
             properties:
               format:
                 const: int64
-              maximum:
-                const: 2147483647
             required:
               - format
-              - maximum
 
   trakrf-readonly-derived-fields:
     description: >
