@@ -105,19 +105,23 @@ func ParseCSVTags(tagsStr string) []string {
 	return tags
 }
 
-// Required CSV columns for asset bulk import
+// Required CSV columns for asset bulk import. Only `name` is strictly required;
+// `external_key` auto-mints to ASSET-NNN, `valid_from` defaults to NOW,
+// `valid_to` to NULL, and `is_active` to TRUE in the storage layer.
 var requiredCSVHeaders = []string{
-	"external_key",
 	"name",
-	"valid_from",
-	"valid_to",
-	"is_active",
+}
+
+// normalizeHeader trims whitespace, strips a leading UTF-8 BOM (Excel adds one
+// when saving a CSV), and lowercases for case-insensitive matching.
+func normalizeHeader(h string) string {
+	return strings.ToLower(strings.TrimSpace(strings.TrimPrefix(h, "\ufeff")))
 }
 
 // ValidateCSVHeaders checks if all required columns are present in the CSV header row.
 // Column order is flexible - all required columns must be present but can be in any order.
 // Extra columns are allowed and will be ignored.
-// Matching is case-insensitive.
+// Matching is case-insensitive and tolerates a leading UTF-8 BOM.
 //
 // Returns detailed error listing missing columns if validation fails.
 func ValidateCSVHeaders(headers []string) error {
@@ -125,13 +129,11 @@ func ValidateCSVHeaders(headers []string) error {
 		return fmt.Errorf("CSV headers cannot be empty")
 	}
 
-	// Normalize headers to lowercase for case-insensitive matching
 	normalizedHeaders := make(map[string]bool)
 	for _, h := range headers {
-		normalizedHeaders[strings.ToLower(strings.TrimSpace(h))] = true
+		normalizedHeaders[normalizeHeader(h)] = true
 	}
 
-	// Check for missing required columns
 	var missing []string
 	for _, required := range requiredCSVHeaders {
 		if !normalizedHeaders[required] {
@@ -153,72 +155,62 @@ func ValidateCSVHeaders(headers []string) error {
 func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, error) {
 	headerIdx := make(map[string]int)
 	for i, h := range headers {
-		headerIdx[strings.ToLower(strings.TrimSpace(h))] = i
+		headerIdx[normalizeHeader(h)] = i
 	}
 
-	getCol := func(name string) (string, error) {
+	// getOpt returns the trimmed cell value if the header exists and the row
+	// is long enough, otherwise the empty string. Use for optional columns.
+	getOpt := func(name string) string {
 		idx, ok := headerIdx[name]
 		if !ok {
-			return "", fmt.Errorf("missing required column: %s", name)
+			return ""
 		}
 		if idx >= len(row) {
-			return "", fmt.Errorf("row too short for column: %s", name)
+			return ""
 		}
-		return strings.TrimSpace(row[idx]), nil
+		return strings.TrimSpace(row[idx])
 	}
 
-	externalKey, err := getCol("external_key")
-	if err != nil {
-		return nil, err
-	}
-	if externalKey == "" {
-		return nil, fmt.Errorf("external_key cannot be empty")
-	}
-
-	name, err := getCol("name")
-	if err != nil {
-		return nil, err
-	}
+	name := getOpt("name")
 	if name == "" {
 		return nil, fmt.Errorf("name cannot be empty")
 	}
 
-	validFromStr, err := getCol("valid_from")
-	if err != nil {
-		return nil, err
+	// external_key is optional; storage auto-mints ASSET-NNN when empty.
+	externalKey := getOpt("external_key")
+
+	// valid_from / valid_to / is_active are optional; storage applies defaults
+	// (NOW, NULL, TRUE respectively) when the parsed values are zero/empty.
+	var validFrom time.Time
+	if s := getOpt("valid_from"); s != "" {
+		t, err := ParseCSVDate(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid valid_from: %w", err)
+		}
+		validFrom = t
 	}
 
-	validToStr, err := getCol("valid_to")
-	if err != nil {
-		return nil, err
+	var validToPtr *time.Time
+	if s := getOpt("valid_to"); s != "" {
+		t, err := ParseCSVDate(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid valid_to: %w", err)
+		}
+		validToPtr = &t
 	}
 
-	isActiveStr, err := getCol("is_active")
-	if err != nil {
-		return nil, err
+	isActive := true
+	if s := getOpt("is_active"); s != "" {
+		b, err := ParseCSVBool(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid is_active: %w", err)
+		}
+		isActive = b
 	}
 
-	validFrom, err := ParseCSVDate(validFromStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid valid_from: %w", err)
-	}
+	description := getOpt("description")
 
-	validTo, err := ParseCSVDate(validToStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid valid_to: %w", err)
-	}
-
-	isActive, err := ParseCSVBool(isActiveStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid is_active: %w", err)
-	}
-
-	description := ""
-	if descIdx, ok := headerIdx["description"]; ok && descIdx < len(row) {
-		description = strings.TrimSpace(row[descIdx])
-	}
-
-	if validTo.Before(validFrom) {
+	if validToPtr != nil && !validFrom.IsZero() && validToPtr.Before(validFrom) {
 		return nil, fmt.Errorf("valid_to must be after valid_from")
 	}
 
@@ -228,7 +220,7 @@ func MapCSVRowToAsset(row []string, headers []string, orgID int) (*asset.Asset, 
 		Name:        name,
 		Description: description,
 		ValidFrom:   validFrom,
-		ValidTo:     &validTo,
+		ValidTo:     validToPtr,
 		IsActive:    isActive,
 	}, nil
 }
@@ -252,7 +244,7 @@ func MapCSVRowToAssetWithTags(row []string, headers []string, orgID int) (*Asset
 	// Extract tags if column exists
 	headerIdx := make(map[string]int)
 	for i, h := range headers {
-		headerIdx[strings.ToLower(strings.TrimSpace(h))] = i
+		headerIdx[normalizeHeader(h)] = i
 	}
 
 	var tagValues []string

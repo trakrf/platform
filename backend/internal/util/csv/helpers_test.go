@@ -262,19 +262,9 @@ func TestValidateCSVHeaders_InvalidHeaders(t *testing.T) {
 			errorContains: "CSV headers cannot be empty",
 		},
 		{
-			name:          "missing external_key",
-			headers:       []string{"name", "valid_from", "valid_to", "is_active"},
-			errorContains: "missing required columns: external_key",
-		},
-		{
-			name:          "missing name",
+			name:          "missing name (only required column)",
 			headers:       []string{"external_key", "valid_from", "valid_to", "is_active"},
 			errorContains: "missing required columns: name",
-		},
-		{
-			name:          "missing multiple columns",
-			headers:       []string{"external_key", "name"},
-			errorContains: "missing required columns",
 		},
 		{
 			name:          "completely wrong headers",
@@ -293,6 +283,37 @@ func TestValidateCSVHeaders_InvalidHeaders(t *testing.T) {
 
 			if !strings.Contains(err.Error(), tt.errorContains) {
 				t.Errorf("ValidateCSVHeaders(%v) error = %v, should contain %q", tt.headers, err, tt.errorContains)
+			}
+		})
+	}
+}
+
+func TestValidateCSVHeaders_LooseRequirements(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers []string
+	}{
+		{
+			name:    "name only",
+			headers: []string{"name"},
+		},
+		{
+			name:    "name + external_key only",
+			headers: []string{"external_key", "name"},
+		},
+		{
+			name:    "name + arbitrary extra cols",
+			headers: []string{"name", "description", "tags", "Asset ID"},
+		},
+		{
+			name:    "BOM-prefixed first header",
+			headers: []string{"\ufeffname", "external_key"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateCSVHeaders(tt.headers); err != nil {
+				t.Errorf("ValidateCSVHeaders(%v) unexpected error: %v", tt.headers, err)
 			}
 		})
 	}
@@ -325,31 +346,73 @@ func TestMapCSVRowToAsset_ValidRow(t *testing.T) {
 	}
 }
 
-func TestMapCSVRowToAsset_MissingRequired(t *testing.T) {
-	tests := []struct {
-		name    string
-		headers []string
-		row     []string
-	}{
-		{
-			name:    "missing external_key",
-			headers: []string{"name", "valid_from", "valid_to", "is_active"},
-			row:     []string{"Test", "2024-01-01", "2024-12-31", "true"},
-		},
-		{
-			name:    "missing name",
-			headers: []string{"external_key", "valid_from", "valid_to", "is_active"},
-			row:     []string{"ASSET-001", "2024-01-01", "2024-12-31", "true"},
-		},
-	}
+func TestMapCSVRowToAsset_MissingName(t *testing.T) {
+	headers := []string{"external_key", "valid_from", "valid_to", "is_active"}
+	row := []string{"ASSET-001", "2024-01-01", "2024-12-31", "true"}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := MapCSVRowToAsset(tt.row, tt.headers, 1)
-			if err == nil {
-				t.Errorf("Expected error for %s, got nil", tt.name)
-			}
-		})
+	_, err := MapCSVRowToAsset(row, headers, 1)
+	if err == nil {
+		t.Error("Expected error when name column is missing")
+	}
+}
+
+func TestMapCSVRowToAsset_NameOnlyDefaults(t *testing.T) {
+	headers := []string{"name"}
+	row := []string{"Cosmotron"}
+
+	a, err := MapCSVRowToAsset(row, headers, 7)
+	if err != nil {
+		t.Fatalf("MapCSVRowToAsset(name only) failed: %v", err)
+	}
+	if a.Name != "Cosmotron" {
+		t.Errorf("Name = %q, want %q", a.Name, "Cosmotron")
+	}
+	if a.ExternalKey != "" {
+		t.Errorf("ExternalKey = %q, want empty (storage will auto-mint)", a.ExternalKey)
+	}
+	if !a.ValidFrom.IsZero() {
+		t.Errorf("ValidFrom = %v, want zero (storage will default to NOW)", a.ValidFrom)
+	}
+	if a.ValidTo != nil {
+		t.Errorf("ValidTo = %v, want nil", a.ValidTo)
+	}
+	if !a.IsActive {
+		t.Errorf("IsActive = false, want true (default)")
+	}
+	if a.OrgID != 7 {
+		t.Errorf("OrgID = %d, want 7", a.OrgID)
+	}
+}
+
+func TestMapCSVRowToAsset_EmptyExternalKeyIsAllowed(t *testing.T) {
+	headers := []string{"external_key", "name"}
+	row := []string{"", "Auto Mint Me"}
+
+	a, err := MapCSVRowToAsset(row, headers, 1)
+	if err != nil {
+		t.Fatalf("MapCSVRowToAsset with empty external_key failed: %v", err)
+	}
+	if a.ExternalKey != "" {
+		t.Errorf("ExternalKey = %q, want empty so storage auto-mints", a.ExternalKey)
+	}
+	if a.Name != "Auto Mint Me" {
+		t.Errorf("Name = %q, want %q", a.Name, "Auto Mint Me")
+	}
+}
+
+func TestMapCSVRowToAsset_BOMHeader(t *testing.T) {
+	headers := []string{"\ufeffname", "is_active"}
+	row := []string{"Excel Saved Me", "false"}
+
+	a, err := MapCSVRowToAsset(row, headers, 1)
+	if err != nil {
+		t.Fatalf("MapCSVRowToAsset with BOM header failed: %v", err)
+	}
+	if a.Name != "Excel Saved Me" {
+		t.Errorf("Name = %q, want %q", a.Name, "Excel Saved Me")
+	}
+	if a.IsActive {
+		t.Errorf("IsActive = true, want false (parsed from 'false')")
 	}
 }
 
@@ -453,10 +516,10 @@ func TestMapCSVRowToAssetWithTags_EmptyTags(t *testing.T) {
 
 func TestMapCSVRowToAssetWithTags_InvalidAssetData(t *testing.T) {
 	headers := []string{"external_key", "name", "description", "valid_from", "valid_to", "is_active", "tags"}
-	row := []string{"", "Test Asset", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1"}
+	row := []string{"ASSET-001", "", "Desc", "2024-01-01", "2024-12-31", "true", "TAG1"}
 
 	_, err := MapCSVRowToAssetWithTags(row, headers, 1)
 	if err == nil {
-		t.Error("Expected error for empty external_key")
+		t.Error("Expected error for empty name")
 	}
 }

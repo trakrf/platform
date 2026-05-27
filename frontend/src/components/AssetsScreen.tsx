@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Plus, Package } from 'lucide-react';
+import { Plus, Package, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAssets, useAssetMutations } from '@/hooks/assets';
 import { useAssetStore } from '@/stores';
@@ -128,6 +128,15 @@ export default function AssetsScreen() {
               <div className="flex-1">
                 <AssetSearchSort />
               </div>
+              <button
+                type="button"
+                onClick={() => setIsBulkUploadOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                aria-label="Import assets from CSV or XLSX"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Import</span>
+              </button>
               <ShareButton
                 onFormatSelect={openExport}
                 disabled={filteredAssets.length === 0}

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, AlertCircle, Download } from 'lucide-react';
 import { assetsApi } from '@/lib/api/assets';
 import { useUploadStore } from '@/stores/uploadStore';
+import { parseXlsxToCsv, RECOGNIZED_COLUMNS } from '@/utils/bulkImport/xlsxToCsv';
 import toast from 'react-hot-toast';
 
 interface BulkUploadModalProps {
@@ -12,36 +13,55 @@ interface BulkUploadModalProps {
 
 export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const setActiveJobId = useUploadStore((state) => state.setActiveJobId);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     setError(null);
     setSuccess(null);
+    setWarnings([]);
+    setUploadFile(null);
 
-    if (selectedFile) {
-      if (!selectedFile.name.endsWith('.csv')) {
-        setError('Please select a CSV file');
-        setFile(null);
-        return;
-      }
+    if (!selectedFile) return;
 
-      if (selectedFile.size > 5 * 1024 * 1024) {
-        setError('File size must be less than 5MB');
-        setFile(null);
-        return;
-      }
-
-      setFile(selectedFile);
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setError('File size must be less than 5MB');
+      setFile(null);
+      return;
     }
+
+    const lower = selectedFile.name.toLowerCase();
+    if (lower.endsWith('.csv')) {
+      setFile(selectedFile);
+      setUploadFile(selectedFile);
+      return;
+    }
+
+    if (lower.endsWith('.xlsx')) {
+      setFile(selectedFile);
+      const result = await parseXlsxToCsv(selectedFile);
+      setWarnings(result.warnings);
+      if (result.errors.length > 0) {
+        setError(result.errors.join(' '));
+        setUploadFile(null);
+        return;
+      }
+      setUploadFile(result.csvFile);
+      return;
+    }
+
+    setError('Please select a CSV or XLSX file');
+    setFile(null);
   };
 
   const handleUpload = async () => {
-    if (!file) {
+    if (!uploadFile) {
       setError('Please select a file');
       return;
     }
@@ -53,7 +73,7 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
     try {
       setActiveJobId(null);
 
-      const response = await assetsApi.uploadCSV(file);
+      const response = await assetsApi.uploadCSV(uploadFile);
 
       if (!response.data || !response.data.job_id) {
         throw new Error('Invalid response from server. Bulk upload API may not be available.');
@@ -63,6 +83,8 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
       toast.success('Upload started! Tracking progress...');
 
       setFile(null);
+      setUploadFile(null);
+      setWarnings([]);
       setError(null);
       setSuccess(null);
 
@@ -92,6 +114,8 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
   const handleClose = () => {
     if (!loading) {
       setFile(null);
+      setUploadFile(null);
+      setWarnings([]);
       setError(null);
       setSuccess(null);
       if (fileInputRef.current) {
@@ -110,6 +134,10 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
   if (!isOpen) {
     return null;
   }
+
+  const optionalColumns = RECOGNIZED_COLUMNS.filter(
+    (c) => c !== 'external_key' && c !== 'name'
+  ).join(', ');
 
   return (
     <div
@@ -133,24 +161,36 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
 
         <div className="p-6 space-y-6">
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <div className="flex items-start justify-between mb-2">
+            <div className="flex items-start justify-between mb-2 gap-3">
               <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300">
-                CSV Format Requirements
+                File Format Requirements
               </h3>
-              <a
-                href="/bulk_assets_sample.csv"
-                download="bulk_assets_sample.csv"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-900/60 border border-blue-300 dark:border-blue-700 rounded-lg transition-colors"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download Sample
-              </a>
+              <div className="flex gap-2">
+                <a
+                  href="/bulk_assets_sample.csv"
+                  download="bulk_assets_sample.csv"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-900/60 border border-blue-300 dark:border-blue-700 rounded-lg transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Sample CSV
+                </a>
+                <a
+                  href="/bulk_assets_sample.xlsx"
+                  download="bulk_assets_sample.xlsx"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-900/60 border border-blue-300 dark:border-blue-700 rounded-lg transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Sample XLSX
+                </a>
+              </div>
             </div>
             <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1 list-disc list-inside">
-              <li>Required columns: identifier, name, type</li>
-              <li>Optional columns: description, is_active, valid_from, valid_to, tags</li>
-              <li>Type must be: asset</li>
-              <li>Tags: comma-separated RFID tag values (e.g., TAG1,TAG2)</li>
+              <li>Accepts <strong>.csv</strong> or <strong>.xlsx</strong> (first sheet only)</li>
+              <li>Only <code>name</code> is required</li>
+              <li>Optional columns: <code>{optionalColumns}</code></li>
+              <li><code>external_key</code> is auto-generated if omitted</li>
+              <li><code>is_active</code>: <code>true</code> or <code>false</code> (defaults to <code>true</code>)</li>
+              <li><code>tags</code>: comma-separated RFID tag values (quote the field if it contains commas)</li>
               <li>Maximum file size: 5MB</li>
             </ul>
           </div>
@@ -159,6 +199,17 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+            </div>
+          )}
+
+          {warnings.length > 0 && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-800 dark:text-yellow-300 space-y-1">
+                {warnings.map((w, i) => (
+                  <p key={i}>{w}</p>
+                ))}
+              </div>
             </div>
           )}
 
@@ -194,7 +245,7 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
                   ) : (
                     <>
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        Click to select CSV file
+                        Click to select CSV or XLSX file
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         or drag and drop
@@ -207,7 +258,7 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
                 ref={fileInputRef}
                 id="csv-upload"
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx"
                 onChange={handleFileSelect}
                 className="hidden"
                 disabled={loading}
@@ -227,7 +278,7 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
             <button
               type="button"
               onClick={handleUpload}
-              disabled={!file || loading}
+              disabled={!uploadFile || loading}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
             >
               {loading ? 'Uploading...' : 'Upload'}
