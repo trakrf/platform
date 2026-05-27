@@ -13,6 +13,7 @@ import { TimeRangeFilter } from '@/components/reports/TimeRangeFilter';
 import { ShareButton } from '@/components/ShareButton';
 import { ExportModal } from '@/components/export';
 import { useCurrentLocations, useReportsFilters } from '@/hooks/reports';
+import { useReportHydration } from '@/hooks/reports/useReportHydration';
 import { useExport } from '@/hooks/useExport';
 import { getFreshnessStatus } from '@/lib/reports/utils';
 import {
@@ -61,6 +62,26 @@ export default function ReportsScreen() {
     fetchAll: true,
   });
 
+  // Hydrate names for the rows currently visible (or about to be exported).
+  const hydrationIds = useMemo(
+    () => ({
+      assetIds: filteredData.map((d) => d.asset_id),
+      locationIds: filteredData.map((d) => d.location_id),
+    }),
+    [filteredData]
+  );
+  const { getAssetName, getLocationName } = useReportHydration(hydrationIds);
+  const assetNameOf = useCallback(
+    (item: CurrentLocationItem) =>
+      getAssetName(item.asset_id, item.asset_external_key, item.asset_deleted_at),
+    [getAssetName]
+  );
+  const locationNameOf = useCallback(
+    (item: CurrentLocationItem) =>
+      getLocationName(item.location_id, item.location_external_key),
+    [getLocationName]
+  );
+
   // Calculate stats from all data
   const stats = useMemo(() => {
     if (!allData || allData.length === 0) {
@@ -90,18 +111,19 @@ export default function ReportsScreen() {
   // Generate export based on filtered data
   const generateExport = useCallback(
     (format: ExportFormat): ExportResult => {
+      const opts = { getAssetName: assetNameOf, getLocationName: locationNameOf };
       switch (format) {
         case 'csv':
-          return generateCurrentLocationsCSV(filteredData);
+          return generateCurrentLocationsCSV(filteredData, opts);
         case 'xlsx':
-          return generateCurrentLocationsExcel(filteredData);
+          return generateCurrentLocationsExcel(filteredData, opts);
         case 'pdf':
-          return generateCurrentLocationsPDF(filteredData);
+          return generateCurrentLocationsPDF(filteredData, opts);
         default:
           throw new Error(`Unsupported format: ${format}`);
       }
     },
-    [filteredData]
+    [filteredData, assetNameOf, locationNameOf]
   );
 
   // Show error toast
@@ -274,6 +296,8 @@ export default function ReportsScreen() {
                   onPageChange={setCurrentPage}
                   onPageSizeChange={setPageSize}
                   onRowClick={handleRowClick}
+                  getAssetName={assetNameOf}
+                  getLocationName={locationNameOf}
                 />
 
                 {/* Mobile: Cards */}
@@ -295,6 +319,8 @@ export default function ReportsScreen() {
                         key={String(item.asset_id ?? item.asset_external_key ?? '')}
                         item={item}
                         onClick={() => handleRowClick(item)}
+                        getAssetName={assetNameOf}
+                        getLocationName={locationNameOf}
                       />
                     ))
                   )}
