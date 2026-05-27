@@ -1,8 +1,10 @@
 /**
  * Reports Export Utilities
  *
- * Generates PDF, Excel, and CSV exports for report data.
- * Follows patterns from assetExport.ts
+ * Generates PDF, Excel, and CSV exports for report data. After TRA-844 each
+ * exporter takes a hydration adapter so the emitted columns include both the
+ * resolved asset/location *name* and the public *external_key*, keeping
+ * downstream joins working while making the human-readable output usable.
  */
 
 import * as XLSX from 'xlsx';
@@ -19,12 +21,24 @@ import {
 } from '@/lib/reports/utils';
 
 // ============================================
+// Hydration adapter types (TRA-844)
+// ============================================
+
+export interface CurrentLocationsExportOpts {
+  getAssetName: (item: CurrentLocationItem) => string;
+  getLocationName: (item: CurrentLocationItem) => string;
+}
+
+export interface AssetHistoryExportOpts {
+  assetName: string;
+  assetKey: string;
+  getLocationName: (item: AssetHistoryItem) => string;
+}
+
+// ============================================
 // Locations History Export
 // ============================================
 
-/**
- * Get freshness label for display
- */
 function getFreshnessLabel(lastSeen: string): string {
   const status = getFreshnessStatus(lastSeen);
   switch (status) {
@@ -42,7 +56,10 @@ function getFreshnessLabel(lastSeen: string): string {
 /**
  * Generate PDF report from current locations
  */
-export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): ExportResult {
+export function generateCurrentLocationsPDF(
+  data: CurrentLocationItem[],
+  opts: CurrentLocationsExportOpts
+): ExportResult {
   const doc = new jsPDF();
 
   // Header
@@ -69,36 +86,41 @@ export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): Export
 
   // Table data
   const tableData = data.map((item) => [
+    opts.getAssetName(item),
     item.asset_external_key ?? '',
-    item.asset_external_key ?? '',
-    item.location_external_key || 'Unknown',
+    opts.getLocationName(item),
+    item.location_external_key ?? '',
     formatRelativeTime(item.asset_last_seen),
     getFreshnessLabel(item.asset_last_seen),
   ]);
 
-  // Add table
   autoTable(doc, {
-    head: [['Asset ID', 'Name', 'Location', 'Last Seen', 'Status']],
+    head: [
+      [
+        'Asset Name',
+        'Asset Key',
+        'Location Name',
+        'Location Key',
+        'Last Seen',
+        'Status',
+      ],
+    ],
     body: tableData,
     startY: 62,
-    styles: {
-      fontSize: 8,
-      cellPadding: 2,
-    },
+    styles: { fontSize: 8, cellPadding: 2 },
     headStyles: {
-      fillColor: [37, 99, 235], // blue-600
+      fillColor: [37, 99, 235],
       textColor: 255,
       fontStyle: 'bold',
     },
-    alternateRowStyles: {
-      fillColor: [245, 245, 245], // gray-100
-    },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
     columnStyles: {
-      0: { cellWidth: 30 }, // Asset ID
-      1: { cellWidth: 40 }, // Name
-      2: { cellWidth: 40 }, // Location
-      3: { cellWidth: 35 }, // Last Seen
-      4: { cellWidth: 25 }, // Status
+      0: { cellWidth: 36 }, // Asset Name
+      1: { cellWidth: 26 }, // Asset Key
+      2: { cellWidth: 36 }, // Location Name
+      3: { cellWidth: 26 }, // Location Key
+      4: { cellWidth: 30 }, // Last Seen
+      5: { cellWidth: 18 }, // Status
     },
   });
 
@@ -108,9 +130,12 @@ export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): Export
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, {
-      align: 'center',
-    });
+    doc.text(
+      `Page ${i} of ${pageCount}`,
+      doc.internal.pageSize.width / 2,
+      doc.internal.pageSize.height - 10,
+      { align: 'center' }
+    );
   }
 
   const blob = doc.output('blob');
@@ -124,30 +149,33 @@ export function generateCurrentLocationsPDF(data: CurrentLocationItem[]): Export
 /**
  * Generate Excel workbook from current locations
  */
-export function generateCurrentLocationsExcel(data: CurrentLocationItem[]): ExportResult {
+export function generateCurrentLocationsExcel(
+  data: CurrentLocationItem[],
+  opts: CurrentLocationsExportOpts
+): ExportResult {
   const wb = XLSX.utils.book_new();
 
-  // Main data sheet
   const sheetData = data.map((item) => ({
-    'Asset ID': item.asset_external_key ?? '',
-    Name: item.asset_external_key ?? '',
-    Location: item.location_external_key || 'Unknown',
+    'Asset Name': opts.getAssetName(item),
+    'Asset Key': item.asset_external_key ?? '',
+    'Location Name': opts.getLocationName(item),
+    'Location Key': item.location_external_key ?? '',
     'Last Seen': formatTimestampForExport(item.asset_last_seen),
     Status: getFreshnessLabel(item.asset_last_seen),
   }));
 
   const ws = XLSX.utils.json_to_sheet(sheetData);
   ws['!cols'] = [
-    { wch: 20 }, // Asset ID
-    { wch: 30 }, // Name
-    { wch: 25 }, // Location
+    { wch: 30 }, // Asset Name
+    { wch: 20 }, // Asset Key
+    { wch: 30 }, // Location Name
+    { wch: 20 }, // Location Key
     { wch: 22 }, // Last Seen
     { wch: 10 }, // Status
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Locations History');
 
-  // Summary sheet
   const liveCount = data.filter((d) => getFreshnessStatus(d.asset_last_seen) === 'live').length;
   const todayCount = data.filter((d) => {
     const status = getFreshnessStatus(d.asset_last_seen);
@@ -182,16 +210,30 @@ export function generateCurrentLocationsExcel(data: CurrentLocationItem[]): Expo
 /**
  * Generate CSV from current locations
  */
-export function generateCurrentLocationsCSV(data: CurrentLocationItem[]): ExportResult {
-  const headers = ['Asset ID', 'Name', 'Location', 'Last Seen', 'Status'];
+export function generateCurrentLocationsCSV(
+  data: CurrentLocationItem[],
+  opts: CurrentLocationsExportOpts
+): ExportResult {
+  const headers = [
+    'Asset Name',
+    'Asset Key',
+    'Location Name',
+    'Location Key',
+    'Last Seen',
+    'Status',
+  ];
   let content = headers.join(',') + '\n';
 
   data.forEach((item) => {
-    const key = item.asset_external_key ?? '';
+    const assetName = opts.getAssetName(item);
+    const assetKey = item.asset_external_key ?? '';
+    const locationName = opts.getLocationName(item);
+    const locationKey = item.location_external_key ?? '';
     const row = [
-      `"${key.replace(/"/g, '""')}"`,
-      `"${key.replace(/"/g, '""')}"`,
-      `"${(item.location_external_key || 'Unknown').replace(/"/g, '""')}"`,
+      `"${assetName.replace(/"/g, '""')}"`,
+      `"${assetKey.replace(/"/g, '""')}"`,
+      `"${locationName.replace(/"/g, '""')}"`,
+      `"${locationKey.replace(/"/g, '""')}"`,
       formatTimestampForExport(item.asset_last_seen),
       getFreshnessLabel(item.asset_last_seen),
     ];
@@ -215,8 +257,7 @@ export function generateCurrentLocationsCSV(data: CurrentLocationItem[]): Export
  */
 export function generateAssetHistoryPDF(
   data: AssetHistoryItem[],
-  assetName: string,
-  assetIdentifier: string
+  opts: AssetHistoryExportOpts
 ): ExportResult {
   const doc = new jsPDF();
 
@@ -227,42 +268,50 @@ export function generateAssetHistoryPDF(
   // Asset info
   doc.setFontSize(12);
   doc.setTextColor(0);
-  doc.text(`Asset: ${assetName}`, 14, 32);
+  doc.text(`Asset: ${opts.assetName}`, 14, 32);
   doc.setFontSize(10);
   doc.setTextColor(100);
-  doc.text(`ID: ${assetIdentifier}`, 14, 38);
+  doc.text(`Key: ${opts.assetKey}`, 14, 38);
   doc.text(`Generated: ${getTimestamp()}`, 14, 44);
   doc.text(`Total Movements: ${data.length}`, 14, 50);
   doc.setTextColor(0);
 
-  // Table data
   const tableData = data.map((item) => [
+    opts.assetName,
+    opts.assetKey,
     formatTimestampForExport(item.event_observed_at),
-    item.location_external_key || 'Unknown',
+    opts.getLocationName(item),
+    item.location_external_key ?? '',
     item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   ]);
 
-  // Add table
   autoTable(doc, {
-    head: [['Timestamp', 'Location', 'Duration']],
+    head: [
+      [
+        'Asset Name',
+        'Asset Key',
+        'Timestamp',
+        'Location Name',
+        'Location Key',
+        'Duration',
+      ],
+    ],
     body: tableData,
     startY: 58,
-    styles: {
-      fontSize: 9,
-      cellPadding: 3,
-    },
+    styles: { fontSize: 9, cellPadding: 3 },
     headStyles: {
-      fillColor: [37, 99, 235], // blue-600
+      fillColor: [37, 99, 235],
       textColor: 255,
       fontStyle: 'bold',
     },
-    alternateRowStyles: {
-      fillColor: [245, 245, 245], // gray-100
-    },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
     columnStyles: {
-      0: { cellWidth: 55 }, // Timestamp
-      1: { cellWidth: 80 }, // Location
-      2: { cellWidth: 35 }, // Duration
+      0: { cellWidth: 32 }, // Asset Name
+      1: { cellWidth: 24 }, // Asset Key
+      2: { cellWidth: 38 }, // Timestamp
+      3: { cellWidth: 32 }, // Location Name
+      4: { cellWidth: 24 }, // Location Key
+      5: { cellWidth: 22 }, // Duration
     },
   });
 
@@ -272,13 +321,16 @@ export function generateAssetHistoryPDF(
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, {
-      align: 'center',
-    });
+    doc.text(
+      `Page ${i} of ${pageCount}`,
+      doc.internal.pageSize.width / 2,
+      doc.internal.pageSize.height - 10,
+      { align: 'center' }
+    );
   }
 
   const blob = doc.output('blob');
-  const sanitizedName = assetName.replace(/[^a-zA-Z0-9-_]/g, '-');
+  const sanitizedName = opts.assetName.replace(/[^a-zA-Z0-9-_]/g, '-');
   return {
     blob,
     filename: `${sanitizedName}-history_${getDateString()}.pdf`,
@@ -291,35 +343,40 @@ export function generateAssetHistoryPDF(
  */
 export function generateAssetHistoryExcel(
   data: AssetHistoryItem[],
-  assetName: string,
-  assetIdentifier: string
+  opts: AssetHistoryExportOpts
 ): ExportResult {
   const wb = XLSX.utils.book_new();
 
-  // Main data sheet
   const sheetData = data.map((item) => ({
+    'Asset Name': opts.assetName,
+    'Asset Key': opts.assetKey,
     Timestamp: formatTimestampForExport(item.event_observed_at),
-    Location: item.location_external_key || 'Unknown',
+    'Location Name': opts.getLocationName(item),
+    'Location Key': item.location_external_key ?? '',
     Duration: item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
   }));
 
   const ws = XLSX.utils.json_to_sheet(sheetData);
   ws['!cols'] = [
+    { wch: 28 }, // Asset Name
+    { wch: 20 }, // Asset Key
     { wch: 22 }, // Timestamp
-    { wch: 30 }, // Location
+    { wch: 28 }, // Location Name
+    { wch: 20 }, // Location Key
     { wch: 15 }, // Duration
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Movement History');
 
-  // Summary sheet
-  const uniqueLocations = new Set(data.map((d) => d.location_external_key || 'Unknown')).size;
+  const uniqueLocations = new Set(
+    data.map((d) => d.location_external_key || 'Unknown')
+  ).size;
   const totalDuration = data.reduce((sum, d) => sum + (d.duration_seconds || 0), 0);
 
   const summaryData = [
     { Metric: 'Report Generated', Value: getTimestamp() },
-    { Metric: 'Asset Name', Value: assetName },
-    { Metric: 'Asset ID', Value: assetIdentifier },
+    { Metric: 'Asset Name', Value: opts.assetName },
+    { Metric: 'Asset Key', Value: opts.assetKey },
     { Metric: 'Total Movements', Value: data.length },
     { Metric: 'Unique Locations', Value: uniqueLocations },
     { Metric: 'Total Time Tracked', Value: formatDuration(totalDuration) },
@@ -334,7 +391,7 @@ export function generateAssetHistoryExcel(
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
-  const sanitizedName = assetName.replace(/[^a-zA-Z0-9-_]/g, '-');
+  const sanitizedName = opts.assetName.replace(/[^a-zA-Z0-9-_]/g, '-');
   return {
     blob,
     filename: `${sanitizedName}-history_${getDateString()}.xlsx`,
@@ -347,23 +404,34 @@ export function generateAssetHistoryExcel(
  */
 export function generateAssetHistoryCSV(
   data: AssetHistoryItem[],
-  assetName: string
+  opts: AssetHistoryExportOpts
 ): ExportResult {
-  const headers = ['Asset', 'Timestamp', 'Location', 'Duration'];
+  const headers = [
+    'Asset Name',
+    'Asset Key',
+    'Timestamp',
+    'Location Name',
+    'Location Key',
+    'Duration',
+  ];
   let content = headers.join(',') + '\n';
 
   data.forEach((item) => {
+    const locationName = opts.getLocationName(item);
+    const locationKey = item.location_external_key ?? '';
     const row = [
-      `"${assetName.replace(/"/g, '""')}"`,
+      `"${opts.assetName.replace(/"/g, '""')}"`,
+      `"${opts.assetKey.replace(/"/g, '""')}"`,
       formatTimestampForExport(item.event_observed_at),
-      `"${(item.location_external_key || 'Unknown').replace(/"/g, '""')}"`,
+      `"${locationName.replace(/"/g, '""')}"`,
+      `"${locationKey.replace(/"/g, '""')}"`,
       item.duration_seconds ? formatDuration(item.duration_seconds) : 'Ongoing',
     ];
     content += row.join(',') + '\n';
   });
 
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-  const sanitizedName = assetName.replace(/[^a-zA-Z0-9-_]/g, '-');
+  const sanitizedName = opts.assetName.replace(/[^a-zA-Z0-9-_]/g, '-');
   return {
     blob,
     filename: `${sanitizedName}-history_${getDateString()}.csv`,
