@@ -16,6 +16,7 @@ interface MovementTimelineProps {
   hasMore: boolean;
   isLoadingMore: boolean;
   onLoadMore: () => void;
+  getLocationName: (item: AssetHistoryItem) => string;
 }
 
 export function MovementTimeline({
@@ -24,6 +25,7 @@ export function MovementTimeline({
   hasMore,
   isLoadingMore,
   onLoadMore,
+  getLocationName,
 }: MovementTimelineProps) {
   const groupedData = useMemo(() => groupTimelineByDate(data), [data]);
 
@@ -131,15 +133,34 @@ export function MovementTimeline({
                       </div>
 
                       {/* Location name */}
-                      <p
-                        className={`font-medium mt-0.5 ${
-                          isFirstOverall
-                            ? 'text-gray-900 dark:text-white'
-                            : 'text-gray-700 dark:text-gray-300'
-                        }`}
-                      >
-                        {item.location_external_key || 'Unknown Location'}
-                      </p>
+                      {(() => {
+                        const locationName = getLocationName(item);
+                        const locationKey = item.location_external_key ?? '';
+                        const showSubtext =
+                          locationKey &&
+                          locationKey !== locationName &&
+                          locationName !== 'Unknown';
+                        return (
+                          <>
+                            <p
+                              className={`font-medium mt-0.5 ${
+                                isFirstOverall
+                                  ? 'text-gray-900 dark:text-white'
+                                  : 'text-gray-700 dark:text-gray-300'
+                              }`}
+                            >
+                              {locationName === 'Unknown'
+                                ? 'Unknown Location'
+                                : locationName}
+                            </p>
+                            {showSubtext && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {locationKey}
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
 
                       {/* Duration bar */}
                       {(item.duration_seconds || isOngoing) && (

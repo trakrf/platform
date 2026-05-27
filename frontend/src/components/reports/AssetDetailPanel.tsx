@@ -1,9 +1,11 @@
+import { useCallback, useMemo } from 'react';
 import { X, Download, ChevronDown, MapPin } from 'lucide-react';
 import { useAssetDetailPanel } from '@/hooks/reports';
+import { useReportHydration } from '@/hooks/reports/useReportHydration';
 import { DATE_RANGE_OPTIONS } from '@/lib/reports/utils';
 import { FreshnessBadge } from './FreshnessBadge';
 import { MovementTimeline } from './MovementTimeline';
-import type { CurrentLocationItem } from '@/types/reports';
+import type { AssetHistoryItem, CurrentLocationItem } from '@/types/reports';
 
 interface AssetDetailPanelProps {
   asset: CurrentLocationItem | null;
@@ -25,17 +27,52 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
     isNotFoundError,
   } = useAssetDetailPanel({ asset, onClose });
 
+  const hydrationIds = useMemo(
+    () => ({
+      assetIds: asset?.asset_id != null ? [asset.asset_id] : [],
+      locationIds: [
+        asset?.location_id ?? null,
+        ...timelineData.map((t) => t.location_id),
+      ],
+    }),
+    [asset?.asset_id, asset?.location_id, timelineData]
+  );
+  const { getAssetName, getLocationName } = useReportHydration(hydrationIds);
+  const locationNameOf = useCallback(
+    (item: AssetHistoryItem) =>
+      getLocationName(item.location_id, item.location_external_key),
+    [getLocationName]
+  );
+
   if (!asset) return null;
+
+  const assetName = getAssetName(
+    asset.asset_id,
+    asset.asset_external_key,
+    asset.asset_deleted_at
+  );
+  const assetKey = asset.asset_external_key ?? '';
+  const showAssetKeySubtext = assetKey && assetKey !== assetName;
+  const currentLocationName = getLocationName(
+    asset.location_id,
+    asset.location_external_key
+  );
+  const currentLocationKey = asset.location_external_key ?? '';
+  const showLocationKeySubtext =
+    currentLocationKey &&
+    currentLocationKey !== currentLocationName &&
+    currentLocationName !== 'Unknown';
 
   const panelContent = (
     <>
       {/* Asset Info Grid */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Asset ID</p>
-          <p className="font-medium text-gray-900 dark:text-white">
-            {asset.asset_external_key ?? '—'}
-          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Asset</p>
+          <p className="font-medium text-gray-900 dark:text-white">{assetName || '—'}</p>
+          {showAssetKeySubtext && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">{assetKey}</p>
+          )}
         </div>
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Type</p>
@@ -44,8 +81,13 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Current Location</p>
           <p className="font-medium text-blue-600 dark:text-blue-400">
-            {asset.location_external_key || 'Unknown'}
+            {currentLocationName === 'Unknown' ? 'Unknown' : currentLocationName}
           </p>
+          {showLocationKeySubtext && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {currentLocationKey}
+            </p>
+          )}
         </div>
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
@@ -105,6 +147,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
             hasMore={hasMore}
             isLoadingMore={isLoadingMore}
             onLoadMore={handleLoadMore}
+            getLocationName={locationNameOf}
           />
         )}
       </div>
@@ -143,7 +186,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
-            {asset.asset_external_key ?? ''}
+            {assetName}
           </h2>
           <button
             onClick={handleClose}
@@ -170,7 +213,7 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
           {/* Header */}
           <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
-              {asset.asset_external_key ?? ''}
+              {assetName}
             </h2>
             <button
               onClick={handleClose}
