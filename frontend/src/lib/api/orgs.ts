@@ -16,7 +16,9 @@ export interface MessageResponse {
 
 export interface SetCurrentOrgResponse {
   message: string;
-  token: string;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
 }
 
 export const orgsApi = {

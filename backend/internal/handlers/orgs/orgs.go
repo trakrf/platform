@@ -1,6 +1,7 @@
 package orgs
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -16,6 +17,13 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
+// tokenMinter is the subset of *services/auth.Service that this handler
+// uses to mint an access+refresh pair when switching org context. Declared
+// as an interface so tests that don't exercise SetCurrentOrg can pass nil.
+type tokenMinter interface {
+	MintTokenPair(ctx context.Context, userID int, email string, orgID *int, userAgent, ip string, generateJWT func(int, string, *int) (string, error)) (accessToken, refreshSecret string, expiresIn int, err error)
+}
+
 var validate = func() *validator.Validate {
 	v := validator.New()
 	v.RegisterTagNameFunc(httputil.JSONTagNameFunc)
@@ -25,10 +33,14 @@ var validate = func() *validator.Validate {
 type Handler struct {
 	storage *storage.Storage
 	service *orgsservice.Service
+	minter  tokenMinter
 }
 
-func NewHandler(storage *storage.Storage, service *orgsservice.Service) *Handler {
-	return &Handler{storage: storage, service: service}
+// NewHandler constructs an orgs HTTP handler. minter is used by SetCurrentOrg
+// to issue a fresh access+refresh pair scoped to the newly-selected org. It
+// may be nil for test fixtures that do not exercise SetCurrentOrg.
+func NewHandler(storage *storage.Storage, service *orgsservice.Service, minter tokenMinter) *Handler {
+	return &Handler{storage: storage, service: service, minter: minter}
 }
 
 // @Summary List organizations the authenticated user belongs to

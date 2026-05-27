@@ -29,8 +29,10 @@ var validate = func() *validator.Validate {
 // authServicer is the subset of authservice.Service used by Handler.
 // Defined as an interface to allow test stubs.
 type authServicer interface {
-	Signup(ctx context.Context, request auth.SignupRequest, hashPassword func(string) (string, error), generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error)
-	Login(ctx context.Context, request auth.LoginRequest, comparePassword func(string, string) error, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error)
+	Signup(ctx context.Context, request auth.SignupRequest, userAgent, ip string, hashPassword func(string) (string, error), generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error)
+	Login(ctx context.Context, request auth.LoginRequest, userAgent, ip string, comparePassword func(string, string) error, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error)
+	Refresh(ctx context.Context, presentedSecret, userAgent, ip string, generateJWT func(int, string, *int) (string, error)) (*auth.RefreshResponse, error)
+	Logout(ctx context.Context, presentedSecret string) error
 	ForgotPassword(ctx context.Context, emailAddr, resetURL string) error
 	ResetPassword(ctx context.Context, token, newPassword string, hashPassword func(string) (string, error)) error
 	AcceptInvitation(ctx context.Context, token string, userID int) (*organization.AcceptInvitationResponse, error)
@@ -72,7 +74,7 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := handler.service.Signup(r.Context(), request, password.Hash, jwt.Generate)
+	response, err := handler.service.Signup(r.Context(), request, r.UserAgent(), clientIP(r), password.Hash, jwt.Generate)
 	if err != nil {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "email already exists") {
@@ -150,7 +152,7 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := handler.service.Login(r.Context(), request, password.Compare, jwt.Generate)
+	response, err := handler.service.Login(r.Context(), request, r.UserAgent(), clientIP(r), password.Compare, jwt.Generate)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid email or password") {
 			httputil.Respond401(w, r, "Invalid email or password", middleware.GetRequestID(r.Context()))
@@ -363,9 +365,101 @@ func (handler *Handler) GetInvitationInfo(w http.ResponseWriter, r *http.Request
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": response})
 }
 
+// @Summary Refresh access token
+// @Description Exchange a current refresh token for a new access JWT + rotated refresh token. Single-use: presenting an already-used refresh token revokes the chain and returns 401.
+// @Tags auth,internal
+// @Accept json
+// @Produce json
+// @Param request body auth.RefreshRequest true "Current refresh token"
+// @Success 200 {object} auth.RefreshResponse
+// @Failure 400 {object} errors.ErrorResponse "Validation error"
+// @Failure 401 {object} errors.ErrorResponse "Invalid, expired, used, or revoked refresh token"
+// @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
+// @Router /api/v1/auth/refresh [post]
+func (handler *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var request auth.RefreshRequest
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		httputil.RespondValidationError(w, r, err, middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	response, err := handler.service.Refresh(r.Context(), request.RefreshToken, r.UserAgent(), clientIP(r), jwt.Generate)
+	if err != nil {
+		// Treat every failure path as opaque to the caller — replay, expiry,
+		// revocation, and unknown all collapse to 401. The chain-revoke
+		// side effect on replay is server-side only.
+		httputil.Respond401(w, r, "Invalid or expired refresh token", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, response)
+}
+
+// @Summary Logout (revoke refresh token)
+// @Description Invalidate the supplied refresh token so it cannot be exchanged again. The access JWT remains valid until its short TTL elapses — clients should also drop it client-side.
+// @Tags auth,internal
+// @Accept json
+// @Produce json
+// @Param request body auth.LogoutRequest true "Refresh token to revoke"
+// @Success 200 {object} auth.MessageResponse
+// @Failure 400 {object} errors.ErrorResponse "Validation error"
+// @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
+// @Router /api/v1/auth/logout [post]
+func (handler *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	var request auth.LogoutRequest
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		httputil.RespondValidationError(w, r, err, middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	// Tolerant: revoking an unknown token returns 200 to avoid revealing
+	// hash existence. The service swallows not-found.
+	if err := handler.service.Logout(r.Context(), request.RefreshToken); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
+			"Failed to revoke refresh token", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, auth.MessageResponse{Message: "Logged out"})
+}
+
+// clientIP returns the originating client IP for a request. Prefers
+// X-Forwarded-For (first hop) when the request arrived through a proxy,
+// otherwise falls back to RemoteAddr stripped of its port.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// XFF is "client, proxy1, proxy2" — first is the originator.
+		for i, c := range xff {
+			if c == ',' {
+				return strings.TrimSpace(xff[:i])
+			}
+		}
+		return strings.TrimSpace(xff)
+	}
+	addr := r.RemoteAddr
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			return addr[:i]
+		}
+	}
+	return addr
+}
+
 func (handler *Handler) RegisterRoutes(r chi.Router, jwtMiddleware func(http.Handler) http.Handler) {
 	r.Post("/api/v1/auth/signup", handler.Signup)
 	r.Post("/api/v1/auth/login", handler.Login)
+	r.Post("/api/v1/auth/refresh", handler.Refresh)
+	r.Post("/api/v1/auth/logout", handler.Logout)
 	r.Post("/api/v1/auth/forgot-password", handler.ForgotPassword)
 	r.Post("/api/v1/auth/reset-password", handler.ResetPassword)
 	r.Get("/api/v1/auth/invitation-info", handler.GetInvitationInfo)

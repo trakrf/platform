@@ -69,7 +69,7 @@ describe('useOrgSwitch', () => {
 
       // Mock setCurrentOrg API
       vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
-        data: { message: 'ok', token: mockToken },
+        data: { message: 'ok', access_token: mockToken, refresh_token: 'rt-mock', expires_in: 900 },
       } as any);
 
       // Mock fetchProfile
@@ -95,7 +95,7 @@ describe('useOrgSwitch', () => {
 
       vi.spyOn(useOrgStore.getState(), 'createOrg').mockResolvedValue(mockOrg);
       vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
-        data: { message: 'ok', token: mockToken },
+        data: { message: 'ok', access_token: mockToken, refresh_token: 'rt-mock', expires_in: 900 },
       } as any);
       vi.spyOn(useAuthStore.getState(), 'fetchProfile').mockResolvedValue();
 
@@ -109,7 +109,7 @@ describe('useOrgSwitch', () => {
         await result.current.createOrg('New Org');
       });
 
-      expect(setStateSpy).toHaveBeenCalledWith({ token: mockToken });
+      expect(setStateSpy).toHaveBeenCalledWith({ token: mockToken, refreshToken: 'rt-mock' });
     });
   });
 });

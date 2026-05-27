@@ -11,7 +11,12 @@ import * as Sentry from '@sentry/react';
 interface AuthState {
   // State
   user: User | null;
+  // token is the short-lived access JWT (the Bearer credential). Field name
+  // kept as `token` to avoid churning every consumer that reads state.token.
   token: string | null;
+  // refreshToken is the long-lived opaque secret exchanged at /auth/refresh.
+  // Persisted alongside the access token; rotated on every successful refresh.
+  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -21,22 +26,32 @@ interface AuthState {
   // Actions
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, orgName?: string, invitationToken?: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   clearError: () => void;
   initialize: () => void;
   fetchProfile: () => Promise<void>;
+  // refresh exchanges the persisted refresh_token for a new access+refresh
+  // pair. The 401 response interceptor calls this when an access JWT expires.
+  // Returns true on success; on failure the caller is responsible for logout.
+  refresh: () => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     createStoreWithTracking(
       (set, get) => {
-        // Helper to refresh token with org context (used by login and signup)
-        const refreshTokenWithOrg = async (orgId: number, actionName: string, attempt: number = 1): Promise<void> => {
+        // setOrgContext switches the session's current organization. It mints
+        // a new access+refresh pair scoped to the selected org and updates
+        // both store fields. Despite the historical name (refreshTokenWithOrg)
+        // this is NOT the refresh-token flow — it is the org-switcher.
+        const setOrgContext = async (orgId: number, actionName: string, attempt: number = 1): Promise<void> => {
           try {
-            console.log('[AuthStore] Refreshing token with org_id:', orgId, attempt > 1 ? `(attempt ${attempt})` : '');
+            console.log('[AuthStore] Setting org context org_id:', orgId, attempt > 1 ? `(attempt ${attempt})` : '');
             const orgResponse = await orgsApi.setCurrentOrg({ org_id: orgId });
-            set({ token: orgResponse.data.token });
+            set({
+              token: orgResponse.data.access_token,
+              refreshToken: orgResponse.data.refresh_token,
+            });
 
             // INVALIDATE: After setCurrentOrg() returns with org_id token
             const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
@@ -45,9 +60,9 @@ export const useAuthStore = create<AuthState>()(
           } catch (err) {
             if (attempt < 2) {
               console.warn('[AuthStore] setCurrentOrg failed, retrying...', err);
-              await refreshTokenWithOrg(orgId, actionName, attempt + 1);
+              await setOrgContext(orgId, actionName, attempt + 1);
             } else {
-              console.error('[AuthStore] Failed to refresh token with org_id after retry:', err);
+              console.error('[AuthStore] Failed to set org context after retry:', err);
               throw new Error(`${actionName} failed: could not set organization context`);
             }
           }
@@ -57,6 +72,7 @@ export const useAuthStore = create<AuthState>()(
         // Initial state
         user: null,
         token: null,
+        refreshToken: null,
         isAuthenticated: false,
         isLoading: false,
         error: null,
@@ -68,10 +84,11 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: true, error: null });
           try {
             const response = await authApi.login({ email, password });
-            const { token, user } = response.data.data; // Backend wraps response in {data: {token, user}}
+            const { access_token, refresh_token, user } = response.data.data;
 
             set({
-              token,
+              token: access_token,
+              refreshToken: refresh_token,
               user,
               isAuthenticated: true,
               isLoading: false,
@@ -90,7 +107,7 @@ export const useAuthStore = create<AuthState>()(
             // Ensure token has org_id claim for org-scoped API calls
             const profile = get().profile;
             if (profile?.current_org?.id) {
-              await refreshTokenWithOrg(profile.current_org.id, 'Login');
+              await setOrgContext(profile.current_org.id, 'Login');
             }
           } catch (err: unknown) {
             // Extract error message from RFC 7807 Problem Details format
@@ -128,10 +145,11 @@ export const useAuthStore = create<AuthState>()(
               org_name: orgName,
               invitation_token: invitationToken,
             });
-            const { token, user } = response.data.data; // Backend wraps response in {data: {token, user}}
+            const { access_token, refresh_token, user } = response.data.data;
 
             set({
-              token,
+              token: access_token,
+              refreshToken: refresh_token,
               user,
               isAuthenticated: true,
               isLoading: false,
@@ -150,7 +168,7 @@ export const useAuthStore = create<AuthState>()(
             // Ensure token has org_id claim for org-scoped API calls
             const profile = get().profile;
             if (profile?.current_org?.id) {
-              await refreshTokenWithOrg(profile.current_org.id, 'Signup');
+              await setOrgContext(profile.current_org.id, 'Signup');
             }
           } catch (err: unknown) {
             // Extract error message from RFC 7807 Problem Details format
@@ -178,13 +196,27 @@ export const useAuthStore = create<AuthState>()(
           }
         },
 
-        logout: () => {
+        logout: async () => {
+          // Best-effort server-side revoke: if a refresh token is held, ask
+          // the backend to mark it revoked so it can't be exchanged again.
+          // Failures here don't block the client-side clear — the user wanted
+          // out, and the access token expires shortly anyway.
+          const refreshToken = get().refreshToken;
+          if (refreshToken) {
+            try {
+              await authApi.logout(refreshToken);
+            } catch (err) {
+              console.warn('[AuthStore] Server-side logout failed (ignored):', err);
+            }
+          }
+
           // Clear Sentry user context
           Sentry.setUser(null);
 
           set({
             user: null,
             token: null,
+            refreshToken: null,
             isAuthenticated: false,
             error: null,
             profile: null,
@@ -197,6 +229,28 @@ export const useAuthStore = create<AuthState>()(
           ]).then(([{ invalidateAllOrgScopedData }, { queryClient }]) => {
             invalidateAllOrgScopedData(queryClient);
           });
+        },
+
+        // refresh exchanges the persisted refresh token for a new
+        // access+refresh pair. Returns false if no refresh token is held or
+        // the server rejects the exchange. The 401 interceptor uses this and
+        // is responsible for triggering logout when refresh fails.
+        refresh: async () => {
+          const currentRefresh = get().refreshToken;
+          if (!currentRefresh) {
+            return false;
+          }
+          try {
+            const response = await authApi.refresh(currentRefresh);
+            set({
+              token: response.data.access_token,
+              refreshToken: response.data.refresh_token,
+            });
+            return true;
+          } catch (err) {
+            console.warn('[AuthStore] Refresh failed:', err);
+            return false;
+          }
         },
 
         clearError: () => set({ error: null }),
@@ -268,6 +322,7 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-storage',
       partialize: (state) => ({
         token: state.token,
+        refreshToken: state.refreshToken,
         user: state.user,
       }),
       onRehydrateStorage: () => (state) => {

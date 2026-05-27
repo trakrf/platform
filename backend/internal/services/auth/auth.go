@@ -35,7 +35,7 @@ func NewService(db *pgxpool.Pool, storage *storage.Storage, emailClient *email.C
 
 // Signup registers a new user with a new org in a single transaction.
 // If InvitationToken is provided, user is added to invited org without creating a personal org.
-func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPassword func(string) (string, error), generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
+func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAgent, ip string, hashPassword func(string) (string, error), generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
 	passwordHash, err := hashPassword(request.Password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -43,7 +43,7 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 
 	// Handle invitation-based signup
 	if request.InvitationToken != nil && *request.InvitationToken != "" {
-		return s.signupWithInvitation(ctx, request, passwordHash, generateJWT)
+		return s.signupWithInvitation(ctx, request, passwordHash, userAgent, ip, generateJWT)
 	}
 
 	// Standard signup: create user + personal org
@@ -103,20 +103,22 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, hashPa
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	token, err := generateJWT(usr.ID, usr.Email, &org.ID)
+	accessToken, refreshToken, expiresIn, err := s.MintTokenPair(ctx, usr.ID, usr.Email, &org.ID, userAgent, ip, generateJWT)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate JWT: %w", err)
+		return nil, err
 	}
 
 	return &auth.AuthResponse{
-		Token: token,
-		User:  usr,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    expiresIn,
+		User:         usr,
 	}, nil
 }
 
 // signupWithInvitation handles signup when user has an invitation token
 // Creates user WITHOUT personal org, adds to invited org atomically
-func (s *Service) signupWithInvitation(ctx context.Context, request auth.SignupRequest, passwordHash string, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
+func (s *Service) signupWithInvitation(ctx context.Context, request auth.SignupRequest, passwordHash, userAgent, ip string, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
 	// Hash the invitation token
 	hash := sha256.Sum256([]byte(*request.InvitationToken))
 	tokenHash := hex.EncodeToString(hash[:])
@@ -199,20 +201,21 @@ func (s *Service) signupWithInvitation(ctx context.Context, request auth.SignupR
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// Generate JWT with invited org
-	token, err := generateJWT(usr.ID, usr.Email, &info.OrgID)
+	accessToken, refreshToken, expiresIn, err := s.MintTokenPair(ctx, usr.ID, usr.Email, &info.OrgID, userAgent, ip, generateJWT)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate JWT: %w", err)
+		return nil, err
 	}
 
 	return &auth.AuthResponse{
-		Token: token,
-		User:  usr,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    expiresIn,
+		User:         usr,
 	}, nil
 }
 
-// Login authenticates a user and returns a JWT token.
-func (s *Service) Login(ctx context.Context, request auth.LoginRequest, comparePassword func(string, string) error, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
+// Login authenticates a user and returns an access JWT + refresh token pair.
+func (s *Service) Login(ctx context.Context, request auth.LoginRequest, userAgent, ip string, comparePassword func(string, string) error, generateJWT func(int, string, *int) (string, error)) (*auth.AuthResponse, error) {
 	usr, err := s.storage.GetUserByEmail(ctx, request.Email)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup user: %w", err)
@@ -264,14 +267,16 @@ func (s *Service) Login(ctx context.Context, request auth.LoginRequest, compareP
 		}
 	}
 
-	token, err := generateJWT(usr.ID, usr.Email, orgIDPtr)
+	accessToken, refreshToken, expiresIn, err := s.MintTokenPair(ctx, usr.ID, usr.Email, orgIDPtr, userAgent, ip, generateJWT)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate JWT: %w", err)
+		return nil, err
 	}
 
 	return &auth.AuthResponse{
-		Token: token,
-		User:  *usr,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    expiresIn,
+		User:         *usr,
 	}, nil
 }
 

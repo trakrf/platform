@@ -81,6 +81,12 @@ func getSecret() string {
 	return secret
 }
 
+// GetExpirationSeconds returns the configured access-token TTL in seconds.
+// Exposed so callers issuing a token-pair can advertise expires_in to clients.
+func GetExpirationSeconds() int {
+	return getExpiration()
+}
+
 func getExpiration() int {
 	exp := os.Getenv("JWT_EXPIRATION")
 	if exp == "" {

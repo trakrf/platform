@@ -73,7 +73,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	log.Info().Msg("Services initialized")
 
 	authHandler := authhandler.NewHandler(authSvc)
-	orgsHandler := orgshandler.NewHandler(store, orgsSvc)
+	orgsHandler := orgshandler.NewHandler(store, orgsSvc, authSvc)
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)

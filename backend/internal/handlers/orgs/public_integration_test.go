@@ -43,7 +43,7 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	require.NoError(t, err)
 
 	service := orgsservice.NewService(pool, store, nil)
-	handler := orgs.NewHandler(store, service)
+	handler := orgs.NewHandler(store, service, nil)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", handler.GetOrgMe)
@@ -83,7 +83,7 @@ func TestGetOrgMe_SessionTokenRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	service := orgsservice.NewService(pool, store, nil)
-	handler := orgs.NewHandler(store, service)
+	handler := orgs.NewHandler(store, service, nil)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.With(middleware.APIKeyAuth(store)).Get("/api/v1/orgs/me", handler.GetOrgMe)

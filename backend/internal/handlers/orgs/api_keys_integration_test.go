@@ -53,7 +53,7 @@ func newAdminRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	t.Helper()
 	pool := store.Pool().(*pgxpool.Pool)
 	service := orgsservice.NewService(pool, store, nil)
-	handler := orgs.NewHandler(store, service)
+	handler := orgs.NewHandler(store, service, nil)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Group(func(r chi.Router) {

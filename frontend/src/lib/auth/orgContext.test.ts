@@ -112,7 +112,7 @@ describe('ensureOrgContext drift detection (TRA-812)', () => {
     vi.mocked(orgsApi.setCurrentOrg).mockImplementation(async ({ org_id }: { org_id: number }) => {
       const newToken = `aligned.${org_id}.jwt`;
       tokenClaims.set(newToken, { current_org_id: org_id });
-      return { data: { token: newToken } } as any;
+      return { data: { access_token: newToken, refresh_token: `rt-${org_id}`, expires_in: 900 } } as any;
     });
   });
 

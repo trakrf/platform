@@ -22,9 +22,17 @@ export interface User {
 
 export interface AuthResponse {
   data: {
-    token: string;
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
     user: User;
   };
+}
+
+export interface RefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
 }
 
 export interface MessageResponse {
@@ -64,4 +72,10 @@ export const authApi = {
     apiClient.get<InvitationInfoResponse>(
       `/auth/invitation-info?token=${encodeURIComponent(token)}`
     ),
+
+  refresh: (refreshToken: string) =>
+    apiClient.post<RefreshResponse>('/auth/refresh', { refresh_token: refreshToken }),
+
+  logout: (refreshToken: string) =>
+    apiClient.post<MessageResponse>('/auth/logout', { refresh_token: refreshToken }),
 };
