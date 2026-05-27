@@ -37,7 +37,20 @@ jobs:
       - name: Compute platform version
         id: version
         run: |
-          version=$(git describe --tags --always --dirty)
+          # --match 'v*' so only release tags (v1.1.0, v1.1.1, ...) anchor the
+          # version. Ad-hoc snapshot tags like `pre-tra-720` would otherwise win
+          # by recency and produce a misleading version string (TRA-851).
+          version=$(git describe --tags --match 'v*' --always --dirty)
+          # On preview-branch builds, append the list of PR numbers currently
+          # merged into preview, sourced from the .preview-manifest file written
+          # by sync-preview.yml. Result: `v1.1.1-N-g<sha>-preview+419+420` so a
+          # quick refresh of the preview env tells you which PRs are in it.
+          if [[ "${GITHUB_REF}" == "refs/heads/preview" && -s .preview-manifest ]]; then
+            prs=$(tr '\n' '+' < .preview-manifest | sed 's/+$//')
+            if [[ -n "${prs}" ]]; then
+              version="${version}-preview+${prs}"
+            fi
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Platform version: ${version}"
 
