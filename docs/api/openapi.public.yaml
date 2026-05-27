@@ -365,8 +365,9 @@ components:
                 external_key:
                     description: |-
                         external_key is optional. Omit to receive a server-assigned key in the
-                        format LOC-NNNN (per-organization sequence), parallel to assets'
-                        ASSET-NNNN behavior. When supplied, must satisfy the external_key_pattern.
+                        format LOC-NNN (per-organization sequence, 3-digit zero-pad), parallel
+                        to (but narrower than) assets' ASSET-NNNN behavior. When supplied,
+                        must satisfy the external_key_pattern.
                     example: wh1
                     maxLength: 255
                     minLength: 1
@@ -2932,7 +2933,8 @@ paths:
 
                 The `external_key` field is optional. Provide a value from your system of record
                 (ERP, WMS, layout/plan) for natural-key joins, or omit it to receive a
-                server-assigned external_key in the format `LOC-NNNN` (per-organization sequence).
+                server-assigned external_key in the format `LOC-NNN` (per-organization
+                sequence, 3-digit zero-pad, grows naturally beyond 999).
                 A caller-supplied external_key that collides with an existing location returns 409.
             operationId: createLocation
             requestBody:

@@ -479,7 +479,7 @@
             "type": "string"
           },
           "external_key": {
-            "description": "external_key is optional. Omit to receive a server-assigned key in the\nformat LOC-NNNN (per-organization sequence), parallel to assets'\nASSET-NNNN behavior. When supplied, must satisfy the external_key_pattern.",
+            "description": "external_key is optional. Omit to receive a server-assigned key in the\nformat LOC-NNN (per-organization sequence, 3-digit zero-pad), parallel\nto (but narrower than) assets' ASSET-NNNN behavior. When supplied,\nmust satisfy the external_key_pattern.",
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,
@@ -4279,7 +4279,7 @@
         ]
       },
       "post": {
-        "description": "**Required scope:** `locations:write`\n\nCreate a new location in the hierarchy, optionally with one or more tags.\nSet parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.\nBoth forms may be supplied together when they name the same parent (silently normalized to a single re-parent operation); a disagreement returns 400 `ambiguous_fields`.\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, layout/plan) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `LOC-NNNN` (per-organization sequence).\nA caller-supplied external_key that collides with an existing location returns 409.",
+        "description": "**Required scope:** `locations:write`\n\nCreate a new location in the hierarchy, optionally with one or more tags.\nSet parent_id (canonical) or parent_external_key (alternate) to nest under an existing parent.\nBoth forms may be supplied together when they name the same parent (silently normalized to a single re-parent operation); a disagreement returns 400 `ambiguous_fields`.\n\nThe `external_key` field is optional. Provide a value from your system of record\n(ERP, WMS, layout/plan) for natural-key joins, or omit it to receive a\nserver-assigned external_key in the format `LOC-NNN` (per-organization\nsequence, 3-digit zero-pad, grows naturally beyond 999).\nA caller-supplied external_key that collides with an existing location returns 409.",
         "operationId": "createLocation",
         "requestBody": {
           "content": {
