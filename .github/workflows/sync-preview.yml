@@ -143,7 +143,10 @@ jobs:
         if: steps.merge-prs.outputs.merged != '' && steps.merge-prs.outputs.merged != '[]'
         run: |
           echo '${{ steps.merge-prs.outputs.merged }}' | jq -r '.[]' > .preview-manifest
-          git add .preview-manifest
+          # -f because .preview-manifest is gitignored to prevent developers
+          # from accidentally committing it from a feature branch. CI on the
+          # preview branch is the only legitimate author.
+          git add -f .preview-manifest
           if ! git diff --cached --quiet; then
             git commit -m "preview: manifest of merged PRs"
           fi
