@@ -15,13 +15,15 @@ interface CurrentLocationsTableProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   onRowClick: (item: CurrentLocationItem) => void;
+  getAssetName: (item: CurrentLocationItem) => string;
+  getLocationName: (item: CurrentLocationItem) => string;
 }
 
 type TableItem = CurrentLocationItem & { id: string };
 
 const columns: Column<TableItem>[] = [
-  { key: 'asset_external_key', label: 'Asset', sortable: true },
-  { key: 'location_external_key', label: 'Location', sortable: true },
+  { key: 'asset_name', label: 'Asset', sortable: false },
+  { key: 'location_name', label: 'Location', sortable: false },
   { key: 'asset_last_seen', label: 'Last Seen', sortable: true },
   { key: 'status', label: 'Status', sortable: false },
 ];
@@ -35,6 +37,8 @@ export function CurrentLocationsTable({
   onPageChange,
   onPageSizeChange,
   onRowClick,
+  getAssetName,
+  getLocationName,
 }: CurrentLocationsTableProps) {
   const tableData: TableItem[] = useMemo(
     () => data.map((item) => ({ ...item, id: String(item.asset_id ?? item.asset_external_key ?? '') })),
@@ -65,7 +69,13 @@ export function CurrentLocationsTable({
       emptyStateDescription="No assets have been scanned yet. Assets will appear here once they are detected."
       className="flex-1 min-h-0"
       renderRow={(item, _index, props) => {
-        const assetLabel = item.asset_external_key ?? '';
+        const assetName = getAssetName(item);
+        const assetKey = item.asset_external_key ?? '';
+        const locationName = getLocationName(item);
+        const locationKey = item.location_external_key ?? '';
+        const showAssetSubtext = assetKey && assetKey !== assetName;
+        const showLocationSubtext =
+          locationKey && locationKey !== locationName && locationName !== 'Unknown';
         return (
           <tr
             key={item.id}
@@ -78,20 +88,34 @@ export function CurrentLocationsTable({
             <td className="px-4 py-3">
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-10 h-10 rounded-lg ${getAvatarColor(assetLabel)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
+                  className={`w-10 h-10 rounded-lg ${getAvatarColor(assetName)} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
                 >
-                  {getInitials(assetLabel)}
+                  {getInitials(assetName)}
                 </div>
                 <div className="min-w-0">
                   <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                    {assetLabel}
+                    {assetName}
                   </div>
+                  {showAssetSubtext && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {assetKey}
+                    </div>
+                  )}
                 </div>
               </div>
             </td>
-            <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-              {item.location_external_key || (
+            <td className="px-4 py-3">
+              {locationName === 'Unknown' ? (
                 <span className="text-gray-400 dark:text-gray-500">Unknown</span>
+              ) : (
+                <>
+                  <div className="text-gray-900 dark:text-gray-100">{locationName}</div>
+                  {showLocationSubtext && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {locationKey}
+                    </div>
+                  )}
+                </>
               )}
             </td>
             <td className="px-4 py-3">

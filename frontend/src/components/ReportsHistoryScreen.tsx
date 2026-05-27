@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, Package, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -6,7 +6,9 @@ import { EmptyState } from '@/components/shared';
 import { AssetHistoryTable } from '@/components/reports/AssetHistoryTable';
 import { AssetHistoryCard } from '@/components/reports/AssetHistoryCard';
 import { useAssetHistory } from '@/hooks/reports';
+import { useReportHydration } from '@/hooks/reports/useReportHydration';
 import { useAssetStore } from '@/stores/assets/assetStore';
+import type { AssetHistoryItem } from '@/types/reports';
 
 export default function ReportsHistoryScreen() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -30,6 +32,21 @@ export default function ReportsHistoryScreen() {
   // Look up asset from store (loaded via useAssets elsewhere in the app)
   const getAssetById = useAssetStore((state) => state.getAssetById);
   const asset = assetId ? getAssetById(assetId) : null;
+
+  // Hydrate location names for the visible history rows.
+  const hydrationIds = useMemo(
+    () => ({
+      assetIds: assetId ? [assetId] : [],
+      locationIds: data.map((d) => d.location_id),
+    }),
+    [assetId, data]
+  );
+  const { getLocationName } = useReportHydration(hydrationIds);
+  const locationNameOf = useCallback(
+    (item: AssetHistoryItem) =>
+      getLocationName(item.location_id, item.location_external_key),
+    [getLocationName]
+  );
 
   // Show error toast
   useEffect(() => {
@@ -131,6 +148,7 @@ export default function ReportsHistoryScreen() {
               pageSize={pageSize}
               onPageChange={setCurrentPage}
               onPageSizeChange={setPageSize}
+              getLocationName={locationNameOf}
             />
 
             {/* Mobile: Cards */}
@@ -152,6 +170,7 @@ export default function ReportsHistoryScreen() {
                     key={`${item.event_observed_at}-${index}`}
                     item={item}
                     isFirst={index === 0}
+                    getLocationName={locationNameOf}
                   />
                 ))
               )}

@@ -1,9 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { FileText } from 'lucide-react';
 import { EmptyState } from '@/components/shared';
 import { ShareButton } from '@/components/ShareButton';
 import { ExportModal } from '@/components/export';
 import { useAssetHistoryTab } from '@/hooks/reports';
+import { useReportHydration } from '@/hooks/reports/useReportHydration';
 import { useExport } from '@/hooks/useExport';
 import { AssetSelector } from './AssetSelector';
 import { DateRangeInputs } from './DateRangeInputs';
@@ -15,6 +16,7 @@ import {
   generateAssetHistoryPDF,
 } from '@/utils/export';
 import type { ExportFormat, ExportResult } from '@/types/export';
+import type { AssetHistoryItem } from '@/types/reports';
 
 export function AssetHistoryTab() {
   const {
@@ -37,22 +39,37 @@ export function AssetHistoryTab() {
 
   const { isModalOpen: isExportModalOpen, selectedFormat, openExport, closeExport } = useExport();
 
+  const hydrationIds = useMemo(
+    () => ({
+      assetIds: selectedAssetId ? [selectedAssetId] : [],
+      locationIds: timelineData.map((t) => t.location_id),
+    }),
+    [selectedAssetId, timelineData]
+  );
+  const { getLocationName } = useReportHydration(hydrationIds);
+  const locationNameOf = useCallback(
+    (item: AssetHistoryItem) =>
+      getLocationName(item.location_id, item.location_external_key),
+    [getLocationName]
+  );
+
   const generateExport = useCallback(
     (format: ExportFormat): ExportResult => {
       const assetName = selectedAsset?.name || 'asset';
-      const assetIdentifier = selectedAsset?.identifier || '';
+      const assetKey = selectedAsset?.identifier || '';
+      const opts = { assetName, assetKey, getLocationName: locationNameOf };
       switch (format) {
         case 'csv':
-          return generateAssetHistoryCSV(timelineData, assetName);
+          return generateAssetHistoryCSV(timelineData, opts);
         case 'xlsx':
-          return generateAssetHistoryExcel(timelineData, assetName, assetIdentifier);
+          return generateAssetHistoryExcel(timelineData, opts);
         case 'pdf':
-          return generateAssetHistoryPDF(timelineData, assetName, assetIdentifier);
+          return generateAssetHistoryPDF(timelineData, opts);
         default:
           throw new Error(`Unsupported format: ${format}`);
       }
     },
-    [timelineData, selectedAsset]
+    [timelineData, selectedAsset, locationNameOf]
   );
 
   return (
@@ -129,6 +146,7 @@ export function AssetHistoryTab() {
             hasMore={hasMore}
             isLoadingMore={isLoadingMore}
             onLoadMore={handleLoadMore}
+            getLocationName={locationNameOf}
           />
         </div>
       )}
