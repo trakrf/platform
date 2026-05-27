@@ -17,10 +17,37 @@ type LoginRequest struct {
 	Password string `json:"password" validate:"required"`
 }
 
-// AuthResponse contains JWT token and user data
+// AuthResponse contains an access JWT, a refresh token, the access TTL in
+// seconds, and the user record. Returned from signup and login.
+//
+// Shape parallels OAuth2: access_token is the short-lived bearer (JWT);
+// refresh_token is an opaque rotating secret to exchange via /auth/refresh
+// when the access JWT expires.
 type AuthResponse struct {
-	Token string    `json:"token"`
-	User  user.User `json:"user"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresIn    int       `json:"expires_in"`
+	User         user.User `json:"user"`
+}
+
+// RefreshRequest is the body for POST /api/v1/auth/refresh.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// RefreshResponse is the body returned by POST /api/v1/auth/refresh.
+// Same fields as AuthResponse minus the user record (the caller already has it).
+type RefreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+// LogoutRequest is the body for POST /api/v1/auth/logout. The access JWT
+// authenticates the caller; the refresh_token is the rotating secret to
+// revoke server-side.
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
 // ForgotPasswordRequest for POST /api/v1/auth/forgot-password

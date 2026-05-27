@@ -23,12 +23,20 @@ type stubAuthService struct {
 	loginErr     error
 }
 
-func (s *stubAuthService) Signup(_ context.Context, _ authmodels.SignupRequest, _ func(string) (string, error), _ func(int, string, *int) (string, error)) (*authmodels.AuthResponse, error) {
+func (s *stubAuthService) Signup(_ context.Context, _ authmodels.SignupRequest, _, _ string, _ func(string) (string, error), _ func(int, string, *int) (string, error)) (*authmodels.AuthResponse, error) {
 	return s.signupResult, s.signupErr
 }
 
-func (s *stubAuthService) Login(_ context.Context, _ authmodels.LoginRequest, _ func(string, string) error, _ func(int, string, *int) (string, error)) (*authmodels.AuthResponse, error) {
+func (s *stubAuthService) Login(_ context.Context, _ authmodels.LoginRequest, _, _ string, _ func(string, string) error, _ func(int, string, *int) (string, error)) (*authmodels.AuthResponse, error) {
 	return s.loginResult, s.loginErr
+}
+
+func (s *stubAuthService) Refresh(_ context.Context, _, _, _ string, _ func(int, string, *int) (string, error)) (*authmodels.RefreshResponse, error) {
+	return nil, nil
+}
+
+func (s *stubAuthService) Logout(_ context.Context, _ string) error {
+	return nil
 }
 
 func (s *stubAuthService) ForgotPassword(_ context.Context, _, _ string) error {

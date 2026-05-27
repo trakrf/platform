@@ -21,9 +21,13 @@ type GetMeResponse struct {
 }
 
 // SetCurrentOrgResponse is returned by POST /api/v1/users/me/current-org.
+// Rotates the access JWT to carry the new org_id claim and issues a fresh
+// refresh token scoped to the new org (TRA-843).
 type SetCurrentOrgResponse struct {
-	Message string `json:"message" example:"Current organization updated"`
-	Token   string `json:"token"   example:"eyJhbGciOiJIUzI1NiIsInR5cCI6..."`
+	Message      string `json:"message"       example:"Current organization updated"`
+	AccessToken  string `json:"access_token"  example:"eyJhbGciOiJIUzI1NiIsInR5cCI6..."`
+	RefreshToken string `json:"refresh_token" example:"f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
+	ExpiresIn    int    `json:"expires_in"    example:"900"`
 }
 
 // @Summary Get the authenticated user's profile with org memberships
@@ -107,8 +111,14 @@ func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate new JWT with updated org_id
-	token, err := jwt.Generate(claims.UserID, claims.Email, &request.OrgID)
+	// Mint a fresh access+refresh pair scoped to the new org. The previous
+	// refresh token (if any) is not revoked here — clients may still hold
+	// stale ones around briefly, and a 30-day TTL on a still-valid token is
+	// not worth the round-trip. The new pair supersedes for new requests.
+	accessToken, refreshToken, expiresIn, err := h.minter.MintTokenPair(
+		r.Context(), claims.UserID, claims.Email, &request.OrgID,
+		r.UserAgent(), clientIP(r), jwt.Generate,
+	)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			"Failed to generate token", middleware.GetRequestID(r.Context()))
@@ -116,10 +126,32 @@ func (h *Handler) SetCurrentOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"message": "Current organization updated",
-		"token":   token,
+	httputil.WriteJSON(w, http.StatusOK, SetCurrentOrgResponse{
+		Message:      "Current organization updated",
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    expiresIn,
 	})
+}
+
+// clientIP returns the originating client IP for a request, preferring
+// X-Forwarded-For when proxied.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		for i, c := range xff {
+			if c == ',' {
+				return xff[:i]
+			}
+		}
+		return xff
+	}
+	addr := r.RemoteAddr
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			return addr[:i]
+		}
+	}
+	return addr
 }
 
 // RegisterMeRoutes registers /users/me endpoints.
