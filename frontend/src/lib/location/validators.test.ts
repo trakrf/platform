@@ -39,9 +39,9 @@ describe('Validators', () => {
       expect(validateIdentifier('Section_B-2')).toBeNull();
     });
 
-    it('should reject empty identifiers', () => {
-      expect(validateIdentifier('')).toBe('Identifier is required');
-      expect(validateIdentifier('   ')).toBe('Identifier is required');
+    it('should accept empty identifiers (TRA-551: backend auto-mints LOC-NNN on omit)', () => {
+      expect(validateIdentifier('')).toBeNull();
+      expect(validateIdentifier('   ')).toBeNull();
     });
 
     it('should reject spaces', () => {

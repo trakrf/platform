@@ -257,11 +257,16 @@ export function LocationForm({
     // TRA-664 / BB26 D7: external_key is immutable on PATCH. Strip it from
     // the edit-mode body; the dedicated rename operation is the only path
     // for mutating the natural key.
+    //
+    // TRA-551: external_key is optional on create — omit when blank so the
+    // backend auto-mints LOC-NNN. An explicit empty string would be rejected
+    // with 400 too_short. Parallels AssetForm.tsx (TRA-650 / BB23 F3).
     const { valid_from: _vf, valid_to: _vt, external_key: _ek, description: _desc, ...rest } = formData;
+    const includeExternalKey = mode === 'create' && _ek.trim() !== '';
     const submitData = {
       ...rest,
       tags: validTags,
-      ...(mode === 'create' ? { external_key: _ek } : {}),
+      ...(includeExternalKey ? { external_key: _ek } : {}),
       // description: nullable + minLength:1 server-side. Send null when the
       // form is blank — POST accepts null (no description) and PATCH treats
       // null as "clear the column," matching user intent on both paths.
@@ -290,7 +295,7 @@ export function LocationForm({
             htmlFor="external_key"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
           >
-            Identifier <span className="text-red-500">*</span>
+            Identifier
           </label>
           <input
             type="text"
@@ -311,7 +316,7 @@ export function LocationForm({
 
           {mode === 'create' && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Letters, numbers, hyphens, and underscores only (no spaces)
+              Optional. Leave blank to auto-assign (e.g., LOC-001). Otherwise: letters, numbers, hyphens, and underscores only (no spaces).
             </p>
           )}
         </div>

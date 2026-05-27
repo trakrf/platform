@@ -104,7 +104,8 @@ func (handler *Handler) resolveParent(
 // @Description
 // @Description  The `external_key` field is optional. Provide a value from your system of record
 // @Description  (ERP, WMS, layout/plan) for natural-key joins, or omit it to receive a
-// @Description  server-assigned external_key in the format `LOC-NNNN` (per-organization sequence).
+// @Description  server-assigned external_key in the format `LOC-NNN` (per-organization
+// @Description  sequence, 3-digit zero-pad, grows naturally beyond 999).
 // @Description  A caller-supplied external_key that collides with an existing location returns 409.
 // @Tags         locations,public
 // @ID           locations.create
@@ -173,7 +174,7 @@ func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TRA-665 / BB26 D3: external_key is optional only by *omission* — an
-	// absent key triggers the server auto-mint of LOC-NNNN. When the caller
+	// absent key triggers the server auto-mint of LOC-NNN. When the caller
 	// sends `external_key` explicitly, it must validate (min=1 + pattern)
 	// to match the PATCH validator on RenameLocationRequest.external_key.
 	// An explicit empty string returns 400 too_short; whitespace-only fails

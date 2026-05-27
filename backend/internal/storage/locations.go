@@ -72,11 +72,15 @@ func (s *Storage) GetNextLocationSequence(ctx context.Context, orgID int) (int, 
 	return int(maxSeq.Int64) + 1, nil
 }
 
-// GenerateLocationExternalKey creates an external_key in format LOC-NNNN.
-// Zero-pads to 4 digits minimum, grows naturally beyond 9999. Parallels
-// GenerateAssetExternalKey.
+// GenerateLocationExternalKey creates an external_key in format LOC-NNN.
+// Zero-pads to 3 digits minimum, grows naturally beyond 999 (LOC-1000+).
+// 3-digit width is intentionally narrower than ASSET-%04d (TRA-551 triage
+// 2026-05-27): locations are typically named-and-known artifacts, so auto-
+// minted keys are the exception and >999 per-org locations is rare. The
+// pattern-match query in GetNextLocationSequence is digit-count-agnostic,
+// so any pre-existing LOC-NNNN rows continue to increment correctly.
 func GenerateLocationExternalKey(seq int) string {
-	return fmt.Sprintf("LOC-%04d", seq)
+	return fmt.Sprintf("LOC-%03d", seq)
 }
 
 func (s *Storage) UpdateLocation(ctx context.Context, orgID, id int, request location.UpdateLocationRequest) (*location.LocationWithParent, error) {

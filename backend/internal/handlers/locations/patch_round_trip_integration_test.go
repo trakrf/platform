@@ -428,7 +428,10 @@ func TestPostLocation_OmittedExternalKey_AutoMints(t *testing.T) {
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Regexp(t, `^LOC-\d+$`, resp.Data.ExternalKey)
+	// TRA-551 (2026-05-27 triage): width is 3-digit zero-pad (LOC-001..LOC-999),
+	// growing naturally beyond. Intentionally narrower than ASSET-%04d.
+	assert.Regexp(t, `^LOC-\d{3,}$`, resp.Data.ExternalKey)
+	assert.Equal(t, "LOC-001", resp.Data.ExternalKey, "first auto-mint in a fresh org starts at LOC-001")
 
 	_ = pool
 }

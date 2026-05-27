@@ -9,14 +9,19 @@ import type { Location } from '@/types/locations';
 
 /**
  * Validates identifier format
- * Rule: letters (upper/lower), numbers, hyphens, underscores only (no spaces)
+ * Rule: letters (upper/lower), numbers, hyphens, underscores only (no spaces).
+ *
+ * TRA-551: blank input is valid — the backend auto-mints LOC-NNN when
+ * external_key is omitted on create. The caller (LocationForm) is
+ * responsible for omitting the field from the payload on blank submit.
+ * Format validation only runs when the user typed something.
  *
  * @param identifier - Location identifier to validate
- * @returns Error message or null if valid
+ * @returns Error message or null if valid (including when blank)
  */
 export function validateIdentifier(identifier: string): string | null {
   if (!identifier || identifier.trim().length === 0) {
-    return 'Identifier is required';
+    return null;
   }
 
   if (identifier.length > 255) {
