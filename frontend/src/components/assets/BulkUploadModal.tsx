@@ -186,9 +186,10 @@ export function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUploadModalP
             </div>
             <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1 list-disc list-inside">
               <li>Accepts <strong>.csv</strong> or <strong>.xlsx</strong> (first sheet only)</li>
-              <li>Required columns: <code>external_key</code>, <code>name</code></li>
+              <li>Only <code>name</code> is required</li>
               <li>Optional columns: <code>{optionalColumns}</code></li>
-              <li><code>is_active</code>: <code>true</code> or <code>false</code></li>
+              <li><code>external_key</code> is auto-generated if omitted</li>
+              <li><code>is_active</code>: <code>true</code> or <code>false</code> (defaults to <code>true</code>)</li>
               <li><code>tags</code>: comma-separated RFID tag values (quote the field if it contains commas)</li>
               <li>Maximum file size: 5MB</li>
             </ul>
