@@ -36,9 +36,9 @@ type LocationWithRelations struct {
 type CreateLocationRequest struct {
 	Name string `json:"name" validate:"required,min=1,max=255,display_name" example:"Warehouse 1"`
 	// external_key is optional. Omit to receive a server-assigned key in the
-	// format LOC-NNN (per-organization sequence, 3-digit zero-pad — TRA-551),
-	// parallel to (but narrower than) assets' ASSET-NNNN behavior. When
-	// supplied, must satisfy the external_key_pattern.
+	// format LOC-NNN (per-organization sequence, 3-digit zero-pad), parallel
+	// to (but narrower than) assets' ASSET-NNNN behavior. When supplied,
+	// must satisfy the external_key_pattern.
 	ExternalKey       string               `json:"external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`
 	ParentID          *int                 `json:"parent_id,omitempty" validate:"omitempty,min=1" example:"42"`
 	ParentExternalKey *string              `json:"parent_external_key,omitempty" validate:"omitempty,min=1,max=255,external_key_pattern" example:"wh1"`

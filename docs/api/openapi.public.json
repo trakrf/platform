@@ -479,7 +479,7 @@
             "type": "string"
           },
           "external_key": {
-            "description": "external_key is optional. Omit to receive a server-assigned key in the\nformat LOC-NNN (per-organization sequence, 3-digit zero-pad — TRA-551),\nparallel to (but narrower than) assets' ASSET-NNNN behavior. When\nsupplied, must satisfy the external_key_pattern.",
+            "description": "external_key is optional. Omit to receive a server-assigned key in the\nformat LOC-NNN (per-organization sequence, 3-digit zero-pad), parallel\nto (but narrower than) assets' ASSET-NNNN behavior. When supplied,\nmust satisfy the external_key_pattern.",
             "example": "wh1",
             "maxLength": 255,
             "minLength": 1,

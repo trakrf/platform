@@ -365,9 +365,9 @@ components:
                 external_key:
                     description: |-
                         external_key is optional. Omit to receive a server-assigned key in the
-                        format LOC-NNN (per-organization sequence, 3-digit zero-pad — TRA-551),
-                        parallel to (but narrower than) assets' ASSET-NNNN behavior. When
-                        supplied, must satisfy the external_key_pattern.
+                        format LOC-NNN (per-organization sequence, 3-digit zero-pad), parallel
+                        to (but narrower than) assets' ASSET-NNNN behavior. When supplied,
+                        must satisfy the external_key_pattern.
                     example: wh1
                     maxLength: 255
                     minLength: 1
