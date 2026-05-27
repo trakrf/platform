@@ -62,7 +62,8 @@ function authHeaders(token) {
 }
 
 function isoToday() {
-  return new Date().toISOString().split('T')[0];
+  // RFC 3339 timestamp at start of UTC day.
+  return new Date().toISOString().split('T')[0] + 'T00:00:00Z';
 }
 
 // Signup a fresh org+user and return { token, orgId, orgName }.
@@ -97,7 +98,7 @@ function createSeedLocation(token, n) {
     `${API}/locations`,
     JSON.stringify({
       name: `seed-loc-${n}`,
-      identifier: `SEED-LOC-${n}`,
+      external_key: `SEED-LOC-${n}`,
       is_active: true,
       valid_from: isoToday(),
       tags: [],
@@ -107,7 +108,7 @@ function createSeedLocation(token, n) {
   if (res.status !== 200 && res.status !== 201) {
     throw new Error(`seed location ${n} failed: ${res.status} ${res.body}`);
   }
-  return res.json().data.surrogate_id;
+  return res.json().data.id;
 }
 
 function createSeedAsset(token, n) {
@@ -115,18 +116,17 @@ function createSeedAsset(token, n) {
     `${API}/assets`,
     JSON.stringify({
       name: `seed-asset-${n}`,
-      identifier: `SEED-ASSET-${n}`,
-      type: 'asset',
+      external_key: `SEED-ASSET-${n}`,
       is_active: true,
       valid_from: isoToday(),
-      tags: [{ type: 'rfid', value: `SEED-EPC-${n}-${randomString(8)}` }],
+      tags: [{ tag_type: 'rfid', value: `SEED-EPC-${n}-${randomString(8)}` }],
     }),
     { ...authHeaders(token), tags: { kind: 'setup' } }
   );
   if (res.status !== 200 && res.status !== 201) {
     throw new Error(`seed asset ${n} failed: ${res.status} ${res.body}`);
   }
-  return res.json().data.surrogate_id;
+  return res.json().data.id;
 }
 
 export function setup() {
@@ -176,7 +176,7 @@ export default function (data) {
     ok = check(res, { 'list_locations 200': (r) => r.status === 200 });
   } else if (action === 'get_asset') {
     const id = data.assetIds[randomIntBetween(0, data.assetIds.length - 1)];
-    res = http.get(`${API}/assets/by-id/${id}`, { ...auth, tags: { kind: 'read', op: 'get_asset' } });
+    res = http.get(`${API}/assets/${id}`, { ...auth, tags: { kind: 'read', op: 'get_asset' } });
     getAssetLat.add(res.timings.duration);
     ok = check(res, { 'get_asset 200': (r) => r.status === 200 });
   } else if (action === 'create_asset') {
@@ -185,18 +185,17 @@ export default function (data) {
       `${API}/assets`,
       JSON.stringify({
         name: `vu-asset-${suffix}`,
-        identifier: `VU-ASSET-${suffix}`,
-        type: 'asset',
+        external_key: `VU-ASSET-${suffix}`,
         is_active: true,
         valid_from: isoToday(),
-        tags: [{ type: 'rfid', value: `VU-EPC-${suffix}` }],
+        tags: [{ tag_type: 'rfid', value: `VU-EPC-${suffix}` }],
       }),
       { ...auth, tags: { kind: 'write', op: 'create_asset' } }
     );
     createAssetLat.add(res.timings.duration);
     ok = check(res, { 'create_asset 2xx': (r) => r.status === 200 || r.status === 201 });
     if (ok) {
-      const newId = res.json().data && res.json().data.surrogate_id;
+      const newId = res.json().data && res.json().data.id;
       if (newId) vuCreated.push(newId);
     }
   } else if (action === 'delete_asset') {
@@ -206,7 +205,7 @@ export default function (data) {
       ok = check(res, { 'list_assets fallback 200': (r) => r.status === 200 });
     } else {
       const id = vuCreated.shift();
-      res = http.del(`${API}/assets/by-id/${id}`, null, { ...auth, tags: { kind: 'write', op: 'delete_asset' } });
+      res = http.del(`${API}/assets/${id}`, null, { ...auth, tags: { kind: 'write', op: 'delete_asset' } });
       ok = check(res, { 'delete_asset 2xx': (r) => r.status === 200 || r.status === 204 });
     }
   } else if (action === 'reports_current_locations') {
