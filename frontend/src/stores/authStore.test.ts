@@ -43,7 +43,9 @@ describe('authStore', () => {
       const mockResponse = {
         data: {
           data: {
-            token: 'test-token-123',
+            access_token: 'test-token-123',
+            refresh_token: 'rt-test-123',
+            expires_in: 900,
             user: {
               id: 1,
               email: 'test@example.com',
@@ -72,7 +74,7 @@ describe('authStore', () => {
 
       // Mock setCurrentOrg to return a token with org_id
       vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
-        data: { token: 'test-token-with-org', message: 'ok' },
+        data: { access_token: 'test-token-with-org', refresh_token: 'rt-org-1', expires_in: 900, message: 'ok' },
       } as any);
 
       await useAuthStore.getState().login('test@example.com', 'password123');
@@ -130,7 +132,9 @@ describe('authStore', () => {
       const mockResponse = {
         data: {
           data: {
-            token: 'new-user-token',
+            access_token: 'new-user-token',
+            refresh_token: 'rt-new-user',
+            expires_in: 900,
             user: {
               id: 2,
               email: 'newuser@example.com',
@@ -159,7 +163,7 @@ describe('authStore', () => {
 
       // Mock setCurrentOrg to return a token with org_id
       vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
-        data: { token: 'new-user-token-with-org', message: 'ok' },
+        data: { access_token: 'new-user-token-with-org', refresh_token: 'rt-new-user-org', expires_in: 900, message: 'ok' },
       } as any);
 
       await useAuthStore.getState().signup('newuser@example.com', 'password123');
@@ -194,10 +198,12 @@ describe('authStore', () => {
   });
 
   describe('logout', () => {
-    it('should clear all auth state', () => {
-      // Set some state first
+    it('should clear all auth state', async () => {
+      // Set some state first (no refreshToken — skip the server-side revoke
+      // and the test stays focused on the store-clearing behavior).
       useAuthStore.setState({
         token: 'test-token',
+        refreshToken: null,
         user: {
           id: 1,
           email: 'test@example.com',
@@ -208,10 +214,11 @@ describe('authStore', () => {
         isAuthenticated: true,
       });
 
-      useAuthStore.getState().logout();
+      await useAuthStore.getState().logout();
 
       const state = useAuthStore.getState();
       expect(state.token).toBeNull();
+      expect(state.refreshToken).toBeNull();
       expect(state.user).toBeNull();
       expect(state.isAuthenticated).toBe(false);
       expect(state.error).toBeNull();
@@ -359,7 +366,9 @@ describe('authStore', () => {
       const mockResponse = {
         data: {
           data: {
-            token: 'persist-test-token',
+            access_token: 'persist-test-token',
+            refresh_token: 'rt-persist-test',
+            expires_in: 900,
             user: {
               id: 3,
               email: 'persist@example.com',
@@ -388,7 +397,7 @@ describe('authStore', () => {
 
       // Mock setCurrentOrg to return a token with org_id
       vi.mocked(orgsApi.setCurrentOrg).mockResolvedValue({
-        data: { token: 'persist-test-token-with-org', message: 'ok' },
+        data: { access_token: 'persist-test-token-with-org', refresh_token: 'rt-persist-org', expires_in: 900, message: 'ok' },
       } as any);
 
       await useAuthStore.getState().login('persist@example.com', 'password');

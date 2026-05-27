@@ -34,13 +34,16 @@ export function getTokenOrgId(): number | null {
 }
 
 /**
- * Call setCurrentOrg for the given org and persist the returned token.
+ * Call setCurrentOrg for the given org and persist the returned token pair.
  *
- * Zustand persist middleware wraps setState, so the token persists to localStorage.
+ * Zustand persist middleware wraps setState, so the tokens persist to localStorage.
  */
 export async function setOrgToken(orgId: number): Promise<void> {
   const response = await orgsApi.setCurrentOrg({ org_id: orgId });
-  useAuthStore.setState({ token: response.data.token });
+  useAuthStore.setState({
+    token: response.data.access_token,
+    refreshToken: response.data.refresh_token,
+  });
 }
 
 /**
