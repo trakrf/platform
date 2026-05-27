@@ -276,6 +276,10 @@ railway up
 docker-compose -f docker-compose.prod.yml up
 ```
 
+## Load Testing
+
+See [`load-tests/README.md`](load-tests/README.md) for the k6 capacity probe — how to run it, current baselines, and what is (and isn't) measured.
+
 ## License
 
 Business Source License (BSL) - see [LICENSE](LICENSE)
