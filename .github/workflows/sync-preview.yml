@@ -134,6 +134,20 @@ jobs:
 
             return result;
 
+      - name: Write preview manifest
+        # When any PRs were merged, write a `.preview-manifest` file listing
+        # them (one PR# per line) and commit it. docker-build.yml reads this
+        # file and appends `-preview+419+420...` to the version string, so the
+        # UI header on app.preview.trakrf.id shows exactly which PRs are in the
+        # current preview build (TRA-851).
+        if: steps.merge-prs.outputs.merged != '' && steps.merge-prs.outputs.merged != '[]'
+        run: |
+          echo '${{ steps.merge-prs.outputs.merged }}' | jq -r '.[]' > .preview-manifest
+          git add .preview-manifest
+          if ! git diff --cached --quiet; then
+            git commit -m "preview: manifest of merged PRs"
+          fi
+
       - name: Push preview branch
         id: push-preview
         run: |
