@@ -143,6 +143,30 @@ func (s *Storage) GetAPIKeyByJTI(ctx context.Context, jti string) (*apikey.APIKe
 	return &k, nil
 }
 
+// GetAPIKeyByID fetches a key by its obfuscated id. Used by the refresh-token
+// grant: api refresh rows reference api_keys.id, and re-mint reads the current
+// scopes/jti/active-state from the row (TRA-846).
+func (s *Storage) GetAPIKeyByID(ctx context.Context, id int64) (*apikey.APIKey, error) {
+	var k apikey.APIKey
+	err := s.pool.QueryRow(ctx, `
+        SELECT id, jti, org_id, name, scopes, created_by, created_by_key_id,
+               created_at, expires_at, last_used_at, revoked_at
+        FROM trakrf.api_keys
+        WHERE id = $1
+    `, id).Scan(
+		&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
+		&k.CreatedBy, &k.CreatedByKeyID,
+		&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
+	)
+	if err != nil {
+		if stderrors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAPIKeyNotFound
+		}
+		return nil, fmt.Errorf("get api_key by id: %w", err)
+	}
+	return &k, nil
+}
+
 // RevokeAPIKey marks a key revoked. Returns ErrAPIKeyNotFound if the id is
 // not in the given org or is already revoked (no rows updated).
 func (s *Storage) RevokeAPIKey(ctx context.Context, orgID, id int) error {

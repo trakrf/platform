@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	authmodels "github.com/trakrf/platform/backend/internal/models/auth"
 	"github.com/trakrf/platform/backend/internal/models/organization"
+	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 )
 
 // stubAuthService implements authServicer for unit tests.
@@ -52,6 +53,14 @@ func (s *stubAuthService) AcceptInvitation(_ context.Context, _ string, _ int) (
 }
 
 func (s *stubAuthService) GetInvitationInfo(_ context.Context, _ string) (*authmodels.InvitationInfoResponse, error) {
+	return nil, nil
+}
+
+func (s *stubAuthService) MintAPITokenPair(_ context.Context, _ string, _ []string, _ int, _ int64, _, _ string) (string, string, int, error) {
+	return "", "", 0, nil
+}
+
+func (s *stubAuthService) RefreshAPIToken(_ context.Context, _, _, _ string) (*authservice.APITokenResponse, error) {
 	return nil, nil
 }
 

@@ -67,6 +67,23 @@ type MessageResponse struct {
 	Message string `json:"message"`
 }
 
+// TokenRequest is the body for POST /api/v1/oauth/token. The OAuth2 grant is
+// selected by grant_type; the remaining fields are conditionally required.
+type TokenRequest struct {
+	GrantType    string `json:"grant_type" validate:"required,oneof=client_credentials refresh_token" example:"client_credentials"`
+	ClientID     string `json:"client_id,omitempty" example:"6f1c2a8e-7d3b-4e90-9a11-2c4d5e6f7a8b"`
+	ClientSecret string `json:"client_secret,omitempty" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.long-lived-api-key-jwt"`
+	RefreshToken string `json:"refresh_token,omitempty" example:"f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
+}
+
+// TokenResponse is the OAuth2 token grant result for the public API.
+type TokenResponse struct {
+	AccessToken  string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.short-lived-access-jwt"`
+	RefreshToken string `json:"refresh_token" example:"f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
+	TokenType    string `json:"token_type" example:"Bearer"`
+	ExpiresIn    int    `json:"expires_in" example:"900"`
+}
+
 // InvitationInfoResponse for GET /api/v1/auth/invitation-info
 type InvitationInfoResponse struct {
 	OrgName       string  `json:"org_name"`

@@ -15,6 +15,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/organization"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
+	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 	"github.com/trakrf/platform/backend/internal/util/password"
@@ -37,6 +38,8 @@ type authServicer interface {
 	ResetPassword(ctx context.Context, token, newPassword string, hashPassword func(string) (string, error)) error
 	AcceptInvitation(ctx context.Context, token string, userID int) (*organization.AcceptInvitationResponse, error)
 	GetInvitationInfo(ctx context.Context, token string) (*auth.InvitationInfoResponse, error)
+	MintAPITokenPair(ctx context.Context, jti string, scopes []string, orgID int, apiKeyID int64, userAgent, ip string) (accessToken, refreshSecret string, expiresIn int, err error)
+	RefreshAPIToken(ctx context.Context, presentedSecret, userAgent, ip string) (*authservice.APITokenResponse, error)
 }
 
 // Ensure *authservice.Service satisfies authServicer at compile time.
@@ -44,10 +47,11 @@ var _ authServicer = (*authservice.Service)(nil)
 
 type Handler struct {
 	service authServicer
+	store   *storage.Storage
 }
 
-func NewHandler(service *authservice.Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *authservice.Service, store *storage.Storage) *Handler {
+	return &Handler{service: service, store: store}
 }
 
 // @Summary User signup
@@ -460,6 +464,7 @@ func (handler *Handler) RegisterRoutes(r chi.Router, jwtMiddleware func(http.Han
 	r.Post("/api/v1/auth/login", handler.Login)
 	r.Post("/api/v1/auth/refresh", handler.Refresh)
 	r.Post("/api/v1/auth/logout", handler.Logout)
+	r.Post("/api/v1/oauth/token", handler.Token)
 	r.Post("/api/v1/auth/forgot-password", handler.ForgotPassword)
 	r.Post("/api/v1/auth/reset-password", handler.ResetPassword)
 	r.Get("/api/v1/auth/invitation-info", handler.GetInvitationInfo)

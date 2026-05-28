@@ -48,7 +48,7 @@ func TestLogin_PopulatesLastLoginAt(t *testing.T) {
 	stubJWT := func(int, string, *int) (string, error) { return "stub-token", nil }
 	before := time.Now().UTC()
 	resp, err := svc.Login(ctx, authmodels.LoginRequest{Email: email, Password: "s3cret!!"},
-		password.Compare, stubJWT)
+		"", "", password.Compare, stubJWT)
 	require.NoError(t, err)
 	after := time.Now().UTC()
 
@@ -67,7 +67,7 @@ func TestLogin_PopulatesLastLoginAt(t *testing.T) {
 	// A second login advances the timestamp — proves we're not returning a cached value.
 	time.Sleep(20 * time.Millisecond)
 	resp2, err := svc.Login(ctx, authmodels.LoginRequest{Email: email, Password: "s3cret!!"},
-		password.Compare, stubJWT)
+		"", "", password.Compare, stubJWT)
 	require.NoError(t, err)
 	require.NotNil(t, resp2.User.LastLoginAt)
 	assert.True(t, resp2.User.LastLoginAt.After(*resp.User.LastLoginAt),

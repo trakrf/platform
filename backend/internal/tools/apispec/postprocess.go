@@ -1485,6 +1485,9 @@ var requiredFields = map[string][]string{
 	"location.RenameLocationResponse":  {"data", "descendant_count_affected"},
 	"location.UpdateLocationResponse":  {"data"},
 
+	// auth — OAuth2 token grant (TRA-846)
+	"auth.TokenResponse": {"access_token", "refresh_token", "token_type", "expires_in"},
+
 	// org envelope (post namespace consolidation — TRA-602)
 	"org.GetOrgMeResponse": {"data"},
 

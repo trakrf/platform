@@ -48,7 +48,7 @@ func ParsePathInt(field, raw string, min, max int64) (int, error) {
 			Params:  map[string]any{"min": float64(min)},
 		}}
 	}
-	if n > max {
+	if n > max || n > math.MaxInt {
 		return 0, &FieldParamError{FieldError: apierrors.FieldError{
 			Field:   field,
 			Code:    "too_large",

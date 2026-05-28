@@ -932,6 +932,47 @@ components:
             required:
                 - data
             type: object
+        auth.TokenRequest:
+            properties:
+                client_id:
+                    example: 6f1c2a8e-7d3b-4e90-9a11-2c4d5e6f7a8b
+                    type: string
+                client_secret:
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.long-lived-api-key-jwt
+                    type: string
+                grant_type:
+                    enum:
+                        - client_credentials
+                        - refresh_token
+                    example: client_credentials
+                    type: string
+                refresh_token:
+                    example: f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                    type: string
+            required:
+                - grant_type
+            type: object
+        auth.TokenResponse:
+            properties:
+                access_token:
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.short-lived-access-jwt
+                    type: string
+                expires_in:
+                    example: 900
+                    format: int32
+                    type: integer
+                refresh_token:
+                    example: f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                    type: string
+                token_type:
+                    example: Bearer
+                    type: string
+            required:
+                - access_token
+                - refresh_token
+                - token_type
+                - expires_in
+            type: object
     securitySchemes:
         BearerAuth:
             bearerFormat: JWT
@@ -4790,6 +4831,146 @@ paths:
                 - locations
             x-required-scopes:
                 - locations:write
+    /api/v1/oauth/token:
+        post:
+            description: 'Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` (the API key''s jti) and `client_secret` (the long-lived API key token returned once at key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.'
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/auth.TokenRequest'
+                description: Token grant request
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/auth.TokenResponse'
+                    description: OK
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Validation error / unsupported grant_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Invalid client credentials or refresh token
+                    headers:
+                        WWW-Authenticate:
+                            $ref: '#/components/headers/WWWAuthenticate'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "405":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Method not allowed
+                    headers:
+                        Allow:
+                            $ref: '#/components/headers/Allow'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: unsupported_media_type
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                default:
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+            summary: OAuth2 token grant
+            tags:
+                - oauth
     /api/v1/orgs/me:
         get:
             description: Returns the organization scoped by the API key presented in Authorization. Intended as a lightweight health-check primitive for integrators verifying a key works end-to-end. Singleton endpoint; accepts no query parameters. Any query parameter returns `400 validation_error / unknown_field`.

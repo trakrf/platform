@@ -12,8 +12,10 @@ import (
 // RefreshToken represents a row in trakrf.refresh_tokens.
 type RefreshToken struct {
 	ID         int64
-	UserID     int
+	TokenType  string
+	UserID     *int
 	OrgID      *int
+	APIKeyID   *int64
 	TokenHash  string
 	UserAgent  *string
 	IP         *net.IP
@@ -51,11 +53,11 @@ func (s *Storage) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 	var t RefreshToken
 	var ipStr *string
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, user_id, org_id, token_hash, user_agent, host(ip), created_at, expires_at, used_at, replaced_by, revoked_at
+		SELECT id, token_type, user_id, org_id, api_key_id, token_hash, user_agent, host(ip), created_at, expires_at, used_at, replaced_by, revoked_at
 		FROM trakrf.refresh_tokens
 		WHERE token_hash = $1
 	`, tokenHash).Scan(
-		&t.ID, &t.UserID, &t.OrgID, &t.TokenHash, &t.UserAgent, &ipStr,
+		&t.ID, &t.TokenType, &t.UserID, &t.OrgID, &t.APIKeyID, &t.TokenHash, &t.UserAgent, &ipStr,
 		&t.CreatedAt, &t.ExpiresAt, &t.UsedAt, &t.ReplacedBy, &t.RevokedAt,
 	)
 	if err != nil {
@@ -148,4 +150,70 @@ func (s *Storage) RevokeRefreshTokenChain(ctx context.Context, startID int64) er
 		return fmt.Errorf("revoke refresh chain: %w", err)
 	}
 	return nil
+}
+
+// CreateAPIRefreshToken inserts a token_type='api' refresh row (user_id NULL,
+// api_key_id set) and returns its ID. Mirrors CreateRefreshToken for the
+// OAuth2 client_credentials grant (TRA-846).
+func (s *Storage) CreateAPIRefreshToken(ctx context.Context, apiKeyID int64, orgID *int, tokenHash string, expiresAt time.Time, userAgent, ipStr string) (int64, error) {
+	var ua, ip any
+	if userAgent != "" {
+		ua = userAgent
+	}
+	if parsed := net.ParseIP(ipStr); parsed != nil {
+		ip = parsed.String()
+	}
+
+	var id int64
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO trakrf.refresh_tokens (token_type, api_key_id, org_id, token_hash, expires_at, user_agent, ip)
+		VALUES ('api', $1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`, apiKeyID, orgID, tokenHash, expiresAt, ua, ip).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create api refresh token: %w", err)
+	}
+	return id, nil
+}
+
+// RotateAPIRefreshToken atomically marks the old api token used and inserts a
+// new api row, linking old.replaced_by → new.id. Returns the new row's ID.
+func (s *Storage) RotateAPIRefreshToken(ctx context.Context, oldID, apiKeyID int64, orgID *int, newHash string, expiresAt time.Time, userAgent, ipStr string) (int64, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin api rotate tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var ua, ip any
+	if userAgent != "" {
+		ua = userAgent
+	}
+	if parsed := net.ParseIP(ipStr); parsed != nil {
+		ip = parsed.String()
+	}
+
+	var newID int64
+	err = tx.QueryRow(ctx, `
+		INSERT INTO trakrf.refresh_tokens (token_type, api_key_id, org_id, token_hash, expires_at, user_agent, ip)
+		VALUES ('api', $1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`, apiKeyID, orgID, newHash, expiresAt, ua, ip).Scan(&newID)
+	if err != nil {
+		return 0, fmt.Errorf("insert new api refresh row: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE trakrf.refresh_tokens
+		SET used_at = NOW(), replaced_by = $2
+		WHERE id = $1
+	`, oldID, newID)
+	if err != nil {
+		return 0, fmt.Errorf("mark old api refresh row used: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit api rotate tx: %w", err)
+	}
+	return newID, nil
 }
