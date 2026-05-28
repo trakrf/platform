@@ -1296,7 +1296,7 @@
     "securitySchemes": {
       "BearerAuth": {
         "bearerFormat": "JWT",
-        "description": "TrakRF API key (JWT). Format: \"Bearer \u003cjwt\u003e\". Mint keys from the API Keys section of your TrakRF account. Some OpenAPI generators (e.g. openapi-fetch, openapi-generator-cli python target) do not auto-attach the Authorization header from this scheme — set it manually if your generated client does not. Similarly, some generated clients (notably openapi-fetch) do not auto-attach `Content-Type: application/merge-patch+json` on PATCH operations, even though the operation's requestBody.content lists only that media type; set the header manually per PATCH call if your client does not.",
+        "description": "TrakRF API access token. Format: \"Bearer \u003caccess_token\u003e\". Create API credentials in the API Keys section of your TrakRF account to obtain a {client_id, client_secret} pair, then exchange them at POST /oauth/token (grant_type=client_credentials) for a short-lived access token; send that token here. Some OpenAPI generators (e.g. openapi-fetch, openapi-generator-cli python target) do not auto-attach the Authorization header from this scheme — set it manually if your generated client does not. Similarly, some generated clients (notably openapi-fetch) do not auto-attach `Content-Type: application/merge-patch+json` on PATCH operations, even though the operation's requestBody.content lists only that media type; set the header manually per PATCH call if your client does not.",
         "scheme": "bearer",
         "type": "http"
       }
@@ -7233,7 +7233,7 @@
     },
     "/api/v1/oauth/token": {
       "post": {
-        "description": "Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` (the API key's jti) and `client_secret` (the long-lived API key token returned once at key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.",
+        "description": "Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` and `client_secret` (the opaque {client_id, client_secret} pair returned once at API-key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.",
         "requestBody": {
           "content": {
             "application/json": {
