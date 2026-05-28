@@ -1,14 +1,13 @@
 import { useEffect } from 'react';
+import { getAppConfig, isNonProd } from '@/lib/appConfig';
 
 export function EnvironmentBanner() {
-  const env = import.meta.env.VITE_ENVIRONMENT as string | undefined;
-
-  // No banner for prod/production, empty, or undefined
-  const isNonProd = typeof env === 'string' && env.length > 0 && env !== 'prod' && env !== 'production' && env !== 'undefined';
+  const env = getAppConfig().environmentLabel;
+  const showBanner = isNonProd(env);
 
   // Update page title with environment prefix
   useEffect(() => {
-    if (!isNonProd) return;
+    if (!showBanner) return;
 
     const baseTitle = 'TrakRF';
     const prefix = env.toUpperCase().slice(0, 3);
@@ -17,9 +16,9 @@ export function EnvironmentBanner() {
     return () => {
       document.title = baseTitle;
     };
-  }, [env, isNonProd]);
+  }, [env, showBanner]);
 
-  if (!isNonProd) return null;
+  if (!showBanner) return null;
 
   return (
     <div

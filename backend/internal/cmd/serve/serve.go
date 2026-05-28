@@ -81,7 +81,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	reportsHandler := reportshandler.NewHandler(store)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
-	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist")
+	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"))
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 

@@ -27,6 +27,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import './styles/globals.css';
 import { queryClient } from '@/lib/queryClient';
+import { getAppConfig, isNonProd } from '@/lib/appConfig';
 
 // Function to initialize the app - only called in non-test environments
 function initializeApp() {
@@ -43,8 +44,11 @@ function initializeApp() {
 }
 
 // Expose test hooks in dev and in non-production deployed envs (preview, gke).
-// Mirrors backend testhandler's "APP_ENV != production" gate.
-if (import.meta.env.DEV || import.meta.env.VITE_ENVIRONMENT === 'preview') {
+// Mirrors backend testhandler's "APP_ENV != production" gate. Runtime-driven
+// via the injected app config (TRA-853) so the same bundle gates correctly in
+// every environment — including the GKE dry-run, which the old build-time
+// `=== 'preview'` check would have missed.
+if (import.meta.env.DEV || isNonProd(getAppConfig().environmentLabel)) {
   import('./stores').then((stores) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as unknown as { __ZUSTAND_STORES__: any }).__ZUSTAND_STORES__ = {

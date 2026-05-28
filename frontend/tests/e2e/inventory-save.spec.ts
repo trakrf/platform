@@ -395,7 +395,7 @@ test.describe('Inventory Save Flow', () => {
     await sharedPage.evaluate(() => {
       const stores = (window as any).__ZUSTAND_STORES__;
       const tagStore = stores?.tagStore;
-      if (!tagStore) throw new Error('tagStore not exposed; build flag VITE_ENVIRONMENT=preview required');
+      if (!tagStore) throw new Error('tagStore not exposed; runs in dev or a non-prod env (ENVIRONMENT_LABEL) per the test-hook gate');
       tagStore.getState().clearTags();
       tagStore.getState().setTags([
         {
