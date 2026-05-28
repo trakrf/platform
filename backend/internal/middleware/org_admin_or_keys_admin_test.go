@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,10 +55,11 @@ func mintAPIKeyJWT(t *testing.T, store *storage.Storage, orgID int, scopes []str
 		fmt.Sprintf("seed-%d", orgID), fmt.Sprintf("seed-%d@ex", orgID),
 	).Scan(&seederID)
 	require.NoError(t, err)
-	key, err := store.CreateAPIKey(context.Background(), orgID, "t", scopes,
+	key, err := store.CreateAPIKey(context.Background(), orgID, "t", "testhash", scopes,
 		apikey.Creator{UserID: &seederID}, nil)
 	require.NoError(t, err)
-	signed, err := jwt.GenerateAccessToken(key.JTI, orgID, scopes, nil)
+	exp := time.Now().Add(15 * time.Minute)
+	signed, err := jwt.GenerateAccessToken(key.JTI, orgID, scopes, &exp)
 	require.NoError(t, err)
 	return signed
 }

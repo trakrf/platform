@@ -11,7 +11,7 @@ import (
 // TRA-547 §2.1: APIKeyCreateResponse omits expires_at when unset.
 func TestAPIKeyCreateResponse_ExpiresAtAbsentWhenNil(t *testing.T) {
 	resp := APIKeyCreateResponse{
-		Token: "k", JTI: "j", Name: "n", Scopes: []string{"s"},
+		ClientID: "j", ClientSecret: "trakrf_secret", Name: "n", Scopes: []string{"s"},
 		// ExpiresAt left nil
 	}
 	data, err := json.Marshal(resp)

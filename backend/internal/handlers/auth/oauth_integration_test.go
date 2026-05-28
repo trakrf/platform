@@ -19,6 +19,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/apikey"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/testutil"
+	"github.com/trakrf/platform/backend/internal/util/apisecret"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
@@ -38,12 +39,12 @@ func TestOAuthToken_ClientCredentialsThenRefresh(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := mkUserH(t, pool, "oauth-e2e@example.com")
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
-	require.NoError(t, err)
 
-	// The long-lived JWT is the client_secret. Mint one the same way key
-	// creation does (no exp).
-	clientSecret, err := jwt.GenerateAccessToken(key.JTI, key.OrgID, key.Scopes, nil)
+	// client_secret is the opaque secret shown once at key creation; only its
+	// hash is stored on the row.
+	clientSecret, err := apisecret.Generate()
+	require.NoError(t, err)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", apisecret.Hash(clientSecret), []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	svc := authservice.NewService(pool, store, nil)
@@ -100,7 +101,9 @@ func TestOAuthToken_BadSecretIs401(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := mkUserH(t, pool, "oauth-bad@example.com")
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	secret, err := apisecret.Generate()
+	require.NoError(t, err)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", apisecret.Hash(secret), []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	svc := authservice.NewService(pool, store, nil)

@@ -15,7 +15,8 @@ func TestGenerateAndValidateAccessToken(t *testing.T) {
 	orgID := 42
 	scopes := []string{"assets:read", "locations:read"}
 
-	token, err := GenerateAccessToken(jti, orgID, scopes, nil)
+	exp := time.Now().Add(15 * time.Minute)
+	token, err := GenerateAccessToken(jti, orgID, scopes, &exp)
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
@@ -26,7 +27,18 @@ func TestGenerateAndValidateAccessToken(t *testing.T) {
 	assert.Equal(t, scopes, claims.Scopes)
 	assert.Equal(t, "trakrf-api-key", claims.Issuer)
 	assert.Contains(t, claims.Audience, "trakrf-api")
-	assert.Nil(t, claims.ExpiresAt)
+	assert.NotNil(t, claims.ExpiresAt)
+}
+
+func TestValidateAccessTokenRejectsMissingExp(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-abc123")
+
+	// A token minted with no expiry (the deprecated long-lived shape) must be rejected.
+	token, err := GenerateAccessToken("some-jti", 1, []string{"assets:read"}, nil)
+	require.NoError(t, err)
+
+	_, err = ValidateAccessToken(token)
+	assert.Error(t, err, "access token without exp must be rejected")
 }
 
 func TestGenerateAccessTokenWithExpiry(t *testing.T) {

@@ -25,7 +25,7 @@ func TestRefreshTokens_APIRowAllowsNullUser(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := createTestUser(t, pool)
-	key, err := store.CreateAPIKey(context.Background(), orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(context.Background(), orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	var id int64
@@ -46,7 +46,7 @@ func TestRefreshTokens_APIRowRejectsUser(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := createTestUser(t, pool)
-	key, err := store.CreateAPIKey(context.Background(), orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(context.Background(), orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(context.Background(), `
@@ -65,7 +65,7 @@ func TestStorage_CreateAndGetAPIRefreshToken(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := createTestUser(t, pool)
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	id, err := store.CreateAPIRefreshToken(ctx, int64(key.ID), &orgID, "hash_get_1", time.Now().Add(time.Hour), "ua", "1.2.3.4")
@@ -89,7 +89,7 @@ func TestStorage_RotateAPIRefreshToken(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := createTestUser(t, pool)
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	oldID, err := store.CreateAPIRefreshToken(ctx, int64(key.ID), &orgID, "hash_rot_old", time.Now().Add(time.Hour), "", "")
@@ -114,7 +114,7 @@ func TestStorage_GetAPIKeyByID(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := createTestUser(t, pool)
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read", "locations:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read", "locations:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	got, err := store.GetAPIKeyByID(ctx, int64(key.ID))
@@ -134,7 +134,7 @@ func TestStorage_APIKeyDeleteCascadesRefreshTokens(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := createTestUser(t, pool)
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	_, err = store.CreateAPIRefreshToken(ctx, int64(key.ID), &orgID, "hash_cascade", time.Now().Add(time.Hour), "", "")
 	require.NoError(t, err)

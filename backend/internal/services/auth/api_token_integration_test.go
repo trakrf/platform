@@ -40,7 +40,7 @@ func TestMintAPITokenPair_IssuesShortLivedJWT(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := mkUser(t, pool, "apitok@example.com")
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read", "locations:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read", "locations:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	access, refresh, expiresIn, err := svc.MintAPITokenPair(ctx, key.JTI, key.Scopes, orgID, int64(key.ID), "ua", "1.2.3.4")
@@ -64,7 +64,7 @@ func TestRefreshAPIToken_RotatesWithCurrentScopes(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := mkUser(t, pool, "apitok2@example.com")
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	_, refresh, _, err := svc.MintAPITokenPair(ctx, key.JTI, key.Scopes, orgID, int64(key.ID), "", "")
@@ -107,7 +107,7 @@ func TestRefreshAPIToken_RejectsRevokedKey(t *testing.T) {
 
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID := mkUser(t, pool, "apitok4@example.com")
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	_, refresh, _, err := svc.MintAPITokenPair(ctx, key.JTI, key.Scopes, orgID, int64(key.ID), "", "")
