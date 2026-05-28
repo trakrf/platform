@@ -1,0 +1,71 @@
+name: Promote to prod
+
+# Moves the floating `ghcr.io/trakrf/backend:prod` tag onto an already-built,
+# already-tested image (TRA-854 / TRA-375). This is a pure manifest re-tag via
+# `docker buildx imagetools` — NO rebuild — so the artifact promoted to prod is
+# byte-identical to the one validated on main/preview. Deliberately a manual
+# dispatch (not a push trigger): promotion is an explicit, audited action, which
+# is the whole point of the floating-tag deploy model.
+#
+# Cutover / rollback both = dispatch this with the target source tag, then flip
+# (or leave) the prod imageTag = `prod` on the infra side; ArgoCD re-pulls the
+# digest `:prod` now resolves to.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source image tag to promote to :prod (e.g. sha-c372f81, or latest)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  # Never let two promotions race on the :prod tag.
+  group: promote-prod
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source tag
+        env:
+          SOURCE: ${{ inputs.source }}
+        run: |
+          # Only main-derived tags may be promoted: an immutable sha-<hex> tag
+          # or `latest`. Blocks fat-fingering a non-prod ref like `preview` or
+          # `gke-preprod` onto :prod.
+          if [[ ! "${SOURCE}" =~ ^(sha-[0-9a-f]{7,40}|latest)$ ]]; then
+            echo "::error::Refusing to promote '${SOURCE}'. Expected sha-<hex> or latest." >&2
+            exit 1
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote source to :prod
+        env:
+          SOURCE: ${{ inputs.source }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/trakrf/backend"
+
+          # Pre-flight: fail loudly if the source doesn't exist, rather than
+          # creating a :prod tag that resolves to nothing.
+          echo "Resolving ${IMAGE}:${SOURCE} ..."
+          docker buildx imagetools inspect "${IMAGE}:${SOURCE}"
+
+          # Pure manifest re-tag — copies the source manifest to :prod, no rebuild.
+          docker buildx imagetools create --tag "${IMAGE}:prod" "${IMAGE}:${SOURCE}"
+
+          echo "Promoted ${IMAGE}:${SOURCE} -> ${IMAGE}:prod"
+          echo "### :prod now resolves to:"
+          docker buildx imagetools inspect "${IMAGE}:prod"
