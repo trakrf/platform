@@ -72,7 +72,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	orgsSvc := orgsservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
 	log.Info().Msg("Services initialized")
 
-	authHandler := authhandler.NewHandler(authSvc)
+	authHandler := authhandler.NewHandler(authSvc, store)
 	orgsHandler := orgshandler.NewHandler(store, orgsSvc, authSvc)
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
