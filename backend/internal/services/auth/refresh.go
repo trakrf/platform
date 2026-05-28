@@ -95,7 +95,10 @@ func (s *Service) Refresh(ctx context.Context, presentedSecret, userAgent, ip st
 		return nil, fmt.Errorf("invalid_refresh_token")
 	}
 
-	usr, err := s.storage.GetUserByID(ctx, row.UserID)
+	if row.UserID == nil {
+		return nil, fmt.Errorf("invalid_refresh_token")
+	}
+	usr, err := s.storage.GetUserByID(ctx, *row.UserID)
 	if err != nil || usr == nil {
 		return nil, fmt.Errorf("invalid_refresh_token")
 	}
@@ -111,7 +114,7 @@ func (s *Service) Refresh(ctx context.Context, presentedSecret, userAgent, ip st
 	}
 
 	_, err = s.storage.RotateRefreshToken(
-		ctx, row.ID, row.UserID, row.OrgID, hashRefreshSecret(newSecret),
+		ctx, row.ID, *row.UserID, row.OrgID, hashRefreshSecret(newSecret),
 		time.Now().Add(refreshTokenTTL), userAgent, ip,
 	)
 	if err != nil {
