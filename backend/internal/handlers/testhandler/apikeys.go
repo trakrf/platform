@@ -3,8 +3,10 @@ package testhandler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/trakrf/platform/backend/internal/models/apikey"
+	"github.com/trakrf/platform/backend/internal/util/apisecret"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -75,16 +77,24 @@ func (h *Handler) MintAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	secret, err := apisecret.Generate()
+	if err != nil {
+		http.Error(w, "Failed to generate secret", http.StatusInternalServerError)
+		return
+	}
 	creator := apikey.Creator{UserID: &user.ID}
-	key, err := h.storage.CreateAPIKey(ctx, org.ID, mintedKeyName, req.Scopes, creator, nil)
+	key, err := h.storage.CreateAPIKey(ctx, org.ID, mintedKeyName, apisecret.Hash(secret), req.Scopes, creator, nil)
 	if err != nil {
 		http.Error(w, "Failed to create api key", http.StatusInternalServerError)
 		return
 	}
 
-	token, err := jwt.GenerateAPIKey(key.JTI, org.ID, req.Scopes, nil)
+	// Mint a short-lived access token directly (generous TTL covers a full
+	// contract-test run) instead of round-tripping the grant endpoint.
+	exp := time.Now().Add(1 * time.Hour)
+	token, err := jwt.GenerateAccessToken(key.JTI, org.ID, req.Scopes, &exp)
 	if err != nil {
-		http.Error(w, "Failed to sign api-key jwt", http.StatusInternalServerError)
+		http.Error(w, "Failed to sign access token", http.StatusInternalServerError)
 		return
 	}
 

@@ -19,6 +19,7 @@ func (s *Storage) CreateAPIKey(
 	ctx context.Context,
 	orgID int,
 	name string,
+	secretHash string,
 	scopes []string,
 	creator apikey.Creator,
 	expiresAt *time.Time,
@@ -29,12 +30,12 @@ func (s *Storage) CreateAPIKey(
 	var k apikey.APIKey
 	err := s.pool.QueryRow(ctx, `
         INSERT INTO trakrf.api_keys
-            (org_id, name, scopes, created_by, created_by_key_id, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, jti, org_id, name, scopes, created_by, created_by_key_id,
+            (org_id, name, secret_hash, scopes, created_by, created_by_key_id, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, jti, secret_hash, org_id, name, scopes, created_by, created_by_key_id,
                   created_at, expires_at, last_used_at, revoked_at
-    `, orgID, name, scopes, creator.UserID, creator.KeyID, expiresAt).Scan(
-		&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
+    `, orgID, name, secretHash, scopes, creator.UserID, creator.KeyID, expiresAt).Scan(
+		&k.ID, &k.JTI, &k.SecretHash, &k.OrgID, &k.Name, &k.Scopes,
 		&k.CreatedBy, &k.CreatedByKeyID,
 		&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
 	)
@@ -125,12 +126,12 @@ func (s *Storage) CountActiveAPIKeys(ctx context.Context, orgID int) (int, error
 func (s *Storage) GetAPIKeyByJTI(ctx context.Context, jti string) (*apikey.APIKey, error) {
 	var k apikey.APIKey
 	err := s.pool.QueryRow(ctx, `
-        SELECT id, jti, org_id, name, scopes, created_by, created_by_key_id,
+        SELECT id, jti, secret_hash, org_id, name, scopes, created_by, created_by_key_id,
                created_at, expires_at, last_used_at, revoked_at
         FROM trakrf.api_keys
         WHERE jti = $1
     `, jti).Scan(
-		&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
+		&k.ID, &k.JTI, &k.SecretHash, &k.OrgID, &k.Name, &k.Scopes,
 		&k.CreatedBy, &k.CreatedByKeyID,
 		&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
 	)
@@ -149,12 +150,12 @@ func (s *Storage) GetAPIKeyByJTI(ctx context.Context, jti string) (*apikey.APIKe
 func (s *Storage) GetAPIKeyByID(ctx context.Context, id int64) (*apikey.APIKey, error) {
 	var k apikey.APIKey
 	err := s.pool.QueryRow(ctx, `
-        SELECT id, jti, org_id, name, scopes, created_by, created_by_key_id,
+        SELECT id, jti, secret_hash, org_id, name, scopes, created_by, created_by_key_id,
                created_at, expires_at, last_used_at, revoked_at
         FROM trakrf.api_keys
         WHERE id = $1
     `, id).Scan(
-		&k.ID, &k.JTI, &k.OrgID, &k.Name, &k.Scopes,
+		&k.ID, &k.JTI, &k.SecretHash, &k.OrgID, &k.Name, &k.Scopes,
 		&k.CreatedBy, &k.CreatedByKeyID,
 		&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt,
 	)

@@ -214,7 +214,7 @@ func TestContract_BB12_401Reproductions(t *testing.T) {
 //
 // The auth chain runs to its terminal 401 without a DB for these inputs
 // (no Authorization header → APIKeyAuth/EitherAuth return early;
-// "Bearer not-a-jwt" → ValidateAPIKey/ClassifyToken fail before any
+// "Bearer not-a-jwt" → ValidateAccessToken/ClassifyToken fail before any
 // storage call), so nil store is safe.
 func TestContract_TRA724_401DetailsAreEndpointAgnostic(t *testing.T) {
 	t.Setenv("JWT_SECRET", "tra724-test-secret")

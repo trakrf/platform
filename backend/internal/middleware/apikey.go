@@ -52,7 +52,7 @@ func APIKeyAuth(store *storage.Storage) func(http.Handler) http.Handler {
 				return
 			}
 
-			claims, err := jwt.ValidateAPIKey(parts[1])
+			claims, err := jwt.ValidateAccessToken(parts[1])
 			if err != nil {
 				logger.Get().Warn().Err(err).Str("request_id", reqID).Msg("api key jwt validation failed")
 				httputil.Respond401(w, r, Detail401InvalidOrExpiredToken, reqID)

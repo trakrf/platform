@@ -14,6 +14,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/apikey"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
+	"github.com/trakrf/platform/backend/internal/util/apisecret"
 )
 
 func createTestUser(t *testing.T, pool *pgxpool.Pool) int {
@@ -38,17 +39,20 @@ func TestAPIKeyStorage_CreateAndGetByJTI(t *testing.T) {
 
 	ctx := context.Background()
 	scopes := []string{"assets:read", "locations:read"}
-	key, err := store.CreateAPIKey(ctx, orgID, "test-key", scopes, apikey.Creator{UserID: &userID}, nil)
+	secretHash := apisecret.Hash("some-opaque-secret")
+	key, err := store.CreateAPIKey(ctx, orgID, "test-key", secretHash, scopes, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	assert.NotZero(t, key.ID)
 	assert.NotEmpty(t, key.JTI)
 	assert.Equal(t, orgID, key.OrgID)
 	assert.Equal(t, "test-key", key.Name)
+	assert.Equal(t, secretHash, key.SecretHash)
 
 	got, err := store.GetAPIKeyByJTI(ctx, key.JTI)
 	require.NoError(t, err)
 	assert.Equal(t, key.ID, got.ID)
 	assert.Equal(t, scopes, got.Scopes)
+	assert.Equal(t, secretHash, got.SecretHash, "secret_hash must round-trip through GetAPIKeyByJTI")
 	assert.Nil(t, got.RevokedAt)
 }
 
@@ -61,9 +65,9 @@ func TestAPIKeyStorage_ListExcludesRevoked(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	active, err := store.CreateAPIKey(ctx, orgID, "active", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	active, err := store.CreateAPIKey(ctx, orgID, "active", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
-	revoked, err := store.CreateAPIKey(ctx, orgID, "revoked", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	revoked, err := store.CreateAPIKey(ctx, orgID, "revoked", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	require.NoError(t, store.RevokeAPIKey(ctx, orgID, revoked.ID))
 
@@ -83,7 +87,7 @@ func TestAPIKeyStorage_CountActive(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		_, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+		_, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 		require.NoError(t, err)
 	}
 	n, err := store.CountActiveAPIKeys(ctx, orgID)
@@ -106,7 +110,7 @@ func TestAPIKeyStorage_RevokeReturnsNotFoundForCrossOrg(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	key, err := store.CreateAPIKey(ctx, org1, "org1-key", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, org1, "org1-key", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	err = store.RevokeAPIKey(ctx, org2, key.ID)
@@ -122,7 +126,7 @@ func TestAPIKeyStorage_UpdateLastUsed(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	assert.Nil(t, key.LastUsedAt)
 
@@ -146,11 +150,11 @@ func TestCreateAPIKey_WithCreatedByKeyID(t *testing.T) {
 		`INSERT INTO trakrf.users (name, email, password_hash) VALUES ('seed', 'seed@x', 'stub') RETURNING id`,
 	).Scan(&seedUserID))
 
-	parent, err := store.CreateAPIKey(context.Background(), orgID, "parent",
+	parent, err := store.CreateAPIKey(context.Background(), orgID, "parent", "testhash",
 		[]string{"keys:admin"}, apikey.Creator{UserID: &seedUserID}, nil)
 	require.NoError(t, err)
 
-	child, err := store.CreateAPIKey(context.Background(), orgID, "child",
+	child, err := store.CreateAPIKey(context.Background(), orgID, "child", "testhash",
 		[]string{"assets:read"}, apikey.Creator{KeyID: &parent.ID}, nil)
 	require.NoError(t, err)
 	require.Nil(t, child.CreatedBy)
@@ -190,13 +194,13 @@ func TestAPIKeyStorage_ListActivePaginated(t *testing.T) {
 	ctx := context.Background()
 
 	// Seed three keys at distinct timestamps so created_at DESC ordering is observable.
-	k1, err := store.CreateAPIKey(ctx, orgID, "first", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	k1, err := store.CreateAPIKey(ctx, orgID, "first", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	time.Sleep(2 * time.Millisecond)
-	k2, err := store.CreateAPIKey(ctx, orgID, "second", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	k2, err := store.CreateAPIKey(ctx, orgID, "second", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	time.Sleep(2 * time.Millisecond)
-	k3, err := store.CreateAPIKey(ctx, orgID, "third", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
+	k3, err := store.CreateAPIKey(ctx, orgID, "third", "testhash", []string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	page1, err := store.ListActiveAPIKeysPaginated(ctx, orgID, 2, 0)
@@ -220,7 +224,7 @@ func TestAPIKeyStorage_RevokeByJTI(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	key, err := store.CreateAPIKey(ctx, orgID, "to-revoke",
+	key, err := store.CreateAPIKey(ctx, orgID, "to-revoke", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, key.JTI)
@@ -249,7 +253,7 @@ func TestAPIKeyStorage_RevokeByJTIReturnsNotFoundForCrossOrg(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	key, err := store.CreateAPIKey(ctx, org1, "org1-key", []string{"assets:read"},
+	key, err := store.CreateAPIKey(ctx, org1, "org1-key", "testhash", []string{"assets:read"},
 		apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
@@ -266,7 +270,7 @@ func TestAPIKeyStorage_RevokeByJTIAlreadyRevoked(t *testing.T) {
 	userID := createTestUser(t, pool)
 	ctx := context.Background()
 
-	key, err := store.CreateAPIKey(ctx, orgID, "k", []string{"assets:read"},
+	key, err := store.CreateAPIKey(ctx, orgID, "k", "testhash", []string{"assets:read"},
 		apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
@@ -288,22 +292,22 @@ func TestAPIKeys_CreatorExactlyOneCheck(t *testing.T) {
 		`INSERT INTO trakrf.users (name, email, password_hash) VALUES ('u', 'u@x', 'stub') RETURNING id`,
 	).Scan(&userID))
 
-	parent, err := store.CreateAPIKey(context.Background(), orgID, "p",
+	parent, err := store.CreateAPIKey(context.Background(), orgID, "p", "testhash",
 		[]string{"keys:admin"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
 	// Bypass storage helper — raw INSERT with BOTH creator columns set → CHECK fails.
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.api_keys (org_id, name, scopes, created_by, created_by_key_id)
-		VALUES ($1, 'both', ARRAY['assets:read'], $2, $3)`,
+		INSERT INTO trakrf.api_keys (org_id, name, secret_hash, scopes, created_by, created_by_key_id)
+		VALUES ($1, 'both', 'h', ARRAY['assets:read'], $2, $3)`,
 		orgID, userID, parent.ID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "api_keys_creator_exactly_one")
 
 	// And with NEITHER set → also CHECK fails.
 	_, err = pool.Exec(context.Background(), `
-		INSERT INTO trakrf.api_keys (org_id, name, scopes)
-		VALUES ($1, 'neither', ARRAY['assets:read'])`, orgID)
+		INSERT INTO trakrf.api_keys (org_id, name, secret_hash, scopes)
+		VALUES ($1, 'neither', 'h', ARRAY['assets:read'])`, orgID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "api_keys_creator_exactly_one")
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -31,11 +32,12 @@ func setupEitherAuth(t *testing.T) (*storage.Storage, func(), int, int, string, 
         VALUES ('ea', 'ea@example.com', 'stub') RETURNING id`,
 	).Scan(&userID))
 
-	key, err := store.CreateAPIKey(context.Background(), orgID, "ea-key",
+	key, err := store.CreateAPIKey(context.Background(), orgID, "ea-key", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
-	apiTok, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	exp := time.Now().Add(15 * time.Minute)
+	apiTok, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, &exp)
 	require.NoError(t, err)
 
 	sessTok, err := jwt.Generate(userID, "ea@example.com", &orgID)

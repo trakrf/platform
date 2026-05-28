@@ -7,14 +7,14 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/auth"
 	"github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/util/apisecret"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
-	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
 // Token is the OAuth2 token endpoint for the public API.
 //
 // @Summary OAuth2 token grant
-// @Description Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` (the API key's jti) and `client_secret` (the long-lived API key token returned once at key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.
+// @Description Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` and `client_secret` (the opaque {client_id, client_secret} pair returned once at API-key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.
 // @Tags oauth,public
 // @Accept json
 // @Produce json
@@ -59,15 +59,14 @@ func (handler *Handler) tokenClientCredentials(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Authenticate the client: the client_secret is the long-lived api-key JWT.
-	claims, err := jwt.ValidateAPIKey(request.ClientSecret)
-	if err != nil || claims.Subject != request.ClientID {
+	// Authenticate the client: client_id is the api_keys.jti, client_secret is
+	// the opaque secret shown once at creation and stored only as a hash.
+	key, err := handler.store.GetAPIKeyByJTI(r.Context(), request.ClientID)
+	if err != nil || key == nil {
 		httputil.Respond401(w, r, "Invalid client credentials", reqID)
 		return
 	}
-
-	key, err := handler.store.GetAPIKeyByJTI(r.Context(), request.ClientID)
-	if err != nil || key == nil {
+	if !apisecret.Verify(request.ClientSecret, key.SecretHash) {
 		httputil.Respond401(w, r, "Invalid client credentials", reqID)
 		return
 	}

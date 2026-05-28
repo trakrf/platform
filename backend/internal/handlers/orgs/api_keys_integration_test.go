@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,6 +25,7 @@ import (
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
+	"github.com/trakrf/platform/backend/internal/util/apisecret"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
@@ -63,13 +66,17 @@ func newAdminRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	return r
 }
 
-// mintKeysAdminAPIKey inserts a DB row, returns the signed JWT and the row id.
+// mintKeysAdminAPIKey inserts a DB row and returns a short-lived access-token
+// Bearer for it (the post-TRA-847 credential) plus the row id.
 func mintKeysAdminAPIKey(t *testing.T, store *storage.Storage, orgID, userID int) (string, int) {
 	t.Helper()
-	key, err := store.CreateAPIKey(context.Background(), orgID, "bootstrap admin",
+	secret, err := apisecret.Generate()
+	require.NoError(t, err)
+	key, err := store.CreateAPIKey(context.Background(), orgID, "bootstrap admin", apisecret.Hash(secret),
 		[]string{"keys:admin"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
-	signed, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"keys:admin"}, nil)
+	exp := time.Now().Add(15 * time.Minute)
+	signed, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"keys:admin"}, &exp)
 	require.NoError(t, err)
 	return signed, key.ID
 }
@@ -106,14 +113,14 @@ func TestCreateAPIKey_Admin(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &flat))
 	assert.NotContains(t, flat, "key", "response must be wrapped in data envelope")
 	resp := envelope.Data
-	assert.NotEmpty(t, resp.Token)
 	assert.Equal(t, "TeamCentral sync", resp.Name)
 	assert.Equal(t, []string{"assets:read", "locations:read"}, resp.Scopes)
 
-	// Key must validate as an api-key JWT
-	claims, err := jwt.ValidateAPIKey(resp.Token)
-	require.NoError(t, err)
-	assert.Equal(t, orgID, claims.OrgID)
+	// client_id is the row jti; client_secret is an opaque secret shown once,
+	// never a JWT.
+	assert.NotEmpty(t, resp.ClientID)
+	assert.True(t, strings.HasPrefix(resp.ClientSecret, "trakrf_"), "client_secret must be opaque, got %q", resp.ClientSecret)
+	assert.NotEqual(t, 2, strings.Count(resp.ClientSecret, "."), "client_secret must not be a JWT")
 }
 
 func TestCreateAPIKey_NonAdminForbidden(t *testing.T) {
@@ -159,10 +166,10 @@ func TestListAPIKeys_ExcludesRevoked(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID, sessionToken := seedAdminUser(t, pool, orgID)
 
-	active, err := store.CreateAPIKey(context.Background(), orgID, "active",
+	active, err := store.CreateAPIKey(context.Background(), orgID, "active", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
-	revoked, err := store.CreateAPIKey(context.Background(), orgID, "revoked",
+	revoked, err := store.CreateAPIKey(context.Background(), orgID, "revoked", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	require.NoError(t, store.RevokeAPIKey(context.Background(), orgID, revoked.ID))
@@ -196,7 +203,7 @@ func TestCreateAPIKey_SoftCap(t *testing.T) {
 	userID, sessionToken := seedAdminUser(t, pool, orgID)
 
 	for i := 0; i < apikey.ActiveKeyCap; i++ {
-		_, err := store.CreateAPIKey(context.Background(), orgID, "k",
+		_, err := store.CreateAPIKey(context.Background(), orgID, "k", "testhash",
 			[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 		require.NoError(t, err)
 	}
@@ -224,7 +231,7 @@ func TestRevokeAPIKey(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID, sessionToken := seedAdminUser(t, pool, orgID)
 
-	key, err := store.CreateAPIKey(context.Background(), orgID, "to-revoke",
+	key, err := store.CreateAPIKey(context.Background(), orgID, "to-revoke", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
@@ -275,7 +282,7 @@ func TestRevokeAPIKey_CrossOrgReturns404(t *testing.T) {
 	require.NoError(t, err)
 
 	// Key belonging to org2
-	victimKey, err := store.CreateAPIKey(context.Background(), org2, "victim",
+	victimKey, err := store.CreateAPIKey(context.Background(), org2, "victim", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &creatorID}, nil)
 	require.NoError(t, err)
 
@@ -309,6 +316,7 @@ func TestListAPIKeys_PaginationEnvelope(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		_, err := store.CreateAPIKey(context.Background(), orgID,
 			fmt.Sprintf("p503-k%d", i),
+			"testhash",
 			[]string{"assets:read"},
 			apikey.Creator{UserID: &userID},
 			nil)
@@ -590,7 +598,7 @@ func TestRevokeAPIKey_ByAPIKeyPrincipal(t *testing.T) {
 	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
 
 	// Create a separate data key to revoke.
-	dataKey, err := store.CreateAPIKey(context.Background(), orgID, "target",
+	dataKey, err := store.CreateAPIKey(context.Background(), orgID, "target", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
@@ -617,7 +625,7 @@ func TestRevokeAPIKey_ByJTI_ByAPIKeyPrincipal(t *testing.T) {
 	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
 
 	// Create a separate data key to revoke.
-	dataKey, err := store.CreateAPIKey(context.Background(), orgID, "target",
+	dataKey, err := store.CreateAPIKey(context.Background(), orgID, "target", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
@@ -632,7 +640,7 @@ func TestRevokeAPIKey_ByJTI_ByAPIKeyPrincipal(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 }
 
-func TestCreateAPIKey_ResponseIncludesJTI(t *testing.T) {
+func TestCreateAPIKey_ResponseIncludesClientID(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-create-jti")
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -661,13 +669,10 @@ func TestCreateAPIKey_ResponseIncludesJTI(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
 	resp := envelope.Data
 
-	require.NotEmpty(t, resp.JTI, "create response must include jti")
-
-	// The UUID jti is encoded in the JWT's `sub` claim (see GenerateAPIKey
-	// in backend/internal/util/jwt/apikey.go) — assert they match.
-	claims, err := jwt.ValidateAPIKey(resp.Token)
-	require.NoError(t, err)
-	assert.Equal(t, claims.Subject, resp.JTI, "jti in response must match JWT sub claim")
+	// client_id is the api_keys.jti (UUID) used as the client_credentials client_id.
+	require.NotEmpty(t, resp.ClientID, "create response must include client_id")
+	_, err := uuid.Parse(resp.ClientID)
+	require.NoError(t, err, "client_id must be the row's UUID jti")
 }
 
 func TestRevokeAPIKey_ByJTI(t *testing.T) {
@@ -678,7 +683,7 @@ func TestRevokeAPIKey_ByJTI(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, pool)
 	userID, sessionToken := seedAdminUser(t, pool, orgID)
 
-	key, err := store.CreateAPIKey(context.Background(), orgID, "to-revoke-jti",
+	key, err := store.CreateAPIKey(context.Background(), orgID, "to-revoke-jti", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, key.JTI)
@@ -719,7 +724,7 @@ func TestRevokeAPIKey_ByJTI_CrossOrgReturns404(t *testing.T) {
 	_, sessionToken2 := seedAdminUser2(t, pool, org2)
 
 	// Create the target key in org1.
-	key, err := store.CreateAPIKey(context.Background(), org1, "org1-target",
+	key, err := store.CreateAPIKey(context.Background(), org1, "org1-target", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
@@ -853,7 +858,7 @@ func TestRevokeAPIKey_KeyRevokesItself_ByJTI(t *testing.T) {
 	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
 
 	// Pull the jti out of the JWT we just minted. The UUID is in `sub`.
-	claims, err := jwt.ValidateAPIKey(adminKeyJWT)
+	claims, err := jwt.ValidateAccessToken(adminKeyJWT)
 	require.NoError(t, err)
 	require.NotEmpty(t, claims.Subject)
 

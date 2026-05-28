@@ -1502,7 +1502,7 @@ var requiredFields = map[string][]string{
 // taking these schemas with it.
 var internalOnlyRequiredFields = map[string][]string{
 	"apikey.APIKeyListItem":       {"id", "jti", "name", "scopes", "created_by", "created_by_key_id", "created_at"},
-	"apikey.APIKeyCreateResponse": {"token", "id", "jti", "name", "scopes", "created_at"},
+	"apikey.APIKeyCreateResponse": {"client_id", "client_secret", "id", "name", "scopes", "created_at"},
 	"org.CreateAPIKeyResponse":    {"data"},
 	"org.ListAPIKeysResponse":     {"data", "limit", "offset", "total_count"},
 }

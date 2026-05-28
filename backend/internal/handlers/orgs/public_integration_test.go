@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,10 +37,11 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	).Scan(&userID)
 	require.NoError(t, err)
 
-	key, err := store.CreateAPIKey(context.Background(), orgID, "pub-key",
+	key, err := store.CreateAPIKey(context.Background(), orgID, "pub-key", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
-	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	exp := time.Now().Add(15 * time.Minute)
+	token, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, &exp)
 	require.NoError(t, err)
 
 	service := orgsservice.NewService(pool, store, nil)

@@ -34,11 +34,12 @@ func setupAPIKey(t *testing.T) (*storage.Storage, func(), int, string) {
 	).Scan(&userID)
 	require.NoError(t, err)
 
-	key, err := store.CreateAPIKey(context.Background(), orgID, "mw-key",
+	key, err := store.CreateAPIKey(context.Background(), orgID, "mw-key", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
-	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	exp := time.Now().Add(15 * time.Minute)
+	token, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, &exp)
 	require.NoError(t, err)
 
 	return store, cleanup, orgID, token
@@ -140,13 +141,14 @@ func TestAPIKeyAuth_DBExpiredKeyRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	past := time.Now().Add(-1 * time.Hour)
-	key, err := store.CreateAPIKey(context.Background(), orgID, "expired",
+	key, err := store.CreateAPIKey(context.Background(), orgID, "expired", "testhash",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, &past)
 	require.NoError(t, err)
 
-	// Generate a token WITHOUT exp claim so JWT parser doesn't reject;
-	// the DB check must catch the expiry.
-	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	// The access token itself is still valid (future exp); the api_keys row's
+	// expires_at is in the past, so the DB-layer check must catch the expiry.
+	exp := time.Now().Add(15 * time.Minute)
+	token, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, &exp)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
