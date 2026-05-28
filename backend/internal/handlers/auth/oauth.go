@@ -22,7 +22,9 @@ import (
 // @Success 200 {object} auth.TokenResponse
 // @Failure 400 {object} errors.ErrorResponse "Validation error / unsupported grant_type"
 // @Failure 401 {object} errors.ErrorResponse "Invalid client credentials or refresh token"
+// @Failure 404 {object} errors.ErrorResponse "not_found"
 // @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
+// @Failure 429 {object} errors.ErrorResponse "rate_limited"
 // @Router /api/v1/oauth/token [post]
 func (handler *Handler) Token(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())

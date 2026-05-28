@@ -967,6 +967,11 @@ components:
                 token_type:
                     example: Bearer
                     type: string
+            required:
+                - access_token
+                - refresh_token
+                - token_type
+                - expires_in
             type: object
     securitySchemes:
         BearerAuth:
@@ -4884,6 +4889,21 @@ paths:
                             $ref: '#/components/headers/XRateLimitReset'
                         X-Request-Id:
                             $ref: '#/components/headers/XRequestId'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: not_found
+                    headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
                 "405":
                     content:
                         application/json:
@@ -4908,6 +4928,23 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        X-RateLimit-Limit:
+                            $ref: '#/components/headers/XRateLimitLimit'
+                        X-RateLimit-Remaining:
+                            $ref: '#/components/headers/XRateLimitRemaining'
+                        X-RateLimit-Reset:
+                            $ref: '#/components/headers/XRateLimitReset'
+                        X-Request-Id:
+                            $ref: '#/components/headers/XRequestId'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: rate_limited
+                    headers:
+                        Retry-After:
+                            $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
