@@ -60,7 +60,7 @@ func (handler *Handler) tokenClientCredentials(w http.ResponseWriter, r *http.Re
 	}
 
 	// Authenticate the client: the client_secret is the long-lived api-key JWT.
-	claims, err := jwt.ValidateAPIKey(request.ClientSecret)
+	claims, err := jwt.ValidateAccessToken(request.ClientSecret)
 	if err != nil || claims.Subject != request.ClientID {
 		httputil.Respond401(w, r, "Invalid client credentials", reqID)
 		return

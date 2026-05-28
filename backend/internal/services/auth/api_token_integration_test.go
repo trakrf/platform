@@ -49,7 +49,7 @@ func TestMintAPITokenPair_IssuesShortLivedJWT(t *testing.T) {
 	assert.NotEmpty(t, refresh)
 	assert.Equal(t, 900, expiresIn) // 15 min
 
-	claims, err := jwt.ValidateAPIKey(access)
+	claims, err := jwt.ValidateAccessToken(access)
 	require.NoError(t, err)
 	assert.Equal(t, key.JTI, claims.Subject)
 	assert.Equal(t, orgID, claims.OrgID)

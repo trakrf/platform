@@ -69,7 +69,7 @@ func mintKeysAdminAPIKey(t *testing.T, store *storage.Storage, orgID, userID int
 	key, err := store.CreateAPIKey(context.Background(), orgID, "bootstrap admin",
 		[]string{"keys:admin"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
-	signed, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"keys:admin"}, nil)
+	signed, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"keys:admin"}, nil)
 	require.NoError(t, err)
 	return signed, key.ID
 }
@@ -111,7 +111,7 @@ func TestCreateAPIKey_Admin(t *testing.T) {
 	assert.Equal(t, []string{"assets:read", "locations:read"}, resp.Scopes)
 
 	// Key must validate as an api-key JWT
-	claims, err := jwt.ValidateAPIKey(resp.Token)
+	claims, err := jwt.ValidateAccessToken(resp.Token)
 	require.NoError(t, err)
 	assert.Equal(t, orgID, claims.OrgID)
 }
@@ -663,9 +663,9 @@ func TestCreateAPIKey_ResponseIncludesJTI(t *testing.T) {
 
 	require.NotEmpty(t, resp.JTI, "create response must include jti")
 
-	// The UUID jti is encoded in the JWT's `sub` claim (see GenerateAPIKey
+	// The UUID jti is encoded in the JWT's `sub` claim (see GenerateAccessToken
 	// in backend/internal/util/jwt/apikey.go) — assert they match.
-	claims, err := jwt.ValidateAPIKey(resp.Token)
+	claims, err := jwt.ValidateAccessToken(resp.Token)
 	require.NoError(t, err)
 	assert.Equal(t, claims.Subject, resp.JTI, "jti in response must match JWT sub claim")
 }
@@ -853,7 +853,7 @@ func TestRevokeAPIKey_KeyRevokesItself_ByJTI(t *testing.T) {
 	adminKeyJWT, _ := mintKeysAdminAPIKey(t, store, orgID, userID)
 
 	// Pull the jti out of the JWT we just minted. The UUID is in `sub`.
-	claims, err := jwt.ValidateAPIKey(adminKeyJWT)
+	claims, err := jwt.ValidateAccessToken(adminKeyJWT)
 	require.NoError(t, err)
 	require.NotEmpty(t, claims.Subject)
 

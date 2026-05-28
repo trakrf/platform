@@ -39,7 +39,7 @@ func TestGetOrgMe_ValidAPIKey(t *testing.T) {
 	key, err := store.CreateAPIKey(context.Background(), orgID, "pub-key",
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
-	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	token, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, nil)
 	require.NoError(t, err)
 
 	service := orgsservice.NewService(pool, store, nil)

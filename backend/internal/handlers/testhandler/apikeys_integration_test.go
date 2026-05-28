@@ -87,7 +87,7 @@ func TestMintAPIKey_Success(t *testing.T) {
 	assert.NotEmpty(t, resp.JTI, "jti must be present")
 	assert.Equal(t, "schemathesis-mint", resp.Name)
 
-	claims, err := jwt.ValidateAPIKey(resp.Token)
+	claims, err := jwt.ValidateAccessToken(resp.Token)
 	require.NoError(t, err)
 	assert.Equal(t, scopes, claims.Scopes)
 	assert.Equal(t, resp.JTI, claims.Subject)

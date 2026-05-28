@@ -128,7 +128,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signed, err := jwt.GenerateAPIKey(key.JTI, orgID, req.Scopes, req.ExpiresAt)
+	signed, err := jwt.GenerateAccessToken(key.JTI, orgID, req.Scopes, req.ExpiresAt)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			"Failed to sign api key", reqID)

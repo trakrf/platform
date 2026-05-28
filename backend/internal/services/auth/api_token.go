@@ -25,7 +25,7 @@ type APITokenResponse struct {
 // is responsible for authenticating the client first.
 func (s *Service) MintAPITokenPair(ctx context.Context, jti string, scopes []string, orgID int, apiKeyID int64, userAgent, ip string) (accessToken, refreshSecret string, expiresIn int, err error) {
 	exp := time.Now().Add(apiAccessTokenTTL)
-	accessToken, err = jwt.GenerateAPIKey(jti, orgID, scopes, &exp)
+	accessToken, err = jwt.GenerateAccessToken(jti, orgID, scopes, &exp)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("failed to generate api access JWT: %w", err)
 	}
@@ -90,7 +90,7 @@ func (s *Service) RefreshAPIToken(ctx context.Context, presentedSecret, userAgen
 	}
 
 	exp := time.Now().Add(apiAccessTokenTTL)
-	accessToken, err := jwt.GenerateAPIKey(key.JTI, key.OrgID, key.Scopes, &exp)
+	accessToken, err := jwt.GenerateAccessToken(key.JTI, key.OrgID, key.Scopes, &exp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate api access JWT: %w", err)
 	}

@@ -35,7 +35,7 @@ func setupEitherAuth(t *testing.T) (*storage.Storage, func(), int, int, string, 
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
-	apiTok, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	apiTok, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, nil)
 	require.NoError(t, err)
 
 	sessTok, err := jwt.Generate(userID, "ea@example.com", &orgID)

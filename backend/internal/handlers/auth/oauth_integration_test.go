@@ -43,7 +43,7 @@ func TestOAuthToken_ClientCredentialsThenRefresh(t *testing.T) {
 
 	// The long-lived JWT is the client_secret. Mint one the same way key
 	// creation does (no exp).
-	clientSecret, err := jwt.GenerateAPIKey(key.JTI, key.OrgID, key.Scopes, nil)
+	clientSecret, err := jwt.GenerateAccessToken(key.JTI, key.OrgID, key.Scopes, nil)
 	require.NoError(t, err)
 
 	svc := authservice.NewService(pool, store, nil)
@@ -72,7 +72,7 @@ func TestOAuthToken_ClientCredentialsThenRefresh(t *testing.T) {
 	require.NotEmpty(t, refresh)
 
 	// The minted access token authenticates as an api-key JWT with the key's scopes.
-	claims, err := jwt.ValidateAPIKey(resp["access_token"].(string))
+	claims, err := jwt.ValidateAccessToken(resp["access_token"].(string))
 	require.NoError(t, err)
 	assert.Equal(t, key.JTI, claims.Subject)
 

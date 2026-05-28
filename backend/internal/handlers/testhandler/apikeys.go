@@ -82,7 +82,7 @@ func (h *Handler) MintAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := jwt.GenerateAPIKey(key.JTI, org.ID, req.Scopes, nil)
+	token, err := jwt.GenerateAccessToken(key.JTI, org.ID, req.Scopes, nil)
 	if err != nil {
 		http.Error(w, "Failed to sign api-key jwt", http.StatusInternalServerError)
 		return

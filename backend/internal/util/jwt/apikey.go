@@ -19,9 +19,9 @@ type APIKeyClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateAPIKey mints a signed JWT for a newly-created api_keys row.
+// GenerateAccessToken mints a signed JWT for a newly-created api_keys row.
 // sub is the row's jti (UUID string). exp is optional; nil means no expiry claim.
-func GenerateAPIKey(jti string, orgID int, scopes []string, exp *time.Time) (string, error) {
+func GenerateAccessToken(jti string, orgID int, scopes []string, exp *time.Time) (string, error) {
 	registered := jwt.RegisteredClaims{
 		Issuer:   apiKeyIssuer,
 		Subject:  jti,
@@ -46,8 +46,8 @@ func GenerateAPIKey(jti string, orgID int, scopes []string, exp *time.Time) (str
 	return signed, nil
 }
 
-// ValidateAPIKey verifies signature, iss, aud, and exp. Does not consult the DB.
-func ValidateAPIKey(tokenString string) (*APIKeyClaims, error) {
+// ValidateAccessToken verifies signature, iss, aud, and exp. Does not consult the DB.
+func ValidateAccessToken(tokenString string) (*APIKeyClaims, error) {
 	claims := &APIKeyClaims{}
 
 	parser := jwt.NewParser(

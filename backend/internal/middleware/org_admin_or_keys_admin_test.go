@@ -57,7 +57,7 @@ func mintAPIKeyJWT(t *testing.T, store *storage.Storage, orgID int, scopes []str
 	key, err := store.CreateAPIKey(context.Background(), orgID, "t", scopes,
 		apikey.Creator{UserID: &seederID}, nil)
 	require.NoError(t, err)
-	signed, err := jwt.GenerateAPIKey(key.JTI, orgID, scopes, nil)
+	signed, err := jwt.GenerateAccessToken(key.JTI, orgID, scopes, nil)
 	require.NoError(t, err)
 	return signed
 }

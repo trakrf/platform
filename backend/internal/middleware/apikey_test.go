@@ -38,7 +38,7 @@ func setupAPIKey(t *testing.T) (*storage.Storage, func(), int, string) {
 		[]string{"assets:read"}, apikey.Creator{UserID: &userID}, nil)
 	require.NoError(t, err)
 
-	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	token, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, nil)
 	require.NoError(t, err)
 
 	return store, cleanup, orgID, token
@@ -146,7 +146,7 @@ func TestAPIKeyAuth_DBExpiredKeyRejected(t *testing.T) {
 
 	// Generate a token WITHOUT exp claim so JWT parser doesn't reject;
 	// the DB check must catch the expiry.
-	token, err := jwt.GenerateAPIKey(key.JTI, orgID, []string{"assets:read"}, nil)
+	token, err := jwt.GenerateAccessToken(key.JTI, orgID, []string{"assets:read"}, nil)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
