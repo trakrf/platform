@@ -1,7 +1,15 @@
 import '@testing-library/jest-dom';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { EnvironmentBanner } from '@/components/EnvironmentBanner';
+
+function setEnvironmentLabel(label: string | undefined) {
+  if (label === undefined) {
+    delete (window as Window).__APP_CONFIG__;
+  } else {
+    window.__APP_CONFIG__ = { environmentLabel: label };
+  }
+}
 
 describe('EnvironmentBanner', () => {
   const originalTitle = document.title;
@@ -13,11 +21,11 @@ describe('EnvironmentBanner', () => {
   afterEach(() => {
     cleanup();
     document.title = originalTitle;
-    vi.unstubAllEnvs();
+    setEnvironmentLabel(undefined);
   });
 
   it('should show banner for any non-prod environment', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'preview');
+    setEnvironmentLabel('preview');
     render(<EnvironmentBanner />);
 
     const banner = screen.getByTestId('environment-banner');
@@ -26,50 +34,51 @@ describe('EnvironmentBanner', () => {
     expect(banner).toHaveClass('bg-purple-600');
   });
 
-  it('should capitalize environment name in banner', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'dev');
+  it('should show a multi-word label verbatim (GKE dry-run)', () => {
+    setEnvironmentLabel('GKE pre-prod');
     render(<EnvironmentBanner />);
 
-    expect(screen.getByTestId('environment-banner')).toHaveTextContent('Dev Environment');
+    const banner = screen.getByTestId('environment-banner');
+    expect(banner).toHaveTextContent('GKE pre-prod Environment');
   });
 
   it('should render nothing for prod environment', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'prod');
+    setEnvironmentLabel('prod');
     render(<EnvironmentBanner />);
 
     expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument();
   });
 
   it('should render nothing for production environment', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'production');
+    setEnvironmentLabel('production');
     render(<EnvironmentBanner />);
 
     expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument();
   });
 
-  it('should render nothing when VITE_ENVIRONMENT is empty', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', '');
+  it('should render nothing when label is empty', () => {
+    setEnvironmentLabel('');
     render(<EnvironmentBanner />);
 
     expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument();
   });
 
-  it('should render nothing when VITE_ENVIRONMENT is undefined', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', undefined);
+  it('should render nothing when __APP_CONFIG__ is absent', () => {
+    setEnvironmentLabel(undefined);
     render(<EnvironmentBanner />);
 
     expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument();
   });
 
   it('should set page title with environment prefix', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'preview');
+    setEnvironmentLabel('preview');
     render(<EnvironmentBanner />);
 
     expect(document.title).toBe('[PRE] TrakRF');
   });
 
   it('should not modify page title for prod environment', () => {
-    vi.stubEnv('VITE_ENVIRONMENT', 'prod');
+    setEnvironmentLabel('prod');
     render(<EnvironmentBanner />);
 
     expect(document.title).toBe('TrakRF');

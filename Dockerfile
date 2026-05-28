@@ -29,10 +29,10 @@ FROM node:24-alpine AS frontend-builder
 WORKDIR /app
 
 # Build-time args for Vite (must be available when frontend builds)
+# NOTE: the environment banner is no longer baked at build time — it's
+# runtime-driven from the backend's ENVIRONMENT_LABEL env var (TRA-853).
 ARG VITE_SENTRY_DSN
-ARG VITE_ENVIRONMENT=""
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
-ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
 
 # Build metadata — same values passed to the backend stage. Exposed as VITE_*
 # so the Vite plugin can emit dist/version.json for curl-able drift detection
