@@ -72,7 +72,7 @@ type MessageResponse struct {
 type TokenRequest struct {
 	GrantType    string `json:"grant_type" validate:"required,oneof=client_credentials refresh_token" example:"client_credentials"`
 	ClientID     string `json:"client_id,omitempty" example:"6f1c2a8e-7d3b-4e90-9a11-2c4d5e6f7a8b"`
-	ClientSecret string `json:"client_secret,omitempty" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.long-lived-api-key-jwt"`
+	ClientSecret string `json:"client_secret,omitempty" example:"trakrf_9f8e7d6c5b4a39281706f5e4d3c2b1a0ffeeddccbbaa99887766554433221100"`
 	RefreshToken string `json:"refresh_token,omitempty" example:"f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
 }
 

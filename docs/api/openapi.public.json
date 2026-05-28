@@ -1243,7 +1243,7 @@
             "type": "string"
           },
           "client_secret": {
-            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.long-lived-api-key-jwt",
+            "example": "trakrf_9f8e7d6c5b4a39281706f5e4d3c2b1a0ffeeddccbbaa99887766554433221100",
             "type": "string"
           },
           "grant_type": {
