@@ -33,7 +33,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	authSvc := authservice.NewService(nil, store, nil)
 	orgsSvc := orgsservice.NewService(nil, store, nil)
 
-	authHandler := authhandler.NewHandler(authSvc)
+	authHandler := authhandler.NewHandler(authSvc, store)
 	orgsHandler := orgshandler.NewHandler(store, orgsSvc, authSvc)
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
