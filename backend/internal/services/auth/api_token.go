@@ -72,7 +72,9 @@ func (s *Service) RefreshAPIToken(ctx context.Context, presentedSecret, userAgen
 		if revokeErr := s.storage.RevokeRefreshTokenChain(ctx, row.ID); revokeErr != nil {
 			fmt.Printf("Warning: failed to revoke api refresh chain after replay: %v\n", revokeErr)
 		}
-		fmt.Printf("WARN api refresh-token replay detected api_key_id=%d token_id=%d\n", *row.APIKeyID, row.ID)
+		// token_id alone identifies the chain for ops; api_key_id is omitted to
+		// avoid logging a "*Key"-named field (CodeQL go/clear-text-logging).
+		fmt.Printf("WARN api refresh-token replay detected token_id=%d\n", row.ID)
 		return nil, fmt.Errorf("invalid_refresh_token")
 	}
 	if time.Now().After(row.ExpiresAt) {
