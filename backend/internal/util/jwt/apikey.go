@@ -19,8 +19,9 @@ type APIKeyClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateAccessToken mints a signed JWT for a newly-created api_keys row.
-// sub is the row's jti (UUID string). exp is optional; nil means no expiry claim.
+// GenerateAccessToken mints a short-lived API access JWT for the grant flow.
+// sub is the owning api_keys row's jti (UUID string). exp is optional here, but
+// ValidateAccessToken requires it: a usable access token always carries expiry.
 func GenerateAccessToken(jti string, orgID int, scopes []string, exp *time.Time) (string, error) {
 	registered := jwt.RegisteredClaims{
 		Issuer:   apiKeyIssuer,
@@ -46,13 +47,17 @@ func GenerateAccessToken(jti string, orgID int, scopes []string, exp *time.Time)
 	return signed, nil
 }
 
-// ValidateAccessToken verifies signature, iss, aud, and exp. Does not consult the DB.
+// ValidateAccessToken verifies signature, iss, aud, and a required exp. Does not
+// consult the DB. exp is mandatory: the only api-key JWTs that exist are
+// short-lived grant access tokens (TRA-847 deleted the long-lived path), so a
+// token without expiry is not a valid access token.
 func ValidateAccessToken(tokenString string) (*APIKeyClaims, error) {
 	claims := &APIKeyClaims{}
 
 	parser := jwt.NewParser(
 		jwt.WithIssuer(apiKeyIssuer),
 		jwt.WithAudience(apiKeyAudience),
+		jwt.WithExpirationRequired(),
 	)
 
 	token, err := parser.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {

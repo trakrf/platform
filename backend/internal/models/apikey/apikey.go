@@ -23,6 +23,7 @@ var ValidScopes = map[string]bool{
 type APIKey struct {
 	ID             int        `json:"id"`
 	JTI            string     `json:"jti"`
+	SecretHash     string     `json:"-"` // SHA-256 of the opaque client_secret; never serialized
 	OrgID          int        `json:"org_id"`
 	Name           string     `json:"name"`
 	Scopes         []string   `json:"scopes"`
@@ -41,17 +42,17 @@ type CreateAPIKeyRequest struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-// APIKeyCreateResponse is returned ONCE from POST; Token is the full JWT.
-// Field is named `token` on the wire (not `key`) so that LLMs and integrators
-// don't confuse it with the human-readable `name` of an API key (TRA-580 C-2).
+// APIKeyCreateResponse is returned ONCE from POST. client_secret is the opaque
+// secret shown exactly once and never persisted in plaintext; client_id is the
+// row's jti, used as the client_credentials client_id at POST /oauth/token.
 type APIKeyCreateResponse struct {
-	Token     string     `json:"token"`
-	ID        int        `json:"id"`
-	JTI       string     `json:"jti"`
-	Name      string     `json:"name"`
-	Scopes    []string   `json:"scopes"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	ClientID     string     `json:"client_id"`
+	ClientSecret string     `json:"client_secret"`
+	ID           int        `json:"id"`
+	Name         string     `json:"name"`
+	Scopes       []string   `json:"scopes"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 }
 
 // APIKeyListItem is what GET returns — never includes the JWT.

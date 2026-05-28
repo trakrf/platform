@@ -11,8 +11,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/apikey"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/storage"
+	"github.com/trakrf/platform/backend/internal/util/apisecret"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
-	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
 // CreateAPIKeyResponse is the typed envelope returned by
@@ -32,7 +32,7 @@ type ListAPIKeysResponse struct {
 }
 
 // @Summary Create a new API key for an organization
-// @Description Mints an API-key JWT scoped to the target org. Accepts either session-admin or an API key with the keys:admin scope.
+// @Description Creates API credentials scoped to the target org and returns an opaque {client_id, client_secret}. The client_secret is shown exactly once and stored only as a hash — exchange it at POST /oauth/token (grant_type=client_credentials) for a short-lived Bearer access token. Accepts either session-admin or an API key with the keys:admin scope.
 // @Tags api-keys,internal
 // @ID api_keys.create
 // @Accept json
@@ -119,8 +119,16 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := h.storage.CreateAPIKey(r.Context(), orgID, req.Name, req.Scopes,
-		creator, req.ExpiresAt)
+	secret, err := apisecret.Generate()
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			"Failed to generate client secret", reqID)
+
+		return
+	}
+
+	key, err := h.storage.CreateAPIKey(r.Context(), orgID, req.Name, apisecret.Hash(secret),
+		req.Scopes, creator, req.ExpiresAt)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
 			"Failed to create api key", reqID)
@@ -128,22 +136,14 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signed, err := jwt.GenerateAccessToken(key.JTI, orgID, req.Scopes, req.ExpiresAt)
-	if err != nil {
-		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			"Failed to sign api key", reqID)
-
-		return
-	}
-
 	resp := apikey.APIKeyCreateResponse{
-		Token:     signed,
-		ID:        key.ID,
-		JTI:       key.JTI,
-		Name:      key.Name,
-		Scopes:    key.Scopes,
-		CreatedAt: key.CreatedAt,
-		ExpiresAt: key.ExpiresAt,
+		ClientID:     key.JTI,
+		ClientSecret: secret,
+		ID:           key.ID,
+		Name:         key.Name,
+		Scopes:       key.Scopes,
+		CreatedAt:    key.CreatedAt,
+		ExpiresAt:    key.ExpiresAt,
 	}
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": resp})
 }
