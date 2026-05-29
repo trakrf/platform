@@ -145,10 +145,13 @@ func TestRateLimit_AllowedRequestSetsHeaders(t *testing.T) {
 	RateLimit(lim, false)(next).ServeHTTP(rec, requestWithAPIKey("jti-alpha", 42))
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"),
-		"tokens above Limit: Remaining caps at Limit")
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Limit"),
+		"Limit advertises the burst ceiling")
+	require.Equal(t, "119", rec.Header().Get("X-RateLimit-Remaining"),
+		"Remaining counts down 1:1 from the first request (one of 120 consumed)")
 	require.NotEmpty(t, rec.Header().Get("X-RateLimit-Reset"))
+	require.Equal(t, "60;w=60", rec.Header().Get("RateLimit-Policy"),
+		"sustained rate advertised separately as quota;w=window-seconds")
 	require.Empty(t, rec.Header().Get("Retry-After"), "allowed responses have no Retry-After")
 }
 
@@ -175,8 +178,9 @@ func TestRateLimit_DeniedRequestReturns429WithEnvelope(t *testing.T) {
 
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Equal(t, "1", rec.Header().Get("Retry-After"))
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Limit"))
 	require.Equal(t, "0", rec.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "60;w=60", rec.Header().Get("RateLimit-Policy"))
 
 	var body struct {
 		Error struct {
@@ -231,9 +235,10 @@ func TestDefaultRateLimitHeaders_SetsHeadersOnUnauthenticatedRequest(t *testing.
 
 	DefaultRateLimitHeaders(lim)(next).ServeHTTP(rec, req)
 
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"),
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Remaining"),
 		"anonymous caller has full quota — no tokens consumed yet")
+	require.Equal(t, "60;w=60", rec.Header().Get("RateLimit-Policy"))
 	reset, err := strconv.ParseInt(rec.Header().Get("X-RateLimit-Reset"), 10, 64)
 	require.NoError(t, err)
 	require.Equal(t, clock.Now().Unix(), reset, "full quota → Reset is now")
@@ -260,8 +265,8 @@ func TestDefaultRateLimitHeaders_SurvivesDownstreamAuthFailure(t *testing.T) {
 	DefaultRateLimitHeaders(lim)(auth(final)).ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Remaining"))
 	require.NotEmpty(t, rec.Header().Get("X-RateLimit-Reset"))
 }
 
@@ -287,5 +292,5 @@ func TestRateLimit_TwoPrincipalsIndependent(t *testing.T) {
 	recB := httptest.NewRecorder()
 	RateLimit(lim, false)(drain).ServeHTTP(recB, requestWithAPIKey("key-b", 2))
 	require.Equal(t, http.StatusOK, recB.Code)
-	require.Equal(t, "60", recB.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "119", recB.Header().Get("X-RateLimit-Remaining"))
 }

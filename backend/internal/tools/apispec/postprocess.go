@@ -603,9 +603,10 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 		schema      func() *openapi3.SchemaRef
 	}
 	defs := []headerDef{
-		{"XRateLimitLimit", "Steady-state requests/min for this API key.", intSchema},
-		{"XRateLimitRemaining", "Steady-state requests remaining in the rate-limit bucket; bounded above by X-RateLimit-Limit. Does not decrement on each call while within the burst margin — clients should not pace on this header.", intSchema},
-		{"XRateLimitReset", "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit.", intSchema},
+		{"XRateLimitLimit", "Maximum requests allowed in a single burst before a 429 — the rate-limit bucket's ceiling. The lower *sustained* rate is advertised separately in the RateLimit-Policy header.", intSchema},
+		{"XRateLimitRemaining", "Requests remaining before a 429. Decrements by one on every request, from X-RateLimit-Limit down to 0; clients may pace on this value. Refills over time toward the ceiling at the sustained rate (see RateLimit-Policy).", intSchema},
+		{"XRateLimitReset", "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit — i.e. when the bucket has fully refilled to the ceiling. Equals the current time when Remaining is already at the ceiling.", intSchema},
+		{"RateLimitPolicy", "Sustained rate-limit policy as `<quota>;w=<window-seconds>` (e.g. `60;w=60` = 60 requests per 60 seconds). The burst ceiling in X-RateLimit-Limit is higher; throughput sustained above this policy is eventually throttled with a 429.", strSchema},
 		{"RetryAfter", "Seconds to wait before retrying.", intSchema},
 		{"WWWAuthenticate", "RFC 7235 authentication challenge. Always `Bearer realm=\"trakrf-api\"` on 401 responses.", strSchema},
 		{"XRequestId", "Server-assigned request correlation identifier; mirrored as error.request_id in error envelopes and echoed in server logs. Quote this when filing support tickets.", strSchema},
@@ -632,6 +633,7 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 	rateLimitLimit := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitLimit"}
 	rateLimitRemaining := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitRemaining"}
 	rateLimitReset := &openapi3.HeaderRef{Ref: "#/components/headers/XRateLimitReset"}
+	rateLimitPolicy := &openapi3.HeaderRef{Ref: "#/components/headers/RateLimitPolicy"}
 	retryAfter := &openapi3.HeaderRef{Ref: "#/components/headers/RetryAfter"}
 	wwwAuthenticate := &openapi3.HeaderRef{Ref: "#/components/headers/WWWAuthenticate"}
 	requestID := &openapi3.HeaderRef{Ref: "#/components/headers/XRequestId"}
@@ -655,6 +657,7 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 				resp.Value.Headers["X-RateLimit-Limit"] = rateLimitLimit
 				resp.Value.Headers["X-RateLimit-Remaining"] = rateLimitRemaining
 				resp.Value.Headers["X-RateLimit-Reset"] = rateLimitReset
+				resp.Value.Headers["RateLimit-Policy"] = rateLimitPolicy
 				resp.Value.Headers["X-Request-Id"] = requestID
 				if code == "429" {
 					resp.Value.Headers["Retry-After"] = retryAfter
