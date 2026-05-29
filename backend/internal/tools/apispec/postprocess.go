@@ -605,7 +605,7 @@ func injectGlobalHeaderRefs(doc *openapi3.T) {
 	defs := []headerDef{
 		{"XRateLimitLimit", "Steady-state requests/min for this API key.", intSchema},
 		{"XRateLimitRemaining", "Steady-state requests remaining in the rate-limit bucket; bounded above by X-RateLimit-Limit. Does not decrement on each call while within the burst margin — clients should not pace on this header.", intSchema},
-		{"XRateLimitReset", "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit.", intSchema},
+		{"XRateLimitReset", "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit. Equals the current time whenever Remaining is already at X-RateLimit-Limit — the steady state for clients pacing at or below the limit, where the burst margin keeps Remaining pinned at the limit and this value does not advance until quota is actually consumed.", intSchema},
 		{"RetryAfter", "Seconds to wait before retrying.", intSchema},
 		{"WWWAuthenticate", "RFC 7235 authentication challenge. Always `Bearer realm=\"trakrf-api\"` on 401 responses.", strSchema},
 		{"XRequestId", "Server-assigned request correlation identifier; mirrored as error.request_id in error envelopes and echoed in server logs. Quote this when filing support tickets.", strSchema},

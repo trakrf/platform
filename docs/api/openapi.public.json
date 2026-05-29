@@ -32,7 +32,7 @@
         }
       },
       "XRateLimitReset": {
-        "description": "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit.",
+        "description": "Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit. Equals the current time whenever Remaining is already at X-RateLimit-Limit — the steady state for clients pacing at or below the limit, where the burst margin keeps Remaining pinned at the limit and this value does not advance until quota is actually consumed.",
         "schema": {
           "type": "integer"
         }
