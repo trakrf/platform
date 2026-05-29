@@ -97,17 +97,29 @@ var knownWeakSecrets = map[string]bool{
 	"change-me": true,
 }
 
+// devOrTestEnvs are the only environments permitted to boot with a weak/dev
+// JWT_SECRET: local development (APP_ENV unset) and the test/CI harness
+// (APP_ENV="test", which backend/justfile's contract-test recipe sets with the
+// dev fallback secret). Every other APP_ENV — preview, staging, production — is
+// a deployed environment that must supply a real secret.
+var devOrTestEnvs = map[string]bool{
+	"":     true,
+	"test": true,
+}
+
 // ValidateSecret fails fast when a DEPLOYED environment lacks a real signing
 // secret. Call it once at startup so the process refuses to boot rather than
 // silently signing forgeable tokens with a publicly-known default.
 //
-// Scope: local dev and tests run with APP_ENV unset and may use the dev
-// fallback. Any non-empty APP_ENV (production, preview, staging, …) is a
-// deployed environment and must provide a real secret — so a misconfig
+// Scope: only local (APP_ENV unset) and the test/CI harness (APP_ENV="test")
+// may use the dev fallback. Any other APP_ENV (preview, staging, production) is
+// a deployed environment and must provide a real secret — so a misconfig
 // fail-boots loudly on the preview proving ground, not silently in production.
+// Enforcing on preview is safe: preview already has a real secret (it boots
+// normally) and only fail-boots if its secret ever regresses to a weak value.
 func ValidateSecret() error {
 	appEnv := os.Getenv("APP_ENV")
-	if appEnv == "" {
+	if devOrTestEnvs[appEnv] {
 		return nil
 	}
 	if knownWeakSecrets[os.Getenv("JWT_SECRET")] {

@@ -23,6 +23,8 @@ func TestValidateSecret(t *testing.T) {
 		{"preview (deployed) with real secret accepted", "preview", "G7c1p+real-random-48b-secret/xyz", false},
 		{"local (empty APP_ENV) with unset secret accepted", "", "", false},
 		{"local (empty APP_ENV) with dev fallback accepted", "", "dev-secret-change-in-production", false},
+		{"test/CI harness with dev fallback accepted", "test", "dev-secret-change-in-production", false},
+		{"test/CI harness with unset secret accepted", "test", "", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
