@@ -147,11 +147,12 @@ func setupRouter(
 		))
 	})
 
-	// TRA-677: the test-handler-minted schemathesis key bypasses rate limiting
-	// when APP_ENV != "production". Same gate used to mount the test handler
-	// itself (below), so production cannot route a schemathesis-mint key into
-	// a bypass even if a key with that name leaked into the prod DB.
-	allowTestRateLimitBypass := os.Getenv("APP_ENV") != "production"
+	// TRA-677/TRA-861: the test-handler-minted schemathesis key bypasses rate
+	// limiting only in dev/test/preview envs (fail-closed; see env_gate.go).
+	// Same gate as the test-handler mount below, so production (APP_ENV="prod")
+	// cannot route a schemathesis-mint key into a bypass even if a key with that
+	// name leaked into the prod DB.
+	allowTestRateLimitBypass := testAffordancesAllowed(os.Getenv("APP_ENV"))
 
 	// Public API — API-key auth (TRA-393 canary)
 	r.With(
@@ -270,10 +271,11 @@ func setupRouter(
 		register405Static(r, "/api/v1/assets/bulk/{jobId}", []string{http.MethodGet})
 	})
 
-	if os.Getenv("APP_ENV") != "production" {
+	if testAffordancesAllowed(os.Getenv("APP_ENV")) {
 		// Test handler registers /test/* with POST + GETs. ContentType is
 		// method-gated, so wrapping leaves GETs untouched and enforces CT
-		// on POST /test/apikeys.
+		// on POST /test/apikeys. Fail-closed gate (env_gate.go): never mounts
+		// on prod (APP_ENV="prod") or any unrecognized env.
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.ContentType)
 			testHandler.RegisterRoutes(r)
