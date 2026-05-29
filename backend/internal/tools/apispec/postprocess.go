@@ -123,6 +123,13 @@ func postprocessPublic(doc *openapi3.T) error {
 	if err := hoistInlineEnums(doc); err != nil {
 		return fmt.Errorf("hoist inline enums: %w", err)
 	}
+	// After splitTagPolymorphism so the RfidTag/BleTag/BarcodeTag variant
+	// schemas exist, and before renamePublicSpec so the dotted names still
+	// resolve. Overrides the int32 that markIntegerFormats stamped on these
+	// integers above (TRA-864).
+	if err := markSurrogateIDBounds(doc, surrogateIDFields); err != nil {
+		return err
+	}
 	if err := renamePublicSpec(doc); err != nil {
 		return fmt.Errorf("rename public spec: %w", err)
 	}
@@ -1207,6 +1214,161 @@ func stripResponseSchemasAdditive(doc *openapi3.T, schemas []string) error {
 		}
 	}
 	return nil
+}
+
+// maxSafeInteger is JS Number.MAX_SAFE_INTEGER (2^53−1). Surrogate ids are
+// stored as bigint and emitted as int64 on the wire (TRA-720), but the id
+// generator targets the JS-safe range, so the spec advertises that ceiling as
+// `maximum` alongside `format: int64` (TRA-864 / bb-2.1 F1+F2). Two payoffs:
+// (1) signals SPA-safe to JS/TS clients that hold integers in IEEE-754
+// doubles; (2) emit.go round-trips it through int64 so the YAML loader writes
+// a bare integer literal rather than scientific notation (the actual emitted
+// ids are 52-bit per the Feistel block, well under this bound).
+const maxSafeInteger = float64(9007199254740991)
+
+// surrogateIDFields names the (schema, property) pairs whose integer value is
+// a surrogate id. TRA-720 widened path params + runtime to int64 but left
+// response/request-body/FK id fields at the markIntegerFormats int32 default;
+// every observed id already exceeds the int32 ceiling, so strict-typed
+// generators (Java Integer, Go int32, Kotlin Int, C# int) throw
+// InputCoercionException on every response. This roster flips them to int64 +
+// maxSafeInteger. Non-id integers (ErrorEnvelope.status, TokenResponse.expires_in,
+// AssetHistoryItem.duration_seconds, the rename descendant_count_affected
+// counters) are deliberately excluded — see TRA-864.
+//
+// Dotted pre-rename names: the pass runs before renamePublicSpec, so the same
+// names already encoded in requiredFields / readOnlyFields / nullableFields
+// resolve here too.
+var surrogateIDFields = map[string][]string{
+	"asset.PublicAssetView":                  {"id"},
+	"location.PublicLocationView":            {"id", "parent_id"},
+	"org.OrgMeView":                          {"id"},
+	"shared.RfidTag":                         {"id"},
+	"shared.BleTag":                          {"id"},
+	"shared.BarcodeTag":                      {"id"},
+	"report.PublicCurrentLocationItem":       {"asset_id", "location_id"},
+	"report.PublicAssetHistoryItem":          {"location_id"},
+	"location.CreateLocationWithTagsRequest": {"parent_id"},
+	"location.UpdateLocationRequest":         {"parent_id"},
+}
+
+// surrogateIDParamNames are the path + query parameter names carrying a
+// surrogate id. Path params are scalar (already int64 via TRA-720; they gain
+// the maximum here for coherence with the body fields). Query filters are
+// repeatable integer arrays that declared no format at all (the int32 ceiling
+// was removed in TRA-720; markQueryIntegerBounds no longer touches them).
+// Keyed by name because the same logical id appears across many operations —
+// the asymmetry this ticket fixes is precisely "one logical value typed three
+// different ways depending on where it appears." tag_id is included for the
+// same reason: the Tag surrogate id is int64+maximum in the {Rfid,Ble,Barcode}Tag
+// response bodies, so its DELETE .../tags/{tag_id} path param must match (it
+// was already int64 from TRA-720 but carried no maximum).
+var surrogateIDParamNames = map[string]bool{
+	"asset_id":    true,
+	"location_id": true,
+	"parent_id":   true,
+	"tag_id":      true,
+}
+
+// markSurrogateIDBounds sets `format: int64` + `maximum: maxSafeInteger` on
+// every surrogate id in the public surface — component body/FK fields named in
+// `fields`, plus path/query params named in surrogateIDParamNames. Runs after
+// splitTagPolymorphism (so the RfidTag/BleTag/BarcodeTag variants exist) and
+// after markIntegerFormats (overriding the int32 it stamps on these), and
+// before renamePublicSpec (so the dotted schema names still resolve).
+//
+// Errors loudly on a missing schema or field so the roster can't silently
+// drift out of sync with the spec — the same "missed sibling surface" failure
+// mode that left these fields behind in TRA-720 (TRA-864).
+func markSurrogateIDBounds(doc *openapi3.T, fields map[string][]string) error {
+	if err := widenSurrogateIDSchemaFields(doc, fields); err != nil {
+		return err
+	}
+	widenSurrogateIDParams(doc)
+	return nil
+}
+
+func widenSurrogateIDSchemaFields(doc *openapi3.T, fields map[string][]string) error {
+	if doc.Components == nil || doc.Components.Schemas == nil {
+		if len(fields) == 0 {
+			return nil
+		}
+		return fmt.Errorf("apispec: components.schemas is empty but surrogateIDFields has %d entries", len(fields))
+	}
+	for schemaName, props := range fields {
+		ref := doc.Components.Schemas[schemaName]
+		if ref == nil || ref.Value == nil {
+			return fmt.Errorf("apispec: surrogateIDFields references unknown schema %q", schemaName)
+		}
+		for _, p := range props {
+			prop := ref.Value.Properties[p]
+			if prop == nil || prop.Value == nil {
+				return fmt.Errorf("apispec: surrogateIDFields references unknown field %s.%s", schemaName, p)
+			}
+			widenIntegerSchema(prop.Value)
+		}
+	}
+	return nil
+}
+
+func widenSurrogateIDParams(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	apply := func(p *openapi3.Parameter) {
+		if p == nil || !surrogateIDParamNames[p.Name] {
+			return
+		}
+		if p.In != "path" && p.In != "query" {
+			return
+		}
+		if p.Schema == nil || p.Schema.Value == nil {
+			return
+		}
+		s := p.Schema.Value
+		// Repeatable filters are integer arrays — widen the item schema.
+		if s.Type != nil && s.Type.Is(openapi3.TypeArray) {
+			if s.Items != nil && s.Items.Value != nil {
+				widenIntegerSchema(s.Items.Value)
+			}
+			return
+		}
+		widenIntegerSchema(s)
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, pRef := range item.Parameters {
+			if pRef != nil {
+				apply(pRef.Value)
+			}
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			for _, pRef := range op.Parameters {
+				if pRef != nil {
+					apply(pRef.Value)
+				}
+			}
+		}
+	}
+}
+
+// widenIntegerSchema sets format int64 + maximum on a single integer schema.
+// Guards on integer type so a mistargeted roster entry can't corrupt a
+// string/bool schema. Idempotent: an existing non-nil maximum is preserved.
+func widenIntegerSchema(s *openapi3.Schema) {
+	if s == nil || s.Type == nil || !s.Type.Is(openapi3.TypeInteger) {
+		return
+	}
+	s.Format = "int64"
+	if s.Max == nil {
+		max := maxSafeInteger
+		s.Max = &max
+	}
 }
 
 // markIntegerFormats walks every schema in the document and sets
