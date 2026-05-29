@@ -4,6 +4,10 @@ components:
             description: Comma-separated list of HTTP methods supported on this resource (RFC 7231 §6.5.5). Emitted on every 405 response.
             schema:
                 type: string
+        RateLimitPolicy:
+            description: Sustained rate-limit policy as `<quota>;w=<window-seconds>` (e.g. `60;w=60` = 60 requests per 60 seconds). The burst ceiling in X-RateLimit-Limit is higher; throughput sustained above this policy is eventually throttled with a 429.
+            schema:
+                type: string
         RetryAfter:
             description: Seconds to wait before retrying.
             schema:
@@ -13,15 +17,15 @@ components:
             schema:
                 type: string
         XRateLimitLimit:
-            description: Steady-state requests/min for this API key.
+            description: Maximum requests allowed in a single burst before a 429 — the rate-limit bucket's ceiling. The lower *sustained* rate is advertised separately in the RateLimit-Policy header.
             schema:
                 type: integer
         XRateLimitRemaining:
-            description: Steady-state requests remaining in the rate-limit bucket; bounded above by X-RateLimit-Limit. Does not decrement on each call while within the burst margin — clients should not pace on this header.
+            description: Requests remaining before a 429. Decrements by one on every request, from X-RateLimit-Limit down to 0; clients may pace on this value. Refills over time toward the ceiling at the sustained rate (see RateLimit-Policy).
             schema:
                 type: integer
         XRateLimitReset:
-            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit.
+            description: Unix timestamp (seconds) when X-RateLimit-Remaining will next equal X-RateLimit-Limit — i.e. when the bucket has fully refilled to the ceiling. Equals the current time when Remaining is already at the ceiling.
             schema:
                 type: integer
         XRequestId:
@@ -1082,6 +1086,8 @@ paths:
                                 $ref: '#/components/schemas/ListAssetsResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1097,6 +1103,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Bad Request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1112,6 +1120,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -1129,6 +1139,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1144,6 +1156,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Not Found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1161,6 +1175,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1176,6 +1192,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -1193,6 +1211,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Internal Server Error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1208,6 +1228,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1255,6 +1277,8 @@ paths:
                             description: Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1270,6 +1294,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1285,6 +1311,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -1302,6 +1330,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1317,6 +1347,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1334,6 +1366,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1349,6 +1383,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1364,6 +1400,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1379,6 +1417,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -1396,6 +1436,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1411,6 +1453,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1447,6 +1491,8 @@ paths:
                 "204":
                     description: deleted
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1462,6 +1508,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1477,6 +1525,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -1494,6 +1544,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1509,6 +1561,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1526,6 +1580,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1541,6 +1597,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -1558,6 +1616,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1573,6 +1633,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1614,6 +1676,8 @@ paths:
                                 $ref: '#/components/schemas/GetAssetResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1629,6 +1693,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Bad Request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1644,6 +1710,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -1661,6 +1729,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1676,6 +1746,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Not Found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1693,6 +1765,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1708,6 +1782,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -1725,6 +1801,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Internal Server Error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1740,6 +1818,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1786,6 +1866,8 @@ paths:
                                 $ref: '#/components/schemas/UpdateAssetResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1801,6 +1883,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1816,6 +1900,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -1833,6 +1919,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1848,6 +1936,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1865,6 +1955,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1880,6 +1972,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1895,6 +1989,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1910,6 +2006,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -1927,6 +2025,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -1942,6 +2042,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2023,6 +2125,8 @@ paths:
                                 $ref: '#/components/schemas/AssetHistoryResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2038,6 +2142,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Bad Request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2053,6 +2159,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -2070,6 +2178,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2085,6 +2195,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Not Found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2102,6 +2214,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2117,6 +2231,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -2134,6 +2250,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Internal Server Error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2149,6 +2267,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2200,6 +2320,8 @@ paths:
                                 $ref: '#/components/schemas/RenameAssetResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2215,6 +2337,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2230,6 +2354,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -2247,6 +2373,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2262,6 +2390,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2279,6 +2409,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2294,6 +2426,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2309,6 +2443,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2324,6 +2460,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -2341,6 +2479,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2356,6 +2496,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2408,6 +2550,8 @@ paths:
                             description: Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2423,6 +2567,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2438,6 +2584,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -2455,6 +2603,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2470,6 +2620,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2487,6 +2639,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2502,6 +2656,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2517,6 +2673,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2532,6 +2690,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -2549,6 +2709,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2564,6 +2726,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2610,6 +2774,8 @@ paths:
                 "204":
                     description: deleted
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2625,6 +2791,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2640,6 +2808,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -2657,6 +2827,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2672,6 +2844,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2689,6 +2863,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2704,6 +2880,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -2721,6 +2899,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2736,6 +2916,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2845,6 +3027,8 @@ paths:
                                 $ref: '#/components/schemas/ListLocationsResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2860,6 +3044,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2875,6 +3061,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -2892,6 +3080,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2907,6 +3097,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2924,6 +3116,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2939,6 +3133,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -2956,6 +3152,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -2971,6 +3169,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3019,6 +3219,8 @@ paths:
                             description: Path of the created resource (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3034,6 +3236,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3049,6 +3253,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -3066,6 +3272,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3081,6 +3289,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3098,6 +3308,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3113,6 +3325,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3128,6 +3342,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3143,6 +3359,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -3160,6 +3378,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3175,6 +3395,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3211,6 +3433,8 @@ paths:
                 "204":
                     description: deleted
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3226,6 +3450,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3241,6 +3467,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -3258,6 +3486,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3273,6 +3503,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3290,6 +3522,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3305,6 +3539,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict — has descendants or placed assets
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3320,6 +3556,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -3337,6 +3575,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3352,6 +3592,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3393,6 +3635,8 @@ paths:
                                 $ref: '#/components/schemas/GetLocationResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3408,6 +3652,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Bad Request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3423,6 +3669,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -3440,6 +3688,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3455,6 +3705,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Not Found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3472,6 +3724,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3487,6 +3741,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Too Many Requests
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -3504,6 +3760,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3519,6 +3777,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3565,6 +3825,8 @@ paths:
                                 $ref: '#/components/schemas/UpdateLocationResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3580,6 +3842,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3595,6 +3859,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -3612,6 +3878,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3627,6 +3895,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3644,6 +3914,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3659,6 +3931,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3674,6 +3948,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3689,6 +3965,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -3706,6 +3984,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3721,6 +4001,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3777,6 +4059,8 @@ paths:
                                 $ref: '#/components/schemas/ListLocationAncestorsResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3792,6 +4076,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3807,6 +4093,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -3824,6 +4112,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3839,6 +4129,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3856,6 +4148,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3871,6 +4165,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -3888,6 +4184,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3903,6 +4201,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3959,6 +4259,8 @@ paths:
                                 $ref: '#/components/schemas/ListLocationChildrenResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3974,6 +4276,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -3989,6 +4293,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -4006,6 +4312,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4021,6 +4329,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4038,6 +4348,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4053,6 +4365,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -4070,6 +4384,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4085,6 +4401,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4141,6 +4459,8 @@ paths:
                                 $ref: '#/components/schemas/ListLocationDescendantsResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4156,6 +4476,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4171,6 +4493,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -4188,6 +4512,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4203,6 +4529,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4220,6 +4548,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4235,6 +4565,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -4252,6 +4584,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4267,6 +4601,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4316,6 +4652,8 @@ paths:
                                 $ref: '#/components/schemas/RenameLocationResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4331,6 +4669,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4346,6 +4686,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -4363,6 +4705,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4378,6 +4722,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4395,6 +4741,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4410,6 +4758,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4425,6 +4775,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4440,6 +4792,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -4457,6 +4811,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4472,6 +4828,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4520,6 +4878,8 @@ paths:
                             description: Path of the created tag (resolve against request URL per RFC 7231 §7.1.2)
                             schema:
                                 type: string
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4535,6 +4895,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4550,6 +4912,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -4567,6 +4931,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4582,6 +4948,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4599,6 +4967,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4614,6 +4984,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: conflict
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4629,6 +5001,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4644,6 +5018,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -4661,6 +5037,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4676,6 +5054,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4722,6 +5102,8 @@ paths:
                 "204":
                     description: deleted
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4737,6 +5119,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4752,6 +5136,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -4769,6 +5155,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4784,6 +5172,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4801,6 +5191,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4816,6 +5208,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -4833,6 +5227,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: internal_error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4848,6 +5244,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4885,6 +5283,8 @@ paths:
                                 $ref: '#/components/schemas/TokenResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4900,6 +5300,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Validation error / unsupported grant_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4915,6 +5317,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Invalid client credentials or refresh token
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -4932,6 +5336,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4949,6 +5355,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4964,6 +5372,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: unsupported_media_type
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -4979,6 +5389,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -4996,6 +5408,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5019,6 +5433,8 @@ paths:
                                 $ref: '#/components/schemas/GetCurrentOrgResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5034,6 +5450,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: bad_request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5049,6 +5467,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -5066,6 +5486,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: not_found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5083,6 +5505,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5098,6 +5522,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: missing_org_context — the API key authenticated but its org no longer exists
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5113,6 +5539,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -5130,6 +5558,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Internal server error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5145,6 +5575,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5262,6 +5694,8 @@ paths:
                                 $ref: '#/components/schemas/AssetLocationsResponse'
                     description: OK
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5277,6 +5711,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Bad Request
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5292,6 +5728,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unauthorized
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         WWW-Authenticate:
                             $ref: '#/components/headers/WWWAuthenticate'
                         X-RateLimit-Limit:
@@ -5309,6 +5747,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Forbidden
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5324,6 +5764,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Not Found
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5341,6 +5783,8 @@ paths:
                     headers:
                         Allow:
                             $ref: '#/components/headers/Allow'
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5356,6 +5800,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: rate_limited
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         Retry-After:
                             $ref: '#/components/headers/RetryAfter'
                         X-RateLimit-Limit:
@@ -5373,6 +5819,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Internal Server Error
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:
@@ -5388,6 +5836,8 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Unmodeled error. Generated clients should treat any response not otherwise enumerated as a structured ErrorResponse.
                     headers:
+                        RateLimit-Policy:
+                            $ref: '#/components/headers/RateLimitPolicy'
                         X-RateLimit-Limit:
                             $ref: '#/components/headers/XRateLimitLimit'
                         X-RateLimit-Remaining:

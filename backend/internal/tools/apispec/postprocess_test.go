@@ -38,7 +38,7 @@ func TestPostprocess_DeclaresAllowHeaderComponent(t *testing.T) {
 // BB22 S1 and TRA-750 / BB46 F2: codegens that pre-allocate response arms
 // can only model 405 if every operation declares it. The inline 405
 // response must carry the same standard headers the other 4xx/5xx
-// responses already do — the four standard headers plus the Allow header
+// responses already do — the five standard headers plus the Allow header
 // (RFC 7231 §6.5.5).
 func TestPostprocess_AttachesMethodNotAllowedToEveryOperation(t *testing.T) {
 	withEmptyRequiredFields(t)
@@ -52,6 +52,7 @@ func TestPostprocess_AttachesMethodNotAllowedToEveryOperation(t *testing.T) {
 		"X-RateLimit-Limit":     "#/components/headers/XRateLimitLimit",
 		"X-RateLimit-Remaining": "#/components/headers/XRateLimitRemaining",
 		"X-RateLimit-Reset":     "#/components/headers/XRateLimitReset",
+		"RateLimit-Policy":      "#/components/headers/RateLimitPolicy",
 		"X-Request-Id":          "#/components/headers/XRequestId",
 	}
 	for path, item := range doc.Paths.Map() {
@@ -1404,7 +1405,7 @@ func TestInjectGlobalHeaderRefs(t *testing.T) {
 
 	require.NotNil(t, doc.Components)
 	require.NotNil(t, doc.Components.Headers)
-	for _, name := range []string{"XRateLimitLimit", "XRateLimitRemaining", "XRateLimitReset", "RetryAfter", "WWWAuthenticate", "XRequestId"} {
+	for _, name := range []string{"XRateLimitLimit", "XRateLimitRemaining", "XRateLimitReset", "RateLimitPolicy", "RetryAfter", "WWWAuthenticate", "XRequestId"} {
 		ref := doc.Components.Headers[name]
 		require.NotNil(t, ref, "components.headers.%s must be defined", name)
 		require.NotNil(t, ref.Value)
@@ -1414,7 +1415,7 @@ func TestInjectGlobalHeaderRefs(t *testing.T) {
 	for _, code := range []string{"200", "401", "429"} {
 		resp := doc.Paths.Find("/widgets").Get.Responses.Value(code)
 		require.NotNil(t, resp, "response %s must be present", code)
-		for _, name := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "X-Request-Id"} {
+		for _, name := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "RateLimit-Policy", "X-Request-Id"} {
 			h := resp.Value.Headers[name]
 			require.NotNil(t, h, "response %s missing %s", code, name)
 			assert.Equal(t, "#/components/headers/"+canonicalizeHeaderName(name), h.Ref,
@@ -1463,7 +1464,7 @@ func TestInjectGlobalHeaderRefs_Idempotent(t *testing.T) {
 	assert.Same(t, first, doc.Components.Headers["XRequestId"], "components.headers entry must be reused, not replaced")
 
 	headers := doc.Paths.Find("/x").Get.Responses.Value("200").Value.Headers
-	assert.Len(t, headers, 4, "200 must declare exactly the 4 global headers (no Retry-After)")
+	assert.Len(t, headers, 5, "200 must declare exactly the 5 global headers (no Retry-After)")
 }
 
 // TestAppendSpecVariantsDescription covers TRA-657 BB25 A8: both spec

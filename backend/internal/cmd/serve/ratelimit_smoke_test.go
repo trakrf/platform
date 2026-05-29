@@ -47,8 +47,9 @@ func TestRateLimit_MountedOnEitherAuthGroup(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "119", rec.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "60;w=60", rec.Header().Get("RateLimit-Policy"))
 }
 
 // TestRateLimit_DefaultHeadersSurviveAuthFailure verifies the TRA-518 chain
@@ -89,8 +90,8 @@ func TestRateLimit_DefaultHeadersSurviveAuthFailure(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Limit"))
-	require.Equal(t, "60", rec.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "120", rec.Header().Get("X-RateLimit-Remaining"))
 	require.NotEmpty(t, rec.Header().Get("X-RateLimit-Reset"))
 }
 

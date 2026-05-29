@@ -20,13 +20,20 @@ import (
 // probe for the bare prefix still gets X-RateLimit-* on its 404.
 const apiV1Prefix = "/api/v1"
 
-// writeRateLimitHeaders emits the three IETF rate-limit headers from a Decision.
-// Used by both RateLimit (per-key, post-auth) and DefaultRateLimitHeaders
-// (anonymous, pre-auth) so header semantics live in one place.
+// writeRateLimitHeaders emits the rate-limit headers from a Decision. Used by
+// both RateLimit (per-key, post-auth) and DefaultRateLimitHeaders (anonymous,
+// pre-auth) so header semantics live in one place.
+//
+// X-RateLimit-Limit is the burst ceiling and X-RateLimit-Remaining counts down
+// 1:1 to it (TRA-878 Option A). The lower sustained rate is advertised in the
+// separate RateLimit-Policy header as `<quota>;w=<window-seconds>`, so a client
+// can distinguish "how hard can I burst" (Limit/Remaining) from "what can I
+// sustain" (Policy).
 func writeRateLimitHeaders(w http.ResponseWriter, d ratelimit.Decision) {
 	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(d.Limit))
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(d.Remaining))
 	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(d.ResetAt.Unix(), 10))
+	w.Header().Set("RateLimit-Policy", fmt.Sprintf("%d;w=%d", d.PolicyQuota, d.PolicyWindowSec))
 }
 
 // DefaultRateLimitHeaders returns a middleware that pre-emits steady-state
