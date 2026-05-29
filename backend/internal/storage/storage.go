@@ -24,6 +24,12 @@ type PgxPool interface {
 // Storage handles all database operations using a connection pool.
 type Storage struct {
 	pool PgxPool
+	// accessorPool, when non-nil, is what Pool() returns instead of pool.
+	// It exists only for the integration test harness (TRA-874): storage
+	// methods run on pool (a non-superuser, RLS-enforced role) while Pool()
+	// hands tests a superuser pool for fixture setup and cleanup. It is
+	// always nil in production, so Pool() returns the real pool there.
+	accessorPool PgxPool
 }
 
 // New creates a new Storage instance with an initialized connection pool.
@@ -69,6 +75,16 @@ func NewWithPool(pool PgxPool) *Storage {
 	return &Storage{pool: pool}
 }
 
+// NewForTest creates a Storage instance for the integration test harness
+// (TRA-874). queryPool is the non-superuser, RLS-enforced pool that every
+// storage method and WithOrgTx executes against — so a method that forgets to
+// set org context fails the test the way it would fail in production.
+// accessorPool is the superuser pool returned by Pool(), used by tests as the
+// privileged escape hatch for cross-org fixture setup and TRUNCATE cleanup.
+func NewForTest(queryPool, accessorPool PgxPool) *Storage {
+	return &Storage{pool: queryPool, accessorPool: accessorPool}
+}
+
 // Close gracefully closes the database connection pool and releases all resources.
 func (s *Storage) Close() {
 	if s.pool != nil {
@@ -78,7 +94,13 @@ func (s *Storage) Close() {
 }
 
 // Pool returns the underlying connection pool for advanced use cases
-// that require direct pool access.
+// that require direct pool access. When a separate accessor pool has been
+// configured (integration test harness, TRA-874), it is returned instead so
+// tests get the superuser pool for fixture setup while storage methods keep
+// running on the RLS-enforced pool.
 func (s *Storage) Pool() PgxPool {
+	if s.accessorPool != nil {
+		return s.accessorPool
+	}
 	return s.pool
 }

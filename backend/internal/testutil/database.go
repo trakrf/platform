@@ -14,6 +14,16 @@ import (
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
+// testAppRole / testAppPassword identify the non-superuser, RLS-enforced role
+// the integration harness runs storage methods as (TRA-874). It mirrors the
+// production trakrf-app-<env> posture: CRUD on tables, USAGE/EXECUTE on the
+// schema's sequences and functions, but no superuser, no BYPASSRLS, and no
+// table ownership — so row-level security is actually evaluated against it.
+const (
+	testAppRole     = "trakrf_test_app"
+	testAppPassword = "trakrf_test_app"
+)
+
 func GetPostgresURL() string {
 	pgURL := os.Getenv("PG_URL")
 	if pgURL != "" {
@@ -35,45 +45,12 @@ func GetTestDatabaseURL() string {
 	return strings.Replace(pgURL, "/postgres?", "/trakrf_test?", 1)
 }
 
+// SetupTestDatabase returns a *storage.Storage whose methods run on the
+// RLS-enforced app role. Storage's Pool() returns the superuser admin pool for
+// fixture setup and cleanup. See SetupTestDBFull for the full harness.
 func SetupTestDatabase(t *testing.T) *storage.Storage {
 	t.Helper()
-
-	ctx := context.Background()
-
-	if err := createTestDatabase(ctx, t); err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-
-	dbURL := GetTestDatabaseURL()
-
-	migrationsPath := getMigrationsPath(t)
-	if err := runMigrations(dbURL, migrationsPath, t); err != nil {
-		t.Fatalf("Failed to run migrations: %v", err)
-	}
-
-	config, err := pgxpool.ParseConfig(dbURL)
-	if err != nil {
-		t.Fatalf("Failed to parse database URL: %v", err)
-	}
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatalf("Failed to create connection pool: %v", err)
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		t.Fatalf("Failed to ping database: %v", err)
-	}
-
-	store := storage.NewWithPool(pool)
-
-	t.Cleanup(func() {
-		cleanupTestData(t, pool)
-		pool.Close()
-	})
-
-	return store
+	return SetupTestDBFull(t).Store
 }
 
 func createTestDatabase(ctx context.Context, t *testing.T) error {
@@ -111,7 +88,63 @@ func createTestDatabase(ctx context.Context, t *testing.T) error {
 		return fmt.Errorf("failed to set obfuscation_key on test database: %w", err)
 	}
 
+	// Create (or normalize) the non-superuser app role. CREATE ROLE is
+	// cluster-level, so it survives the DROP/CREATE DATABASE above and persists
+	// across test runs; the ALTER makes the attributes self-healing if a prior
+	// run left the role in a different state.
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '%s') THEN
+				CREATE ROLE %s LOGIN PASSWORD '%s';
+			END IF;
+		END
+		$$;`, testAppRole, testAppRole, testAppPassword))
+	if err != nil {
+		return fmt.Errorf("failed to create test app role: %w", err)
+	}
+
+	_, err = conn.Exec(ctx, fmt.Sprintf(
+		"ALTER ROLE %s WITH LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD '%s'",
+		testAppRole, testAppPassword))
+	if err != nil {
+		return fmt.Errorf("failed to normalize test app role: %w", err)
+	}
+
 	t.Logf("✅ Created test database: trakrf_test")
+	return nil
+}
+
+// grantTestAppRole gives the non-superuser app role the same posture as the
+// production trakrf-app-<env> role: CRUD on tables, USAGE/SELECT on sequences,
+// EXECUTE on functions, USAGE on the schemas. It deliberately grants no
+// TRUNCATE and no ownership, so RLS is enforced for this role. Run after
+// migrations (objects must exist) and re-run every test since the database is
+// recreated each time.
+func grantTestAppRole(ctx context.Context, t *testing.T, dbURL string) error {
+	t.Helper()
+
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to grant app role: %w", err)
+	}
+	defer conn.Close(ctx)
+
+	stmts := []string{
+		fmt.Sprintf("GRANT CONNECT ON DATABASE trakrf_test TO %s", testAppRole),
+		fmt.Sprintf("GRANT USAGE ON SCHEMA trakrf TO %s", testAppRole),
+		fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", testAppRole),
+		fmt.Sprintf("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA trakrf TO %s", testAppRole),
+		fmt.Sprintf("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA trakrf TO %s", testAppRole),
+		fmt.Sprintf("GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA trakrf TO %s", testAppRole),
+	}
+	for _, stmt := range stmts {
+		if _, err := conn.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("failed to grant to test app role (%q): %w", stmt, err)
+		}
+	}
+
+	t.Logf("✅ Granted RLS-enforced posture to role: %s", testAppRole)
 	return nil
 }
 
@@ -226,6 +259,84 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 			t.Logf("Warning: failed to truncate %s: %v", table, err)
 		}
 	}
+}
+
+// TestDB bundles a configured *storage.Storage with direct handles to both
+// connection pools used by the integration test harness (TRA-874).
+type TestDB struct {
+	// Store runs every storage method on the RLS-enforced app pool.
+	Store *storage.Storage
+	// AdminPool is the superuser pool: cross-org fixture setup and cleanup.
+	AdminPool *pgxpool.Pool
+	// AppPool is the non-superuser, RLS-enforced pool backing Store.
+	AppPool *pgxpool.Pool
+}
+
+// SetupTestDBFull creates the test database, runs migrations, and returns a
+// TestDB with both the superuser admin pool and the RLS-enforced app pool.
+// SetupTestDB is the thin back-compat wrapper used by most tests.
+func SetupTestDBFull(t *testing.T) *TestDB {
+	t.Helper()
+
+	ctx := context.Background()
+
+	if err := createTestDatabase(ctx, t); err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+
+	dbURL := GetTestDatabaseURL()
+
+	migrationsPath := getMigrationsPath(t)
+	if err := runMigrations(dbURL, migrationsPath, t); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	if err := grantTestAppRole(ctx, t, dbURL); err != nil {
+		t.Fatalf("Failed to grant test app role: %v", err)
+	}
+
+	adminPool := openPool(ctx, t, dbURL, nil)
+	// The app pool connects as the non-superuser, RLS-enforced role. Storage
+	// methods run here, so a missing WithOrgTx fails the test.
+	appPool := openPool(ctx, t, dbURL, func(c *pgxpool.Config) {
+		c.ConnConfig.User = testAppRole
+		c.ConnConfig.Password = testAppPassword
+	})
+
+	store := storage.NewForTest(appPool, adminPool)
+
+	t.Cleanup(func() {
+		cleanupTestData(t, adminPool)
+		appPool.Close()
+		adminPool.Close()
+	})
+
+	return &TestDB{Store: store, AdminPool: adminPool, AppPool: appPool}
+}
+
+func openPool(ctx context.Context, t *testing.T, url string, mutate func(*pgxpool.Config)) *pgxpool.Pool {
+	t.Helper()
+
+	config, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatalf("Failed to parse database URL: %v", err)
+	}
+
+	if mutate != nil {
+		mutate(config)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatalf("Failed to create connection pool: %v", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		t.Fatalf("Failed to ping database: %v", err)
+	}
+
+	return pool
 }
 
 // SetupTestDB sets up a test database and returns storage with cleanup function.
