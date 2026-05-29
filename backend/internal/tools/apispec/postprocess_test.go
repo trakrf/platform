@@ -1571,6 +1571,12 @@ func withEmptyRequiredFields(t *testing.T) {
 	// hoist_enums_test.go.
 	savedInlineEnumExtractions := inlineEnumExtractions
 	inlineEnumExtractions = nil
+	// TRA-864: surrogateIDFields is strict (errors on unknown schema/field)
+	// like the maps above. Minimal in-memory test docs don't seed the
+	// PublicAssetView / PublicLocationView / etc. schemas, so clear it here.
+	// Coverage for the pass itself lives alongside the other strict-map passes.
+	savedSurrogateIDFields := surrogateIDFields
+	surrogateIDFields = map[string][]string{}
 	t.Cleanup(func() {
 		requiredFields = saved
 		internalOnlyRequiredFields = savedInternal
@@ -1581,6 +1587,7 @@ func withEmptyRequiredFields(t *testing.T) {
 		publicOperationIdRenames = savedOpIDRenames
 		publicTagDescriptions = savedTagDescriptions
 		inlineEnumExtractions = savedInlineEnumExtractions
+		surrogateIDFields = savedSurrogateIDFields
 	})
 }
 
@@ -1948,4 +1955,96 @@ func TestPostprocess_StripsXOriginalParamNameOnBothPipelines(t *testing.T) {
 		_, has := rb.Extensions["x-originalParamName"]
 		assert.False(t, has, "internal spec must not carry x-originalParamName")
 	})
+}
+
+// TRA-864 / bb-2.1 F1+F2: surrogate id fields must declare format: int64
+// (post-bigint-migration wire reality) plus maximum: 2^53−1 so JS/TS clients
+// holding integers in IEEE-754 doubles never receive an inexact value.
+func TestMarkSurrogateIDBounds_WidensIDFieldsAndParams(t *testing.T) {
+	const maxSafe = float64(9007199254740991)
+
+	doc := docWithSchemas(openapi3.Schemas{
+		"report.PublicAssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type: &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{
+				// surrogate id — must widen
+				"location_id": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema().WithFormat("int32")},
+				// NOT a surrogate id — must be left exactly as-is (int32)
+				"duration_seconds": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema().WithFormat("int32")},
+			},
+		}},
+	})
+
+	// path param (scalar integer, already int64 from TRA-720 but no maximum)
+	// + repeatable query filter (array of integer, no format at all).
+	doc.Paths.Set("/api/v1/assets/{asset_id}/history", &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Parameters: openapi3.Parameters{
+				{Value: &openapi3.Parameter{
+					Name: "asset_id", In: "path",
+					Schema: &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema().WithFormat("int64")},
+				}},
+				{Value: &openapi3.Parameter{
+					Name: "location_id", In: "query",
+					Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{
+						Type:  &openapi3.Types{openapi3.TypeArray},
+						Items: &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+					}},
+				}},
+				// non-id query param must be left alone
+				{Value: &openapi3.Parameter{
+					Name: "limit", In: "query",
+					Schema: &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()},
+				}},
+			},
+		},
+	})
+
+	fields := map[string][]string{
+		"report.PublicAssetHistoryItem": {"location_id"},
+	}
+	if err := markSurrogateIDBounds(doc, fields); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// component id field widened
+	locID := doc.Components.Schemas["report.PublicAssetHistoryItem"].Value.Properties["location_id"].Value
+	assert.Equal(t, "int64", locID.Format, "surrogate id must be int64")
+	require.NotNil(t, locID.Max, "surrogate id must declare maximum")
+	assert.Equal(t, maxSafe, *locID.Max, "surrogate id maximum must be MAX_SAFE_INTEGER")
+
+	// sibling non-id integer untouched
+	dur := doc.Components.Schemas["report.PublicAssetHistoryItem"].Value.Properties["duration_seconds"].Value
+	assert.Equal(t, "int32", dur.Format, "duration_seconds must stay int32")
+	assert.Nil(t, dur.Max, "duration_seconds must not get a surrogate-id maximum")
+
+	params := doc.Paths.Value("/api/v1/assets/{asset_id}/history").Get.Parameters
+	// path param: int64 + maximum
+	assert.Equal(t, "int64", params[0].Value.Schema.Value.Format, "path asset_id must be int64")
+	require.NotNil(t, params[0].Value.Schema.Value.Max)
+	assert.Equal(t, maxSafe, *params[0].Value.Schema.Value.Max, "path asset_id needs MAX_SAFE_INTEGER cap")
+	// query array param: items widened
+	items := params[1].Value.Schema.Value.Items.Value
+	assert.Equal(t, "int64", items.Format, "query location_id items must be int64")
+	require.NotNil(t, items.Max)
+	assert.Equal(t, maxSafe, *items.Max, "query location_id items need MAX_SAFE_INTEGER cap")
+	// non-id query param untouched
+	assert.Equal(t, "", params[2].Value.Schema.Value.Format, "limit must not be widened")
+	assert.Nil(t, params[2].Value.Schema.Value.Max, "limit must not get a surrogate-id maximum")
+}
+
+// The curated field roster must stay in sync with the spec; a stale entry
+// (renamed/removed field) fails the build rather than silently no-op'ing —
+// the exact "missed sibling surface" failure mode this ticket exists to fix.
+func TestMarkSurrogateIDBounds_ErrorsOnMissingField(t *testing.T) {
+	doc := docWithSchemas(openapi3.Schemas{
+		"report.PublicAssetHistoryItem": &openapi3.SchemaRef{Value: &openapi3.Schema{
+			Type:       &openapi3.Types{openapi3.TypeObject},
+			Properties: openapi3.Schemas{"location_id": &openapi3.SchemaRef{Value: openapi3.NewIntegerSchema()}},
+		}},
+	})
+	err := markSurrogateIDBounds(doc, map[string][]string{"report.PublicAssetHistoryItem": {"ghost"}})
+	if err == nil {
+		t.Fatalf("expected error for missing field, got nil")
+	}
 }
