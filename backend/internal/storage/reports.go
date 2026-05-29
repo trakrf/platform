@@ -312,47 +312,52 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			location_id,
 			location_name,
 			location_external_key,
-			-- TRA-865: cast to BIGINT, not INT. A single sentinel/bad timestamp
-			-- in an asset's seeded scan history can put two consecutive scans
-			-- more than ~68 years apart, and EXTRACT(EPOCH ...)::INT overflows
-			-- int4 (SQLSTATE 22003) — crashing the whole query with a 500 for
-			-- every row of that asset's history. BIGINT can hold any epoch
-			-- difference across the timestamp range. (DurationSeconds is *int /
-			-- 64-bit Go-side, so this scans cleanly.)
+			-- Cast to BIGINT, not INT: a legitimate >68-year gap between two
+			-- consecutive scans overflows EXTRACT(EPOCH ...)::INT (int4,
+			-- SQLSTATE 22003). BIGINT holds any epoch difference across the
+			-- timestamp range; DurationSeconds is *int / 64-bit Go-side, so it
+			-- scans cleanly.
 			EXTRACT(EPOCH FROM (next_timestamp - timestamp))::BIGINT AS duration_seconds
 		FROM scans
 		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
 	`
 
-	rows, err := s.pool.Query(ctx, query, assetID, orgID, filter.From, filter.To, filter.Limit, filter.Offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list asset history: %w", err)
-	}
-	defer rows.Close()
-
+	// Run inside WithOrgTx so SET LOCAL app.current_org_id is in effect: the
+	// LEFT JOIN onto trakrf.locations is subject to the org-isolation RLS
+	// policy, which casts current_setting('app.current_org_id')::bigint. Querying
+	// on the raw pool leaves that setting empty/unset and the policy aborts the
+	// scan (SQLSTATE 22P02 / 42704) the moment a location row is probed — i.e. a
+	// 500 on every asset that has any scan history. (TRA-865.)
 	items := []report.AssetHistoryItem{}
-	for rows.Next() {
-		var item report.AssetHistoryItem
-		err := rows.Scan(
-			&item.Timestamp,
-			&item.LocationID,
-			&item.LocationName,
-			&item.LocationExternalKey,
-			&item.DurationSeconds,
-		)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, assetID, orgID, filter.From, filter.To, filter.Limit, filter.Offset)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan asset history: %w", err)
+			return fmt.Errorf("failed to list asset history: %w", err)
 		}
-		items = append(items, item)
-	}
+		defer rows.Close()
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating asset history: %w", err)
-	}
+		for rows.Next() {
+			var item report.AssetHistoryItem
+			if err := rows.Scan(
+				&item.Timestamp,
+				&item.LocationID,
+				&item.LocationName,
+				&item.LocationExternalKey,
+				&item.DurationSeconds,
+			); err != nil {
+				return fmt.Errorf("failed to scan asset history: %w", err)
+			}
+			items = append(items, item)
+		}
 
-	if items == nil {
-		items = []report.AssetHistoryItem{}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("error iterating asset history: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return items, nil
@@ -369,8 +374,14 @@ func (s *Storage) CountAssetHistory(ctx context.Context, assetID, orgID int, fil
 		  AND ($4::timestamptz IS NULL OR s.timestamp <= $4)
 	`
 
+	// Wrapped in WithOrgTx for parity with ListAssetHistory and the other
+	// report queries: even though this COUNT only touches asset_scans (which
+	// carries no RLS policy today), keeping the org context consistent avoids
+	// re-introducing the bypass if a locations join is ever added here. (TRA-865.)
 	var count int
-	err := s.pool.QueryRow(ctx, query, assetID, orgID, filter.From, filter.To).Scan(&count)
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, assetID, orgID, filter.From, filter.To).Scan(&count)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count asset history: %w", err)
 	}
