@@ -312,7 +312,14 @@ func (s *Storage) ListAssetHistory(ctx context.Context, assetID, orgID int, filt
 			location_id,
 			location_name,
 			location_external_key,
-			EXTRACT(EPOCH FROM (next_timestamp - timestamp))::INT AS duration_seconds
+			-- TRA-865: cast to BIGINT, not INT. A single sentinel/bad timestamp
+			-- in an asset's seeded scan history can put two consecutive scans
+			-- more than ~68 years apart, and EXTRACT(EPOCH ...)::INT overflows
+			-- int4 (SQLSTATE 22003) — crashing the whole query with a 500 for
+			-- every row of that asset's history. BIGINT can hold any epoch
+			-- difference across the timestamp range. (DurationSeconds is *int /
+			-- 64-bit Go-side, so this scans cleanly.)
+			EXTRACT(EPOCH FROM (next_timestamp - timestamp))::BIGINT AS duration_seconds
 		FROM scans
 		ORDER BY ` + orderBy + `
 		LIMIT $5 OFFSET $6
