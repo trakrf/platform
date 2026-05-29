@@ -7,6 +7,38 @@ import (
 	"time"
 )
 
+func TestValidateSecret(t *testing.T) {
+	cases := []struct {
+		name      string
+		appEnv    string
+		jwtSecret string
+		wantErr   bool
+	}{
+		{"production with unset secret rejected", "production", "", true},
+		{"production with dev fallback rejected", "production", "dev-secret-change-in-production", true},
+		{"production with chart default change-me rejected", "production", "change-me", true},
+		{"production with real secret accepted", "production", "G7c1p+real-random-48b-secret/xyz", false},
+		{"preview (deployed) with unset secret rejected", "preview", "", true},
+		{"preview (deployed) with chart default change-me rejected", "preview", "change-me", true},
+		{"preview (deployed) with real secret accepted", "preview", "G7c1p+real-random-48b-secret/xyz", false},
+		{"local (empty APP_ENV) with unset secret accepted", "", "", false},
+		{"local (empty APP_ENV) with dev fallback accepted", "", "dev-secret-change-in-production", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("APP_ENV", c.appEnv)
+			t.Setenv("JWT_SECRET", c.jwtSecret)
+			err := ValidateSecret()
+			if c.wantErr && err == nil {
+				t.Fatalf("expected error for APP_ENV=%q JWT_SECRET=%q, got nil", c.appEnv, c.jwtSecret)
+			}
+			if !c.wantErr && err != nil {
+				t.Fatalf("expected nil for APP_ENV=%q JWT_SECRET=%q, got %v", c.appEnv, c.jwtSecret, err)
+			}
+		})
+	}
+}
+
 func TestGenerate(t *testing.T) {
 	os.Setenv("JWT_SECRET", "test-secret-key")
 	os.Setenv("JWT_EXPIRATION", "3600")
