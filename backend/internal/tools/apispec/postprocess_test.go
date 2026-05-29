@@ -1086,6 +1086,27 @@ func TestPostprocess_StripsBearerScopeArrays_EmitsExtension(t *testing.T) {
 	assert.Equal(t, []string{"assets:read"}, got)
 }
 
+// TestPostprocess_ScopeInvariant_PreAuthOpGetsEmptyArray locks TRA-877 item 1:
+// an operation with NO security requirement at all (e.g. the pre-auth
+// POST /api/v1/oauth/token) still carries x-required-scopes: [] so the
+// documented "every operation carries it" invariant holds — a scope-policy
+// ingestor never hits the missing-field ambiguity the empty array exists to
+// prevent.
+func TestPostprocess_ScopeInvariant_PreAuthOpGetsEmptyArray(t *testing.T) {
+	withEmptyRequiredFields(t)
+	doc := loadAndConvert(t, "testdata/minimal-v2.json")
+	op := doc.Paths.Find("/assets").Get
+	require.NotNil(t, op)
+	op.Security = nil // pre-auth: no security requirement, like /oauth/token
+
+	require.NoError(t, postprocessPublic(doc))
+
+	require.NotNil(t, op.Extensions, "extensions must be populated")
+	got, ok := op.Extensions["x-required-scopes"]
+	require.True(t, ok, "pre-auth op must still carry x-required-scopes (the invariant)")
+	assert.Equal(t, []string{}, got, "pre-auth op gets an explicit empty array, not an absent key")
+}
+
 // TestPostprocess_ErrorEnvelopeDescriptionMatchesDocs locks in TRA-585 S1
 // (and TRA-780 F2's hoist). The errors page declares the envelope is
 // "modeled on RFC 7807 but not 7807-compliant" — the spec description on

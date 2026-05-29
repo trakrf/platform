@@ -74,3 +74,52 @@ func TestToken_MissingGrantTypeIs400(t *testing.T) {
 	w := postToken(t, h, map[string]string{})
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+// firstFieldCode pulls error.fields[0].code out of a validation envelope.
+func firstFieldCode(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Fields []struct {
+				Field string `json:"field"`
+				Code  string `json:"code"`
+			} `json:"fields"`
+		} `json:"error"`
+	}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	if len(body.Error.Fields) == 0 {
+		t.Fatalf("expected at least one field error, got body: %s", w.Body.String())
+	}
+	assert.Equal(t, "grant_type", body.Error.Fields[0].Field)
+	return body.Error.Fields[0].Code
+}
+
+// TRA-877 item 4: an ABSENT grant_type is a presence violation → code "required",
+// matching the rest of the surface (POST /assets with no name → required) and the
+// errors-doc taxonomy. Three of three bb-2.3 sessions reproduced the old too_short.
+func TestToken_AbsentGrantType_ReturnsRequired(t *testing.T) {
+	h := newTestHandler(&stubAuthService{})
+	w := postToken(t, h, map[string]string{})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "required", firstFieldCode(t, w),
+		"absent grant_type must report code=required, not too_short")
+}
+
+// An EMPTY grant_type ("") is present-but-invalid-length → stays too_short,
+// mirroring empty name on POST /assets. (The presence overlay must not over-promote.)
+func TestToken_EmptyGrantType_StaysTooShort(t *testing.T) {
+	h := newTestHandler(&stubAuthService{})
+	w := postToken(t, h, map[string]string{"grant_type": ""})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "too_short", firstFieldCode(t, w),
+		"empty grant_type was provided (just too short) — not a presence violation")
+}
+
+// The form-urlencoded path must honor the same taxonomy: absent grant_type → required.
+func TestToken_AbsentGrantTypeForm_ReturnsRequired(t *testing.T) {
+	h := newTestHandler(&stubAuthService{})
+	w := postTokenForm(t, h, url.Values{})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "required", firstFieldCode(t, w),
+		"absent grant_type on a form body must also report code=required")
+}
