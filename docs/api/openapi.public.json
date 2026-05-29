@@ -8110,7 +8110,8 @@
         "summary": "OAuth2 token grant",
         "tags": [
           "oauth"
-        ]
+        ],
+        "x-required-scopes": []
       }
     },
     "/api/v1/orgs/me": {

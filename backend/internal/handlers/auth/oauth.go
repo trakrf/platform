@@ -32,6 +32,11 @@ func (handler *Handler) Token(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 
 	var request auth.TokenRequest
+	// Track top-level key presence so an ABSENT required field (grant_type)
+	// reports code=required rather than the TRA-637 too_short collapse, while an
+	// empty-string value stays too_short — matching the rest of the surface and
+	// the errors-doc taxonomy (TRA-877 item 4, via the TRA-692 presence overlay).
+	present := map[string]struct{}{}
 	// OAuth2 clients (RFC 6749 §3.2/§4.4) post application/x-www-form-urlencoded;
 	// JSON is also accepted. ContentType middleware has already constrained this
 	// route to exactly those two media types.
@@ -46,12 +51,22 @@ func (handler *Handler) Token(w http.ResponseWriter, r *http.Request) {
 			ClientSecret: r.PostForm.Get("client_secret"),
 			RefreshToken: r.PostForm.Get("refresh_token"),
 		}
-	} else if err := httputil.DecodeJSON(r, &request); err != nil {
-		httputil.RespondDecodeError(w, r, err, reqID)
-		return
+		if _, ok := r.PostForm["grant_type"]; ok {
+			present["grant_type"] = struct{}{}
+		}
+	} else {
+		// Peek presence before decoding; PeekJSONFields restores r.Body so the
+		// subsequent DecodeJSON re-reads the same payload.
+		if _, ok := httputil.PeekJSONFields(r, []string{"grant_type"})["grant_type"]; ok {
+			present["grant_type"] = struct{}{}
+		}
+		if err := httputil.DecodeJSON(r, &request); err != nil {
+			httputil.RespondDecodeError(w, r, err, reqID)
+			return
+		}
 	}
 	if err := validate.Struct(request); err != nil {
-		httputil.RespondValidationError(w, r, err, reqID)
+		httputil.RespondValidationErrorWithPresence(w, r, err, reqID, present, nil)
 		return
 	}
 

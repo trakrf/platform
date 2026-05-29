@@ -110,6 +110,7 @@ func postprocessPublic(doc *openapi3.T) error {
 	injectDefaultErrorResponse(doc)
 	injectGlobalHeaderRefs(doc)
 	stripBearerScopeArrays(doc)
+	ensurePublicScopeInvariant(doc)
 	stripSessionAuthScheme(doc)
 	appendSpecVariantsDescription(doc)
 	appendMethodPolicyDescription(doc)
@@ -2226,6 +2227,39 @@ func stripBearerScopeArrays(doc *openapi3.T) {
 				op.Extensions = map[string]any{}
 			}
 			op.Extensions["x-required-scopes"] = append([]string{}, scopes...)
+		}
+	}
+}
+
+// ensurePublicScopeInvariant guarantees every public operation carries an
+// x-required-scopes extension (TRA-877 item 1). stripBearerScopeArrays stamps
+// bearer-gated operations (with their captured scopes, or [] for scopeless
+// bearer ops), but pre-auth operations with no security requirement at all —
+// e.g. POST /api/v1/oauth/token — would otherwise omit the key entirely. The
+// auth doc commits to the invariant that "every operation carries
+// x-required-scopes precisely so the absence of a required scope is a positive
+// signal (empty array) rather than a missing-field ambiguity"; a scope-policy
+// ingestor relying on it hits exactly that ambiguity on the token endpoint.
+// Fill an explicit empty array wherever the extension is still absent. Public
+// spec only (not called from postprocessInternal). Idempotent.
+func ensurePublicScopeInvariant(doc *openapi3.T) {
+	if doc.Paths == nil {
+		return
+	}
+	for _, item := range doc.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for _, op := range item.Operations() {
+			if op == nil {
+				continue
+			}
+			if op.Extensions == nil {
+				op.Extensions = map[string]any{}
+			}
+			if _, ok := op.Extensions["x-required-scopes"]; !ok {
+				op.Extensions["x-required-scopes"] = []string{}
+			}
 		}
 	}
 }
