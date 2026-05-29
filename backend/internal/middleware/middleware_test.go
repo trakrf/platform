@@ -615,7 +615,13 @@ func TestCORS_EnabledOriginShortCircuitsOptions(t *testing.T) {
 	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
 		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "https://app.example.com")
 	}
-	if got := w.Header().Get("Access-Control-Allow-Methods"); got == "" {
-		t.Errorf("Access-Control-Allow-Methods must be set on preflight responses")
+	// TRA-866: ACAM must match the actual route table — HEAD is valid on every
+	// GET route (chi auto-serves it), and no route uses PUT. Advertising PUT
+	// was a stale generic default; omitting HEAD understated coverage.
+	if got, want := w.Header().Get("Access-Control-Allow-Methods"), "GET, HEAD, POST, PATCH, DELETE, OPTIONS"; got != want {
+		t.Errorf("Access-Control-Allow-Methods = %q, want %q", got, want)
+	}
+	if strings.Contains(w.Header().Get("Access-Control-Allow-Methods"), "PUT") {
+		t.Errorf("Access-Control-Allow-Methods must not advertise PUT — no route uses it")
 	}
 }

@@ -81,7 +81,10 @@ func CORS(next http.Handler) http.Handler {
 		corsEnabled := origin != "disabled"
 		if corsEnabled {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			// TRA-866: match the actual route table — HEAD is valid on every GET
+			// route (chi auto-serves it) and no route uses PUT. The prior list
+			// was a stale generic default that advertised PUT and omitted HEAD.
+			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "3600")
 
