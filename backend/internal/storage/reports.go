@@ -375,9 +375,10 @@ func (s *Storage) CountAssetHistory(ctx context.Context, assetID, orgID int, fil
 	`
 
 	// Wrapped in WithOrgTx for parity with ListAssetHistory and the other
-	// report queries: even though this COUNT only touches asset_scans (which
-	// carries no RLS policy today), keeping the org context consistent avoids
-	// re-introducing the bypass if a locations join is ever added here. (TRA-865.)
+	// report queries: asset_scans carries its own org-isolation RLS policy
+	// (TRA-875), so the org context must be set or this COUNT fails the policy
+	// qual the moment it scans (22P02/42704) — the same loud failure mode
+	// TRA-865 produced on the locations join.
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, assetID, orgID, filter.From, filter.To).Scan(&count)
