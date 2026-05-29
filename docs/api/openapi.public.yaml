@@ -846,6 +846,47 @@ components:
                 - $ref: '#/components/schemas/RfidTagRequest'
                 - $ref: '#/components/schemas/BleTagRequest'
                 - $ref: '#/components/schemas/BarcodeTagRequest'
+        TokenRequest:
+            properties:
+                client_id:
+                    example: 6f1c2a8e-7d3b-4e90-9a11-2c4d5e6f7a8b
+                    type: string
+                client_secret:
+                    example: trakrf_9f8e7d6c5b4a39281706f5e4d3c2b1a0ffeeddccbbaa99887766554433221100
+                    type: string
+                grant_type:
+                    enum:
+                        - client_credentials
+                        - refresh_token
+                    example: client_credentials
+                    type: string
+                refresh_token:
+                    example: f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                    type: string
+            required:
+                - grant_type
+            type: object
+        TokenResponse:
+            properties:
+                access_token:
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.short-lived-access-jwt
+                    type: string
+                expires_in:
+                    example: 900
+                    format: int32
+                    type: integer
+                refresh_token:
+                    example: f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                    type: string
+                token_type:
+                    example: Bearer
+                    type: string
+            required:
+                - access_token
+                - refresh_token
+                - token_type
+                - expires_in
+            type: object
         UpdateAssetRequest:
             properties:
                 description:
@@ -931,47 +972,6 @@ components:
                     $ref: '#/components/schemas/LocationView'
             required:
                 - data
-            type: object
-        auth.TokenRequest:
-            properties:
-                client_id:
-                    example: 6f1c2a8e-7d3b-4e90-9a11-2c4d5e6f7a8b
-                    type: string
-                client_secret:
-                    example: trakrf_9f8e7d6c5b4a39281706f5e4d3c2b1a0ffeeddccbbaa99887766554433221100
-                    type: string
-                grant_type:
-                    enum:
-                        - client_credentials
-                        - refresh_token
-                    example: client_credentials
-                    type: string
-                refresh_token:
-                    example: f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-                    type: string
-            required:
-                - grant_type
-            type: object
-        auth.TokenResponse:
-            properties:
-                access_token:
-                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.short-lived-access-jwt
-                    type: string
-                expires_in:
-                    example: 900
-                    format: int32
-                    type: integer
-                refresh_token:
-                    example: f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-                    type: string
-                token_type:
-                    example: Bearer
-                    type: string
-            required:
-                - access_token
-                - refresh_token
-                - token_type
-                - expires_in
             type: object
     securitySchemes:
         BearerAuth:
@@ -4834,14 +4834,15 @@ paths:
     /api/v1/oauth/token:
         post:
             description: 'Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` and `client_secret` (the opaque {client_id, client_secret} pair returned once at API-key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.'
+            operationId: createToken
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/auth.TokenRequest'
+                            $ref: '#/components/schemas/TokenRequest'
                     application/x-www-form-urlencoded:
                         schema:
-                            $ref: '#/components/schemas/auth.TokenRequest'
+                            $ref: '#/components/schemas/TokenRequest'
                 description: Token grant request
                 required: true
             responses:
@@ -4849,7 +4850,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/auth.TokenResponse'
+                                $ref: '#/components/schemas/TokenResponse'
                     description: OK
                     headers:
                         X-RateLimit-Limit:

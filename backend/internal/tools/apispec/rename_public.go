@@ -87,6 +87,14 @@ var publicSchemaRenames = map[string]string{
 	"shared.RfidTagRequest":    "RfidTagRequest",
 	"shared.BleTagRequest":     "BleTagRequest",
 	"shared.BarcodeTagRequest": "BarcodeTagRequest",
+
+	// auth — OAuth2 client_credentials/refresh grant (TRA-846). Drop the
+	// auth. package prefix (TRA-867 / bb-2.1 F6): it was the only dotted
+	// schema namespace leaking into the public surface, and forced
+	// datamodel-code-generator into modular mode. Flat names match the
+	// rest of the spec's PascalCase convention.
+	"auth.TokenRequest":  "TokenRequest",
+	"auth.TokenResponse": "TokenResponse",
 }
 
 // publicOperationIdRenames maps the dotted operationIds swag emits
@@ -122,6 +130,12 @@ var publicOperationIdRenames = map[string]string{
 	"locations.tags.remove":   "removeLocationTag",
 	"orgs.me":                 "getCurrentOrg",
 	"reports.asset-locations": "listAssetLocations",
+
+	// auth — POST /api/v1/oauth/token. The bootstrap operation every
+	// integrator calls first; it carried no operationId, so generators
+	// auto-derived leaky names like api_v1_oauth_token_post (TRA-867 /
+	// bb-2.1 F5). createToken matches the createAsset/createLocation verb-noun.
+	"oauth.token": "createToken",
 }
 
 // publicTagDescriptions adds top-level tag definitions to the public
