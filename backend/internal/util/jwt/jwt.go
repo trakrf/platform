@@ -73,12 +73,61 @@ func Validate(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
+// devSecret is the fallback signing secret for non-production environments when
+// JWT_SECRET is unset. It is publicly known, so ValidateSecret refuses to let it
+// (or other known-weak values) sign tokens in production.
+const devSecret = "dev-secret-change-in-production"
+
 func getSecret() string {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "dev-secret-change-in-production"
+		secret = devSecret
 	}
 	return secret
+}
+
+// knownWeakSecrets are signing secrets that must never sign tokens in a deployed
+// environment: the unset/empty fallback (resolves to devSecret), devSecret
+// itself, and the helm chart default "change-me" (helm/trakrf-backend
+// values.yaml). All are publicly known, so any would let anyone forge a Bearer
+// for any org.
+var knownWeakSecrets = map[string]bool{
+	"":          true,
+	devSecret:   true,
+	"change-me": true,
+}
+
+// devOrTestEnvs are the only environments permitted to boot with a weak/dev
+// JWT_SECRET: local development (APP_ENV unset) and the test/CI harness
+// (APP_ENV="test", which backend/justfile's contract-test recipe sets with the
+// dev fallback secret). Every other APP_ENV — preview, staging, production — is
+// a deployed environment that must supply a real secret.
+var devOrTestEnvs = map[string]bool{
+	"":     true,
+	"test": true,
+}
+
+// ValidateSecret fails fast when a DEPLOYED environment lacks a real signing
+// secret. Call it once at startup so the process refuses to boot rather than
+// silently signing forgeable tokens with a publicly-known default.
+//
+// Scope: only local (APP_ENV unset) and the test/CI harness (APP_ENV="test")
+// may use the dev fallback. Any other APP_ENV (preview, staging, production) is
+// a deployed environment and must provide a real secret — so a misconfig
+// fail-boots loudly on the preview proving ground, not silently in production.
+// Enforcing on preview is safe: preview already has a real secret (it boots
+// normally) and only fail-boots if its secret ever regresses to a weak value.
+func ValidateSecret() error {
+	appEnv := os.Getenv("APP_ENV")
+	if devOrTestEnvs[appEnv] {
+		return nil
+	}
+	if knownWeakSecrets[os.Getenv("JWT_SECRET")] {
+		return fmt.Errorf("JWT_SECRET must be set to a real, non-default value in %q "+
+			"(it is unset or a known-weak default — \"\", %q, or \"change-me\"); "+
+			"refusing to start to avoid signing forgeable tokens", appEnv, devSecret)
+	}
+	return nil
 }
 
 // GetExpirationSeconds returns the configured access-token TTL in seconds.

@@ -27,6 +27,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	"github.com/trakrf/platform/backend/internal/storage"
+	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
 // Run starts the long-lived HTTP server process. It blocks until ctx is
@@ -38,6 +39,14 @@ import (
 func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	startTime := time.Now()
 	log := logger.Get()
+
+	// Fail fast: a deployed environment must never sign tokens with a known-weak
+	// secret (unset → dev fallback, or the "change-me" chart default), which
+	// would let anyone forge a Bearer for any org. Refuse to boot instead.
+	if err := jwt.ValidateSecret(); err != nil {
+		log.Error().Err(err).Msg("Refusing to start: insecure JWT_SECRET")
+		return err
+	}
 
 	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
 		err := sentry.Init(sentry.ClientOptions{
