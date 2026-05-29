@@ -337,6 +337,26 @@ func TestContentType_MultipartBoundary(t *testing.T) {
 	}
 }
 
+// TestContentType_OAuthTokenAcceptsFormUrlencoded verifies the OAuth2 token
+// endpoint accepts application/x-www-form-urlencoded — the media type stock
+// OAuth2 client libraries default to (RFC 6749 §3.2/§4.4). Every other public
+// POST still requires application/json; this is a path-scoped exception.
+func TestContentType_OAuthTokenAcceptsFormUrlencoded(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/oauth/token",
+		strings.NewReader("grant_type=client_credentials"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	ContentType(next).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected form-urlencoded allowed on /api/v1/oauth/token (200), got %d", rr.Code)
+	}
+}
+
 func TestAuth_MissingHeader_Respond401(t *testing.T) {
 	h := Auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("should not reach handler") }))
 	w := httptest.NewRecorder()

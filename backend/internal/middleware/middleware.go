@@ -103,6 +103,13 @@ func CORS(next http.Handler) http.Handler {
 // internal and is not part of the public OpenAPI surface.
 const bulkCSVUploadPath = "/api/v1/assets/bulk"
 
+// oauthTokenPath additionally accepts application/x-www-form-urlencoded (on top
+// of application/json) so stock OAuth2 client libraries — which default to
+// form-urlencoded for the token endpoint per RFC 6749 §3.2/§4.4 — can exchange
+// credentials without hand-setting a JSON content type. Every other public POST
+// remains JSON-only.
+const oauthTokenPath = "/api/v1/oauth/token"
+
 // ContentType enforces declared Content-Type per method (BB32 D4 / TRA-703).
 // The public docs commit to a strict per-method matrix on every write
 // endpoint, and missing or otherwise-unlisted Content-Type returns 415 with
@@ -142,6 +149,17 @@ func ContentType(next http.Handler) http.Handler {
 
 		isJSON := ct == "application/json" || ct == "application/json; charset=utf-8"
 		isMergePatch := ct == "application/merge-patch+json" || ct == "application/merge-patch+json; charset=utf-8"
+
+		// OAuth2 token endpoint accepts form-urlencoded (RFC 6749) in addition
+		// to JSON; the handler branches on Content-Type to parse accordingly.
+		if r.Method == http.MethodPost && r.URL.Path == oauthTokenPath {
+			if isJSON || strings.HasPrefix(ct, "application/x-www-form-urlencoded") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			httputil.Respond415(w, r, GetRequestID(r.Context()))
+			return
+		}
 
 		allowed := false
 		switch r.Method {

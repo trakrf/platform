@@ -7240,6 +7240,11 @@
               "schema": {
                 "$ref": "#/components/schemas/auth.TokenRequest"
               }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/auth.TokenRequest"
+              }
             }
           },
           "description": "Token grant request",

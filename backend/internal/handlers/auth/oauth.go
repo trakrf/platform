@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/trakrf/platform/backend/internal/middleware"
@@ -16,7 +17,7 @@ import (
 // @Summary OAuth2 token grant
 // @Description Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` and `client_secret` (the opaque {client_id, client_secret} pair returned once at API-key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.
 // @Tags oauth,public
-// @Accept json
+// @Accept json,x-www-form-urlencoded
 // @Produce json
 // @Param request body auth.TokenRequest true "Token grant request"
 // @Success 200 {object} auth.TokenResponse
@@ -30,7 +31,21 @@ func (handler *Handler) Token(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 
 	var request auth.TokenRequest
-	if err := httputil.DecodeJSON(r, &request); err != nil {
+	// OAuth2 clients (RFC 6749 §3.2/§4.4) post application/x-www-form-urlencoded;
+	// JSON is also accepted. ContentType middleware has already constrained this
+	// route to exactly those two media types.
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		if err := r.ParseForm(); err != nil {
+			httputil.RespondDecodeError(w, r, err, reqID)
+			return
+		}
+		request = auth.TokenRequest{
+			GrantType:    r.PostForm.Get("grant_type"),
+			ClientID:     r.PostForm.Get("client_id"),
+			ClientSecret: r.PostForm.Get("client_secret"),
+			RefreshToken: r.PostForm.Get("refresh_token"),
+		}
+	} else if err := httputil.DecodeJSON(r, &request); err != nil {
 		httputil.RespondDecodeError(w, r, err, reqID)
 		return
 	}
