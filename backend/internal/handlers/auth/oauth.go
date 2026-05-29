@@ -17,6 +17,7 @@ import (
 // @Summary OAuth2 token grant
 // @Description Exchange API credentials for a short-lived (15 min) access token + a rotating 30-day refresh token. Two grants are supported. `client_credentials`: supply `client_id` and `client_secret` (the opaque {client_id, client_secret} pair returned once at API-key creation). `refresh_token`: supply a current `refresh_token` to rotate the pair; presenting an already-used refresh token revokes the whole chain and returns 401.
 // @Tags oauth,public
+// @ID oauth.token
 // @Accept json,x-www-form-urlencoded
 // @Produce json
 // @Param request body auth.TokenRequest true "Token grant request"
