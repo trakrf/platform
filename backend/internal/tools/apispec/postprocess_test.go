@@ -289,7 +289,13 @@ func TestPostprocess_SetsPublicInfoAndServers(t *testing.T) {
 	require.NotNil(t, doc.Info.Contact, "info.contact must be present (TrakRF Support / support@trakrf.id)")
 	assert.Equal(t, "TrakRF Support", doc.Info.Contact.Name)
 	assert.Equal(t, "support@trakrf.id", doc.Info.Contact.Email)
-	assert.Empty(t, doc.Info.Contact.URL, "info.contact.url is intentionally absent (TRA-743) — generator-default Help/Contact links into the docs site would re-introduce the mirror coupling the ticket eliminated")
+	// TRA-882 (folds TRA-743): contact.url restored, targeting the env-neutral
+	// marketing root. TRA-743 omitted it only because the docs-site target
+	// leaked the prod host into preview-served specs; https://trakrf.id is
+	// identical across environments, so the env-leak that drove the removal
+	// does not apply.
+	assert.Equal(t, "https://trakrf.id", doc.Info.Contact.URL,
+		"info.contact.url must be the env-neutral marketing root (TRA-882)")
 	require.Len(t, doc.Servers, 2)
 
 	assert.Equal(t, "https://app.preview.trakrf.id", doc.Servers[0].URL,

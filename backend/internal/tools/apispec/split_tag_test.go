@@ -141,6 +141,38 @@ func TestSplitTagPolymorphism_SubtypesCarryFlatShape(t *testing.T) {
 	}
 }
 
+// TestSplitTagPolymorphism_ReadSubtypesCarryExtensibleEnum verifies the
+// TRA-882 contract: the three read subtypes mark tag_type open with
+// x-extensible-enum:true (as a real bool, matching ErrorType /
+// FieldErrorCode), while the three request subtypes leave tag_type bare —
+// the write surface is closed and must not advertise extensibility the
+// validator rejects.
+func TestSplitTagPolymorphism_ReadSubtypesCarryExtensibleEnum(t *testing.T) {
+	doc := buildTagFixture()
+	require.NoError(t, splitTagPolymorphism(doc))
+
+	for _, name := range []string{"shared.RfidTag", "shared.BleTag", "shared.BarcodeTag"} {
+		sub := doc.Components.Schemas[name]
+		require.NotNil(t, sub, "subtype %q must exist", name)
+		tagType := sub.Value.Properties["tag_type"]
+		require.NotNil(t, tagType)
+		require.NotNil(t, tagType.Value)
+		got, ok := tagType.Value.Extensions["x-extensible-enum"]
+		require.True(t, ok, "read subtype %q tag_type must carry x-extensible-enum", name)
+		assert.Equal(t, true, got, "x-extensible-enum must be a real bool, not the string \"true\"")
+	}
+
+	for _, name := range []string{"shared.RfidTagRequest", "shared.BleTagRequest", "shared.BarcodeTagRequest"} {
+		sub := doc.Components.Schemas[name]
+		require.NotNil(t, sub, "subtype %q must exist", name)
+		tagType := sub.Value.Properties["tag_type"]
+		require.NotNil(t, tagType)
+		require.NotNil(t, tagType.Value)
+		_, ok := tagType.Value.Extensions["x-extensible-enum"]
+		assert.False(t, ok, "request subtype %q tag_type must stay bare (closed write surface)", name)
+	}
+}
+
 // TestSplitTagPolymorphism_RequestSubtypesRequireDiscriminator covers the
 // request side: tag_type becomes required on each subtype even though the
 // parent shared.TagRequest only required value. additionalProperties:

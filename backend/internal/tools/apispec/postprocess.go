@@ -149,6 +149,14 @@ func postprocessPublic(doc *openapi3.T) error {
 	if doc.Info.Contact.Email == "" {
 		doc.Info.Contact.Email = "support@trakrf.id"
 	}
+	// TRA-882 (folds TRA-743): restore info.contact.url. TRA-743 removed it
+	// because no acceptable target existed — docs.trakrf.id leaked the prod
+	// host into preview-served specs and app.trakrf.id/api served the SPA
+	// shell. The marketing root is env-neutral (identical in preview and
+	// prod), so it carries no env-leak and is safe as a static value.
+	if doc.Info.Contact.URL == "" {
+		doc.Info.Contact.URL = "https://trakrf.id"
+	}
 	// TRA-777 / BB62 F4: declare the canonical Python package name on
 	// info so openapi-python-client's snake-case derivation (which
 	// otherwise yields the awkward `trak_rf_api_client` from "TrakRF API")
@@ -2419,7 +2427,13 @@ func annotateReadOnlyTags(doc *openapi3.T) {
 // POST/PATCH writes still reject unrecognized variants with
 // 400 validation_error. Without the disambiguation a careful integrator
 // reads the "open" wording and the write rejection as contradictory.
-const tagSchemaDescription = "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: " +
+// TRA-882: the description is split read vs write. The read schema's
+// tag_type now carries x-extensible-enum:true (see buildTagSubtype), so the
+// read copy describes that marker as emitted; the write (Request) copy
+// describes the closed write surface and makes no emission claim — the
+// earlier shared prose claimed the marker was "currently emitted ... on
+// tag_type" on every copy, which was false on the bare write enums.
+const tagSchemaDescriptionBase = "Polymorphic identifier attached to an asset or location, discriminated by `tag_type` into one of three variants: " +
 	"`RfidTag` (RFID transponder, `tag_type: rfid`), `BleTag` (Bluetooth Low Energy beacon, `tag_type: ble`), or `BarcodeTag` (1D/2D barcode, `tag_type: barcode`). " +
 	"The `/assets/{asset_id}/tags` and `/locations/{location_id}/tags` subresources accept and return all three variants; " +
 	"`tag_type` together with `value` form the natural key (a tag value is unique within its kind, not across kinds). " +
@@ -2429,11 +2443,27 @@ const tagSchemaDescription = "Polymorphic identifier attached to an asset or loc
 	"\n\n" +
 	"**Read direction is open; write direction is closed.** The open-enumeration semantic applies to **response handling**: if a `GET` returns a `tag_type` value your client doesn't recognize, pass the row through untouched rather than rejecting it (additive variants may appear in minor revisions). " +
 	"The **write surface is closed**: `POST /tags` and the natural-key tuple `(tag_type, value)` accept only the currently-defined variants (`rfid`, `ble`, `barcode`). " +
-	"Writes carrying an unrecognized `tag_type` are rejected with `400 validation_error` / `code: invalid_value` / `params.allowed_values: [...]`. " +
-	"The asymmetry is intentional — forward-compatibility on read, strict validation on write — and is expected to be retired in a future migration that surfaces `x-extensible-enum: true` natively (currently emitted as a vendor extension on `tag_type`)." +
-	"\n\n" +
+	"Writes carrying an unrecognized `tag_type` are rejected with `400 validation_error` / `code: invalid_value` / `params.allowed_values: [...]`. "
+
+// tagSchemaDescriptionReadAsymmetry closes the read-schema description. The
+// read tag_type enum carries x-extensible-enum:true, so the marker is now
+// genuinely emitted; native OpenAPI 3.1 enum handling of it stays deferred.
+const tagSchemaDescriptionReadAsymmetry = "The asymmetry is intentional — forward-compatibility on read, strict validation on write. " +
+	"On this read schema the `tag_type` enum carries `x-extensible-enum: true` (an OpenAPI 3.0 vendor extension) to mark it open to additive variants; promoting that marker to native OpenAPI 3.1 enum semantics is a deferred migration."
+
+// tagSchemaDescriptionWriteAsymmetry closes the request-schema description.
+// The write tag_type enum is deliberately bare — no extensibility marker —
+// because the write surface is closed.
+const tagSchemaDescriptionWriteAsymmetry = "The asymmetry is intentional — forward-compatibility on read, strict validation on write. " +
+	"The request `tag_type` enum is intentionally closed: it carries no `x-extensible-enum` marker, and a write naming an unrecognized variant is rejected as described above."
+
+// tagSchemaDescriptionCodegen is the shared trailing codegen note.
+const tagSchemaDescriptionCodegen = "\n\n" +
 	"**Codegen note:** some strict-typed generators (e.g. datamodel-codegen for Pydantic) materialize the single-value `tag_type` constants on each variant as separate enum classes — `TagType`, `TagType2`, `TagType4` or similar. " +
 	"That is a generator artifact and not part of the contract; the wire shape is a single discriminated union with three variants today. Treat the generated classes as implementation detail."
+
+const tagSchemaDescriptionRead = tagSchemaDescriptionBase + tagSchemaDescriptionReadAsymmetry + tagSchemaDescriptionCodegen
+const tagSchemaDescriptionWrite = tagSchemaDescriptionBase + tagSchemaDescriptionWriteAsymmetry + tagSchemaDescriptionCodegen
 
 const tagTypeFieldDescription = "Discriminator for the polymorphic Tag resource. " +
 	"`rfid` denotes an RFID transponder, `ble` denotes a Bluetooth Low Energy beacon, " +
@@ -2442,9 +2472,12 @@ const tagTypeFieldDescription = "Discriminator for the polymorphic Tag resource.
 
 // annotateTagPolymorphism sets the schema-level description on shared.Tag /
 // shared.TagRequest and the field-level description on their tag_type
-// discriminator. Pre-rename names — runs before renamePublicSpec
-// consolidates them to Tag / TagRequest. Silently skipped for any missing
-// schema, matching the pattern in annotateReadOnlyTags.
+// discriminator. The read parent (shared.Tag) gets the read-direction
+// description, the write parent (shared.TagRequest) the write-direction one
+// (TRA-882); splitTagPolymorphism then copies each parent's description onto
+// its three subtypes verbatim. Pre-rename names — runs before
+// renamePublicSpec consolidates them to Tag / TagRequest. Silently skipped
+// for any missing schema, matching the pattern in annotateReadOnlyTags.
 func annotateTagPolymorphism(doc *openapi3.T) {
 	if doc.Components == nil || doc.Components.Schemas == nil {
 		return
@@ -2454,7 +2487,10 @@ func annotateTagPolymorphism(doc *openapi3.T) {
 		if ref == nil || ref.Value == nil {
 			continue
 		}
-		ref.Value.Description = tagSchemaDescription
+		ref.Value.Description = tagSchemaDescriptionRead
+		if schemaName == "shared.TagRequest" {
+			ref.Value.Description = tagSchemaDescriptionWrite
+		}
 		if prop, ok := ref.Value.Properties["tag_type"]; ok && prop != nil && prop.Value != nil {
 			prop.Value.Description = tagTypeFieldDescription
 		}
