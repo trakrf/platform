@@ -107,6 +107,7 @@ CREATE TRIGGER update_org_users_updated_at
     EXECUTE FUNCTION trakrf.update_updated_at_column();
 
 COMMENT ON TABLE org_users IS 'Junction table managing user membership and roles within organizations';
+COMMENT ON COLUMN org_users.deleted_at IS 'Reserved/unused. Membership removal is a hard delete (see Storage.RemoveMember) for unambiguous access revocation. Membership history, if needed, will come from a separate append-only access audit log rather than soft-deleting this row.';
 
 -- ============================================================================
 -- org_invitations
