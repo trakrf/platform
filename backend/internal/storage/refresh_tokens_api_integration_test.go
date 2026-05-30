@@ -17,7 +17,7 @@ import (
 )
 
 // An api-type refresh row: user_id NULL, api_key_id set — must be allowed
-// after migration 000012.
+// by the refresh_tokens_type_consistent CHECK (TRA-846; folded into 000009).
 func TestRefreshTokens_APIRowAllowsNullUser(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
