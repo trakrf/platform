@@ -6,8 +6,6 @@ SET search_path = trakrf, public;
 -- ============================================================================
 -- scan_devices
 -- ============================================================================
-CREATE SEQUENCE scan_device_seq AS BIGINT;
-
 CREATE TABLE scan_devices (
     id              BIGINT PRIMARY KEY,
     org_id          BIGINT NOT NULL REFERENCES organizations(id),
@@ -36,7 +34,7 @@ CREATE INDEX idx_scan_devices_active ON scan_devices(is_active) WHERE is_active 
 CREATE TRIGGER generate_scan_device_id_trigger
     BEFORE INSERT ON scan_devices
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('scan_device_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE TRIGGER update_scan_devices_updated_at
     BEFORE UPDATE ON scan_devices
@@ -55,8 +53,6 @@ COMMENT ON COLUMN scan_devices.identifier IS 'Natural key/business identifier (e
 -- ============================================================================
 -- scan_points
 -- ============================================================================
-CREATE SEQUENCE scan_point_seq AS BIGINT;
-
 CREATE TABLE scan_points (
     id              BIGINT PRIMARY KEY,
     org_id          BIGINT NOT NULL REFERENCES organizations(id),
@@ -86,7 +82,7 @@ CREATE INDEX idx_scan_points_active ON scan_points(is_active) WHERE is_active = 
 CREATE TRIGGER generate_scan_point_id_trigger
     BEFORE INSERT ON scan_points
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('scan_point_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE TRIGGER update_scan_points_updated_at
     BEFORE UPDATE ON scan_points

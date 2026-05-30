@@ -123,7 +123,8 @@ test-contract:
     # connection resolves to 'trakrf'. Without this the migration library would
     # put schema_migrations in 'public' on the first run, then look for it in
     # 'trakrf' on the second (backend startup re-runs migrations) — and apply
-    # migration 1 again, which fails on "organization_seq already exists".
+    # migration 1 again, which fails on an "already exists" error (e.g. the
+    # trakrf schema or an extension).
     psql "$PG_URL_LOCAL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA trakrf;"
 
     # 3. Migrate (PG_URL_LOCAL exported above, re-evaluated by just migrate)
@@ -551,10 +552,9 @@ db-pull-nk source-url target-url *flags='':
     TGT_URL="{{target-url}}"
     FLAGS="{{flags}}"
 
-    # Force search_path on every connection so the per-table triggers
-    # (`trakrf.generate_obfuscated_id`) can resolve un-qualified sequence
-    # names like `organization_seq`. The function declaration doesn't
-    # bake search_path in, so callers must set it.
+    # Force search_path on every connection so the cutover SQL's unqualified
+    # trakrf-schema references resolve. (The id trigger now reads a fully-
+    # qualified trakrf.id_seq, so it no longer relies on this.)
     export PGOPTIONS='-c search_path=trakrf,public'
 
     SRC_HOST=$(python3 -c "import urllib.parse,sys;u=urllib.parse.urlparse(sys.argv[1]);print(u.hostname)" "$SRC_URL")

@@ -3,8 +3,6 @@
 
 SET search_path = trakrf, public;
 
-CREATE SEQUENCE location_seq AS BIGINT;
-
 CREATE TABLE locations (
     id                  BIGINT PRIMARY KEY,
     org_id              BIGINT NOT NULL REFERENCES organizations(id),
@@ -33,7 +31,7 @@ CREATE UNIQUE INDEX locations_org_id_external_key_unique
 CREATE TRIGGER generate_location_id_trigger
     BEFORE INSERT ON locations
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('location_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE TRIGGER update_locations_updated_at
     BEFORE UPDATE ON locations
