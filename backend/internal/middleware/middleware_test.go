@@ -357,6 +357,36 @@ func TestContentType_OAuthTokenAcceptsFormUrlencoded(t *testing.T) {
 	}
 }
 
+// TestContentType_OAuthTokenUnsupportedMediaNamesBothTypes verifies the 415
+// detail on /api/v1/oauth/token names BOTH accepted media types, not just
+// application/json — the endpoint genuinely accepts form-urlencoded as well
+// (TRA-883 / Round 2.4 F2). text/plain is the unsupported Content-Type; a
+// bare `curl -d` would auto-set form-urlencoded and pass, so the probe sets
+// text/plain explicitly.
+func TestContentType_OAuthTokenUnsupportedMediaNamesBothTypes(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler must not be reached on unsupported Content-Type")
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/oauth/token",
+		strings.NewReader("grant_type=client_credentials"))
+	req.Header.Set("Content-Type", "text/plain")
+	rr := httptest.NewRecorder()
+
+	ContentType(next).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415", rr.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !strings.Contains(resp.Error.Detail, "application/json") ||
+		!strings.Contains(resp.Error.Detail, "application/x-www-form-urlencoded") {
+		t.Errorf("detail = %q, must name both application/json and application/x-www-form-urlencoded", resp.Error.Detail)
+	}
+}
+
 func TestAuth_MissingHeader_Respond401(t *testing.T) {
 	h := Auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("should not reach handler") }))
 	w := httptest.NewRecorder()

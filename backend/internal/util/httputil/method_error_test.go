@@ -82,6 +82,17 @@ func TestRespond415_PatchNamesMergePatch(t *testing.T) {
 	assertRespond415Envelope(t, w, "Content-Type must be application/merge-patch+json on PATCH operations", "req-4p")
 }
 
+// Respond415Detail writes the canonical 415 envelope with a caller-supplied
+// detail, used by routes that accept more than application/json (oauth/token
+// also takes application/x-www-form-urlencoded; TRA-883).
+func TestRespond415Detail_UsesCallerDetail(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/api/v1/oauth/token", nil)
+	detail := "Content-Type must be application/json or application/x-www-form-urlencoded"
+	httputil.Respond415Detail(w, r, detail, "req-4o")
+	assertRespond415Envelope(t, w, detail, "req-4o")
+}
+
 func assertRespond415Envelope(t *testing.T, w *httptest.ResponseRecorder, wantDetail, wantReqID string) {
 	t.Helper()
 

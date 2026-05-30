@@ -42,6 +42,16 @@ func Respond415(w http.ResponseWriter, r *http.Request, requestID string) {
 	if r.Method == http.MethodPatch {
 		detail = "Content-Type must be application/merge-patch+json on PATCH operations"
 	}
+	Respond415Detail(w, r, detail, requestID)
+}
+
+// Respond415Detail writes the same normalized 415 envelope as Respond415 but
+// with a caller-supplied detail. Routes that accept media types beyond the
+// default application/json — the oauth/token endpoint also takes
+// application/x-www-form-urlencoded (RFC 6749) — use this so the detail names
+// every accepted type instead of under-reporting JSON only (TRA-883). type and
+// title stay canonical; only the non-contractual detail varies.
+func Respond415Detail(w http.ResponseWriter, r *http.Request, detail, requestID string) {
 	WriteJSONError(w, r, http.StatusUnsupportedMediaType, apierrors.ErrUnsupportedMedia,
 		detail, requestID)
 }
