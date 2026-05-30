@@ -55,3 +55,21 @@ SELECT add_retention_policy('asset_scans', INTERVAL '365 days');
 
 COMMENT ON TABLE asset_scans IS 'TimescaleDB hypertable for derived asset scan events (business-level data)';
 COMMENT ON COLUMN asset_scans.tag_scan_id IS 'Link to source raw tag_scans.id (no FK; cannot reference hypertable)';
+
+-- TRA-875 (folded in from migration 000014): RLS on asset_scans, the last
+-- tenant table to get it. "No RLS on hypertables" is a misconception —
+-- TimescaleDB enforces RLS at the hypertable parent for any query routed
+-- through it (timescaledb#7830 only means policies aren't propagated to chunks,
+-- but the runtime trakrf-app role has no _timescaledb_internal access, so every
+-- app query goes through this parent). Every asset_scans query is already
+-- WithOrgTx-wrapped with an explicit WHERE org_id, so this is a no-op on the
+-- happy path; it only makes a forgotten-WithOrgTx query fail loud (22P02/42704,
+-- like TRA-865) instead of silently leaking. USING-only (no WITH CHECK, no
+-- FORCE), identical shape to the other six tenant tables. Future Timescale-native
+-- caveats (none apply today): RLS unsupported on COMPRESSED chunks; not extended
+-- to continuous aggregates (any CAGG must filter org_id itself); disables the
+-- OrderedAppend optimization (negligible at current volume).
+ALTER TABLE asset_scans ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY org_isolation_asset_scans ON asset_scans
+    USING (org_id = current_setting('app.current_org_id')::BIGINT);
