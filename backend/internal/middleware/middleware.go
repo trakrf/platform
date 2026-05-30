@@ -113,6 +113,11 @@ const bulkCSVUploadPath = "/api/v1/assets/bulk"
 // remains JSON-only.
 const oauthTokenPath = "/api/v1/oauth/token"
 
+// oauthTokenUnsupportedMediaDetail is the 415 detail for oauthTokenPath. Unlike
+// the JSON-only write paths, this endpoint accepts two media types, so the
+// detail names both rather than under-reporting application/json (TRA-883).
+const oauthTokenUnsupportedMediaDetail = "Content-Type must be application/json or application/x-www-form-urlencoded"
+
 // ContentType enforces declared Content-Type per method (BB32 D4 / TRA-703).
 // The public docs commit to a strict per-method matrix on every write
 // endpoint, and missing or otherwise-unlisted Content-Type returns 415 with
@@ -160,7 +165,7 @@ func ContentType(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			httputil.Respond415(w, r, GetRequestID(r.Context()))
+			httputil.Respond415Detail(w, r, oauthTokenUnsupportedMediaDetail, GetRequestID(r.Context()))
 			return
 		}
 
