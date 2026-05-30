@@ -7,7 +7,13 @@
 --     exposed for test parity against the Go reference at
 --     backend/internal/obfuscatedid.
 --   * trakrf.generate_obfuscated_id() — the TRIGGER function that wraps
---     _feistel_encrypt and pulls seq_value from nextval(TG_ARGV[0]).
+--     _feistel_encrypt and pulls seq_value from nextval('trakrf.id_seq').
+--
+-- A SINGLE shared sequence (trakrf.id_seq) feeds every BEFORE INSERT trigger
+-- (TRA-886). One global counter means no two rows ever share an ordinal, so no
+-- two rows share an id — surrogate ids are globally unique by construction, not
+-- merely unique within a type. The function reads id_seq by name and takes no
+-- argument, so a per-table sequence cannot be reintroduced via TG_ARGV.
 --
 -- Construction: pure 52-bit Feistel cipher (2 x 26-bit halves), 6 rounds,
 -- HMAC-SHA256 round function truncated to 26 bits. Output range: [0, 2^52).
@@ -20,6 +26,10 @@
 -- defensive.
 
 SET search_path = trakrf, public;
+
+-- The single shared surrogate-id sequence. Every Feistel id trigger draws from
+-- this one counter (TRA-886). Do NOT add per-table sequences.
+CREATE SEQUENCE trakrf.id_seq AS BIGINT;
 
 CREATE OR REPLACE FUNCTION trakrf._feistel_encrypt(seq_value BIGINT) RETURNS BIGINT
 LANGUAGE plpgsql STABLE AS $$
@@ -73,10 +83,13 @@ $$;
 CREATE OR REPLACE FUNCTION trakrf.generate_obfuscated_id() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE
-    seq_name TEXT := TG_ARGV[0];
     seq_value BIGINT;
 BEGIN
-    seq_value := nextval(seq_name);
+    -- Single shared sequence for all surrogate ids (TRA-886). The sequence name
+    -- is hardcoded and the function takes no trigger argument, so no trigger can
+    -- redirect minting to a per-table sequence and reintroduce cross-type id
+    -- equality.
+    seq_value := nextval('trakrf.id_seq');
     NEW.id := trakrf._feistel_encrypt(seq_value);
     RETURN NEW;
 END;

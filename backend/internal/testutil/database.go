@@ -74,8 +74,9 @@ func createTestDatabase(ctx context.Context, t *testing.T) error {
 		return fmt.Errorf("failed to create test database: %w", err)
 	}
 
-	// Set the database-level search_path so trakrf.generate_obfuscated_id() can
-	// find trakrf-schema sequences (e.g. organization_seq) without schema prefix.
+	// Set the database-level search_path so migrations and unqualified
+	// trakrf-schema references resolve. (The id trigger itself now reads a
+	// fully-qualified trakrf.id_seq, so it no longer depends on this.)
 	_, err = conn.Exec(ctx, "ALTER DATABASE trakrf_test SET search_path TO trakrf, public")
 	if err != nil {
 		return fmt.Errorf("failed to set search_path on test database: %w", err)

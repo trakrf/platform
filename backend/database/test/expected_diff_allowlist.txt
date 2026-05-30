@@ -66,4 +66,18 @@ these categories represents a regression that requires investigation.
     The new 000006_assets.up.sql must NOT recreate it (was a regression caught
     and fixed during Task 13 verification).
 
+20. TRA-886 single shared surrogate-id sequence:
+    The legacy stack mints each entity's id from its own per-table sequence
+    (organization_seq, user_seq, location_seq, scan_device_seq, scan_point_seq,
+    asset_seq, tag_seq, bulk_import_job_seq, api_key_seq). The new stack drops
+    all nine and adds a single trakrf.id_seq feeding every BEFORE INSERT trigger.
+    Two consequences in the diff:
+      a. CREATE SEQUENCE for the nine per-table *_seq dropped; trakrf.id_seq added.
+      b. EXECUTE FUNCTION trakrf.generate_obfuscated_id('<table>_seq') loses its
+         argument → generate_obfuscated_id() (the function now reads id_seq).
+    Eliminates structural cross-type id equality; ids are globally unique by
+    construction. (org_invitations_id_seq / password_reset_tokens_id_seq /
+    refresh_tokens_id_seq / tag_scans_id_seq are non-Feistel implicit sequences
+    and are unaffected — see category 17.)
+
 Diff lines NOT covered by these categories are regressions.

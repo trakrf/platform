@@ -9,8 +9,6 @@ SET search_path = trakrf, public;
 -- ============================================================================
 -- bulk_import_jobs
 -- ============================================================================
-CREATE SEQUENCE bulk_import_job_seq AS BIGINT;
-
 CREATE TABLE bulk_import_jobs (
     id              BIGINT PRIMARY KEY,
     org_id          BIGINT NOT NULL REFERENCES organizations(id),
@@ -35,7 +33,7 @@ CREATE INDEX idx_bulk_import_jobs_created_at ON bulk_import_jobs(created_at DESC
 CREATE TRIGGER generate_bulk_import_job_id_trigger
     BEFORE INSERT ON bulk_import_jobs
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('bulk_import_job_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 ALTER TABLE bulk_import_jobs ENABLE ROW LEVEL SECURITY;
 
@@ -48,8 +46,6 @@ COMMENT ON COLUMN bulk_import_jobs.tags_created IS 'Number of tag rows created b
 -- ============================================================================
 -- api_keys
 -- ============================================================================
-CREATE SEQUENCE api_key_seq AS BIGINT;
-
 CREATE TABLE api_keys (
     id                  BIGINT PRIMARY KEY,
     jti                 UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
@@ -69,7 +65,7 @@ CREATE TABLE api_keys (
 CREATE TRIGGER generate_api_key_id_trigger
     BEFORE INSERT ON api_keys
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('api_key_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE INDEX idx_api_keys_active_by_org
     ON api_keys(org_id) WHERE revoked_at IS NULL;

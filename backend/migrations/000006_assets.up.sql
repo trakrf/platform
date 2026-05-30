@@ -3,8 +3,6 @@
 
 SET search_path = trakrf, public;
 
-CREATE SEQUENCE asset_seq AS BIGINT;
-
 CREATE TABLE assets (
     id              BIGINT PRIMARY KEY,
     org_id          BIGINT NOT NULL REFERENCES organizations(id),
@@ -33,7 +31,7 @@ CREATE UNIQUE INDEX assets_org_id_external_key_unique
 CREATE TRIGGER generate_asset_id_trigger
     BEFORE INSERT ON assets
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('asset_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE TRIGGER update_assets_updated_at
     BEFORE UPDATE ON assets

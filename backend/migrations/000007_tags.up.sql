@@ -4,8 +4,6 @@
 
 SET search_path = trakrf, public;
 
-CREATE SEQUENCE tag_seq AS BIGINT;
-
 CREATE TABLE tags (
     id              BIGINT PRIMARY KEY,
     org_id          BIGINT NOT NULL REFERENCES organizations(id),
@@ -40,7 +38,7 @@ CREATE UNIQUE INDEX tags_org_id_type_value_unique
 CREATE TRIGGER generate_tag_id_trigger
     BEFORE INSERT ON tags
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('tag_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE TRIGGER update_tags_updated_at
     BEFORE UPDATE ON tags

@@ -13,8 +13,6 @@ CREATE TYPE org_role AS ENUM ('viewer', 'operator', 'manager', 'admin');
 -- ============================================================================
 -- organizations
 -- ============================================================================
-CREATE SEQUENCE organization_seq AS BIGINT;
-
 CREATE TABLE organizations (
     id          BIGINT PRIMARY KEY,
     name        VARCHAR(255) NOT NULL,
@@ -33,7 +31,7 @@ CREATE INDEX idx_organizations_identifier ON organizations(identifier);
 CREATE TRIGGER generate_id_trigger
     BEFORE INSERT ON organizations
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('organization_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE TRIGGER update_organizations_updated_at
     BEFORE UPDATE ON organizations
@@ -47,8 +45,6 @@ COMMENT ON COLUMN organizations.identifier IS 'URL-safe identifier for MQTT topi
 -- ============================================================================
 -- users
 -- ============================================================================
-CREATE SEQUENCE user_seq AS BIGINT;
-
 CREATE TABLE users (
     id              BIGINT PRIMARY KEY,
     email           VARCHAR(255) NOT NULL,
@@ -69,7 +65,7 @@ CREATE UNIQUE INDEX idx_users_email ON users(email);
 CREATE TRIGGER generate_user_id_trigger
     BEFORE INSERT ON users
     FOR EACH ROW
-    EXECUTE FUNCTION trakrf.generate_obfuscated_id('user_seq');
+    EXECUTE FUNCTION trakrf.generate_obfuscated_id();
 
 CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users
