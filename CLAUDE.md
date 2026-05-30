@@ -28,7 +28,7 @@
 - Read `PLANNING.md` for architecture and project context
 
 ## Worktrees
-- Use `.worktrees/` for git worktrees (already in `.gitignore`)
+- Git worktrees live in `.claude/worktrees/` — where the native `EnterWorktree` tool writes and where `claude -w` resume looks. The superpowers worktree skill defers to the native tool. Covered by the `.claude/` gitignore; no symlink.
 
 ## Verification
 - Run relevant tests before claiming completion
