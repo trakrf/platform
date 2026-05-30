@@ -11,11 +11,18 @@ import (
 // discriminator.mapping iteration); the protocol is order-insensitive.
 var tagKinds = []string{"rfid", "ble", "barcode"}
 
+// readTagParentName is the read-direction parent schema. Its subtypes
+// (RfidTag / BleTag / BarcodeTag) carry the x-extensible-enum:true marker
+// on tag_type so the open-set read contract is machine-readable; the
+// shared.TagRequest subtypes stay bare because the write surface is closed
+// (TRA-882). Pre-rename, swag-emitted dotted form.
+const readTagParentName = "shared.Tag"
+
 // tagSubtypeNamesPreRename maps each parent schema (pre-rename, swag-
 // emitted dotted form) to the (rfid, ble, barcode) subtype names this
 // pass will create.
 var tagSubtypeNamesPreRename = map[string]map[string]string{
-	"shared.Tag": {
+	readTagParentName: {
 		"rfid":    "shared.RfidTag",
 		"ble":     "shared.BleTag",
 		"barcode": "shared.BarcodeTag",
@@ -95,8 +102,12 @@ func splitOneTagSchema(doc *openapi3.T, parentName string, subtypeNames map[stri
 		return fmt.Errorf("apispec: splitTagPolymorphism: %q has no value property", parentName)
 	}
 
+	// Read subtypes mark tag_type as an open enum; write subtypes stay bare
+	// (closed write surface). See readTagParentName (TRA-882).
+	extensibleEnum := parentName == readTagParentName
+
 	for _, kind := range tagKinds {
-		sub := buildTagSubtype(src, kind)
+		sub := buildTagSubtype(src, kind, extensibleEnum)
 		doc.Components.Schemas[subtypeNames[kind]] = &openapi3.SchemaRef{Value: sub}
 	}
 
@@ -131,7 +142,15 @@ func splitOneTagSchema(doc *openapi3.T, parentName string, subtypeNames map[stri
 // kind. tag_type and value are always required on the subtype; id is
 // included in required only when present on the parent (omitted for
 // the request schema).
-func buildTagSubtype(src *openapi3.Schema, kind string) *openapi3.Schema {
+//
+// extensibleEnum stamps x-extensible-enum:true on the subtype's tag_type
+// when the parent is the read schema, marking the open-set read contract
+// machine-readable alongside ErrorType / FieldErrorCode. Write subtypes
+// pass false: the write surface is closed and an open marker there would
+// advertise extensibility the validator rejects (TRA-882). The marker is
+// set as a real bool so consumers don't parse the string form — matching
+// fixExtensibleEnumBool's normalization of the swag-emitted sites.
+func buildTagSubtype(src *openapi3.Schema, kind string, extensibleEnum bool) *openapi3.Schema {
 	props := openapi3.Schemas{}
 	for k, v := range src.Properties {
 		if k == "tag_type" {
@@ -139,11 +158,15 @@ func buildTagSubtype(src *openapi3.Schema, kind string) *openapi3.Schema {
 		}
 		props[k] = v
 	}
-	props["tag_type"] = &openapi3.SchemaRef{Value: &openapi3.Schema{
+	tagType := &openapi3.Schema{
 		Type:        &openapi3.Types{openapi3.TypeString},
 		Enum:        []any{kind},
 		Description: tagTypeFieldDescription,
-	}}
+	}
+	if extensibleEnum {
+		tagType.Extensions = map[string]any{"x-extensible-enum": true}
+	}
+	props["tag_type"] = &openapi3.SchemaRef{Value: tagType}
 
 	required := make([]string, 0, 3)
 	if _, hasID := src.Properties["id"]; hasID {
