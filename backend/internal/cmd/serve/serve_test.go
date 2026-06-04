@@ -19,6 +19,8 @@ import (
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
+	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
+	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
@@ -40,12 +42,14 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	locationsHandler := locationshandler.NewHandler(store)
 	inventoryHandler := inventoryhandler.NewHandler(store)
 	reportsHandler := reportshandler.NewHandler(store)
+	scanDevicesHandler := scandeviceshandler.NewHandler(store)
+	scanPointsHandler := scanpointshandler.NewHandler(store)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")
 	testHandler := testhandler.NewHandler(store)
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {
