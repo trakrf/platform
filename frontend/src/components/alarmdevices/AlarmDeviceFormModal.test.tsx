@@ -41,7 +41,9 @@ describe('AlarmDeviceFormModal', () => {
     org_id: 1,
     name: 'Dock Strobe',
     type: 'shelly_gen4',
+    transport: 'http',
     base_url: 'http://192.168.50.66',
+    command_topic: null,
     switch_id: 0,
     location_id: null,
     is_active: true,
@@ -104,6 +106,7 @@ describe('AlarmDeviceFormModal', () => {
         name: 'Dock Strobe',
         base_url: 'http://192.168.50.66',
         type: 'shelly_gen4',
+        transport: 'http',
         switch_id: 0,
         location_id: null,
       })
@@ -111,6 +114,42 @@ describe('AlarmDeviceFormModal', () => {
     await waitFor(() => {
       expect(mockOnClose).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('submits an MQTT device with command_topic (no base_url)', async () => {
+    render(<AlarmDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Strobe' } });
+    fireEvent.change(screen.getByLabelText(/Transport/), { target: { value: 'mqtt' } });
+    fireEvent.change(screen.getByLabelText(/Command Topic/), {
+      target: { value: 'trakrf.id/dock-strobe' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Alarm Device/i }));
+
+    await waitFor(() => {
+      expect(alarmDevicesApi.create).toHaveBeenCalledTimes(1);
+    });
+    expect(alarmDevicesApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Dock Strobe',
+        transport: 'mqtt',
+        command_topic: 'trakrf.id/dock-strobe',
+      })
+    );
+  });
+
+  it('requires a command topic for MQTT transport', async () => {
+    render(<AlarmDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Strobe' } });
+    fireEvent.change(screen.getByLabelText(/Transport/), { target: { value: 'mqtt' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create Alarm Device/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Command topic is required for MQTT transport')).toBeInTheDocument();
+    });
+    expect(alarmDevicesApi.create).not.toHaveBeenCalled();
   });
 
   it('rejects a missing base URL', async () => {

@@ -27,19 +27,18 @@ func (f *fakeLookup) ListAlarmDevicesForLocation(_ context.Context, orgID, locat
 }
 
 type setCall struct {
-	baseURL  string
-	switchID int
+	deviceID int
 	on       bool
 }
 
 type fakeDriver struct {
-	calls   []setCall
-	failURL string // returns an error when baseURL == failURL
+	calls    []setCall
+	failOnID int // returns an error when device.ID == failOnID
 }
 
-func (d *fakeDriver) Set(_ context.Context, baseURL string, switchID int, on bool) error {
-	d.calls = append(d.calls, setCall{baseURL, switchID, on})
-	if baseURL == d.failURL {
+func (d *fakeDriver) Set(_ context.Context, dev alarmdevice.AlarmDevice, on bool) error {
+	d.calls = append(d.calls, setCall{dev.ID, on})
+	if dev.ID == d.failOnID {
 		return errors.New("boom")
 	}
 	return nil
@@ -50,7 +49,7 @@ func testEvent() geofence.AlarmEvent {
 	return geofence.AlarmEvent{OrgID: 7, AssetID: 3, ScanPointID: 9, LocationID: &loc, EPC: "E2", RSSI: -50, FiredAt: time.Unix(0, 0)}
 }
 
-func newTestFirer(lookup deviceLookup, drv driver) Firer {
+func newTestFirer(lookup deviceLookup, drv deviceSetter) Firer {
 	log := zerolog.New(io.Discard)
 	return NewFirer(lookup, drv, &log)
 }
@@ -72,7 +71,7 @@ func TestFirer_FiresEachBoundDevice(t *testing.T) {
 	if len(drv.calls) != 2 {
 		t.Fatalf("driver calls = %d, want 2", len(drv.calls))
 	}
-	want := []setCall{{"http://a", 0, true}, {"http://b", 1, true}}
+	want := []setCall{{1, true}, {2, true}}
 	for i, c := range drv.calls {
 		if c != want[i] {
 			t.Errorf("call[%d] = %+v, want %+v", i, c, want[i])
@@ -117,7 +116,7 @@ func TestFirer_DriverErrorAggregatedNotFatal(t *testing.T) {
 		{ID: 1, BaseURL: "http://ok", SwitchID: 0},
 		{ID: 2, BaseURL: "http://bad", SwitchID: 0},
 	}}
-	drv := &fakeDriver{failURL: "http://bad"}
+	drv := &fakeDriver{failOnID: 2}
 	f := newTestFirer(lookup, drv)
 
 	err := f.Fire(context.Background(), testEvent())

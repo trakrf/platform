@@ -27,23 +27,24 @@ var validate = func() *validator.Validate {
 	return v
 }()
 
-// driver is the device transport; *shelly.Client satisfies it. Narrowed so the
-// handler can be tested with a fake driver and no real device.
-type driver interface {
-	Set(ctx context.Context, baseURL string, switchID int, on bool) error
+// actuator drives one alarm device on/off using its configured transport
+// (http or mqtt); alarm.Dispatcher satisfies it. Narrowed so the handler can be
+// tested with a fake and no real device/broker.
+type actuator interface {
+	Set(ctx context.Context, dev alarmdevice.AlarmDevice, on bool) error
 }
 
 // Handler serves alarm-device CRUD + actions.
 type Handler struct {
 	storage   *storage.Storage
-	driver    driver
+	actuator  actuator
 	testPulse time.Duration
 }
 
 // NewHandler builds the handler. testPulse is how long a test-fire holds the
 // relay on before turning it back off (pass 0 in tests to skip the wait).
-func NewHandler(storage *storage.Storage, drv driver, testPulse time.Duration) *Handler {
-	return &Handler{storage: storage, driver: drv, testPulse: testPulse}
+func NewHandler(storage *storage.Storage, act actuator, testPulse time.Duration) *Handler {
+	return &Handler{storage: storage, actuator: act, testPulse: testPulse}
 }
 
 // RegisterRoutes wires alarm-device routes onto r. Mount inside the session-auth
@@ -56,6 +57,22 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Delete("/api/v1/alarm-devices/{alarm_device_id}", h.Delete)
 	r.Post("/api/v1/alarm-devices/{alarm_device_id}/test", h.Test)
 	r.Post("/api/v1/alarm-devices/{alarm_device_id}/reset", h.Reset)
+}
+
+// transportFieldError enforces the transport-specific required field on create:
+// mqtt needs a command_topic, http needs a base_url. transport defaults to http
+// when blank. Returns "" when valid.
+func transportFieldError(transport, baseURL string, commandTopic *string) string {
+	if transport == alarmdevice.TransportMQTT {
+		if commandTopic == nil || *commandTopic == "" {
+			return "command_topic is required for mqtt transport"
+		}
+		return ""
+	}
+	if baseURL == "" {
+		return "base_url is required for http transport"
+	}
+	return ""
 }
 
 func parseListLimitOffset(r *http.Request) (limit, offset int) {
@@ -121,6 +138,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validate.Struct(req); err != nil {
 		httputil.RespondValidationError(w, r, err, reqID)
+		return
+	}
+	// Transport-specific required field (transport defaults to http).
+	if msg := transportFieldError(req.Transport, req.BaseURL, req.CommandTopic); msg != "" {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
 	}
 	device, err := h.storage.CreateAlarmDevice(r.Context(), orgID, req)
@@ -244,7 +266,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if err := h.driver.Set(ctx, device.BaseURL, device.SwitchID, true); err != nil {
+	if err := h.actuator.Set(ctx, *device, true); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "alarm device unreachable: "+err.Error(), reqID)
 		return
 	}
@@ -252,7 +274,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(h.testPulse)
 	}
 	// Best-effort off; the operator can still use reset if this fails.
-	_ = h.driver.Set(ctx, device.BaseURL, device.SwitchID, false)
+	_ = h.actuator.Set(ctx, *device, false)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
@@ -274,7 +296,7 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.driver.Set(r.Context(), device.BaseURL, device.SwitchID, false); err != nil {
+	if err := h.actuator.Set(r.Context(), *device, false); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "alarm device unreachable: "+err.Error(), reqID)
 		return
 	}

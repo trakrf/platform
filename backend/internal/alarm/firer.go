@@ -22,9 +22,10 @@ type deviceLookup interface {
 	ListAlarmDevicesForLocation(ctx context.Context, orgID, locationID int) ([]alarmdevice.AlarmDevice, error)
 }
 
-// driver is the device transport; *shelly.Client satisfies it.
-type driver interface {
-	Set(ctx context.Context, baseURL string, switchID int, on bool) error
+// deviceSetter drives one alarm device on/off using its configured transport;
+// Dispatcher satisfies it. Narrowed so tests can inject a fake.
+type deviceSetter interface {
+	Set(ctx context.Context, dev alarmdevice.AlarmDevice, on bool) error
 }
 
 // Firer drives alarm devices when the geofence engine fires. Construct with
@@ -32,15 +33,15 @@ type driver interface {
 // but never panic, matching the engine's best-effort fire contract.
 type Firer struct {
 	store deviceLookup
-	drv   driver
+	act   deviceSetter
 	log   zerolog.Logger
 }
 
 // NewFirer builds a Firer with a component-tagged logger.
-func NewFirer(store deviceLookup, drv driver, log *zerolog.Logger) Firer {
+func NewFirer(store deviceLookup, act deviceSetter, log *zerolog.Logger) Firer {
 	return Firer{
 		store: store,
-		drv:   drv,
+		act:   act,
 		log:   log.With().Str("component", "alarm").Logger(),
 	}
 }
@@ -73,10 +74,10 @@ func (f Firer) Fire(ctx context.Context, ev geofence.AlarmEvent) error {
 
 	var errs []error
 	for _, d := range devices {
-		if err := f.drv.Set(ctx, d.BaseURL, d.SwitchID, true); err != nil {
+		if err := f.act.Set(ctx, d, true); err != nil {
 			f.log.Error().Err(err).
 				Int("alarm_device_id", d.ID).
-				Str("base_url", d.BaseURL).
+				Str("transport", d.Transport).
 				Msg("alarm device fire failed (fail-quiet)")
 			errs = append(errs, err)
 		}
