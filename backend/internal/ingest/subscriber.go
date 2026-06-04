@@ -26,8 +26,11 @@ func NewSubscriber(cfg Config, store *storage.Storage, log *zerolog.Logger) *Sub
 	return &Subscriber{cfg: cfg, store: store, log: log.With().Str("component", "ingest").Logger()}
 }
 
-// Start connects and subscribes. It returns once connected (or on connect
-// error); message handling continues on paho's goroutines until Stop.
+// Start begins connecting in the background and returns immediately — it never
+// blocks server startup on broker availability. ConnectRetry + AutoReconnect
+// keep the client trying until the broker is reachable, then OnConnect
+// (re)subscribes; every state change is logged. Message handling runs on paho's
+// goroutines until Stop.
 func (s *Subscriber) Start() error {
 	clientID := s.cfg.ClientID
 	if host, _ := os.Hostname(); host != "" {
@@ -53,11 +56,12 @@ func (s *Subscriber) Start() error {
 		})
 
 	s.client = mqtt.NewClient(opts)
-	tok := s.client.Connect()
-	if tok.Wait() && tok.Error() != nil {
-		return tok.Error()
-	}
-	s.log.Info().Str("client_id", clientID).Msg("mqtt subscriber connected")
+	// Do NOT wait on the connect token: with ConnectRetry the token only
+	// completes once a connection succeeds, so waiting would hang serve.Run
+	// whenever the broker is down at boot. The connection is established
+	// asynchronously and self-heals.
+	s.client.Connect()
+	s.log.Info().Str("client_id", clientID).Str("topic", s.cfg.Topic).Msg("mqtt subscriber connecting")
 	return nil
 }
 
