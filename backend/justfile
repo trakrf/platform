@@ -420,7 +420,7 @@ api-lint:
 check-rls-guard:
     #!/usr/bin/env bash
     set -e
-    RLS_FILES="internal/storage/assets.go internal/storage/locations.go internal/storage/inventory.go internal/storage/tags.go internal/storage/bulk_import_jobs.go internal/storage/reports.go"
+    RLS_FILES="internal/storage/assets.go internal/storage/locations.go internal/storage/inventory.go internal/storage/tags.go internal/storage/bulk_import_jobs.go internal/storage/reports.go internal/storage/scan_devices.go internal/storage/scan_points.go"
     RESULT=$(grep -n 's\.pool\.\(Query\|Exec\|Begin\)' $RLS_FILES || true)
     FILTERED=$(echo "$RESULT" | grep -v '^$' || true)
     if [ -n "$FILTERED" ]; then
