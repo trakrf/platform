@@ -24,6 +24,7 @@ import (
 	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
@@ -77,6 +78,22 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	}
 	defer store.Close()
 	log.Info().Msg("Storage initialized")
+
+	// TRA-900: in-backend MQTT subscriber (replaces the RC ingester + the
+	// process_tag_scans trigger). Disabled when MQTT_URL is unset, so local
+	// dev / tests / pre-cutover prod stay inert.
+	mqttCfg := ingest.ConfigFromEnv()
+	if mqttCfg.Enabled() {
+		subscriber := ingest.NewSubscriber(mqttCfg, store, log)
+		if err := subscriber.Start(); err != nil {
+			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
+			return err
+		}
+		defer subscriber.Stop()
+		log.Info().Msg("MQTT subscriber started")
+	} else {
+		log.Info().Msg("MQTT subscriber disabled (MQTT_URL unset)")
+	}
 
 	emailClient := email.NewClient()
 	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
