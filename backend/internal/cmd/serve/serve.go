@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/trakrf/platform/backend/internal/buildinfo"
+	"github.com/trakrf/platform/backend/internal/geofence"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -84,7 +85,14 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// dev / tests / pre-cutover prod stay inert.
 	mqttCfg := ingest.ConfigFromEnv()
 	if mqttCfg.Enabled() {
-		subscriber := ingest.NewSubscriber(mqttCfg, store, log)
+		// TRA-901: geofence engine evaluates the membership-passing reads the
+		// subscriber derives, firing boundary alarms. Its lifecycle is tied to the
+		// subscriber's (only meaningful when ingestion is on).
+		geofenceEngine := geofence.NewEngine(geofence.ConfigFromEnv(), store, geofence.NewLogFirer(log), log)
+		geofenceEngine.Start()
+		defer geofenceEngine.Stop()
+
+		subscriber := ingest.NewSubscriber(mqttCfg, store, geofenceEngine, log)
 		if err := subscriber.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
 			return err
