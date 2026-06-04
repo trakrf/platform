@@ -22,9 +22,37 @@ permissions:
   contents: read
   packages: write
 
+env:
+  REGISTRY_IMAGE: ghcr.io/trakrf/backend
+
+# Multi-arch strategy (TRA-909): fork into native per-arch builds, then merge a
+# manifest — NO per-arch tags. The `build` matrix builds linux/amd64 on a
+# standard amd64 runner and linux/arm64 on the ARM runner in parallel, each
+# pushing by digest (no tag). The `merge` job stitches the digests into one
+# multi-arch tag with `docker buildx imagetools create`. Wall clock is
+# ~max(amd64, arm64), not the sum, and we avoid QEMU emulation entirely (the
+# ~20-min cycle-time hit that originally drove the arm64-only switch). Native
+# builds also keep CGO a non-issue — though the Dockerfile already pins
+# CGO_ENABLED=0, so the server binary is fully static pure-Go regardless.
+#
+# Downstream tags stay byte-correct for free: promote-prod.yml and
+# sync-preview.yml both manipulate the manifest (imagetools create / branch
+# composition), never rebuild, so the multi-arch index propagates to :prod and
+# :preview without changes.
+
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,7 +97,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/trakrf/backend
+          images: ${{ env.REGISTRY_IMAGE }}
           # `preview` is given priority=50 (below `sha`'s default 100) so the
           # immutable `sha-<short>` remains the primary version output — that
           # keeps BUILD_TAG/VITE_BUILD_TAG pinned to a real commit instead of
@@ -79,18 +107,29 @@ jobs:
             type=raw,value=preview,enable=${{ github.ref == 'refs/heads/preview' }},priority=50
             type=sha,prefix=sha-,format=short
 
-      - name: Build and push
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           target: production
-          platforms: linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: ${{ matrix.platform }}
+          # Push by digest only — no tag here. The merge job applies the tags
+          # to the assembled manifest list. `push=false` on pull_request keeps
+          # PRs build-only (validates both arches compile, nothing published).
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          # Plain single-platform manifests merge cleanly. Provenance/SBOM
+          # attestations would wrap each digest in an image index, which
+          # imagetools create then nests — yielding bogus unknown/unknown
+          # platform entries in the final tag. Disable so each digest is a
+          # single OCI manifest.
+          provenance: false
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          # Per-arch cache scopes — the two matrix legs run concurrently and
+          # would clobber a shared gha cache otherwise.
+          cache-from: type=gha,scope=backend-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=backend-${{ matrix.arch }}
           # Inject build metadata so /health and frontend /version.json report
           # the deployed commit. BUILD_TAG uses the primary ref tag produced
           # by metadata-action (sha-xxxx on commits, latest on default branch).
@@ -102,3 +141,77 @@ jobs:
             COMMIT_SHA=${{ github.sha }}
             BUILD_TAG=${{ steps.meta.outputs.version }}
             APP_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          # The artifact only needs the digest in its name; the file is an
+          # empty marker the merge job globs to reconstruct the @sha256 refs.
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          # Distinct per-arch names — upload-artifact@v4 names are immutable, so
+          # the two legs cannot share one artifact. merge job globs `digest-*`.
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    # No manifest to merge on PRs — the build job already validated both arches.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          # Same tag rules as the build job — metadata-action derives them from
+          # the github context (ref, sha), so no checkout is needed here.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=preview,enable=${{ github.ref == 'refs/heads/preview' }},priority=50
+            type=sha,prefix=sha-,format=short
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta.outputs.json }}
+        run: |
+          # Stitch the per-arch digests into one multi-arch tag set. The `-t`
+          # flags come from metadata-action's tag list; the trailing args are
+          # the digest refs (one empty marker file per arch in this dir).
+          # SC2046: the word-splitting on both $(...) is deliberate — each
+          # expands to multiple separate CLI args.
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
