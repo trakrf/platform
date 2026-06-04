@@ -11,12 +11,12 @@ import (
 
 // alarmDeviceColumns is the canonical SELECT/RETURNING column list, kept
 // identical across every alarm_devices query so scan targets line up.
-const alarmDeviceColumns = `id, org_id, name, type, base_url, switch_id,
-	location_id, is_active, metadata, created_at, updated_at, deleted_at`
+const alarmDeviceColumns = `id, org_id, name, type, transport, base_url, switch_id,
+	command_topic, location_id, is_active, metadata, created_at, updated_at, deleted_at`
 
 func scanAlarmDevice(row pgx.Row, d *alarmdevice.AlarmDevice) error {
-	return row.Scan(&d.ID, &d.OrgID, &d.Name, &d.Type, &d.BaseURL, &d.SwitchID,
-		&d.LocationID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt)
+	return row.Scan(&d.ID, &d.OrgID, &d.Name, &d.Type, &d.Transport, &d.BaseURL, &d.SwitchID,
+		&d.CommandTopic, &d.LocationID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt)
 }
 
 // CreateAlarmDevice inserts an alarm device. type defaults to shelly_gen4,
@@ -25,6 +25,10 @@ func (s *Storage) CreateAlarmDevice(ctx context.Context, orgID int, req alarmdev
 	deviceType := req.Type
 	if deviceType == "" {
 		deviceType = alarmdevice.TypeShellyGen4
+	}
+	transport := req.Transport
+	if transport == "" {
+		transport = alarmdevice.TransportHTTP
 	}
 	switchID := 0
 	if req.SwitchID != nil {
@@ -41,14 +45,14 @@ func (s *Storage) CreateAlarmDevice(ctx context.Context, orgID int, req alarmdev
 
 	query := `
 		INSERT INTO trakrf.alarm_devices
-		(org_id, name, type, base_url, switch_id, location_id, is_active, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		(org_id, name, type, transport, base_url, switch_id, command_topic, location_id, is_active, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING ` + alarmDeviceColumns
 
 	var d alarmdevice.AlarmDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanAlarmDevice(tx.QueryRow(ctx, query, orgID, req.Name, deviceType, req.BaseURL,
-			switchID, req.LocationID, isActive, metadata), &d)
+		return scanAlarmDevice(tx.QueryRow(ctx, query, orgID, req.Name, deviceType, transport, req.BaseURL,
+			switchID, req.CommandTopic, req.LocationID, isActive, metadata), &d)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create alarm device: %w", err)
@@ -162,8 +166,14 @@ func (s *Storage) UpdateAlarmDevice(ctx context.Context, orgID, id int, req alar
 	if req.Type != nil {
 		add("type", *req.Type)
 	}
+	if req.Transport != nil {
+		add("transport", *req.Transport)
+	}
 	if req.BaseURL != nil {
 		add("base_url", *req.BaseURL)
+	}
+	if req.CommandTopic != nil {
+		add("command_topic", *req.CommandTopic)
 	}
 	if req.SwitchID != nil {
 		add("switch_id", *req.SwitchID)

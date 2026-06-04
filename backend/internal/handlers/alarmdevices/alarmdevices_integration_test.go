@@ -17,6 +17,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -37,9 +38,9 @@ type fakeDriver struct {
 	failURL string
 }
 
-func (d *fakeDriver) Set(_ context.Context, baseURL string, switchID int, on bool) error {
-	d.calls = append(d.calls, setCall{baseURL, switchID, on})
-	if baseURL == d.failURL {
+func (d *fakeDriver) Set(_ context.Context, dev alarmdevice.AlarmDevice, on bool) error {
+	d.calls = append(d.calls, setCall{dev.BaseURL, dev.SwitchID, on})
+	if dev.BaseURL == d.failURL {
 		return errors.New("device unreachable")
 	}
 	return nil
@@ -120,6 +121,61 @@ func TestAlarmDevicesHandler_CreateValidation(t *testing.T) {
 	// Missing name + bad base_url.
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{"base_url": "not-a-url"}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, withOrg(req, orgID))
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
+func TestAlarmDevicesHandler_CreateMQTT(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+
+	var buf bytes.Buffer
+	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
+		"name": "Dock Strobe", "transport": "mqtt", "command_topic": "trakrf.id/dock-strobe",
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, withOrg(req, orgID))
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	var created struct {
+		Data struct {
+			Transport    string `json:"transport"`
+			CommandTopic string `json:"command_topic"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+	require.Equal(t, "mqtt", created.Data.Transport)
+	require.Equal(t, "trakrf.id/dock-strobe", created.Data.CommandTopic)
+}
+
+func TestAlarmDevicesHandler_MQTTRequiresCommandTopic(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+
+	var buf bytes.Buffer
+	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
+		"name": "Dock Strobe", "transport": "mqtt", // no command_topic
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, withOrg(req, orgID))
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
+func TestAlarmDevicesHandler_HTTPRequiresBaseURL(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+
+	var buf bytes.Buffer
+	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
+		"name": "Dock Strobe", // default http transport, no base_url
+	}))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

@@ -8,6 +8,8 @@
 
 export type AlarmDeviceType = 'shelly_gen4';
 
+export type AlarmTransport = 'http' | 'mqtt';
+
 /**
  * Core AlarmDevice entity — matches the backend alarm_devices JSON shape.
  */
@@ -16,8 +18,10 @@ export interface AlarmDevice {
   org_id: number;
   name: string;
   type: AlarmDeviceType;
+  transport: AlarmTransport;
   base_url: string;
   switch_id: number;
+  command_topic?: string | null;
   location_id?: number | null;
   is_active: boolean;
   metadata?: Record<string, unknown>;
@@ -29,8 +33,10 @@ export interface AlarmDevice {
 export interface CreateAlarmDeviceRequest {
   name: string;
   type?: AlarmDeviceType;
-  base_url: string;
+  transport?: AlarmTransport;
+  base_url?: string;
   switch_id?: number;
+  command_topic?: string | null;
   location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
@@ -39,8 +45,10 @@ export interface CreateAlarmDeviceRequest {
 export interface UpdateAlarmDeviceRequest {
   name?: string;
   type?: AlarmDeviceType;
+  transport?: AlarmTransport;
   base_url?: string;
   switch_id?: number;
+  command_topic?: string | null;
   location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;

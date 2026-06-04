@@ -91,7 +91,8 @@ export default function AlarmDevicesScreen() {
                 <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                   <th className="py-2 px-3 font-medium">Name</th>
                   <th className="px-3 font-medium">Type</th>
-                  <th className="px-3 font-medium">Base URL</th>
+                  <th className="px-3 font-medium">Transport</th>
+                  <th className="px-3 font-medium">Target</th>
                   <th className="px-3 font-medium">Switch</th>
                   <th className="px-3 font-medium">Location</th>
                   <th className="px-3 font-medium">Active</th>
@@ -106,7 +107,10 @@ export default function AlarmDevicesScreen() {
                   >
                     <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
                     <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
-                    <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">{device.base_url}</td>
+                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
+                    <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
+                      {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
+                    </td>
                     <td className="px-3 text-gray-700 dark:text-gray-300">{device.switch_id}</td>
                     <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
                     <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>

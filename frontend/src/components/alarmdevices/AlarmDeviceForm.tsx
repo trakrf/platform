@@ -4,6 +4,7 @@ import { useLocations } from '@/hooks/locations';
 import type {
   AlarmDevice,
   AlarmDeviceType,
+  AlarmTransport,
   CreateAlarmDeviceRequest,
   UpdateAlarmDeviceRequest,
 } from '@/types/alarmdevices';
@@ -15,11 +16,18 @@ const DEVICE_TYPES: { value: AlarmDeviceType; label: string }[] = [
 interface AlarmDeviceFormData {
   name: string;
   type: AlarmDeviceType;
-  base_url: string;
+  transport: AlarmTransport;
+  base_url: string; // http transport
+  command_topic: string; // mqtt transport (Shelly topic prefix)
   switch_id: string; // string in the form; coerced to number on submit
   location_id: string; // optional; blank -> null (the location, not the antenna)
   is_active: boolean;
 }
+
+const TRANSPORTS: { value: AlarmTransport; label: string }[] = [
+  { value: 'http', label: 'HTTP (local edge)' },
+  { value: 'mqtt', label: 'MQTT (broker)' },
+];
 
 interface AlarmDeviceFormProps {
   mode: 'create' | 'edit';
@@ -33,13 +41,16 @@ interface AlarmDeviceFormProps {
 interface FieldErrors {
   name?: string;
   base_url?: string;
+  command_topic?: string;
   switch_id?: string;
 }
 
 const EMPTY_FORM: AlarmDeviceFormData = {
   name: '',
   type: 'shelly_gen4',
+  transport: 'http',
   base_url: '',
+  command_topic: '',
   switch_id: '0',
   location_id: '',
   is_active: true,
@@ -68,7 +79,9 @@ export function AlarmDeviceForm({
       setFormData({
         name: device.name,
         type: device.type,
+        transport: device.transport,
         base_url: device.base_url,
+        command_topic: device.command_topic ?? '',
         switch_id: String(device.switch_id),
         location_id: device.location_id != null ? String(device.location_id) : '',
         is_active: device.is_active,
@@ -84,8 +97,12 @@ export function AlarmDeviceForm({
     const nameError = validateName(formData.name);
     if (nameError) errors.name = nameError;
 
-    const urlError = validateBaseURL(formData.base_url);
-    if (urlError) errors.base_url = urlError;
+    if (formData.transport === 'http') {
+      const urlError = validateBaseURL(formData.base_url);
+      if (urlError) errors.base_url = urlError;
+    } else if (formData.command_topic.trim() === '') {
+      errors.command_topic = 'Command topic is required for MQTT transport';
+    }
 
     if (formData.switch_id.trim() !== '' && !/^\d+$/.test(formData.switch_id.trim())) {
       errors.switch_id = 'Switch ID must be a non-negative integer';
@@ -114,7 +131,9 @@ export function AlarmDeviceForm({
     const common = {
       name: formData.name,
       type: formData.type,
-      base_url: formData.base_url.trim(),
+      transport: formData.transport,
+      base_url: formData.transport === 'http' ? formData.base_url.trim() : '',
+      command_topic: formData.transport === 'mqtt' ? formData.command_topic.trim() : null,
       switch_id,
       location_id,
       is_active: formData.is_active,
@@ -177,28 +196,72 @@ export function AlarmDeviceForm({
             ))}
           </select>
         </div>
+
+        <div>
+          <label htmlFor="transport" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Transport <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="transport"
+            value={formData.transport}
+            onChange={(e) => handleChange('transport', e.target.value as AlarmTransport)}
+            disabled={loading}
+            className={inputClass(false)}
+          >
+            {TRANSPORTS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div>
-        <label htmlFor="base_url" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Base URL <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          id="base_url"
-          value={formData.base_url}
-          onChange={(e) => handleChange('base_url', e.target.value)}
-          disabled={loading}
-          className={inputClass(!!fieldErrors.base_url)}
-          placeholder="http://192.168.50.66"
-        />
-        {fieldErrors.base_url && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.base_url}</p>
-        )}
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Local HTTP address of the device (Shelly Gen2+ RPC).
-        </p>
-      </div>
+      {formData.transport === 'http' ? (
+        <div>
+          <label htmlFor="base_url" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Base URL <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="base_url"
+            value={formData.base_url}
+            onChange={(e) => handleChange('base_url', e.target.value)}
+            disabled={loading}
+            className={inputClass(!!fieldErrors.base_url)}
+            placeholder="http://192.168.50.66"
+          />
+          {fieldErrors.base_url && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.base_url}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Local HTTP address of the device (Shelly Gen2+ RPC). Only reachable when the backend is on
+            the device&apos;s network.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label htmlFor="command_topic" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Command Topic <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="command_topic"
+            value={formData.command_topic}
+            onChange={(e) => handleChange('command_topic', e.target.value)}
+            disabled={loading}
+            className={inputClass(!!fieldErrors.command_topic)}
+            placeholder="trakrf.id/dock-strobe"
+          />
+          {fieldErrors.command_topic && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.command_topic}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            The Shelly&apos;s MQTT topic prefix. Must match the prefix configured on the device; the backend
+            publishes to <code>&lt;topic&gt;/command/switch:&lt;id&gt;</code>. Firewall-friendly (no inbound).
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trakrf/platform/backend/internal/alarm"
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	alarmdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
@@ -46,7 +47,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
-	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, shelly.New(0), 0)
+	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil), 0)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")
