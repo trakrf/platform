@@ -12,11 +12,11 @@ import (
 // alarmDeviceColumns is the canonical SELECT/RETURNING column list, kept
 // identical across every alarm_devices query so scan targets line up.
 const alarmDeviceColumns = `id, org_id, name, type, base_url, switch_id,
-	scan_point_id, is_active, metadata, created_at, updated_at, deleted_at`
+	location_id, is_active, metadata, created_at, updated_at, deleted_at`
 
 func scanAlarmDevice(row pgx.Row, d *alarmdevice.AlarmDevice) error {
 	return row.Scan(&d.ID, &d.OrgID, &d.Name, &d.Type, &d.BaseURL, &d.SwitchID,
-		&d.ScanPointID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt)
+		&d.LocationID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt)
 }
 
 // CreateAlarmDevice inserts an alarm device. type defaults to shelly_gen4,
@@ -41,14 +41,14 @@ func (s *Storage) CreateAlarmDevice(ctx context.Context, orgID int, req alarmdev
 
 	query := `
 		INSERT INTO trakrf.alarm_devices
-		(org_id, name, type, base_url, switch_id, scan_point_id, is_active, metadata)
+		(org_id, name, type, base_url, switch_id, location_id, is_active, metadata)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING ` + alarmDeviceColumns
 
 	var d alarmdevice.AlarmDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return scanAlarmDevice(tx.QueryRow(ctx, query, orgID, req.Name, deviceType, req.BaseURL,
-			switchID, req.ScanPointID, isActive, metadata), &d)
+			switchID, req.LocationID, isActive, metadata), &d)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create alarm device: %w", err)
@@ -115,16 +115,17 @@ func (s *Storage) CountAlarmDevices(ctx context.Context, orgID int) (int, error)
 	return n, nil
 }
 
-// ListAlarmDevicesForScanPoint returns active, non-deleted devices bound to the
-// given scan point. Used by the geofence firer.
-func (s *Storage) ListAlarmDevicesForScanPoint(ctx context.Context, orgID, scanPointID int) ([]alarmdevice.AlarmDevice, error) {
+// ListAlarmDevicesForLocation returns active, non-deleted devices bound to the
+// given logical location. Used by the geofence firer: the engine resolves the
+// tripped scan point to a location, and every alarm bound to that location fires.
+func (s *Storage) ListAlarmDevicesForLocation(ctx context.Context, orgID, locationID int) ([]alarmdevice.AlarmDevice, error) {
 	query := `SELECT ` + alarmDeviceColumns + `
 		FROM trakrf.alarm_devices
-		WHERE org_id = $1 AND scan_point_id = $2 AND is_active = true AND deleted_at IS NULL
+		WHERE org_id = $1 AND location_id = $2 AND is_active = true AND deleted_at IS NULL
 		ORDER BY id`
 	out := []alarmdevice.AlarmDevice{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, orgID, scanPointID)
+		rows, err := tx.Query(ctx, query, orgID, locationID)
 		if err != nil {
 			return err
 		}
@@ -139,7 +140,7 @@ func (s *Storage) ListAlarmDevicesForScanPoint(ctx context.Context, orgID, scanP
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list alarm devices for scan point: %w", err)
+		return nil, fmt.Errorf("failed to list alarm devices for location: %w", err)
 	}
 	return out, nil
 }
@@ -167,8 +168,8 @@ func (s *Storage) UpdateAlarmDevice(ctx context.Context, orgID, id int, req alar
 	if req.SwitchID != nil {
 		add("switch_id", *req.SwitchID)
 	}
-	if req.ScanPointID != nil {
-		add("scan_point_id", *req.ScanPointID)
+	if req.LocationID != nil {
+		add("location_id", *req.LocationID)
 	}
 	if req.IsActive != nil {
 		add("is_active", *req.IsActive)

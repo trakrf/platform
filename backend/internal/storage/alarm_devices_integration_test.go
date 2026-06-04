@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
-	"github.com/trakrf/platform/backend/internal/models/scandevice"
+	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
@@ -26,7 +26,7 @@ func TestAlarmDevice_CRUD(t *testing.T) {
 	require.Equal(t, alarmdevice.TypeShellyGen4, created.Type)
 	require.Equal(t, 0, created.SwitchID)
 	require.True(t, created.IsActive)
-	require.Nil(t, created.ScanPointID)
+	require.Nil(t, created.LocationID)
 
 	// Get round-trips.
 	got, err := db.Store.GetAlarmDeviceByID(ctx, orgID, created.ID)
@@ -82,33 +82,31 @@ func TestAlarmDevice_CRUD(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestAlarmDevice_ListForScanPoint(t *testing.T) {
+func TestAlarmDevice_ListForLocation(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
-	// A scan device auto-creates antenna 1; grab its scan_point id to bind to.
-	sd, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "boundary-1", Name: "Door", Type: scandevice.DeviceTypeCS463,
+	loc, err := db.Store.CreateLocation(ctx, location.Location{
+		OrgID: orgID, ExternalKey: "dock-1", Name: "Dock 1",
 	})
 	require.NoError(t, err)
-	points, err := db.Store.ListScanPointsByDevice(ctx, orgID, sd.ID)
+	other, err := db.Store.CreateLocation(ctx, location.Location{
+		OrgID: orgID, ExternalKey: "dock-2", Name: "Dock 2",
+	})
 	require.NoError(t, err)
-	require.NotEmpty(t, points)
-	pointID := points[0].ID
-	otherPointID := pointID + 1 // a point id we never bind an active device to
 
-	// Active device bound to the point -> should be returned.
+	// Active device bound to the location -> should be returned.
 	active := true
 	bound, err := db.Store.CreateAlarmDevice(ctx, orgID, alarmdevice.CreateAlarmDeviceRequest{
-		Name: "Bound", BaseURL: "http://192.168.50.66", ScanPointID: &pointID, IsActive: &active,
+		Name: "Bound", BaseURL: "http://192.168.50.66", LocationID: &loc.ID, IsActive: &active,
 	})
 	require.NoError(t, err)
 
-	// Inactive device bound to the same point -> excluded.
+	// Inactive device bound to the same location -> excluded.
 	inactive := false
 	_, err = db.Store.CreateAlarmDevice(ctx, orgID, alarmdevice.CreateAlarmDeviceRequest{
-		Name: "Inactive", BaseURL: "http://192.168.50.67", ScanPointID: &pointID, IsActive: &inactive,
+		Name: "Inactive", BaseURL: "http://192.168.50.67", LocationID: &loc.ID, IsActive: &inactive,
 	})
 	require.NoError(t, err)
 
@@ -118,13 +116,13 @@ func TestAlarmDevice_ListForScanPoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := db.Store.ListAlarmDevicesForScanPoint(ctx, orgID, pointID)
+	got, err := db.Store.ListAlarmDevicesForLocation(ctx, orgID, loc.ID)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.Equal(t, bound.ID, got[0].ID)
 
-	// A point with no active bound devices -> empty.
-	none, err := db.Store.ListAlarmDevicesForScanPoint(ctx, orgID, otherPointID)
+	// A location with no active bound devices -> empty.
+	none, err := db.Store.ListAlarmDevicesForLocation(ctx, orgID, other.ID)
 	require.NoError(t, err)
 	require.Empty(t, none)
 }

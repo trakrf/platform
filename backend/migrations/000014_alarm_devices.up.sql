@@ -1,6 +1,8 @@
 -- TRA-903 — alarm OUTPUT devices (demo: Shelly Gen4 relay). Internal-only CRUD.
--- Optionally bound to a boundary scan_point; the geofence.Firer (alarm.Firer)
--- drives every active device bound to a firing point. id is Feistel-obfuscated
+-- Optionally bound to a logical location; the geofence.Firer (alarm.Firer)
+-- drives every active device bound to the location where an asset was seen
+-- (we care about the location, not which reader/antenna observed it — the
+-- geofence engine resolves scan_point -> location). id is Feistel-obfuscated
 -- via the shared trigger (wire-exposed by id in the internal CRUD), matching
 -- scan_devices. No in-migration GRANTs: the infra init-grants Job sets ALTER
 -- DEFAULT PRIVILEGES for the migrate role, and the integration harness grants
@@ -16,7 +18,7 @@ CREATE TABLE alarm_devices (
     type          alarm_device_type NOT NULL DEFAULT 'shelly_gen4',
     base_url      VARCHAR(255) NOT NULL,
     switch_id     INT NOT NULL DEFAULT 0,
-    scan_point_id BIGINT REFERENCES scan_points(id),
+    location_id   BIGINT REFERENCES locations(id),
     is_active     BOOLEAN NOT NULL DEFAULT true,
     metadata      JSONB DEFAULT '{}',
     created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -24,8 +26,8 @@ CREATE TABLE alarm_devices (
     deleted_at    TIMESTAMPTZ
 );
 
-CREATE INDEX idx_alarm_devices_org        ON alarm_devices(org_id);
-CREATE INDEX idx_alarm_devices_scan_point ON alarm_devices(scan_point_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_alarm_devices_org      ON alarm_devices(org_id);
+CREATE INDEX idx_alarm_devices_location ON alarm_devices(location_id) WHERE deleted_at IS NULL;
 
 CREATE TRIGGER generate_alarm_device_id_trigger
     BEFORE INSERT ON alarm_devices
@@ -46,4 +48,4 @@ CREATE POLICY org_isolation_alarm_devices ON alarm_devices
 COMMENT ON TABLE alarm_devices IS 'TRA-903: alarm output devices (Shelly Gen4). Internal-only CRUD; fired by the geofence engine via alarm.Firer.';
 COMMENT ON COLUMN alarm_devices.base_url IS 'Local HTTP base URL of the device, e.g. http://192.168.50.66 (Shelly Gen2+ RPC).';
 COMMENT ON COLUMN alarm_devices.switch_id IS 'Shelly relay channel passed as Switch.Set id=.';
-COMMENT ON COLUMN alarm_devices.scan_point_id IS 'Optional binding: fires when the geofence engine trips this boundary scan point.';
+COMMENT ON COLUMN alarm_devices.location_id IS 'Optional binding: fires when the geofence engine trips at this logical location (any reader/antenna mapped to it).';

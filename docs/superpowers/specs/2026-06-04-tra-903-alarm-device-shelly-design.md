@@ -76,9 +76,22 @@ CREATE POLICY org_isolation_alarm_devices ON alarm_devices
 
 Down: `DROP TABLE IF EXISTS alarm_devices; DROP TYPE IF EXISTS alarm_device_type;`
 
-**Binding rationale:** `scan_point_id` is nullable so a device can be created and
-**test-fired before** it's wired to a boundary. The auto-firer only matches
-devices whose `scan_point_id` equals the event's scan point; NULL never matches.
+**Binding rationale:** the alarm binds to a **logical `location_id`**, not a
+scan point — we care that an asset was seen *at a location*, not which
+reader/antenna observed it. The geofence engine already resolves the tripped
+scan point to a location (`AlarmEvent.LocationID`), so the firer matches on that.
+`location_id` is nullable so a device can be created and **test-fired before**
+it's wired. The auto-firer only matches active devices whose `location_id`
+equals the event's location; NULL location (unmapped scan point) or a location
+with no alarm device is a **no-op**.
+
+**Two firing invariants** (both already enforced upstream, no extra code):
+1. Only EPCs that resolve to a **registered asset** ever reach the firer — the
+   geofence engine evaluates `Resolved` reads only (membership filter from
+   TRA-901's PersistReads tag→asset join). A random/unregistered tag (library
+   book, handbag) never produces an AlarmEvent.
+2. A read that resolves to a location with **no alarm device** (or to a scan
+   point with no location) fires nothing — the firer's lookup returns empty.
 
 ### 2. Shelly Gen4 driver — `internal/alarm/shelly`
 

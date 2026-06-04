@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Zap, Power } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAlarmDevices, useAlarmDeviceMutations } from '@/hooks/alarmdevices';
+import { useLocations } from '@/hooks/locations';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
 import { ConfirmModal } from '@/components/shared';
@@ -16,8 +17,12 @@ export default function AlarmDevicesScreen() {
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const { alarmDevices, isLoading } = useAlarmDevices();
+  const { locations } = useLocations();
   const { delete: deleteAlarmDevice, test, reset } = useAlarmDeviceMutations();
   const { setActiveTab } = useUIStore();
+
+  const locationName = (id?: number | null) =>
+    id == null ? '—' : (locations.find((l) => l.id === id)?.name ?? `#${id}`);
 
   useEffect(() => {
     setActiveTab('alarm-devices');
@@ -88,7 +93,7 @@ export default function AlarmDevicesScreen() {
                   <th className="px-3 font-medium">Type</th>
                   <th className="px-3 font-medium">Base URL</th>
                   <th className="px-3 font-medium">Switch</th>
-                  <th className="px-3 font-medium">Scan Point</th>
+                  <th className="px-3 font-medium">Location</th>
                   <th className="px-3 font-medium">Active</th>
                   <th className="px-3"></th>
                 </tr>
@@ -103,7 +108,7 @@ export default function AlarmDevicesScreen() {
                     <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
                     <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">{device.base_url}</td>
                     <td className="px-3 text-gray-700 dark:text-gray-300">{device.switch_id}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.scan_point_id ?? '—'}</td>
+                    <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
                     <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>
                     <td className="px-3 text-right whitespace-nowrap">
                       <button

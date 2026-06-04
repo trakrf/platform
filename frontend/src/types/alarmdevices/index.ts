@@ -18,7 +18,7 @@ export interface AlarmDevice {
   type: AlarmDeviceType;
   base_url: string;
   switch_id: number;
-  scan_point_id?: number | null;
+  location_id?: number | null;
   is_active: boolean;
   metadata?: Record<string, unknown>;
   created_at: string;
@@ -31,7 +31,7 @@ export interface CreateAlarmDeviceRequest {
   type?: AlarmDeviceType;
   base_url: string;
   switch_id?: number;
-  scan_point_id?: number | null;
+  location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
 }
@@ -41,7 +41,7 @@ export interface UpdateAlarmDeviceRequest {
   type?: AlarmDeviceType;
   base_url?: string;
   switch_id?: number;
-  scan_point_id?: number | null;
+  location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
 }

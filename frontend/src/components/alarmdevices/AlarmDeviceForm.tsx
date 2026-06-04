@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { validateName } from '@/lib/location/validators';
+import { useLocations } from '@/hooks/locations';
 import type {
   AlarmDevice,
   AlarmDeviceType,
@@ -16,7 +17,7 @@ interface AlarmDeviceFormData {
   type: AlarmDeviceType;
   base_url: string;
   switch_id: string; // string in the form; coerced to number on submit
-  scan_point_id: string; // optional; blank -> null
+  location_id: string; // optional; blank -> null (the location, not the antenna)
   is_active: boolean;
 }
 
@@ -33,7 +34,6 @@ interface FieldErrors {
   name?: string;
   base_url?: string;
   switch_id?: string;
-  scan_point_id?: string;
 }
 
 const EMPTY_FORM: AlarmDeviceFormData = {
@@ -41,7 +41,7 @@ const EMPTY_FORM: AlarmDeviceFormData = {
   type: 'shelly_gen4',
   base_url: '',
   switch_id: '0',
-  scan_point_id: '',
+  location_id: '',
   is_active: true,
 };
 
@@ -61,6 +61,7 @@ export function AlarmDeviceForm({
 }: AlarmDeviceFormProps) {
   const [formData, setFormData] = useState<AlarmDeviceFormData>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const { locations } = useLocations();
 
   useEffect(() => {
     if (mode === 'edit' && device) {
@@ -69,7 +70,7 @@ export function AlarmDeviceForm({
         type: device.type,
         base_url: device.base_url,
         switch_id: String(device.switch_id),
-        scan_point_id: device.scan_point_id != null ? String(device.scan_point_id) : '',
+        location_id: device.location_id != null ? String(device.location_id) : '',
         is_active: device.is_active,
       });
     } else if (mode === 'create') {
@@ -89,9 +90,6 @@ export function AlarmDeviceForm({
     if (formData.switch_id.trim() !== '' && !/^\d+$/.test(formData.switch_id.trim())) {
       errors.switch_id = 'Switch ID must be a non-negative integer';
     }
-    if (formData.scan_point_id.trim() !== '' && !/^\d+$/.test(formData.scan_point_id.trim())) {
-      errors.scan_point_id = 'Scan point ID must be a number';
-    }
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -110,15 +108,15 @@ export function AlarmDeviceForm({
     if (!validateForm()) return;
 
     const switch_id = formData.switch_id.trim() === '' ? 0 : parseInt(formData.switch_id.trim(), 10);
-    const scan_point_id =
-      formData.scan_point_id.trim() === '' ? null : parseInt(formData.scan_point_id.trim(), 10);
+    const location_id =
+      formData.location_id.trim() === '' ? null : parseInt(formData.location_id.trim(), 10);
 
     const common = {
       name: formData.name,
       type: formData.type,
       base_url: formData.base_url.trim(),
       switch_id,
-      scan_point_id,
+      location_id,
       is_active: formData.is_active,
     };
 
@@ -225,25 +223,27 @@ export function AlarmDeviceForm({
 
         <div>
           <label
-            htmlFor="scan_point_id"
+            htmlFor="location_id"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
           >
-            Bound Scan Point ID
+            Location
           </label>
-          <input
-            type="number"
-            id="scan_point_id"
-            value={formData.scan_point_id}
-            onChange={(e) => handleChange('scan_point_id', e.target.value)}
+          <select
+            id="location_id"
+            value={formData.location_id}
+            onChange={(e) => handleChange('location_id', e.target.value)}
             disabled={loading}
-            className={inputClass(!!fieldErrors.scan_point_id)}
-            placeholder="Optional"
-          />
-          {fieldErrors.scan_point_id && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.scan_point_id}</p>
-          )}
+            className={inputClass(false)}
+          >
+            <option value="">— None —</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={String(loc.id)}>
+                {loc.name}
+              </option>
+            ))}
+          </select>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Boundary scan point that fires this device. Leave blank to manage manually.
+            Fires when an asset is seen at this location (any reader/antenna). Leave blank to manage manually.
           </p>
         </div>
       </div>

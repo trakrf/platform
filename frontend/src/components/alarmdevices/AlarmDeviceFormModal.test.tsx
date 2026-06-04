@@ -18,6 +18,11 @@ vi.mock('@/lib/api/alarmdevices');
 vi.mock('@/lib/auth/orgContext', () => ({
   ensureOrgContext: vi.fn().mockResolvedValue(undefined),
 }));
+// The form fetches locations for its dropdown; stub the hook so the test
+// doesn't hit the network.
+vi.mock('@/hooks/locations', () => ({
+  useLocations: () => ({ locations: [{ id: 5, name: 'Dock 1' }], isLoading: false }),
+}));
 
 const wrapper = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({
@@ -38,7 +43,7 @@ describe('AlarmDeviceFormModal', () => {
     type: 'shelly_gen4',
     base_url: 'http://192.168.50.66',
     switch_id: 0,
-    scan_point_id: null,
+    location_id: null,
     is_active: true,
     metadata: {},
     created_at: '2024-01-01T00:00:00Z',
@@ -100,7 +105,7 @@ describe('AlarmDeviceFormModal', () => {
         base_url: 'http://192.168.50.66',
         type: 'shelly_gen4',
         switch_id: 0,
-        scan_point_id: null,
+        location_id: null,
       })
     );
     await waitFor(() => {

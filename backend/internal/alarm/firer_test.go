@@ -13,14 +13,16 @@ import (
 )
 
 type fakeLookup struct {
-	devices []alarmdevice.AlarmDevice
-	err     error
-	gotOrg  int
-	gotPnt  int
+	devices   []alarmdevice.AlarmDevice
+	err       error
+	gotOrg    int
+	gotLoc    int
+	callCount int
 }
 
-func (f *fakeLookup) ListAlarmDevicesForScanPoint(_ context.Context, orgID, scanPointID int) ([]alarmdevice.AlarmDevice, error) {
-	f.gotOrg, f.gotPnt = orgID, scanPointID
+func (f *fakeLookup) ListAlarmDevicesForLocation(_ context.Context, orgID, locationID int) ([]alarmdevice.AlarmDevice, error) {
+	f.gotOrg, f.gotLoc = orgID, locationID
+	f.callCount++
 	return f.devices, f.err
 }
 
@@ -44,7 +46,8 @@ func (d *fakeDriver) Set(_ context.Context, baseURL string, switchID int, on boo
 }
 
 func testEvent() geofence.AlarmEvent {
-	return geofence.AlarmEvent{OrgID: 7, AssetID: 3, ScanPointID: 42, EPC: "E2", RSSI: -50, FiredAt: time.Unix(0, 0)}
+	loc := 42
+	return geofence.AlarmEvent{OrgID: 7, AssetID: 3, ScanPointID: 9, LocationID: &loc, EPC: "E2", RSSI: -50, FiredAt: time.Unix(0, 0)}
 }
 
 func newTestFirer(lookup deviceLookup, drv driver) Firer {
@@ -63,8 +66,8 @@ func TestFirer_FiresEachBoundDevice(t *testing.T) {
 	if err := f.Fire(context.Background(), testEvent()); err != nil {
 		t.Fatalf("Fire returned error: %v", err)
 	}
-	if lookup.gotOrg != 7 || lookup.gotPnt != 42 {
-		t.Errorf("lookup got org=%d point=%d, want 7/42", lookup.gotOrg, lookup.gotPnt)
+	if lookup.gotOrg != 7 || lookup.gotLoc != 42 {
+		t.Errorf("lookup got org=%d location=%d, want 7/42", lookup.gotOrg, lookup.gotLoc)
 	}
 	if len(drv.calls) != 2 {
 		t.Fatalf("driver calls = %d, want 2", len(drv.calls))
@@ -87,6 +90,25 @@ func TestFirer_NoDevicesNoCalls(t *testing.T) {
 	}
 	if len(drv.calls) != 0 {
 		t.Errorf("driver calls = %d, want 0", len(drv.calls))
+	}
+}
+
+func TestFirer_NilLocationIsNoOp(t *testing.T) {
+	lookup := &fakeLookup{devices: []alarmdevice.AlarmDevice{{ID: 1, BaseURL: "http://a"}}}
+	drv := &fakeDriver{}
+	f := newTestFirer(lookup, drv)
+
+	ev := testEvent()
+	ev.LocationID = nil // tripped scan point not mapped to a location
+
+	if err := f.Fire(context.Background(), ev); err != nil {
+		t.Fatalf("Fire returned error: %v", err)
+	}
+	if lookup.callCount != 0 {
+		t.Errorf("lookup called %d times, want 0 when location is nil", lookup.callCount)
+	}
+	if len(drv.calls) != 0 {
+		t.Errorf("driver calls = %d, want 0 when location is nil", len(drv.calls))
 	}
 }
 

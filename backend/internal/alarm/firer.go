@@ -19,7 +19,7 @@ import (
 // deviceLookup is the storage dependency Firer needs; *storage.Storage
 // satisfies it. Narrowed to an interface so unit tests can inject a fake.
 type deviceLookup interface {
-	ListAlarmDevicesForScanPoint(ctx context.Context, orgID, scanPointID int) ([]alarmdevice.AlarmDevice, error)
+	ListAlarmDevicesForLocation(ctx context.Context, orgID, locationID int) ([]alarmdevice.AlarmDevice, error)
 }
 
 // driver is the device transport; *shelly.Client satisfies it.
@@ -59,9 +59,16 @@ func (f Firer) Fire(ctx context.Context, ev geofence.AlarmEvent) error {
 		Time("fired_at", ev.FiredAt).
 		Msg("geofence boundary alarm")
 
-	devices, err := f.store.ListAlarmDevicesForScanPoint(ctx, ev.OrgID, ev.ScanPointID)
+	// The alarm cares about the logical location, not the reader/antenna. If the
+	// tripped scan point isn't mapped to a location, no location-bound alarm can
+	// match — nothing to fire.
+	if ev.LocationID == nil {
+		return nil
+	}
+
+	devices, err := f.store.ListAlarmDevicesForLocation(ctx, ev.OrgID, *ev.LocationID)
 	if err != nil {
-		return fmt.Errorf("alarm: lookup devices for scan_point %d: %w", ev.ScanPointID, err)
+		return fmt.Errorf("alarm: lookup devices for location %d: %w", *ev.LocationID, err)
 	}
 
 	var errs []error
