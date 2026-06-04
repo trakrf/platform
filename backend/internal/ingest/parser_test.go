@@ -51,3 +51,20 @@ func TestParseCS463_MalformedJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, ErrUnsupportedDevice)
 }
+
+// RSSI is informational; a malformed value must not discard an otherwise-valid
+// read or fail the whole batch. Float/blank/garbage all yield a usable read.
+func TestParseCS463_LenientRSSI(t *testing.T) {
+	payload := []byte(`{"tags":[
+		{"epc":"AA","capturePointName":"cp-1","antennaPort":1,"rssi":"-56.5"},
+		{"epc":"BB","capturePointName":"cp-1","antennaPort":1,"rssi":""},
+		{"epc":"CC","capturePointName":"cp-1","antennaPort":1,"rssi":"garbage"}
+	]}`)
+	reads, err := Parse(scandevice.DeviceTypeCS463, payload)
+	require.NoError(t, err)
+	require.Len(t, reads, 3)
+	assert.Equal(t, -57, reads[0].RSSI) // -56.5 rounds away from zero to -57
+	assert.Equal(t, 0, reads[1].RSSI)   // blank -> 0
+	assert.Equal(t, 0, reads[2].RSSI)   // unparseable -> 0, read still kept
+	assert.Equal(t, "CC", reads[2].EPC)
+}

@@ -80,11 +80,11 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.log.Error().Interface("panic", r).Str("topic", m.Topic()).Msg("recovered from panic in handler")
-			metricMessages.WithLabelValues("parse_error").Inc()
+			metricMessages.WithLabelValues("panic").Inc()
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	topic, payload := m.Topic(), m.Payload()
@@ -95,7 +95,7 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	tagScanID, err := s.store.InsertRawTagScan(ctx, topic, payload)
 	if err != nil {
 		s.log.Error().Err(err).Str("topic", topic).Msg("audit insert failed")
-		metricMessages.WithLabelValues("persist_error").Inc()
+		metricMessages.WithLabelValues("audit_error").Inc()
 		return
 	}
 
@@ -103,7 +103,7 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	route, found, err := s.store.ResolveScanTopic(ctx, topic)
 	if err != nil {
 		s.log.Error().Err(err).Str("topic", topic).Msg("topic resolution failed")
-		metricMessages.WithLabelValues("persist_error").Inc()
+		metricMessages.WithLabelValues("resolve_error").Inc()
 		return
 	}
 	if !found {
@@ -131,8 +131,11 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	// parsed observations for the immediate-on-entry alarm decision.
 	res, err := s.store.PersistReads(ctx, route.OrgID, tagScanID, receivedAt, reads)
 	if err != nil {
-		s.log.Error().Err(err).Str("topic", topic).Int("org_id", route.OrgID).Msg("derivation failed")
-		metricMessages.WithLabelValues("persist_error").Inc()
+		// The raw message is already durable in tag_scans (audit row above), so a
+		// transient failure here loses only the derivation, which is reproducible
+		// from the audit log. Replay/backfill is owned by the cutover work (TRA-907).
+		s.log.Error().Err(err).Str("topic", topic).Int("org_id", route.OrgID).Int64("tag_scan_id", tagScanID).Msg("derivation failed")
+		metricMessages.WithLabelValues("derive_error").Inc()
 		return
 	}
 	metricAssetScansInserted.Add(float64(res.Inserted))

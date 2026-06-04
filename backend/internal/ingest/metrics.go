@@ -12,7 +12,7 @@ var (
 	metricMessages = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ingest_messages_total",
 		Help: "MQTT messages received by the in-backend subscriber, by result.",
-	}, []string{"result"}) // received, unregistered_topic, unsupported_device, parse_error, persist_error
+	}, []string{"result"}) // received, unregistered_topic, unsupported_device, parse_error, panic, audit_error, resolve_error, derive_error
 
 	metricReadsParsed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ingest_reads_parsed_total",

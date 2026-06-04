@@ -12,6 +12,10 @@ DROP FUNCTION IF EXISTS trakrf.process_tag_scans();
 -- publish_topic = trakrf.id/{external_key}/reads. SECURITY DEFINER so it sees
 -- all orgs' devices (the routing key is cross-org by design); returns only the
 -- minimal ids needed to route + set org context.
+-- Gating: filters deleted_at only — consistent with every scan_devices read in
+-- the app (is_active / valid_to are non-gating metadata across the codebase;
+-- soft-delete is the enforced off switch). Whether is_active should gate reads
+-- everywhere is a separate cross-cutting decision, not an ingestion-only bolt-on.
 CREATE OR REPLACE FUNCTION trakrf.resolve_scan_topic(p_topic text)
 RETURNS TABLE (org_id bigint, scan_device_id bigint, device_type trakrf.scan_device_type)
 LANGUAGE sql

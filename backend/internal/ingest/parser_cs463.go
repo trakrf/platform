@@ -3,6 +3,7 @@ package ingest
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -30,13 +31,13 @@ func parseCS463(payload []byte) ([]scanread.Read, error) {
 	}
 	reads := make([]scanread.Read, 0, len(p.Tags))
 	for _, t := range p.Tags {
+		// RSSI is informational (a TRA-901 gate input), not load-bearing for
+		// asset_scans. Parse leniently — a malformed value (float, signed, blank)
+		// must not discard an otherwise-valid read. ParseFloat tolerates "-56",
+		// "-56.5", "+40"; on failure we keep the read with rssi 0.
 		rssi := 0
-		if t.RSSI != "" {
-			v, err := strconv.Atoi(t.RSSI)
-			if err != nil {
-				return nil, fmt.Errorf("cs463: parse rssi %q: %w", t.RSSI, err)
-			}
-			rssi = v
+		if f, err := strconv.ParseFloat(t.RSSI, 64); err == nil {
+			rssi = int(math.Round(f))
 		}
 		reads = append(reads, scanread.Read{
 			EPC:              t.EPC,

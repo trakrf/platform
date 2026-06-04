@@ -46,6 +46,7 @@ EXCEPTION
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trigger_process_tag_scans ON trakrf.tag_scans;
 CREATE TRIGGER trigger_process_tag_scans
     AFTER INSERT ON trakrf.tag_scans
     FOR EACH ROW
