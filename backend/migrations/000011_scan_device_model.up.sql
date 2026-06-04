@@ -63,13 +63,18 @@ COMMENT ON COLUMN scan_points.is_boundary IS
 -- CRUD-managed. Reads from unregistered devices/points resolve to nothing
 -- below and produce no asset_scans (consistent with TRA-901's membership
 -- filter). Asset + tag auto-create from EPCs is retained (TRA-901's concern).
+--
+-- Table refs are schema-qualified (trakrf.*) so the trigger does not depend on
+-- the calling connection's search_path. The inherited 000010 body left them
+-- unqualified, which made it fragile under pooled connections that did not
+-- carry trakrf on the search_path (TRA-899).
 CREATE OR REPLACE FUNCTION trakrf.process_tag_scans() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE
     topic_org_id BIGINT;
 BEGIN
     SELECT o.id INTO topic_org_id
-    FROM organizations o
+    FROM trakrf.organizations o
     WHERE o.identifier = split_part(NEW.message_topic, '/', 1);
 
     IF topic_org_id IS NULL THEN
@@ -77,25 +82,25 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    INSERT INTO assets (org_id, external_key, name)
+    INSERT INTO trakrf.assets (org_id, external_key, name)
     SELECT DISTINCT topic_org_id, t.tag ->> 'epc', t.tag ->> 'epc' || ' (auto-created from scan)'
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
-    WHERE NOT EXISTS (SELECT 1 FROM assets a WHERE a.org_id = topic_org_id AND a.external_key = t.tag ->> 'epc')
-      AND NOT EXISTS (SELECT 1 FROM tags i WHERE i.org_id = topic_org_id AND i.value = t.tag ->> 'epc');
+    WHERE NOT EXISTS (SELECT 1 FROM trakrf.assets a WHERE a.org_id = topic_org_id AND a.external_key = t.tag ->> 'epc')
+      AND NOT EXISTS (SELECT 1 FROM trakrf.tags i WHERE i.org_id = topic_org_id AND i.value = t.tag ->> 'epc');
 
-    INSERT INTO tags (org_id, asset_id, type, value)
+    INSERT INTO trakrf.tags (org_id, asset_id, type, value)
     SELECT DISTINCT topic_org_id, a.id, 'rfid', t.tag ->> 'epc'
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
-    JOIN assets a ON a.org_id = topic_org_id AND a.external_key = t.tag ->> 'epc'
-    WHERE NOT EXISTS (SELECT 1 FROM tags i WHERE i.org_id = topic_org_id AND i.value = t.tag ->> 'epc');
+    JOIN trakrf.assets a ON a.org_id = topic_org_id AND a.external_key = t.tag ->> 'epc'
+    WHERE NOT EXISTS (SELECT 1 FROM trakrf.tags i WHERE i.org_id = topic_org_id AND i.value = t.tag ->> 'epc');
 
-    INSERT INTO asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id)
+    INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id)
     SELECT
         to_timestamp((t.tag ->> 'timeStampOfRead')::BIGINT / 1000000.0),
         topic_org_id, a.id, sp.location_id, sp.id
     FROM jsonb_array_elements(NEW.message_data -> 'tags') AS t(tag)
-    JOIN scan_points sp ON sp.org_id = topic_org_id AND sp.external_key = t.tag ->> 'capturePointName'
-    JOIN assets a       ON a.org_id  = topic_org_id AND a.external_key = t.tag ->> 'epc'
+    JOIN trakrf.scan_points sp ON sp.org_id = topic_org_id AND sp.external_key = t.tag ->> 'capturePointName'
+    JOIN trakrf.assets a       ON a.org_id  = topic_org_id AND a.external_key = t.tag ->> 'epc'
     ON CONFLICT (timestamp, org_id, asset_id) DO NOTHING;
 
     RETURN NEW;
