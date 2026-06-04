@@ -10,8 +10,11 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/trakrf/platform/backend/internal/alarm"
+	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/geofence"
+	alarmdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -83,12 +86,27 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// TRA-900: in-backend MQTT subscriber (replaces the RC ingester + the
 	// process_tag_scans trigger). Disabled when MQTT_URL is unset, so local
 	// dev / tests / pre-cutover prod stay inert.
+	// TRA-903/906: the alarm Dispatcher routes a fire to the right transport per
+	// device — local HTTP (Shelly RPC) or MQTT publish to the shared broker. It
+	// is shared by the geofence firer (auto-fire on boundary trip) and the
+	// alarm-device test-fire/reset endpoints. The MQTT publisher only exists when
+	// the broker is configured; when it isn't, mqtt-transport devices fail with a
+	// clear error and the http path is unaffected.
+	shellyClient := shelly.New(0)
+
 	mqttCfg := ingest.ConfigFromEnv()
+	var alarmDispatcher alarm.Dispatcher
 	if mqttCfg.Enabled() {
+		// TRA-906: dedicated publish client on the same broker (reuses MQTT_URL).
+		alarmPublisher, stopPublisher := alarm.NewMQTTPublisher(mqttCfg, log)
+		defer stopPublisher()
+		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher)
+
 		// TRA-901: geofence engine evaluates the membership-passing reads the
 		// subscriber derives, firing boundary alarms. Its lifecycle is tied to the
-		// subscriber's (only meaningful when ingestion is on).
-		geofenceEngine := geofence.NewEngine(geofence.ConfigFromEnv(), store, geofence.NewLogFirer(log), log)
+		// subscriber's (only meaningful when ingestion is on). TRA-903/906: the
+		// alarm.Firer drives the bound devices via the Dispatcher.
+		geofenceEngine := geofence.NewEngine(geofence.ConfigFromEnv(), store, alarm.NewFirer(store, alarmDispatcher, log), log)
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 
@@ -100,6 +118,8 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		defer subscriber.Stop()
 		log.Info().Msg("MQTT subscriber started")
 	} else {
+		// No broker: http-only dispatcher (nil mqtt → mqtt devices error clearly).
+		alarmDispatcher = alarm.NewDispatcher(shellyClient, nil)
 		log.Info().Msg("MQTT subscriber disabled (MQTT_URL unset)")
 	}
 
@@ -117,13 +137,16 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
+	// 2s test-fire pulse: long enough for an operator to see the strobe, short
+	// enough not to leave the relay latched after a confidence check.
+	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"))
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, alarmDevicesHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
