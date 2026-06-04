@@ -10,8 +10,11 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/trakrf/platform/backend/internal/alarm"
+	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/geofence"
+	alarmdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -83,12 +86,17 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// TRA-900: in-backend MQTT subscriber (replaces the RC ingester + the
 	// process_tag_scans trigger). Disabled when MQTT_URL is unset, so local
 	// dev / tests / pre-cutover prod stay inert.
+	// TRA-903: one Shelly driver, shared by the geofence firer (auto-fire on
+	// boundary trip) and the alarm-device CRUD test-fire/reset endpoints.
+	shellyClient := shelly.New(0)
+
 	mqttCfg := ingest.ConfigFromEnv()
 	if mqttCfg.Enabled() {
 		// TRA-901: geofence engine evaluates the membership-passing reads the
 		// subscriber derives, firing boundary alarms. Its lifecycle is tied to the
-		// subscriber's (only meaningful when ingestion is on).
-		geofenceEngine := geofence.NewEngine(geofence.ConfigFromEnv(), store, geofence.NewLogFirer(log), log)
+		// subscriber's (only meaningful when ingestion is on). TRA-903: the
+		// alarm.Firer drives the physical Shelly devices bound to the tripped point.
+		geofenceEngine := geofence.NewEngine(geofence.ConfigFromEnv(), store, alarm.NewFirer(store, shellyClient, log), log)
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 
@@ -117,13 +125,16 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
+	// 2s test-fire pulse: long enough for an operator to see the strobe, short
+	// enough not to leave the relay latched after a confidence check.
+	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, shellyClient, 2*time.Second)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"))
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, alarmDevicesHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
