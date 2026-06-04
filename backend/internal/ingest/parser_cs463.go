@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/trakrf/platform/backend/internal/models/scanread"
 )
 
 // cs463Payload is the CS463 reader JSON shape (verified against live preview
@@ -21,12 +23,12 @@ type cs463Tag struct {
 	RSSI             string `json:"rssi"`
 }
 
-func parseCS463(payload []byte) ([]Read, error) {
+func parseCS463(payload []byte) ([]scanread.Read, error) {
 	var p cs463Payload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, fmt.Errorf("cs463: unmarshal payload: %w", err)
 	}
-	reads := make([]Read, 0, len(p.Tags))
+	reads := make([]scanread.Read, 0, len(p.Tags))
 	for _, t := range p.Tags {
 		rssi := 0
 		if t.RSSI != "" {
@@ -36,7 +38,7 @@ func parseCS463(payload []byte) ([]Read, error) {
 			}
 			rssi = v
 		}
-		reads = append(reads, Read{
+		reads = append(reads, scanread.Read{
 			EPC:              t.EPC,
 			CapturePointName: t.CapturePointName,
 			AntennaPort:      t.AntennaPort,
