@@ -1,10 +1,11 @@
 -- TRA-810 — pull scan_devices then scan_points.
--- scan_devices natural key: (org_id, identifier).
--- scan_points natural key: (org_id, identifier); FKs via device.identifier + location.external_key.
+-- scan_devices natural key: (org_id, external_key). TRA-899 renamed the target
+--   column identifier -> external_key; the cloud source still exposes `identifier`.
+-- scan_points natural key: (org_id, external_key); FKs via device.external_key + location.external_key.
 \set ON_ERROR_STOP on
 
 INSERT INTO trakrf.scan_devices
-    (org_id, identifier, name, type, serial_number, model, description,
+    (org_id, external_key, name, type, serial_number, model, description,
      valid_from, valid_to, is_active, metadata, created_at, updated_at)
 SELECT
     t_org.id, s.identifier, s.name, s.type, s.serial_number, s.model, s.description,
@@ -24,7 +25,7 @@ DO $$ DECLARE src_n INT; tgt_n INT; BEGIN
 END $$;
 
 INSERT INTO trakrf.scan_points
-    (org_id, scan_device_id, location_id, identifier, name, antenna_port,
+    (org_id, scan_device_id, location_id, external_key, name, antenna_port,
      description, valid_from, valid_to, is_active, metadata, created_at, updated_at)
 SELECT
     t_org.id, t_dev.id, t_loc.id, s.identifier, s.name, s.antenna_port,
@@ -36,7 +37,7 @@ JOIN cloud_src.scan_devices src_dev    ON src_dev.id = s.scan_device_id
 LEFT JOIN cloud_src.locations src_loc  ON src_loc.id = s.location_id
 JOIN trakrf.organizations t_org        ON t_org.identifier = src_org.identifier
 JOIN trakrf.scan_devices t_dev
-        ON t_dev.org_id = t_org.id AND t_dev.identifier = src_dev.identifier
+        ON t_dev.org_id = t_org.id AND t_dev.external_key = src_dev.identifier
 LEFT JOIN trakrf.locations t_loc
         ON t_loc.org_id = t_org.id AND t_loc.external_key = src_loc.external_key
 WHERE s.deleted_at IS NULL
