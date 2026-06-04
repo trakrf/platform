@@ -23,6 +23,8 @@ import (
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
+	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
+	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
 	"github.com/trakrf/platform/backend/internal/handlers/swaggerspec"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
@@ -41,6 +43,8 @@ func setupRouter(
 	locationsHandler *locationshandler.Handler,
 	inventoryHandler *inventoryhandler.Handler,
 	reportsHandler *reportshandler.Handler,
+	scanDevicesHandler *scandeviceshandler.Handler,
+	scanPointsHandler *scanpointshandler.Handler,
 	lookupHandler *lookuphandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
@@ -138,6 +142,9 @@ func setupRouter(
 		assetsHandler.RegisterRoutes(r)
 		inventoryHandler.RegisterRoutes(r)
 		reportsHandler.RegisterRoutes(r)
+		// Internal-only scan device/point management (not public API).
+		scanDevicesHandler.RegisterRoutes(r)
+		scanPointsHandler.RegisterRoutes(r)
 		lookupHandler.RegisterRoutes(r)
 
 		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)

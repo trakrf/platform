@@ -80,4 +80,21 @@ these categories represents a regression that requires investigation.
     refresh_tokens_id_seq / tag_scans_id_seq are non-Feistel implicit sequences
     and are unaffected — see category 17.)
 
+21. TRA-899 scan device model (migration 000011, layered on the frozen stack):
+    a. scan_devices.identifier / scan_points.identifier renamed to external_key
+       (column + index idx_scan_*_identifier -> idx_scan_*_external_key + UNIQUE
+       constraint *_org_id_identifier_valid_from_key -> *_org_id_external_key_*).
+       Completes the TRA-475/554 identifier->external_key rename that originally
+       skipped the (then internal-only) scan tables.
+    b. New enum types scan_device_type / scan_transport; scan_devices.type retyped
+       from varchar(50) to scan_device_type (legacy 'rfid_reader' mapped to
+       'csl_cs463').
+    c. Added columns: scan_devices.transport (scan_transport, default 'mqtt'),
+       scan_devices.publish_topic (varchar, nullable) + idx_scan_devices_publish_topic
+       and the partial-unique idx_scan_devices_publish_topic_unique; and
+       scan_points.is_boundary (bool, default false).
+    d. process_tag_scans body change: external_key column refs, and removal of the
+       scan_devices / scan_points / locations auto-create INSERT blocks (devices and
+       points are now CRUD-managed). Asset/tag auto-create from EPC retained.
+
 Diff lines NOT covered by these categories are regressions.

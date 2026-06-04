@@ -1,8 +1,8 @@
 import React from 'react';
-import { useUIStore, useDeviceStore } from '@/stores';
+import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3 } from 'lucide-react';
+import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower } from 'lucide-react';
 import { appVersion } from '@/version';
 
 interface NavItemProps {
@@ -52,7 +52,12 @@ export default function TabNavigation() {
   // Read directly from store to avoid race conditions
   const activeTab = useUIStore((state) => state.activeTab);
   const readerState = useDeviceStore((state) => state.readerState);
+  const currentRole = useOrgStore((state) => state.currentRole);
   const { setActiveTab } = useUIStore.getState();
+
+  // Scan device management mirrors the org-management surfaces (API Keys,
+  // Members) which are owner/admin-only.
+  const canManageScanDevices = currentRole === 'owner' || currentRole === 'admin';
   
   // Handle browser back button navigation
   React.useEffect(() => {
@@ -205,6 +210,17 @@ export default function TabNavigation() {
             icon={<MapPinned className="w-5 h-5" />}
             tooltip="Manage your locations - create, view, and organize location data"
           />
+
+          {canManageScanDevices && (
+            <NavItem
+              id="scan-devices"
+              label="Scan Devices"
+              isActive={activeTab === 'scan-devices'}
+              onClick={() => handleTabClick('scan-devices')}
+              icon={<RadioTower className="w-5 h-5" />}
+              tooltip="Manage scan devices (readers) and their scan points"
+            />
+          )}
 
           <NavItem
             id="reports"

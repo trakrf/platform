@@ -1,0 +1,53 @@
+// Package scanpoint models capture points (antennas / gateway zones) belonging
+// to a scan device, and the requests for their internal CRUD endpoints.
+// Every device has at least scan_point 1, uniformly (TRA-899).
+package scanpoint
+
+import "time"
+
+type ScanPoint struct {
+	ID           int        `json:"id"`
+	OrgID        int        `json:"org_id"`
+	ScanDeviceID int        `json:"scan_device_id"`
+	LocationID   *int       `json:"location_id,omitempty"`
+	ExternalKey  string     `json:"external_key"`
+	Name         string     `json:"name"`
+	AntennaPort  *int       `json:"antenna_port,omitempty"`
+	IsBoundary   bool       `json:"is_boundary"`
+	Description  string     `json:"description"`
+	Metadata     any        `json:"metadata"`
+	ValidFrom    time.Time  `json:"valid_from"`
+	ValidTo      *time.Time `json:"valid_to,omitempty"`
+	IsActive     bool       `json:"is_active"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+}
+
+type CreateScanPointRequest struct {
+	ExternalKey string         `json:"external_key" validate:"required,min=1,max=255" example:"cs463-214-1"`
+	Name        string         `json:"name" validate:"required,min=1,max=255" example:"Antenna 1"`
+	LocationID  *int           `json:"location_id,omitempty" validate:"omitempty,min=1"`
+	AntennaPort *int           `json:"antenna_port,omitempty" validate:"omitempty,min=0"`
+	IsBoundary  *bool          `json:"is_boundary,omitempty"`
+	Description *string        `json:"description,omitempty" validate:"omitempty,max=1024"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	IsActive    *bool          `json:"is_active,omitempty"`
+}
+
+type UpdateScanPointRequest struct {
+	Name        *string         `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
+	LocationID  *int            `json:"location_id,omitempty" validate:"omitempty,min=1"`
+	AntennaPort *int            `json:"antenna_port,omitempty" validate:"omitempty,min=0"`
+	IsBoundary  *bool           `json:"is_boundary,omitempty"`
+	Description *string         `json:"description,omitempty" validate:"omitempty,max=1024"`
+	Metadata    *map[string]any `json:"metadata,omitempty"`
+	IsActive    *bool           `json:"is_active,omitempty"`
+	// ClearLocationID is set by the PATCH handler on an explicit JSON null for
+	// location_id, requesting a column-clear (detach the zone). Not decoded directly.
+	ClearLocationID bool `json:"-"`
+}
+
+type ScanPointResponse struct {
+	Data ScanPoint `json:"data"`
+}
