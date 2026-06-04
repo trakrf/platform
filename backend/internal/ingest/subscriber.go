@@ -12,18 +12,28 @@ import (
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
+// ReadEvaluator receives the membership-passing reads of each message so a
+// downstream consumer (the TRA-901 geofence engine) can act on them. Defined
+// here (not in geofence) so the subscriber depends on a local interface, not the
+// engine — keeping ingest free of a geofence import. *geofence.Engine satisfies it.
+type ReadEvaluator interface {
+	Evaluate(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []storage.ResolvedRead)
+}
+
 // Subscriber consumes MQTT reads and derives asset_scans (TRA-900). It is the
 // observable replacement for the silent process_tag_scans trigger.
 type Subscriber struct {
 	cfg    Config
 	store  *storage.Storage
+	eval   ReadEvaluator // optional; nil disables geofence evaluation
 	log    zerolog.Logger
 	client mqtt.Client
 }
 
-// NewSubscriber builds a subscriber. It does not connect; call Start.
-func NewSubscriber(cfg Config, store *storage.Storage, log *zerolog.Logger) *Subscriber {
-	return &Subscriber{cfg: cfg, store: store, log: log.With().Str("component", "ingest").Logger()}
+// NewSubscriber builds a subscriber. It does not connect; call Start. eval may
+// be nil (no geofence evaluation).
+func NewSubscriber(cfg Config, store *storage.Storage, eval ReadEvaluator, log *zerolog.Logger) *Subscriber {
+	return &Subscriber{cfg: cfg, store: store, eval: eval, log: log.With().Str("component", "ingest").Logger()}
 }
 
 // Start begins connecting in the background and returns immediately — it never
@@ -142,6 +152,14 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	for reason, n := range res.Dropped {
 		metricReadsDropped.WithLabelValues(reason).Add(float64(n))
 	}
+
+	// 5. Geofence evaluation (TRA-901). Best-effort and outside the derivation
+	// transaction: a slow/failed alarm path must never lose a scan. Only the
+	// membership-passing reads are handed off.
+	if s.eval != nil && len(res.Resolved) > 0 {
+		s.eval.Evaluate(ctx, route.OrgID, tagScanID, receivedAt, res.Resolved)
+	}
+
 	s.log.Info().
 		Str("topic", topic).Int("org_id", route.OrgID).
 		Int("parsed", len(reads)).Int("inserted", res.Inserted).

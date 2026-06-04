@@ -53,6 +53,27 @@ func (s *Storage) InsertRawTagScan(ctx context.Context, topic string, payload []
 type PersistResult struct {
 	Inserted int
 	Dropped  map[string]int // reason -> count: no_scan_point, no_asset, conflict
+	// Resolved is every read that passed the membership filter (registered rfid
+	// tag → asset AND registered scan_point), enriched with the data the geofence
+	// engine (TRA-901) needs. A read appears here even when its asset_scans insert
+	// was a within-message dedup conflict — presence at the boundary is the
+	// geofence signal regardless of scan-row dedup.
+	Resolved []ResolvedRead
+}
+
+// ResolvedRead is a membership-passing read with the fields the geofence engine
+// (TRA-901) evaluates. Produced by PersistReads, consumed by geofence.Evaluate.
+type ResolvedRead struct {
+	AssetID     int
+	ScanPointID int
+	LocationID  *int
+	IsBoundary  bool
+	EPC         string
+	RSSI        int // scanread.Read.RSSI; 0 == parser sentinel for "no usable RSSI"
+	// RSSIThresholdRaw is the scan_point's optional per-point override
+	// (metadata->>'rssi_threshold'), as raw text; nil when unset. Parsed leniently
+	// by the engine so a malformed value never breaks derivation.
+	RSSIThresholdRaw *string
 }
 
 // PersistReads writes asset_scans for parsed reads under org context (RLS).
@@ -65,11 +86,14 @@ func (s *Storage) PersistReads(ctx context.Context, orgID int, tagScanID int64, 
 		for _, rd := range reads {
 			var scanPointID int
 			var locationID *int
+			var isBoundary bool
+			var rssiThresholdRaw *string
 			err := tx.QueryRow(ctx,
-				`SELECT id, location_id FROM trakrf.scan_points
+				`SELECT id, location_id, is_boundary, metadata->>'rssi_threshold'
+				 FROM trakrf.scan_points
 				 WHERE org_id = $1 AND external_key = $2 AND deleted_at IS NULL`,
 				orgID, rd.CapturePointName,
-			).Scan(&scanPointID, &locationID)
+			).Scan(&scanPointID, &locationID, &isBoundary, &rssiThresholdRaw)
 			if errors.Is(err, pgx.ErrNoRows) {
 				res.Dropped["no_scan_point"]++
 				continue
@@ -93,6 +117,19 @@ func (s *Storage) PersistReads(ctx context.Context, orgID int, tagScanID int64, 
 			if err != nil {
 				return fmt.Errorf("resolve asset for epc %q: %w", rd.EPC, err)
 			}
+
+			// Membership passed: record the resolved read for the geofence engine
+			// before the dedup branch, so a within-message duplicate (conflict)
+			// still counts as a boundary observation.
+			res.Resolved = append(res.Resolved, ResolvedRead{
+				AssetID:          assetID,
+				ScanPointID:      scanPointID,
+				LocationID:       locationID,
+				IsBoundary:       isBoundary,
+				EPC:              rd.EPC,
+				RSSI:             rd.RSSI,
+				RSSIThresholdRaw: rssiThresholdRaw,
+			})
 
 			ct, err := tx.Exec(ctx,
 				`INSERT INTO trakrf.asset_scans
