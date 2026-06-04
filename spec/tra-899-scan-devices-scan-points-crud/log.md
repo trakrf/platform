@@ -19,6 +19,11 @@ Branch: `feat/tra-899-scan-devices-scan-points-crud`
 ### Frontend
 - types / axios api client / TanStack-Query hooks / `ScanDevicesScreen` + device & scan-point form modals (+ ConfirmModal deletes). Scan-point form uses a **location selector** (each antenna associates to a location/zone). Registered the `scan-devices` tab.
 
+## Fixtures (real captures)
+Captured live from the GKE preview broker `mqtt.preview.gke.trakrf.id` (topic `trakrf.id/#`; GL-S10 `C4DEE229A176` + CS463s `cs463-212`/`cs463-214`). Corrected vs the initial reconstructions:
+- CS463 `timeStampOfRead` is a JSON **number** in µs (not a string); `rssi` is a string; `timeZone` is per-tag; payload also carries `sequenceNumber`/`numberOfTags`. `->>` in `process_tag_scans` handles number-or-string, so no code change needed.
+- GL-S10 is a different shape: top-level `dev_ble_mac`/`dev_sn`/`dev_version` + `dev_list[]` of BLE obs (`mac`, `rssi` as a **number**, `ad` hex, `ts` in **ms**) — no `epc`/`capturePointName`. Parser deferred (TRA-910); fixture is documentation only.
+
 ## Notable findings
 - Flaky `process_tag_scans` test root cause: the fixture's 2024 `timeStampOfRead` vs the `asset_scans` 365-day retention policy — the retention worker intermittently reaped the just-created old chunk. Fixed by stamping the test scan at `now()`. The trigger itself was always correct.
 - Decision (Mike): keep parse in the DB function for now; moving parse to Go (and possibly demoting `tag_scans` to a log) is backlogged, out of TRA-899 scope. TRA-900 (MQTT ingestion) and TRA-901 (geofence) remain separate.

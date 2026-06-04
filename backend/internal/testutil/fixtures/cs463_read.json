@@ -1,14 +1,16 @@
 {
+  "sequenceNumber": 0,
   "rfidReaderName": "cs463-214",
   "pcEthernetMACAddress": "",
-  "timeZone": "America/New_York",
+  "numberOfTags": 1,
   "tags": [
     {
-      "epc": "712AC12F00000000000000A1",
+      "epc": "E2801190A503006543E21224",
+      "timeStampOfRead": 1780587173668000,
+      "timeZone": "-6:00",
       "antennaPort": 1,
       "capturePointName": "cs463-214-1",
-      "rssi": "-52",
-      "timeStampOfRead": "1717500000000000"
+      "rssi": "-56"
     }
   ]
 }

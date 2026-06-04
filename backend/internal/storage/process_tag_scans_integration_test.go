@@ -96,6 +96,6 @@ func TestProcessTagScans_UnregisteredDeviceCreatesNothing(t *testing.T) {
 	// Asset/tag auto-create from EPC is intentionally retained.
 	var assets int
 	require.NoError(t, db.AdminPool.QueryRow(ctx,
-		`SELECT count(*) FROM trakrf.assets WHERE org_id=$1 AND external_key='712AC12F00000000000000A1'`, orgID).Scan(&assets))
+		`SELECT count(*) FROM trakrf.assets WHERE org_id=$1 AND external_key='E2801190A503006543E21224'`, orgID).Scan(&assets))
 	require.Equal(t, 1, assets, "asset auto-create from EPC is retained")
 }
