@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/models/scandevice"
-	"github.com/trakrf/platform/backend/internal/models/scanpoint"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
@@ -30,21 +29,11 @@ func TestProcessTagScans_RegisteredDeviceProducesAssetScan(t *testing.T) {
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool) // identifier: test-org
 
-	// A zone location for the boundary capture point.
-	var locID int
-	require.NoError(t, db.AdminPool.QueryRow(ctx, `
-		INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1,'dock','Dock') RETURNING id`, orgID).Scan(&locID))
-
-	// Register the device + capture point matching the fixture's
-	// rfidReaderName (cs463-214) and capturePointName (cs463-214-1).
-	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+	// Register the device. Creating it auto-provisions scan_point 1
+	// (external_key cs463-214-1), which matches the fixture's capturePointName —
+	// so no separate scan_point step is needed.
+	_, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
 		ExternalKey: "cs463-214", Name: "Dock Reader", Type: scandevice.DeviceTypeCS463,
-	})
-	require.NoError(t, err)
-	port := 1
-	boundary := true
-	_, err = db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
-		ExternalKey: "cs463-214-1", Name: "Antenna 1", AntennaPort: &port, LocationID: &locID, IsBoundary: &boundary,
 	})
 	require.NoError(t, err)
 

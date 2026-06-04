@@ -50,8 +50,21 @@ func (s *Storage) CreateScanDevice(ctx context.Context, orgID int, req scandevic
 
 	var d scandevice.ScanDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanScanDevice(tx.QueryRow(ctx, query, orgID, req.ExternalKey, req.Name, req.Type,
-			transport, publishTopic, req.SerialNumber, req.Model, req.Description, metadata, isActive), &d)
+		if err := scanScanDevice(tx.QueryRow(ctx, query, orgID, req.ExternalKey, req.Name, req.Type,
+			transport, publishTopic, req.SerialNumber, req.Model, req.Description, metadata, isActive), &d); err != nil {
+			return err
+		}
+		// TRA-899: every device has at least scan_point 1, uniformly (even
+		// single-point devices). Auto-create antenna 1 in the same transaction
+		// so the invariant holds for every client (API or UI), not just the
+		// create screen. external_key follows the capturePointName convention
+		// ({device}-{port}), so for CS463 it matches live reads out of the box.
+		_, err := tx.Exec(ctx, `
+			INSERT INTO trakrf.scan_points
+			(org_id, scan_device_id, external_key, name, antenna_port, is_boundary)
+			VALUES ($1, $2, $3, 'Antenna 1', 1, false)`,
+			orgID, d.ID, d.ExternalKey+"-1")
+		return err
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
