@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower } from 'lucide-react';
+import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower, Siren } from 'lucide-react';
 import { appVersion } from '@/version';
 
 interface NavItemProps {
@@ -219,6 +219,17 @@ export default function TabNavigation() {
               onClick={() => handleTabClick('scan-devices')}
               icon={<RadioTower className="w-5 h-5" />}
               tooltip="Manage scan devices (readers) and their scan points"
+            />
+          )}
+
+          {canManageScanDevices && (
+            <NavItem
+              id="alarm-devices"
+              label="Alarm Devices"
+              isActive={activeTab === 'alarm-devices'}
+              onClick={() => handleTabClick('alarm-devices')}
+              icon={<Siren className="w-5 h-5" />}
+              tooltip="Manage alarm output devices (e.g. Shelly relays) and test-fire them"
             />
           )}
 
