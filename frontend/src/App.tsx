@@ -19,6 +19,7 @@ const SettingsScreen = lazyWithRetry(() => import('@/components/SettingsScreen')
 const HelpScreen = lazyWithRetry(() => import('@/components/HelpScreen'));
 const AssetsScreen = lazyWithRetry(() => import('@/components/AssetsScreen'));
 const LocationsScreen = lazyWithRetry(() => import('@/components/LocationsScreen'));
+const ScanDevicesScreen = lazyWithRetry(() => import('@/components/ScanDevicesScreen'));
 const LoginScreen = lazyWithRetry(() => import('@/components/LoginScreen'));
 const SignupScreen = lazyWithRetry(() => import('@/components/SignupScreen'));
 const ForgotPasswordScreen = lazyWithRetry(() => import('@/components/ForgotPasswordScreen'));
@@ -31,7 +32,7 @@ const APIKeysScreen = lazyWithRetry(() => import('@/components/APIKeysScreen'));
 const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite', 'api-keys'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite', 'api-keys'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -194,6 +195,7 @@ export default function App() {
       barcode: BarcodeScreen,
       assets: AssetsScreen,
       locations: LocationsScreen,
+      'scan-devices': ScanDevicesScreen,
       settings: SettingsScreen,
       help: HelpScreen,
       login: LoginScreen,
@@ -216,6 +218,7 @@ export default function App() {
       barcode: BarcodeLoadingScreen,
       assets: LoadingScreen,
       locations: LoadingScreen,
+      'scan-devices': LoadingScreen,
       settings: SettingsLoadingScreen,
       help: HelpLoadingScreen,
       login: LoadingScreen,
