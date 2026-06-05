@@ -57,7 +57,7 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
     rssiValues.length > 0 ? `${Math.min(...rssiValues)} … ${Math.max(...rssiValues)} dBm` : '—';
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={`flex flex-col gap-4 ${compact ? '' : 'h-full min-h-0'}`}>
       <div className="flex items-center justify-end text-sm text-gray-600 dark:text-gray-300">
         <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${STATUS_DOT[status]}`} />
         {STATUS_LABEL[status]}
