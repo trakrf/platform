@@ -1,6 +1,6 @@
 // Package alarm wires the geofence engine's fire decision to physical alarm
 // output devices (TRA-903). Firer implements geofence.Firer: on each fire it
-// looks up the active alarm devices bound to the tripped scan point and drives
+// looks up the active output devices bound to the tripped scan point and drives
 // them on. It lives outside the geofence package to avoid an import cycle —
 // alarm depends on geofence (for AlarmEvent + the Firer contract), not vice
 // versa.
@@ -13,22 +13,22 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/trakrf/platform/backend/internal/geofence"
-	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 )
 
 // deviceLookup is the storage dependency Firer needs; *storage.Storage
 // satisfies it. Narrowed to an interface so unit tests can inject a fake.
 type deviceLookup interface {
-	ListAlarmDevicesForLocation(ctx context.Context, orgID, locationID int) ([]alarmdevice.AlarmDevice, error)
+	ListOutputDevicesForLocation(ctx context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error)
 }
 
-// deviceSetter drives one alarm device on/off using its configured transport;
+// deviceSetter drives one output device on/off using its configured transport;
 // Dispatcher satisfies it. Narrowed so tests can inject a fake.
 type deviceSetter interface {
-	Set(ctx context.Context, dev alarmdevice.AlarmDevice, on bool) error
+	Set(ctx context.Context, dev outputdevice.OutputDevice, on bool) error
 }
 
-// Firer drives alarm devices when the geofence engine fires. Construct with
+// Firer drives output devices when the geofence engine fires. Construct with
 // NewFirer. Fire is best-effort: per-device errors are logged and aggregated
 // but never panic, matching the engine's best-effort fire contract.
 type Firer struct {
@@ -46,7 +46,7 @@ func NewFirer(store deviceLookup, act deviceSetter, log *zerolog.Logger) Firer {
 	}
 }
 
-// Fire logs the boundary alarm, then turns on every active alarm device bound
+// Fire logs the boundary alarm, then turns on every active output device bound
 // to the event's scan point. A device-drive failure is logged (fail-quiet) and
 // folded into the returned error so the engine's fire-error metric increments;
 // the engine never lets that block ingestion.
@@ -67,7 +67,7 @@ func (f Firer) Fire(ctx context.Context, ev geofence.AlarmEvent) error {
 		return nil
 	}
 
-	devices, err := f.store.ListAlarmDevicesForLocation(ctx, ev.OrgID, *ev.LocationID)
+	devices, err := f.store.ListOutputDevicesForLocation(ctx, ev.OrgID, *ev.LocationID)
 	if err != nil {
 		return fmt.Errorf("alarm: lookup devices for location %d: %w", *ev.LocationID, err)
 	}
@@ -76,9 +76,9 @@ func (f Firer) Fire(ctx context.Context, ev geofence.AlarmEvent) error {
 	for _, d := range devices {
 		if err := f.act.Set(ctx, d, true); err != nil {
 			f.log.Error().Err(err).
-				Int("alarm_device_id", d.ID).
+				Int("output_device_id", d.ID).
 				Str("transport", d.Transport).
-				Msg("alarm device fire failed (fail-quiet)")
+				Msg("output device fire failed (fail-quiet)")
 			errs = append(errs, err)
 		}
 	}

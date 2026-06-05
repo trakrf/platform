@@ -14,7 +14,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 
-	alarmdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -23,6 +22,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
+	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
@@ -47,7 +47,7 @@ func setupRouter(
 	reportsHandler *reportshandler.Handler,
 	scanDevicesHandler *scandeviceshandler.Handler,
 	scanPointsHandler *scanpointshandler.Handler,
-	alarmDevicesHandler *alarmdeviceshandler.Handler,
+	outputDevicesHandler *outputdeviceshandler.Handler,
 	lookupHandler *lookuphandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
@@ -149,8 +149,8 @@ func setupRouter(
 		// Internal-only scan device/point management (not public API).
 		scanDevicesHandler.RegisterRoutes(r)
 		scanPointsHandler.RegisterRoutes(r)
-		// Internal-only alarm output device management (not public API).
-		alarmDevicesHandler.RegisterRoutes(r)
+		// Internal-only output device management (not public API).
+		outputDevicesHandler.RegisterRoutes(r)
 		lookupHandler.RegisterRoutes(r)
 		// TRA-924: org-enforced Live Reads SSE stream (session-auth, internal).
 		readstreamHandler.RegisterRoutes(r)

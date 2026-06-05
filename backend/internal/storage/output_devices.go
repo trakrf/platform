@@ -6,29 +6,29 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 )
 
-// alarmDeviceColumns is the canonical SELECT/RETURNING column list, kept
-// identical across every alarm_devices query so scan targets line up.
-const alarmDeviceColumns = `id, org_id, name, type, transport, base_url, switch_id,
+// outputDeviceColumns is the canonical SELECT/RETURNING column list, kept
+// identical across every output_devices query so scan targets line up.
+const outputDeviceColumns = `id, org_id, name, type, transport, base_url, switch_id,
 	command_topic, location_id, is_active, metadata, created_at, updated_at, deleted_at`
 
-func scanAlarmDevice(row pgx.Row, d *alarmdevice.AlarmDevice) error {
+func scanOutputDevice(row pgx.Row, d *outputdevice.OutputDevice) error {
 	return row.Scan(&d.ID, &d.OrgID, &d.Name, &d.Type, &d.Transport, &d.BaseURL, &d.SwitchID,
 		&d.CommandTopic, &d.LocationID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt)
 }
 
-// CreateAlarmDevice inserts an alarm device. type defaults to shelly_gen4,
+// CreateOutputDevice inserts an output device. type defaults to shelly_gen4,
 // switch_id to 0, is_active to true, metadata to {} when omitted.
-func (s *Storage) CreateAlarmDevice(ctx context.Context, orgID int, req alarmdevice.CreateAlarmDeviceRequest) (*alarmdevice.AlarmDevice, error) {
+func (s *Storage) CreateOutputDevice(ctx context.Context, orgID int, req outputdevice.CreateOutputDeviceRequest) (*outputdevice.OutputDevice, error) {
 	deviceType := req.Type
 	if deviceType == "" {
-		deviceType = alarmdevice.TypeShellyGen4
+		deviceType = outputdevice.TypeShellyGen4
 	}
 	transport := req.Transport
 	if transport == "" {
-		transport = alarmdevice.TransportHTTP
+		transport = outputdevice.TransportHTTP
 	}
 	switchID := 0
 	if req.SwitchID != nil {
@@ -44,48 +44,48 @@ func (s *Storage) CreateAlarmDevice(ctx context.Context, orgID int, req alarmdev
 	}
 
 	query := `
-		INSERT INTO trakrf.alarm_devices
+		INSERT INTO trakrf.output_devices
 		(org_id, name, type, transport, base_url, switch_id, command_topic, location_id, is_active, metadata)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING ` + alarmDeviceColumns
+		RETURNING ` + outputDeviceColumns
 
-	var d alarmdevice.AlarmDevice
+	var d outputdevice.OutputDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanAlarmDevice(tx.QueryRow(ctx, query, orgID, req.Name, deviceType, transport, req.BaseURL,
+		return scanOutputDevice(tx.QueryRow(ctx, query, orgID, req.Name, deviceType, transport, req.BaseURL,
 			switchID, req.CommandTopic, req.LocationID, isActive, metadata), &d)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create alarm device: %w", err)
+		return nil, fmt.Errorf("failed to create output device: %w", err)
 	}
 	return &d, nil
 }
 
-// GetAlarmDeviceByID returns the live alarm device or (nil, nil) if not found.
-func (s *Storage) GetAlarmDeviceByID(ctx context.Context, orgID, id int) (*alarmdevice.AlarmDevice, error) {
-	query := `SELECT ` + alarmDeviceColumns + `
-		FROM trakrf.alarm_devices
+// GetOutputDeviceByID returns the live output device or (nil, nil) if not found.
+func (s *Storage) GetOutputDeviceByID(ctx context.Context, orgID, id int) (*outputdevice.OutputDevice, error) {
+	query := `SELECT ` + outputDeviceColumns + `
+		FROM trakrf.output_devices
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`
-	var d alarmdevice.AlarmDevice
+	var d outputdevice.OutputDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanAlarmDevice(tx.QueryRow(ctx, query, id, orgID), &d)
+		return scanOutputDevice(tx.QueryRow(ctx, query, id, orgID), &d)
 	})
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to get alarm device: %w", err)
+		return nil, fmt.Errorf("failed to get output device: %w", err)
 	}
 	return &d, nil
 }
 
-// ListAlarmDevices returns live alarm devices for the org, newest first.
-func (s *Storage) ListAlarmDevices(ctx context.Context, orgID, limit, offset int) ([]alarmdevice.AlarmDevice, error) {
-	query := `SELECT ` + alarmDeviceColumns + `
-		FROM trakrf.alarm_devices
+// ListOutputDevices returns live output devices for the org, newest first.
+func (s *Storage) ListOutputDevices(ctx context.Context, orgID, limit, offset int) ([]outputdevice.OutputDevice, error) {
+	query := `SELECT ` + outputDeviceColumns + `
+		FROM trakrf.output_devices
 		WHERE org_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3`
-	devices := []alarmdevice.AlarmDevice{}
+	devices := []outputdevice.OutputDevice{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, orgID, limit, offset)
 		if err != nil {
@@ -93,8 +93,8 @@ func (s *Storage) ListAlarmDevices(ctx context.Context, orgID, limit, offset int
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var d alarmdevice.AlarmDevice
-			if err := scanAlarmDevice(rows, &d); err != nil {
+			var d outputdevice.OutputDevice
+			if err := scanOutputDevice(rows, &d); err != nil {
 				return err
 			}
 			devices = append(devices, d)
@@ -102,32 +102,32 @@ func (s *Storage) ListAlarmDevices(ctx context.Context, orgID, limit, offset int
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list alarm devices: %w", err)
+		return nil, fmt.Errorf("failed to list output devices: %w", err)
 	}
 	return devices, nil
 }
 
-// CountAlarmDevices returns the number of live alarm devices for the org.
-func (s *Storage) CountAlarmDevices(ctx context.Context, orgID int) (int, error) {
+// CountOutputDevices returns the number of live output devices for the org.
+func (s *Storage) CountOutputDevices(ctx context.Context, orgID int) (int, error) {
 	var n int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT COUNT(*) FROM trakrf.alarm_devices WHERE org_id = $1 AND deleted_at IS NULL`, orgID).Scan(&n)
+		return tx.QueryRow(ctx, `SELECT COUNT(*) FROM trakrf.output_devices WHERE org_id = $1 AND deleted_at IS NULL`, orgID).Scan(&n)
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to count alarm devices: %w", err)
+		return 0, fmt.Errorf("failed to count output devices: %w", err)
 	}
 	return n, nil
 }
 
-// ListAlarmDevicesForLocation returns active, non-deleted devices bound to the
+// ListOutputDevicesForLocation returns active, non-deleted devices bound to the
 // given logical location. Used by the geofence firer: the engine resolves the
 // tripped scan point to a location, and every alarm bound to that location fires.
-func (s *Storage) ListAlarmDevicesForLocation(ctx context.Context, orgID, locationID int) ([]alarmdevice.AlarmDevice, error) {
-	query := `SELECT ` + alarmDeviceColumns + `
-		FROM trakrf.alarm_devices
+func (s *Storage) ListOutputDevicesForLocation(ctx context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error) {
+	query := `SELECT ` + outputDeviceColumns + `
+		FROM trakrf.output_devices
 		WHERE org_id = $1 AND location_id = $2 AND is_active = true AND deleted_at IS NULL
 		ORDER BY id`
-	out := []alarmdevice.AlarmDevice{}
+	out := []outputdevice.OutputDevice{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, orgID, locationID)
 		if err != nil {
@@ -135,8 +135,8 @@ func (s *Storage) ListAlarmDevicesForLocation(ctx context.Context, orgID, locati
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var d alarmdevice.AlarmDevice
-			if err := scanAlarmDevice(rows, &d); err != nil {
+			var d outputdevice.OutputDevice
+			if err := scanOutputDevice(rows, &d); err != nil {
 				return err
 			}
 			out = append(out, d)
@@ -144,14 +144,14 @@ func (s *Storage) ListAlarmDevicesForLocation(ctx context.Context, orgID, locati
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list alarm devices for location: %w", err)
+		return nil, fmt.Errorf("failed to list output devices for location: %w", err)
 	}
 	return out, nil
 }
 
-// UpdateAlarmDevice applies a partial update. Returns (nil, nil) if no live
+// UpdateOutputDevice applies a partial update. Returns (nil, nil) if no live
 // device with that id exists for the org.
-func (s *Storage) UpdateAlarmDevice(ctx context.Context, orgID, id int, req alarmdevice.UpdateAlarmDeviceRequest) (*alarmdevice.AlarmDevice, error) {
+func (s *Storage) UpdateOutputDevice(ctx context.Context, orgID, id int, req outputdevice.UpdateOutputDeviceRequest) (*outputdevice.OutputDevice, error) {
 	setClauses := []string{}
 	args := []any{id, orgID}
 	pos := 3
@@ -190,36 +190,36 @@ func (s *Storage) UpdateAlarmDevice(ctx context.Context, orgID, id int, req alar
 
 	// Nothing to update: return the current row (or nil if missing).
 	if len(setClauses) == 0 {
-		return s.GetAlarmDeviceByID(ctx, orgID, id)
+		return s.GetOutputDeviceByID(ctx, orgID, id)
 	}
 
 	setClauses = append(setClauses, "updated_at = NOW()")
 	query := fmt.Sprintf(`
-		UPDATE trakrf.alarm_devices
+		UPDATE trakrf.output_devices
 		SET %s
 		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-		RETURNING `+alarmDeviceColumns, strings.Join(setClauses, ", "))
+		RETURNING `+outputDeviceColumns, strings.Join(setClauses, ", "))
 
-	var d alarmdevice.AlarmDevice
+	var d outputdevice.OutputDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanAlarmDevice(tx.QueryRow(ctx, query, args...), &d)
+		return scanOutputDevice(tx.QueryRow(ctx, query, args...), &d)
 	})
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to update alarm device: %w", err)
+		return nil, fmt.Errorf("failed to update output device: %w", err)
 	}
 	return &d, nil
 }
 
-// DeleteAlarmDevice soft-deletes the device. Returns false if no live device
+// DeleteOutputDevice soft-deletes the device. Returns false if no live device
 // with that id existed.
-func (s *Storage) DeleteAlarmDevice(ctx context.Context, orgID, id int) (bool, error) {
+func (s *Storage) DeleteOutputDevice(ctx context.Context, orgID, id int) (bool, error) {
 	var rowsAffected int64
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, `
-			UPDATE trakrf.alarm_devices
+			UPDATE trakrf.output_devices
 			   SET deleted_at = NOW()
 			 WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`, id, orgID)
 		if err != nil {
@@ -229,7 +229,7 @@ func (s *Storage) DeleteAlarmDevice(ctx context.Context, orgID, id int) (bool, e
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("could not delete alarm device: %w", err)
+		return false, fmt.Errorf("could not delete output device: %w", err)
 	}
 	return rowsAffected > 0, nil
 }

@@ -224,12 +224,12 @@ export default function TabNavigation() {
 
           {canManageScanDevices && (
             <NavItem
-              id="alarm-devices"
-              label="Alarm Devices"
-              isActive={activeTab === 'alarm-devices'}
-              onClick={() => handleTabClick('alarm-devices')}
+              id="output-devices"
+              label="Output Devices"
+              isActive={activeTab === 'output-devices'}
+              onClick={() => handleTabClick('output-devices')}
               icon={<Siren className="w-5 h-5" />}
-              tooltip="Manage alarm output devices (e.g. Shelly relays) and test-fire them"
+              tooltip="Manage output devices (e.g. Shelly relays) and test-fire them"
             />
           )}
 

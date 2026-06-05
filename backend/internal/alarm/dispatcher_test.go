@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 )
 
 type recordingHTTP struct {
@@ -36,7 +36,7 @@ func strptr(s string) *string { return &s }
 func TestDispatcher_HTTPDevice_UsesHTTP(t *testing.T) {
 	h, m := &recordingHTTP{}, &recordingMQTT{}
 	d := NewDispatcher(h, m)
-	dev := alarmdevice.AlarmDevice{Transport: alarmdevice.TransportHTTP, BaseURL: "http://1.2.3.4", SwitchID: 2}
+	dev := outputdevice.OutputDevice{Transport: outputdevice.TransportHTTP, BaseURL: "http://1.2.3.4", SwitchID: 2}
 
 	if err := d.Set(context.Background(), dev, true); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -52,7 +52,7 @@ func TestDispatcher_HTTPDevice_UsesHTTP(t *testing.T) {
 func TestDispatcher_MQTTDevice_UsesMQTT(t *testing.T) {
 	h, m := &recordingHTTP{}, &recordingMQTT{}
 	d := NewDispatcher(h, m)
-	dev := alarmdevice.AlarmDevice{Transport: alarmdevice.TransportMQTT, CommandTopic: strptr("trakrf.id/dock"), SwitchID: 1}
+	dev := outputdevice.OutputDevice{Transport: outputdevice.TransportMQTT, CommandTopic: strptr("trakrf.id/dock"), SwitchID: 1}
 
 	if err := d.Set(context.Background(), dev, false); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -67,7 +67,7 @@ func TestDispatcher_MQTTDevice_UsesMQTT(t *testing.T) {
 
 func TestDispatcher_MQTTDevice_NoCommandTopic_Errors(t *testing.T) {
 	d := NewDispatcher(&recordingHTTP{}, &recordingMQTT{})
-	dev := alarmdevice.AlarmDevice{Transport: alarmdevice.TransportMQTT} // no command_topic
+	dev := outputdevice.OutputDevice{Transport: outputdevice.TransportMQTT} // no command_topic
 	if err := d.Set(context.Background(), dev, true); err == nil {
 		t.Fatal("expected error for mqtt device with no command_topic")
 	}
@@ -75,7 +75,7 @@ func TestDispatcher_MQTTDevice_NoCommandTopic_Errors(t *testing.T) {
 
 func TestDispatcher_MQTTDevice_NilPublisher_Errors(t *testing.T) {
 	d := NewDispatcher(&recordingHTTP{}, nil) // broker disabled
-	dev := alarmdevice.AlarmDevice{Transport: alarmdevice.TransportMQTT, CommandTopic: strptr("trakrf.id/dock")}
+	dev := outputdevice.OutputDevice{Transport: outputdevice.TransportMQTT, CommandTopic: strptr("trakrf.id/dock")}
 	if err := d.Set(context.Background(), dev, true); err == nil {
 		t.Fatal("expected error when mqtt transport requested but publisher is nil")
 	}

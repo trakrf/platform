@@ -12,7 +12,6 @@ import (
 	"github.com/trakrf/platform/backend/internal/alarm"
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
-	alarmdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -21,6 +20,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
+	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
@@ -49,14 +49,14 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
-	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil), 0)
+	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil), 0)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")
 	readstreamHandler := readstreamhandler.NewHandler(readstreamsvc.New())
 	testHandler := testhandler.NewHandler(store)
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, alarmDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {

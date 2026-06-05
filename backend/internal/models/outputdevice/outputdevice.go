@@ -1,11 +1,11 @@
-// Package alarmdevice defines the alarm output device model (TRA-903): a
+// Package outputdevice defines the output device model (TRA-903): a
 // physical device (demo: Shelly Gen4 relay) the geofence engine fires when a
 // registered asset trips a boundary scan point.
-package alarmdevice
+package outputdevice
 
 import "time"
 
-// TypeShellyGen4 is the only supported alarm device type today.
+// TypeShellyGen4 is the only supported output device type today.
 const TypeShellyGen4 = "shelly_gen4"
 
 // Fire-path transports (TRA-906).
@@ -14,8 +14,8 @@ const (
 	TransportMQTT = "mqtt" // publish to the shared broker (firewall-friendly)
 )
 
-// AlarmDevice is an alarm output device row.
-type AlarmDevice struct {
+// OutputDevice is an output device row.
+type OutputDevice struct {
 	ID           int        `json:"id"`
 	OrgID        int        `json:"org_id"`
 	Name         string     `json:"name"`
@@ -32,9 +32,9 @@ type AlarmDevice struct {
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
 }
 
-// CreateAlarmDeviceRequest is the create payload. type/switch_id/is_active/
+// CreateOutputDeviceRequest is the create payload. type/switch_id/is_active/
 // metadata default server-side when omitted.
-type CreateAlarmDeviceRequest struct {
+type CreateOutputDeviceRequest struct {
 	Name      string `json:"name" validate:"required,min=1,max=255"`
 	Type      string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
 	Transport string `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
@@ -49,8 +49,8 @@ type CreateAlarmDeviceRequest struct {
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
-// UpdateAlarmDeviceRequest is a partial update; nil fields are left unchanged.
-type UpdateAlarmDeviceRequest struct {
+// UpdateOutputDeviceRequest is a partial update; nil fields are left unchanged.
+type UpdateOutputDeviceRequest struct {
 	Name      *string `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
 	Type      *string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
 	Transport *string `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
@@ -64,7 +64,7 @@ type UpdateAlarmDeviceRequest struct {
 	Metadata     *map[string]any `json:"metadata,omitempty"`
 }
 
-// AlarmDeviceResponse is the single-resource envelope.
-type AlarmDeviceResponse struct {
-	Data AlarmDevice `json:"data"`
+// OutputDeviceResponse is the single-resource envelope.
+type OutputDeviceResponse struct {
+	Data OutputDevice `json:"data"`
 }

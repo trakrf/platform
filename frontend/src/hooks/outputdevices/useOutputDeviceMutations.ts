@@ -1,22 +1,22 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { alarmDevicesApi } from '@/lib/api/alarmdevices';
+import { outputDevicesApi } from '@/lib/api/outputdevices';
 import { ensureOrgContext } from '@/lib/auth/orgContext';
 import type {
-  CreateAlarmDeviceRequest,
-  UpdateAlarmDeviceRequest,
-} from '@/types/alarmdevices';
+  CreateOutputDeviceRequest,
+  UpdateOutputDeviceRequest,
+} from '@/types/outputdevices';
 
-export function useAlarmDeviceMutations() {
+export function useOutputDeviceMutations() {
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
-    mutationFn: async (data: CreateAlarmDeviceRequest) => {
+    mutationFn: async (data: CreateOutputDeviceRequest) => {
       await ensureOrgContext();
-      const response = await alarmDevicesApi.create(data);
+      const response = await outputDevicesApi.create(data);
       return response.data.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['alarmDevices'] });
+      queryClient.invalidateQueries({ queryKey: ['outputDevices'] });
     },
   });
 
@@ -26,27 +26,27 @@ export function useAlarmDeviceMutations() {
       updates,
     }: {
       id: number;
-      updates: UpdateAlarmDeviceRequest;
+      updates: UpdateOutputDeviceRequest;
     }) => {
       await ensureOrgContext();
-      const response = await alarmDevicesApi.update(id, updates);
+      const response = await outputDevicesApi.update(id, updates);
       return response.data.data;
     },
     onSuccess: (device) => {
-      queryClient.invalidateQueries({ queryKey: ['alarmDevices'] });
-      queryClient.invalidateQueries({ queryKey: ['alarmDevice', device.id] });
+      queryClient.invalidateQueries({ queryKey: ['outputDevices'] });
+      queryClient.invalidateQueries({ queryKey: ['outputDevice', device.id] });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       await ensureOrgContext();
-      await alarmDevicesApi.delete(id);
+      await outputDevicesApi.delete(id);
       return id;
     },
     onSuccess: (id) => {
-      queryClient.invalidateQueries({ queryKey: ['alarmDevices'] });
-      queryClient.invalidateQueries({ queryKey: ['alarmDevice', id] });
+      queryClient.invalidateQueries({ queryKey: ['outputDevices'] });
+      queryClient.invalidateQueries({ queryKey: ['outputDevice', id] });
     },
   });
 
@@ -55,7 +55,7 @@ export function useAlarmDeviceMutations() {
   const testMutation = useMutation({
     mutationFn: async (id: number) => {
       await ensureOrgContext();
-      await alarmDevicesApi.test(id);
+      await outputDevicesApi.test(id);
       return id;
     },
   });
@@ -63,7 +63,7 @@ export function useAlarmDeviceMutations() {
   const resetMutation = useMutation({
     mutationFn: async (id: number) => {
       await ensureOrgContext();
-      await alarmDevicesApi.reset(id);
+      await outputDevicesApi.reset(id);
       return id;
     },
   });
