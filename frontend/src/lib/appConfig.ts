@@ -11,15 +11,6 @@ declare global {
   interface Window {
     __APP_CONFIG__?: {
       environmentLabel?: string;
-      // Reader live-feed (TRA-902) MQTT-over-WebSocket config, injected at serve
-      // time. See lib/readerfeed/config.ts. Public values — the broker user must
-      // be least-privilege, subscribe-only. Empty url disables the feed.
-      readerFeed?: {
-        url?: string;
-        username?: string;
-        password?: string;
-        topic?: string;
-      };
     };
   }
 }
