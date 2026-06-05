@@ -23,6 +23,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
+	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
 	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
@@ -50,6 +51,7 @@ func setupRouter(
 	lookupHandler *lookuphandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
+	readstreamHandler *readstreamhandler.Handler,
 	testHandler *testhandler.Handler,
 	store *storage.Storage,
 ) *chi.Mux {
@@ -150,6 +152,8 @@ func setupRouter(
 		// Internal-only alarm output device management (not public API).
 		alarmDevicesHandler.RegisterRoutes(r)
 		lookupHandler.RegisterRoutes(r)
+		// TRA-924: org-enforced Live Reads SSE stream (session-auth, internal).
+		readstreamHandler.RegisterRoutes(r)
 
 		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)
 		r.Get("/swagger/openapi.internal.yaml", swaggerspec.ServeYAML)

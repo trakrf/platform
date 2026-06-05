@@ -3,12 +3,12 @@
 // Shows the raw firehose of tag reads off the fixed reader (CS463), every read
 // whether or not it maps to a registered asset, so an operator can tune
 // antenna placement and the RSSI threshold. Ported from Power Mixer, re-skinned
-// off Ant Design onto the existing Tailwind table tokens. Reads arrive over
-// MQTT-over-WebSocket directly in the browser (see useReaderFeed); the feed is
-// disabled unless VITE_READER_FEED_MQTT_URL is configured (infra prereq).
+// off Ant Design onto the existing Tailwind table tokens. Reads arrive over the
+// backend SSE proxy (see useReaderFeed), org-filtered server-side — the browser
+// never connects to the broker (TRA-924).
 
 import { useEffect, useState } from 'react';
-import { WifiOff, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useUIStore } from '@/stores';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useReaderFeed } from '@/hooks/readerfeed/useReaderFeed';
@@ -16,7 +16,6 @@ import { ageSeconds, ageBandClass, READ_TTL_SECONDS } from '@/lib/readerfeed/sto
 import type { ReaderFeedStatus } from '@/types/readerfeed';
 
 const STATUS_LABEL: Record<ReaderFeedStatus, string> = {
-  disabled: 'Not configured',
   connecting: 'Connecting…',
   connected: 'Connected',
   error: 'Error',
@@ -24,7 +23,6 @@ const STATUS_LABEL: Record<ReaderFeedStatus, string> = {
 };
 
 const STATUS_DOT: Record<ReaderFeedStatus, string> = {
-  disabled: 'bg-gray-400',
   connecting: 'bg-amber-400 animate-pulse',
   connected: 'bg-green-500',
   error: 'bg-red-500',
@@ -33,10 +31,10 @@ const STATUS_DOT: Record<ReaderFeedStatus, string> = {
 
 export default function LiveReadsScreen() {
   const { setActiveTab } = useUIStore();
-  const { reads, status, error, readerCount, topic, configured } = useReaderFeed();
+  const { reads, status, error, readerCount } = useReaderFeed();
 
   // Re-render once per second so the live Age column and row coloring advance
-  // even between MQTT messages.
+  // even between reads.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     setActiveTab('live-reads');
@@ -77,9 +75,7 @@ export default function LiveReadsScreen() {
         </div>
 
         <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-          {!configured ? (
-            <NotConfigured />
-          ) : status === 'error' ? (
+          {status === 'error' ? (
             <div className="flex items-start gap-3 p-4 text-sm text-red-700 dark:text-red-400">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <div>
@@ -90,7 +86,7 @@ export default function LiveReadsScreen() {
           ) : reads.length === 0 ? (
             <p className="p-4 text-sm text-gray-600 dark:text-gray-400">
               {status === 'connected'
-                ? `Connected to ${topic} — waiting for reads…`
+                ? 'Connected — waiting for reads…'
                 : 'Connecting to the reader feed…'}
             </p>
           ) : (
@@ -138,21 +134,6 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2">
       <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</div>
       <div className="text-lg font-semibold text-gray-900 dark:text-white">{value}</div>
-    </div>
-  );
-}
-
-function NotConfigured() {
-  return (
-    <div className="flex flex-col items-center justify-center text-center p-10 text-gray-500 dark:text-gray-400">
-      <WifiOff className="w-10 h-10 mb-3 text-gray-400" />
-      <p className="font-medium text-gray-700 dark:text-gray-300">Live feed not configured</p>
-      <p className="max-w-md text-sm mt-1">
-        The reader feed needs a broker WebSocket URL. Set the{' '}
-        <code className="font-mono text-xs">READER_FEED_MQTT_*</code> environment variables on
-        the backend (and a read-only broker user) once the MQTT WebSocket listener is exposed
-        for this environment.
-      </p>
     </div>
   );
 }

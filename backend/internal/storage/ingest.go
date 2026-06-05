@@ -78,8 +78,11 @@ type ResolvedRead struct {
 
 // PersistReads writes asset_scans for parsed reads under org context (RLS).
 // Asset resolution is tag-based with NO auto-create (TRA-900): a read records a
-// scan only if its EPC already has a live rfid tag. receivedAt (server time) is
-// authoritative for asset_scans.timestamp; the reader clock is ignored.
+// scan only if its EPC already has a live tag linked to an asset. Membership is
+// tag-class agnostic (TRA-927) — the read identifier is matched against the tag
+// value regardless of type, so a BLE gateway's MAC registered as type='ble'
+// resolves the same as an rfid EPC. receivedAt (server time) is authoritative
+// for asset_scans.timestamp; the reader clock is ignored.
 func (s *Storage) PersistReads(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (PersistResult, error) {
 	res := PersistResult{Dropped: map[string]int{}}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
@@ -105,7 +108,7 @@ func (s *Storage) PersistReads(ctx context.Context, orgID int, tagScanID int64, 
 			var assetID int
 			err = tx.QueryRow(ctx,
 				`SELECT asset_id FROM trakrf.tags
-				 WHERE org_id = $1 AND type = 'rfid' AND value = $2
+				 WHERE org_id = $1 AND value = $2
 				   AND asset_id IS NOT NULL AND deleted_at IS NULL
 				 LIMIT 1`,
 				orgID, rd.EPC,
