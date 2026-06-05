@@ -47,7 +47,13 @@ func New() *Broadcaster {
 }
 
 // Subscribe registers a client for an org's read stream. The returned cancel
-// func unsubscribes and closes the channel; it is safe to call more than once.
+// func unsubscribes; it is safe to call more than once.
+//
+// The channel is deliberately never closed. Closing would race Publish, which
+// sends (non-blocking) to subscriber channels outside the lock — a concurrent
+// cancel + close could panic the send. The SSE handler instead exits on its
+// request context, after which map removal stops further sends and the orphaned
+// buffered channel is garbage-collected.
 func (b *Broadcaster) Subscribe(orgID int) (<-chan ReadEvent, func()) {
 	s := &subscriber{ch: make(chan ReadEvent, clientBuffer)}
 
@@ -69,7 +75,6 @@ func (b *Broadcaster) Subscribe(orgID int) (<-chan ReadEvent, func()) {
 				}
 			}
 			b.mu.Unlock()
-			close(s.ch)
 		})
 	}
 	return s.ch, cancel

@@ -1,6 +1,7 @@
 package readstream
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -76,6 +77,26 @@ func TestBroadcaster_UnsubscribeStopsDelivery(t *testing.T) {
 func TestBroadcaster_PublishNoSubscribersNoop(t *testing.T) {
 	b := New()
 	b.Publish(99, "trakrf.id/r/reads", reads("E")) // must not panic
+}
+
+func TestBroadcaster_PublishAfterCancelNoPanic(t *testing.T) {
+	b := New()
+	_, cancel := b.Subscribe(1)
+	cancel()
+	// Publishing after cancel must never panic (the channel is not closed).
+	b.Publish(1, "trakrf.id/r/reads", reads("E1", "E2"))
+}
+
+func TestBroadcaster_ConcurrentCancelAndPublishNoPanic(t *testing.T) {
+	b := New()
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		_, cancel := b.Subscribe(1)
+		wg.Add(2)
+		go func() { defer wg.Done(); b.Publish(1, "trakrf.id/r/reads", reads("E")) }()
+		go func() { defer wg.Done(); cancel() }()
+	}
+	wg.Wait() // must complete without a send-on-closed-channel panic
 }
 
 func TestReaderKeyFromTopic(t *testing.T) {
