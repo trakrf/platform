@@ -24,7 +24,7 @@ func TestClient_Set_SendsSwitchSetRPC(t *testing.T) {
 	defer srv.Close()
 
 	c := New(2 * time.Second)
-	if err := c.Set(context.Background(), srv.URL, 2, true); err != nil {
+	if err := c.Set(context.Background(), srv.URL, 2, true, 0); err != nil {
 		t.Fatalf("Set returned error: %v", err)
 	}
 
@@ -48,6 +48,29 @@ func TestClient_Set_SendsSwitchSetRPC(t *testing.T) {
 	if params["on"] != true {
 		t.Errorf("params.on = %v, want true", params["on"])
 	}
+	if _, present := params["toggle_after"]; present {
+		t.Errorf("toggle_after present with duration 0; want omitted")
+	}
+}
+
+func TestClient_Set_IncludesToggleAfter(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":1,"result":{"was_on":false}}`))
+	}))
+	defer srv.Close()
+
+	c := New(2 * time.Second)
+	if err := c.Set(context.Background(), srv.URL, 0, true, 30); err != nil {
+		t.Fatalf("Set returned error: %v", err)
+	}
+	params, _ := gotBody["params"].(map[string]any)
+	if params["toggle_after"] != float64(30) {
+		t.Errorf("params.toggle_after = %v, want 30", params["toggle_after"])
+	}
 }
 
 func TestClient_Set_Non2xxIsError(t *testing.T) {
@@ -57,7 +80,7 @@ func TestClient_Set_Non2xxIsError(t *testing.T) {
 	defer srv.Close()
 
 	c := New(2 * time.Second)
-	if err := c.Set(context.Background(), srv.URL, 0, false); err == nil {
+	if err := c.Set(context.Background(), srv.URL, 0, false, 0); err == nil {
 		t.Fatal("expected error on non-2xx, got nil")
 	}
 }
@@ -70,7 +93,7 @@ func TestClient_Set_TimeoutIsError(t *testing.T) {
 	defer srv.Close()
 
 	c := New(10 * time.Millisecond)
-	if err := c.Set(context.Background(), srv.URL, 0, true); err == nil {
+	if err := c.Set(context.Background(), srv.URL, 0, true, 0); err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
 }
