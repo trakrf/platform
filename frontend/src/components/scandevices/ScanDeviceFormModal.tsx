@@ -7,8 +7,11 @@ import type {
   UpdateScanDeviceRequest,
 } from '@/types/scandevices';
 import { ScanDeviceForm } from './ScanDeviceForm';
+import { ReaderPointsSection } from './ReaderPointsSection';
+import { LiveReadsFeed } from '@/components/readerfeed/LiveReadsFeed';
 import { useScanDeviceMutations } from '@/hooks/scandevices';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
+import { readerKeyForDevice } from '@/lib/scandevices/deviceProfile';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 
 interface ScanDeviceFormModalProps {
@@ -66,7 +69,11 @@ function ScanDeviceFormModalBody({ isOpen, mode, device, onClose }: ScanDeviceFo
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+      <div
+        className={`relative w-full ${
+          mode === 'edit' ? 'max-w-4xl' : 'max-w-2xl'
+        } bg-white dark:bg-gray-900 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto`}
+      >
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             {mode === 'create' ? 'Create New Scan Device' : `Edit Scan Device: ${device?.external_key}`}
@@ -90,6 +97,31 @@ function ScanDeviceFormModalBody({ isOpen, mode, device, onClose }: ScanDeviceFo
             loading={loading}
             error={error}
           />
+
+          {/* Reader edit is the single commissioning surface (TRA-931): once the
+              device exists, manage its antennas/location and watch its live feed
+              right here. Both are skipped on create — they key off the saved
+              device id. */}
+          {mode === 'edit' && device && (
+            <>
+              <section className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
+                  Antennas &amp; Location
+                </h3>
+                <ReaderPointsSection device={device} />
+              </section>
+
+              <section className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
+                  Live Reads
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Reads off this reader only — for antenna placement and RSSI tuning.
+                </p>
+                <LiveReadsFeed filterReaderKey={readerKeyForDevice(device)} compact />
+              </section>
+            </>
+          )}
         </div>
       </div>
     </div>

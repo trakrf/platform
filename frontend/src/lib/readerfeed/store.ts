@@ -41,6 +41,16 @@ export function ageSeconds(read: Pick<LiveRead, 'receivedAt'>, now: number): num
 }
 
 /**
+ * Scope a read list to a single reader by its key (the `{key}` segment of the
+ * source topic). With no key the list is returned unchanged so the global feed
+ * pays nothing. Pure — never mutates the input.
+ */
+export function filterReadsByReader(reads: LiveRead[], readerKey: string | undefined): LiveRead[] {
+  if (!readerKey) return reads;
+  return reads.filter((r) => r.readerKey === readerKey);
+}
+
+/**
  * Tailwind row classes by age — fresh reads pop, stale reads fade toward
  * expiry. Adapted from Power Mixer's grayscale bands to light/dark tokens.
  */

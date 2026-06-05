@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useScanPoints, useScanPointMutations } from '@/hooks/scandevices';
+import { useLocations } from '@/hooks/locations/useLocations';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { ConfirmModal } from '@/components/shared';
 import { ScanPointForm } from './ScanPointForm';
@@ -18,6 +19,14 @@ interface ScanPointsPanelProps {
 export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
   const { scanPoints, isLoading } = useScanPoints(deviceId);
   const { create, update, delete: deletePoint } = useScanPointMutations(deviceId);
+  const { locations } = useLocations();
+
+  // Map location_id → display name so the antenna's 1:1 location assignment is
+  // visible inline (the geofence-relevant attribute per TRA-931).
+  const locationName = useMemo(() => {
+    const byId = new Map(locations.map((l) => [l.id, l.name || l.external_key]));
+    return (id: number | null | undefined) => (id != null ? byId.get(id) : undefined);
+  }, [locations]);
 
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const [editingPoint, setEditingPoint] = useState<ScanPoint | null>(null);
@@ -99,6 +108,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
             <tr className="text-left border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
               <th className="py-2 font-medium">External Key</th>
               <th className="font-medium">Name</th>
+              <th className="font-medium">Location</th>
               <th className="font-medium">Antenna Port</th>
               <th className="font-medium">Boundary</th>
               <th className="font-medium">Active</th>
@@ -110,6 +120,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
               <tr key={sp.id} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 font-mono text-xs text-gray-900 dark:text-gray-100">{sp.external_key}</td>
                 <td className="text-gray-900 dark:text-gray-100">{sp.name}</td>
+                <td className="text-gray-700 dark:text-gray-300">{locationName(sp.location_id) ?? '—'}</td>
                 <td className="text-gray-700 dark:text-gray-300">{sp.antenna_port ?? '—'}</td>
                 <td className="text-gray-700 dark:text-gray-300">{sp.is_boundary ? 'Yes' : 'No'}</td>
                 <td className="text-gray-700 dark:text-gray-300">{sp.is_active ? 'Yes' : 'No'}</td>

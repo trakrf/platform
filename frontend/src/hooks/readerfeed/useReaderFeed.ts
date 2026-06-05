@@ -5,7 +5,12 @@
 // scoping and holds the broker connection.
 
 import { useEffect, useMemo, useState } from 'react';
-import { mergeReads, expireReads, READ_TTL_SECONDS } from '@/lib/readerfeed/store';
+import {
+  mergeReads,
+  expireReads,
+  filterReadsByReader,
+  READ_TTL_SECONDS,
+} from '@/lib/readerfeed/store';
 import { openReadStream } from '@/lib/readerfeed/stream';
 import { API_BASE_URL } from '@/lib/api/client';
 import { useAuthStore } from '@/stores/authStore';
@@ -21,7 +26,13 @@ export interface ReaderFeedState {
   readerCount: number;
 }
 
-export function useReaderFeed(): ReaderFeedState {
+/**
+ * Owns the live read feed. Pass `filterReaderKey` to scope the view to a single
+ * reader (the device's `readerKey`); omit it for the global firehose. The SSE
+ * stream is always the full org feed — filtering is a presentation concern, so
+ * the scoped panel and the global page share one stream and one reducer.
+ */
+export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   const [tags, setTags] = useState<Map<string, LiveRead>>(new Map());
   const [status, setStatus] = useState<ReaderFeedStatus>('connecting');
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +72,10 @@ export function useReaderFeed(): ReaderFeedState {
     return () => clearInterval(id);
   }, []);
 
-  const reads = useMemo(() => [...tags.values()], [tags]);
+  const reads = useMemo(
+    () => filterReadsByReader([...tags.values()], filterReaderKey),
+    [tags, filterReaderKey]
+  );
   const readerCount = useMemo(() => new Set(reads.map((r) => r.readerKey)).size, [reads]);
 
   return { reads, status, error, readerCount };

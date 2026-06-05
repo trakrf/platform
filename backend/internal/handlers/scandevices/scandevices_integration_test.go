@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
@@ -120,4 +121,92 @@ func TestScanDevicesHandler_RoundTrip(t *testing.T) {
 func itoa(i int) string {
 	b, _ := json.Marshal(i)
 	return string(b)
+}
+
+// TestScanPoints_UpdateLocationIDPersists pins the geofence-relevant behavior
+// for TRA-931: PATCH /scan-points must persist a provided location_id (set it),
+// and persist an explicit null (clear it). Regression guard for the handler
+// passing location_id in the decoder's read-only `drop` set, which silently
+// stripped it from the body so every location_id edit was a no-op 200.
+func TestScanPoints_UpdateLocationIDPersists(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	scandevices.NewHandler(db.Store).RegisterRoutes(r)
+	scanpoints.NewHandler(db.Store).RegisterRoutes(r)
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var buf bytes.Buffer
+		if body != nil {
+			require.NoError(t, json.NewEncoder(&buf).Encode(body))
+		}
+		req := httptest.NewRequest(method, path, &buf)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, withOrg(req, orgID))
+		return rec
+	}
+
+	// A single-point gateway. Device create auto-provisions scan_point 1.
+	rec := do(http.MethodPost, "/api/v1/scan-devices", map[string]any{
+		"external_key": "gw-1", "name": "Gateway 1", "type": "gl_s10",
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var dev struct {
+		Data struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &dev))
+	devicePath := "/api/v1/scan-devices/" + itoa(dev.Data.ID)
+
+	// firstPoint GETs the device's points and returns the (sole) point id and
+	// its location_id, decoding into a FRESH struct each call — location_id is
+	// `omitempty`, so a cleared value is absent from the response and must not
+	// be read off a reused struct.
+	firstPoint := func() (int, *int) {
+		rec := do(http.MethodGet, devicePath+"/scan-points", nil)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var pts struct {
+			Data []struct {
+				ID         int  `json:"id"`
+				LocationID *int `json:"location_id"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &pts))
+		require.Len(t, pts.Data, 1)
+		return pts.Data[0].ID, pts.Data[0].LocationID
+	}
+
+	// Read back the auto-provisioned point.
+	pointID, loc := firstPoint()
+	require.Nil(t, loc, "point starts with no location")
+
+	// A location to assign.
+	var locID int
+	require.NoError(t, db.AdminPool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.locations (org_id, external_key, name, description, valid_from)
+		VALUES ($1, 'zone-a', 'Zone A', '', $2) RETURNING id
+	`, orgID, time.Now().UTC()).Scan(&locID))
+
+	// Set location_id via PATCH — it must persist.
+	rec = do(http.MethodPatch, "/api/v1/scan-points/"+itoa(pointID), map[string]any{
+		"location_id": locID,
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, loc = firstPoint()
+	require.NotNil(t, loc, "location_id must persist after PATCH")
+	require.Equal(t, locID, *loc)
+
+	// Explicit null clears it.
+	rec = do(http.MethodPatch, "/api/v1/scan-points/"+itoa(pointID), map[string]any{
+		"location_id": nil,
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	_, loc = firstPoint()
+	require.Nil(t, loc, "explicit null must clear location_id")
 }
