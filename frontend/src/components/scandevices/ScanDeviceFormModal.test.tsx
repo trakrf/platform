@@ -18,6 +18,18 @@ vi.mock('@/lib/api/scandevices');
 vi.mock('@/lib/auth/orgContext', () => ({
   ensureOrgContext: vi.fn().mockResolvedValue(undefined),
 }));
+// Stub the hook-backed commissioning children so the modal test isolates
+// composition (which sections appear, and what the feed is scoped to).
+vi.mock('./ReaderPointsSection', () => ({
+  ReaderPointsSection: ({ device }: { device: ScanDevice }) => (
+    <div data-testid="reader-points">points:{device.type}</div>
+  ),
+}));
+vi.mock('@/components/readerfeed/LiveReadsFeed', () => ({
+  LiveReadsFeed: ({ filterReaderKey }: { filterReaderKey?: string }) => (
+    <div data-testid="scoped-feed">feed:{filterReaderKey}</div>
+  ),
+}));
 
 const wrapper = ({ children }: { children: ReactNode }) => {
   // Fresh client per render so cache state doesn't leak across tests.
@@ -134,5 +146,30 @@ describe('ScanDeviceFormModal', () => {
     });
     expect(scanDevicesApi.create).not.toHaveBeenCalled();
     expect(mockOnClose).not.toHaveBeenCalled();
+  });
+
+  it('shows the commissioning sections in edit mode', () => {
+    render(
+      <ScanDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
+    );
+
+    expect(screen.getByTestId('reader-points')).toHaveTextContent('points:csl_cs463');
+    expect(screen.getByTestId('scoped-feed')).toBeInTheDocument();
+  });
+
+  it('scopes the live-read panel to the device reader key (from publish_topic)', () => {
+    render(
+      <ScanDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
+    );
+
+    // publish_topic is trakrf.id/dock_reader_1/reads → key dock_reader_1.
+    expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:dock_reader_1');
+  });
+
+  it('does not show the commissioning sections in create mode', () => {
+    render(<ScanDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+    expect(screen.queryByTestId('reader-points')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scoped-feed')).not.toBeInTheDocument();
   });
 });

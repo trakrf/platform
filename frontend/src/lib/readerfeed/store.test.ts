@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { mergeReads, expireReads, ageSeconds, ageBandClass, READ_TTL_SECONDS } from './store';
+import {
+  mergeReads,
+  expireReads,
+  ageSeconds,
+  ageBandClass,
+  filterReadsByReader,
+  READ_TTL_SECONDS,
+} from './store';
 import type { LiveRead, ParsedRead } from '@/types/readerfeed';
 
 const read = (epc: string, over: Partial<ParsedRead> = {}): ParsedRead => ({
@@ -69,6 +76,34 @@ describe('ageSeconds', () => {
     expect(ageSeconds(r, 1000)).toBe(0);
     expect(ageSeconds(r, 3400)).toBe(2);
     expect(ageSeconds(r, 9000)).toBe(8);
+  });
+});
+
+describe('filterReadsByReader', () => {
+  const liveRead = (epc: string, readerKey: string): LiveRead => ({
+    ...read(epc, { readerKey }),
+    id: epc,
+    receivedAt: 0,
+  });
+
+  it('returns all reads unchanged when no key is given', () => {
+    const reads = [liveRead('AAA', 'dock-1'), liveRead('BBB', 'dock-2')];
+    expect(filterReadsByReader(reads, undefined)).toBe(reads);
+  });
+
+  it('keeps only reads whose readerKey matches', () => {
+    const reads = [
+      liveRead('AAA', 'dock-1'),
+      liveRead('BBB', 'dock-2'),
+      liveRead('CCC', 'dock-1'),
+    ];
+    const out = filterReadsByReader(reads, 'dock-1');
+    expect(out.map((r) => r.epc).sort()).toEqual(['AAA', 'CCC']);
+  });
+
+  it('returns an empty array when nothing matches', () => {
+    const reads = [liveRead('AAA', 'dock-1')];
+    expect(filterReadsByReader(reads, 'dock-9')).toEqual([]);
   });
 });
 
