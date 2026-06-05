@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/models/scandevice"
 	"github.com/trakrf/platform/backend/internal/models/scanread"
 	"github.com/trakrf/platform/backend/internal/testutil"
@@ -40,6 +41,18 @@ func registerRFIDTag(t *testing.T, db *testutil.TestDB, orgID int, epc string) {
 	_, err := db.AdminPool.Exec(context.Background(),
 		`INSERT INTO trakrf.tags (org_id, asset_id, type, value) VALUES ($1, $2, 'rfid', $3)`,
 		orgID, asset.ID, epc)
+	require.NoError(t, err)
+}
+
+// registerGLS10Device creates a GL-S10 BLE gateway (auto-provisions scan_point
+// {externalKey}-1, same TRA-899 invariant as CS463). external_key must equal
+// the gateway's dev_ble_mac for parsed reads' {dev_ble_mac}-1 capture point to
+// match.
+func registerGLS10Device(t *testing.T, db *testutil.TestDB, orgID int, externalKey string) {
+	t.Helper()
+	_, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
+		ExternalKey: externalKey, Name: "Test Gateway", Type: scandevice.DeviceTypeGLS10,
+	})
 	require.NoError(t, err)
 }
 
@@ -218,4 +231,43 @@ func TestPersistReads_BoundaryAndPerPointThresholdResolved(t *testing.T) {
 	assert.True(t, res.Resolved[0].IsBoundary, "scan_point marked boundary must surface IsBoundary")
 	require.NotNil(t, res.Resolved[0].RSSIThresholdRaw)
 	assert.Equal(t, "-55", *res.Resolved[0].RSSIThresholdRaw)
+}
+
+// TestGLS10_ParseToAssetScan exercises the full GL-S10 path end to end (TRA-925):
+// a real-shaped BLE gateway payload parses via ingest.Parse, and the read whose
+// MAC is a registered rfid tag lands in asset_scans on the gateway's
+// auto-provisioned {dev_ble_mac}-1 capture point, while unregistered BLE noise
+// drops at membership. Pins both GL-S10 provisioning contracts.
+func TestGLS10_ParseToAssetScan(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	registerGLS10Device(t, db, orgID, "C4DEE229A176") // auto scan_point C4DEE229A176-1
+	const assetMAC = "F95BC0EC4E56"
+	registerRFIDTag(t, db, orgID, assetMAC)
+
+	// Two BLE devices seen: the registered asset MAC and unregistered noise.
+	payload := []byte(`{"dev_ble_mac":"C4DEE229A176","dev_list":[
+		{"mac":"F95BC0EC4E56","ad":"0201","ts":1780625164824,"rssi":-57},
+		{"mac":"DEADBEEFCAFE","ad":"0201","ts":1780625164900,"rssi":-80}
+	]}`)
+	reads, err := ingest.Parse(scandevice.DeviceTypeGLS10, payload)
+	require.NoError(t, err)
+	require.Len(t, reads, 2)
+
+	tagScanID, err := db.Store.InsertRawTagScan(ctx, "trakrf.id/C4DEE229A176/reads", payload)
+	require.NoError(t, err)
+	res, err := db.Store.PersistReads(ctx, orgID, tagScanID, time.Now(), reads)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Inserted, "registered asset MAC lands as a scan")
+	assert.Equal(t, 1, res.Dropped["no_asset"], "unregistered BLE noise drops at membership")
+	require.Equal(t, 1, countAssetScans(t, db, orgID))
+
+	// The asset_scan resolved to the gateway's single auto-provisioned capture point.
+	var spExternalKey string
+	require.NoError(t, db.AdminPool.QueryRow(ctx, `
+		SELECT sp.external_key FROM trakrf.asset_scans a
+		JOIN trakrf.scan_points sp ON sp.id = a.scan_point_id
+		WHERE a.org_id = $1`, orgID).Scan(&spExternalKey))
+	assert.Equal(t, "C4DEE229A176-1", spExternalKey)
 }
