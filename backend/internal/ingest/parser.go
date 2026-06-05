@@ -10,7 +10,7 @@ import (
 )
 
 // ErrUnsupportedDevice is returned by Parse when a device type has no parser
-// yet (GL-S10 / ESP32 / CS108 are deferred to their own tickets).
+// yet (ESP32 / CS108 are deferred to their own tickets).
 var ErrUnsupportedDevice = errors.New("ingest: unsupported device type")
 
 // Parse dispatches a raw MQTT payload to the parser for the registered device
@@ -19,6 +19,8 @@ func Parse(deviceType string, payload []byte) ([]scanread.Read, error) {
 	switch deviceType {
 	case scandevice.DeviceTypeCS463:
 		return parseCS463(payload)
+	case scandevice.DeviceTypeGLS10:
+		return parseGLS10(payload)
 	default:
 		return nil, ErrUnsupportedDevice
 	}
