@@ -32,7 +32,7 @@ var validate = func() *validator.Validate {
 // (http or mqtt); alarm.Dispatcher satisfies it. Narrowed so the handler can be
 // tested with a fake and no real device/broker.
 type actuator interface {
-	Set(ctx context.Context, dev outputdevice.OutputDevice, on bool) error
+	Set(ctx context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error
 }
 
 // Handler serves output-device CRUD + actions.
@@ -322,7 +322,10 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if err := h.actuator.Set(ctx, *device, true); err != nil {
+	// Backend-driven pulse for the manual test action: on, hold, off. offAfterSec
+	// is 0 here (we drive the off ourselves) — the device-side toggle_after timer
+	// is the geofence fire path's concern, not this synchronous diagnostic.
+	if err := h.actuator.Set(ctx, *device, true, 0); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}
@@ -330,7 +333,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(h.testPulse)
 	}
 	// Best-effort off; the operator can still use reset if this fails.
-	_ = h.actuator.Set(ctx, *device, false)
+	_ = h.actuator.Set(ctx, *device, false, 0)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
@@ -352,7 +355,7 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.actuator.Set(r.Context(), *device, false); err != nil {
+	if err := h.actuator.Set(r.Context(), *device, false, 0); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}

@@ -3,7 +3,10 @@
 // registered asset trips a boundary scan point.
 package outputdevice
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // TypeShellyGen4 is the only supported output device type today.
 const TypeShellyGen4 = "shelly_gen4"
@@ -30,6 +33,39 @@ type OutputDevice struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+}
+
+// AutoOffSeconds returns the per-device auto-off duration in seconds from
+// metadata.auto_off_seconds, or 0 when unset, zero, negative, or non-numeric.
+// 0 means "stay on until manual reset" (the latch default). This mirrors the
+// per-scan-point metadata tuning used for rssi_threshold (geofence engine).
+// Metadata arrives as map[string]any from jsonb, so numbers are float64.
+func (d OutputDevice) AutoOffSeconds() int {
+	m, ok := d.Metadata.(map[string]any)
+	if !ok {
+		return 0
+	}
+	var sec int
+	switch n := m["auto_off_seconds"].(type) {
+	case float64:
+		sec = int(n)
+	case int:
+		sec = n
+	case int64:
+		sec = int(n)
+	case json.Number:
+		i, err := n.Int64()
+		if err != nil {
+			return 0
+		}
+		sec = int(i)
+	default:
+		return 0
+	}
+	if sec < 0 {
+		return 0
+	}
+	return sec
 }
 
 // CreateOutputDeviceRequest is the create payload. type/switch_id/is_active/
