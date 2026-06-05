@@ -37,10 +37,23 @@ func registerDevice(t *testing.T, db *testutil.TestDB, orgID int, externalKey st
 // registerRFIDTag links an rfid tag value (EPC) to a new asset.
 func registerRFIDTag(t *testing.T, db *testutil.TestDB, orgID int, epc string) {
 	t.Helper()
-	asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "asset-"+epc)
+	registerTag(t, db, orgID, "rfid", epc)
+}
+
+// registerBLETag links a ble tag value (a MAC) to a new asset — the natural
+// registration for a BLE gateway's asset identity (TRA-927).
+func registerBLETag(t *testing.T, db *testutil.TestDB, orgID int, mac string) {
+	t.Helper()
+	registerTag(t, db, orgID, "ble", mac)
+}
+
+// registerTag links a tag of the given type/value to a new asset.
+func registerTag(t *testing.T, db *testutil.TestDB, orgID int, tagType, value string) {
+	t.Helper()
+	asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "asset-"+value)
 	_, err := db.AdminPool.Exec(context.Background(),
-		`INSERT INTO trakrf.tags (org_id, asset_id, type, value) VALUES ($1, $2, 'rfid', $3)`,
-		orgID, asset.ID, epc)
+		`INSERT INTO trakrf.tags (org_id, asset_id, type, value) VALUES ($1, $2, $3, $4)`,
+		orgID, asset.ID, tagType, value)
 	require.NoError(t, err)
 }
 
@@ -270,4 +283,33 @@ func TestGLS10_ParseToAssetScan(t *testing.T) {
 		JOIN trakrf.scan_points sp ON sp.id = a.scan_point_id
 		WHERE a.org_id = $1`, orgID).Scan(&spExternalKey))
 	assert.Equal(t, "C4DEE229A176-1", spExternalKey)
+}
+
+// TestGLS10_BLETagProducesScan mirrors TestGLS10_ParseToAssetScan but registers
+// the asset MAC as a type='ble' tag — the natural registration for a BLE
+// gateway — instead of the rfid workaround. Membership must resolve non-rfid tag
+// classes; before TRA-927 the rfid-only predicate dropped this read silently.
+func TestGLS10_BLETagProducesScan(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	registerGLS10Device(t, db, orgID, "C4DEE229A176") // auto scan_point C4DEE229A176-1
+	const assetMAC = "F95BC0EC4E56"
+	registerBLETag(t, db, orgID, assetMAC) // registered as ble, not rfid
+
+	payload := []byte(`{"dev_ble_mac":"C4DEE229A176","dev_list":[
+		{"mac":"F95BC0EC4E56","ad":"0201","ts":1780625164824,"rssi":-57},
+		{"mac":"DEADBEEFCAFE","ad":"0201","ts":1780625164900,"rssi":-80}
+	]}`)
+	reads, err := ingest.Parse(scandevice.DeviceTypeGLS10, payload)
+	require.NoError(t, err)
+	require.Len(t, reads, 2)
+
+	tagScanID, err := db.Store.InsertRawTagScan(ctx, "trakrf.id/C4DEE229A176/reads", payload)
+	require.NoError(t, err)
+	res, err := db.Store.PersistReads(ctx, orgID, tagScanID, time.Now(), reads)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Inserted, "ble-registered asset MAC lands as a scan")
+	assert.Equal(t, 1, res.Dropped["no_asset"], "unregistered BLE noise still drops at membership")
+	require.Equal(t, 1, countAssetScans(t, db, orgID))
 }

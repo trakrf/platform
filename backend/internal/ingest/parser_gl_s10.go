@@ -31,9 +31,9 @@ type glS10Entry struct {
 //   - The device must be registered with external_key == dev_ble_mac, so the
 //     synthesized capture point {dev_ble_mac}-1 matches the scan_point that
 //     CreateScanDevice auto-provisions as {external_key}-1.
-//   - The BLE MAC must be registered as a type='rfid' tag value: membership
-//     resolution is rfid-only (TRA-900). A MAC registered as type='ble' parses
-//     fine here but silently never produces an asset_scan.
+//   - The BLE MAC must be registered as a tag value linked to an asset.
+//     Membership is tag-class agnostic (TRA-927), so the natural type='ble'
+//     registration resolves the same as an rfid EPC.
 func parseGLS10(payload []byte) ([]scanread.Read, error) {
 	var p glS10Payload
 	if err := json.Unmarshal(payload, &p); err != nil {
