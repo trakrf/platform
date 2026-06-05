@@ -1,27 +1,14 @@
-// Types for the reader live-feed / coverage diagnostic (TRA-902).
+// Types for the reader live-feed / coverage diagnostic.
 //
-// The CS463 publishes to `trakrf.id/{key}/reads`. Payload shape mirrors the
-// backend parser (`internal/ingest/parser_cs463.go`), verified against live
-// preview traffic 2026-06-04: rssi is a quoted string, timeStampOfRead is
-// microseconds since epoch.
-
-/** Raw CS463 MQTT payload (one publish = one or more tag reads). */
-export interface CS463Payload {
-  tags?: CS463Tag[];
-}
-
-export interface CS463Tag {
-  epc: string;
-  timeStampOfRead: number; // microseconds since epoch
-  antennaPort: number;
-  capturePointName: string;
-  rssi: string; // quoted, e.g. "-56"
-}
+// As of TRA-924 reads arrive already parsed and org-filtered from the backend
+// SSE proxy (each SSE `data:` frame is one ParsedRead). The CS463 wire payload
+// is parsed server-side now (internal/ingest/parser_cs463.go), so the browser
+// no longer sees raw broker payloads.
 
 /**
- * A single parsed read, device-agnostic. `rssi` is coerced to a number (0 on
- * unparseable). `readerTimestampMs` is the reader's own clock (informational —
- * display only). `readerKey` is the `{key}` segment of the source topic.
+ * A single parsed read, device-agnostic. `rssi` is a number (0 when unknown).
+ * `readerTimestampMs` is the reader's own clock (informational — display only).
+ * `readerKey` is the `{key}` segment of the source topic.
  */
 export interface ParsedRead {
   epc: string;
@@ -44,9 +31,4 @@ export interface LiveRead extends ParsedRead {
   receivedAt: number;
 }
 
-export type ReaderFeedStatus =
-  | 'disabled' // no broker URL configured
-  | 'connecting'
-  | 'connected'
-  | 'error'
-  | 'closed';
+export type ReaderFeedStatus = 'connecting' | 'connected' | 'error' | 'closed';

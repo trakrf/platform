@@ -9,6 +9,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/backend/internal/models/scanread"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -20,20 +21,30 @@ type ReadEvaluator interface {
 	Evaluate(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []storage.ResolvedRead)
 }
 
+// ReadPublisher receives every parsed read (before membership filtering) for
+// live fan-out — the org-scoped SSE Live Reads feed (TRA-924). Unlike the
+// geofence path it sees ALL reads, because Live Reads is a coverage diagnostic
+// that must surface unknown EPCs too. Defined here so ingest depends on a local
+// interface, not the readstream service. Optional; nil disables fan-out.
+type ReadPublisher interface {
+	Publish(orgID int, topic string, reads []scanread.Read)
+}
+
 // Subscriber consumes MQTT reads and derives asset_scans (TRA-900). It is the
 // observable replacement for the silent process_tag_scans trigger.
 type Subscriber struct {
 	cfg    Config
 	store  *storage.Storage
 	eval   ReadEvaluator // optional; nil disables geofence evaluation
+	feed   ReadPublisher // optional; nil disables live-feed fan-out
 	log    zerolog.Logger
 	client mqtt.Client
 }
 
-// NewSubscriber builds a subscriber. It does not connect; call Start. eval may
-// be nil (no geofence evaluation).
-func NewSubscriber(cfg Config, store *storage.Storage, eval ReadEvaluator, log *zerolog.Logger) *Subscriber {
-	return &Subscriber{cfg: cfg, store: store, eval: eval, log: log.With().Str("component", "ingest").Logger()}
+// NewSubscriber builds a subscriber. It does not connect; call Start. eval and
+// feed may each be nil (no geofence evaluation / no live-feed fan-out).
+func NewSubscriber(cfg Config, store *storage.Storage, eval ReadEvaluator, feed ReadPublisher, log *zerolog.Logger) *Subscriber {
+	return &Subscriber{cfg: cfg, store: store, eval: eval, feed: feed, log: log.With().Str("component", "ingest").Logger()}
 }
 
 // Start begins connecting in the background and returns immediately — it never
@@ -135,6 +146,14 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 		return
 	}
 	metricReadsParsed.Add(float64(len(reads)))
+
+	// 3b. Live-feed fan-out (TRA-924): hand the full parsed set to the org-scoped
+	// SSE feed before membership filtering — Live Reads is a coverage diagnostic
+	// and must surface unknown EPCs too. Best-effort and non-blocking (the
+	// broadcaster drops for slow clients); never affects derivation.
+	if s.feed != nil {
+		s.feed.Publish(route.OrgID, topic, reads)
+	}
 
 	// 4. Derive asset_scans under org context (RLS-correct).
 	// TRA-901 seam: `reads` is also where the geofence engine will be handed the
