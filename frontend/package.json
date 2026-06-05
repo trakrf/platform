@@ -39,6 +39,7 @@
     "jspdf-autotable": "^5.0.2",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^0.535.0",
+    "mqtt": "^5.15.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-gauge-component": "^1.2.64",
