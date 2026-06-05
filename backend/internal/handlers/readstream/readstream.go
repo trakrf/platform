@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	rs "github.com/trakrf/platform/backend/internal/services/readstream"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	rs "github.com/trakrf/platform/backend/internal/services/readstream"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
