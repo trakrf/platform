@@ -35,10 +35,13 @@ type AlarmDevice struct {
 // CreateAlarmDeviceRequest is the create payload. type/switch_id/is_active/
 // metadata default server-side when omitted.
 type CreateAlarmDeviceRequest struct {
-	Name         string         `json:"name" validate:"required,min=1,max=255"`
-	Type         string         `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
-	Transport    string         `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
-	BaseURL      string         `json:"base_url,omitempty" validate:"omitempty,url,max=255"`
+	Name      string `json:"name" validate:"required,min=1,max=255"`
+	Type      string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
+	Transport string `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
+	// base_url is only meaningful for http transport; its required/URL-format
+	// validation is transport-aware in the handler (TRA-928), not a struct tag,
+	// so an mqtt device can omit or blank it without tripping a url validator.
+	BaseURL      string         `json:"base_url,omitempty" validate:"omitempty,max=255"`
 	SwitchID     *int           `json:"switch_id,omitempty" validate:"omitempty,min=0"`
 	CommandTopic *string        `json:"command_topic,omitempty" validate:"omitempty,max=255"`
 	LocationID   *int           `json:"location_id,omitempty"`
@@ -48,10 +51,12 @@ type CreateAlarmDeviceRequest struct {
 
 // UpdateAlarmDeviceRequest is a partial update; nil fields are left unchanged.
 type UpdateAlarmDeviceRequest struct {
-	Name         *string         `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
-	Type         *string         `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
-	Transport    *string         `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
-	BaseURL      *string         `json:"base_url,omitempty" validate:"omitempty,url,max=255"`
+	Name      *string `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
+	Type      *string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
+	Transport *string `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
+	// base_url validation is transport-aware in the handler (TRA-928): a non-nil
+	// pointer to "" (what the form sends for mqtt) must not be rejected here.
+	BaseURL      *string         `json:"base_url,omitempty" validate:"omitempty,max=255"`
 	SwitchID     *int            `json:"switch_id,omitempty" validate:"omitempty,min=0"`
 	CommandTopic *string         `json:"command_topic,omitempty" validate:"omitempty,max=255"`
 	LocationID   *int            `json:"location_id,omitempty"`

@@ -183,6 +183,36 @@ func TestAlarmDevicesHandler_HTTPRequiresBaseURL(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
 
+// TestAlarmDevicesHandler_UpdateMQTTIgnoresEmptyBaseURL reproduces TRA-928:
+// editing an mqtt-transport alarm device while the client still sends an empty
+// base_url (as the form historically did) must succeed — base_url is not
+// applicable to mqtt and must not be validated as a URL.
+func TestAlarmDevicesHandler_UpdateMQTTIgnoresEmptyBaseURL(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+
+	id := createMQTTDevice(t, r, orgID, "trakrf.id/dock-strobe")
+
+	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/alarm-devices/"+itoa(id), map[string]any{
+		"transport": "mqtt", "command_topic": "trakrf.id/dock-strobe", "base_url": "",
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+}
+
+// TestAlarmDevicesHandler_UpdateHTTPRejectsInvalidBaseURL asserts the other half
+// of TRA-928: http transport still requires a valid base_url on update.
+func TestAlarmDevicesHandler_UpdateHTTPRejectsInvalidBaseURL(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+
+	id := createDevice(t, r, orgID, "http://192.168.50.66")
+
+	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/alarm-devices/"+itoa(id), map[string]any{
+		"base_url": "not-a-url",
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
 func TestAlarmDevicesHandler_TestFirePulses(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
@@ -237,6 +267,36 @@ func TestAlarmDevicesHandler_TestFireMissingIs404(t *testing.T) {
 }
 
 // helpers
+
+func doReq(t *testing.T, r *chi.Mux, orgID int, method, path string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		require.NoError(t, json.NewEncoder(&buf).Encode(body))
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, withOrg(req, orgID))
+	return rec
+}
+
+func createMQTTDevice(t *testing.T, r *chi.Mux, orgID int, topic string) int {
+	t.Helper()
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/alarm-devices", map[string]any{
+		"name": "D", "transport": "mqtt", "command_topic": topic,
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var created struct {
+		Data struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+	return created.Data.ID
+}
 
 func createDevice(t *testing.T, r *chi.Mux, orgID int, baseURL string) int {
 	t.Helper()

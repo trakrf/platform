@@ -128,15 +128,19 @@ export function AlarmDeviceForm({
     const location_id =
       formData.location_id.trim() === '' ? null : parseInt(formData.location_id.trim(), 10);
 
+    // Only submit the field that applies to the selected transport. Sending a
+    // stale/empty base_url for mqtt trips the backend's url validation and is
+    // an unrecoverable dead end since the field isn't shown (TRA-928).
     const common = {
       name: formData.name,
       type: formData.type,
       transport: formData.transport,
-      base_url: formData.transport === 'http' ? formData.base_url.trim() : '',
-      command_topic: formData.transport === 'mqtt' ? formData.command_topic.trim() : null,
       switch_id,
       location_id,
       is_active: formData.is_active,
+      ...(formData.transport === 'http'
+        ? { base_url: formData.base_url.trim() }
+        : { command_topic: formData.command_topic.trim() }),
     };
 
     if (mode === 'create') {
