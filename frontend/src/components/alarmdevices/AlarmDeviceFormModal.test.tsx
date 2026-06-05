@@ -137,6 +137,33 @@ describe('AlarmDeviceFormModal', () => {
         command_topic: 'trakrf.id/dock-strobe',
       })
     );
+    // TRA-928: base_url is not applicable to mqtt and must not be submitted (an
+    // empty base_url is rejected by the backend's url validation envelope).
+    const createPayload = (alarmDevicesApi.create as any).mock.calls[0][0];
+    expect(createPayload).not.toHaveProperty('base_url');
+  });
+
+  it('edit: switching an HTTP device to MQTT submits no base_url (TRA-928)', async () => {
+    render(
+      <AlarmDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
+    );
+
+    fireEvent.change(screen.getByLabelText(/Transport/), { target: { value: 'mqtt' } });
+    fireEvent.change(screen.getByLabelText(/Command Topic/), {
+      target: { value: 'trakrf.id/dock-strobe' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Update Alarm Device/i }));
+
+    await waitFor(() => {
+      expect(alarmDevicesApi.update).toHaveBeenCalledTimes(1);
+    });
+    const [, updatePayload] = (alarmDevicesApi.update as any).mock.calls[0];
+    expect(updatePayload).not.toHaveProperty('base_url');
+    expect(updatePayload).toMatchObject({
+      transport: 'mqtt',
+      command_topic: 'trakrf.id/dock-strobe',
+    });
   });
 
   it('requires a command topic for MQTT transport', async () => {

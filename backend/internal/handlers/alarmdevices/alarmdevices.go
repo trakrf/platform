@@ -7,6 +7,7 @@ package alarmdevices
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -59,12 +60,15 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/v1/alarm-devices/{alarm_device_id}/reset", h.Reset)
 }
 
-// transportFieldError enforces the transport-specific required field on create:
-// mqtt needs a command_topic, http needs a base_url. transport defaults to http
-// when blank. Returns "" when valid.
-func transportFieldError(transport, baseURL string, commandTopic *string) string {
+// transportFieldsError enforces the transport-specific fields of an alarm
+// device against its effective (post-merge) state. mqtt needs a command_topic
+// and ignores base_url entirely; http (the default when transport is blank)
+// needs a base_url that is a valid http(s) URL. Validating here rather than via
+// a struct `url` tag keeps base_url from being rejected for mqtt devices, where
+// it is not applicable (TRA-928). Returns "" when valid.
+func transportFieldsError(transport, baseURL, commandTopic string) string {
 	if transport == alarmdevice.TransportMQTT {
-		if commandTopic == nil || *commandTopic == "" {
+		if commandTopic == "" {
 			return "command_topic is required for mqtt transport"
 		}
 		return ""
@@ -72,7 +76,27 @@ func transportFieldError(transport, baseURL string, commandTopic *string) string
 	if baseURL == "" {
 		return "base_url is required for http transport"
 	}
+	if !isHTTPURL(baseURL) {
+		return "base_url is not a valid value"
+	}
 	return ""
+}
+
+// isHTTPURL reports whether s is an absolute http(s) URL with a host. This is
+// the transport-aware replacement for the former `url` struct validator.
+func isHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func parseListLimitOffset(r *http.Request) (limit, offset int) {
@@ -140,8 +164,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondValidationError(w, r, err, reqID)
 		return
 	}
-	// Transport-specific required field (transport defaults to http).
-	if msg := transportFieldError(req.Transport, req.BaseURL, req.CommandTopic); msg != "" {
+	// Transport-specific validation (transport defaults to http).
+	transport := req.Transport
+	if transport == "" {
+		transport = alarmdevice.TransportHTTP
+	}
+	if msg := transportFieldsError(transport, req.BaseURL, deref(req.CommandTopic)); msg != "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
 	}
@@ -203,6 +231,34 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validate.Struct(req); err != nil {
 		httputil.RespondValidationError(w, r, err, reqID)
+		return
+	}
+	// Resolve effective state for transport-aware validation: a patch may change
+	// transport without resending base_url/command_topic, so merge the request
+	// over the stored device before checking (TRA-928).
+	existing, err := h.storage.GetAlarmDeviceByID(r.Context(), orgID, id)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+		return
+	}
+	if existing == nil {
+		httputil.Respond404(w, r, "alarm device not found", reqID)
+		return
+	}
+	transport := existing.Transport
+	if req.Transport != nil {
+		transport = *req.Transport
+	}
+	baseURL := existing.BaseURL
+	if req.BaseURL != nil {
+		baseURL = *req.BaseURL
+	}
+	commandTopic := deref(existing.CommandTopic)
+	if req.CommandTopic != nil {
+		commandTopic = *req.CommandTopic
+	}
+	if msg := transportFieldsError(transport, baseURL, commandTopic); msg != "" {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
 	}
 	device, err := h.storage.UpdateAlarmDevice(r.Context(), orgID, id, req)
