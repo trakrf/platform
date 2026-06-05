@@ -23,6 +23,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
+	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
 	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
@@ -33,6 +34,7 @@ import (
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
+	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -94,6 +96,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// clear error and the http path is unaffected.
 	shellyClient := shelly.New(0)
 
+	// TRA-924: in-process per-org read broadcaster backing the Live Reads SSE
+	// endpoint. Always constructed so the endpoint serves (heartbeat-only when
+	// ingestion is off); the subscriber publishes parsed reads into it. Single
+	// replica only — multi-replica fan-out is deferred (TRA-907).
+	readBroadcaster := readstreamsvc.New()
+
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
 	if mqttCfg.Enabled() {
@@ -110,7 +118,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 
-		subscriber := ingest.NewSubscriber(mqttCfg, store, geofenceEngine, log)
+		subscriber := ingest.NewSubscriber(mqttCfg, store, geofenceEngine, readBroadcaster, log)
 		if err := subscriber.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
 			return err
@@ -142,16 +150,15 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
-	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"), frontendhandler.ReaderFeedConfig{
-		URL:      os.Getenv("READER_FEED_MQTT_URL"),
-		Username: os.Getenv("READER_FEED_MQTT_USERNAME"),
-		Password: os.Getenv("READER_FEED_MQTT_PASSWORD"),
-		Topic:    os.Getenv("READER_FEED_MQTT_TOPIC"),
-	})
+	// TRA-924: Live Reads is now served by the org-enforced SSE endpoint, so the
+	// browser no longer receives broker URL/creds — the readerFeed runtime config
+	// is gone.
+	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"))
+	readstreamHandler := readstreamhandler.NewHandler(readBroadcaster)
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, alarmDevicesHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, alarmDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

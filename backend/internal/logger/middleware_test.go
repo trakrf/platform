@@ -189,6 +189,39 @@ func TestResponseWriter(t *testing.T) {
 	})
 }
 
+// fakeFlusher records whether Flush was delegated to the underlying writer.
+type fakeFlusher struct {
+	http.ResponseWriter
+	flushed bool
+}
+
+func (f *fakeFlusher) Flush() { f.flushed = true }
+
+func TestResponseWriter_StreamingTransparency(t *testing.T) {
+	// SSE (TRA-924) needs the wrapper to be transparent: Flush must delegate to
+	// the underlying writer, and Unwrap must expose it so http.ResponseController
+	// can reach SetWriteDeadline. Without this the SSE flush panics through the
+	// sentry fancy-writer chain.
+	t.Run("Flush delegates to the wrapped writer", func(t *testing.T) {
+		ff := &fakeFlusher{ResponseWriter: httptest.NewRecorder()}
+		rw := &responseWriter{ResponseWriter: ff, statusCode: http.StatusOK}
+
+		f, ok := interface{}(rw).(http.Flusher)
+		assert.True(t, ok, "responseWriter must implement http.Flusher")
+		f.Flush()
+		assert.True(t, ff.flushed, "Flush must delegate to the underlying writer")
+	})
+
+	t.Run("Unwrap exposes the wrapped writer", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		rw := &responseWriter{ResponseWriter: rec, statusCode: http.StatusOK}
+
+		u, ok := interface{}(rw).(interface{ Unwrap() http.ResponseWriter })
+		assert.True(t, ok, "responseWriter must implement Unwrap")
+		assert.Equal(t, http.ResponseWriter(rec), u.Unwrap())
+	})
+}
+
 func TestMiddlewareWithHeaders(t *testing.T) {
 	// Initialize logger
 	cfg := &Config{

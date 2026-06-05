@@ -62,3 +62,20 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
 }
+
+// Flush makes the wrapper transparent to streaming responses (SSE, TRA-924):
+// it delegates to the underlying writer when that supports flushing. Without
+// this, the sentry fancy-writer above us asserts its wrapped writer is an
+// http.Flusher and panics when streaming.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap exposes the underlying writer so http.ResponseController can reach
+// capabilities we don't proxy (e.g. SetWriteDeadline, needed to keep a
+// long-lived SSE stream alive past the server WriteTimeout).
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
