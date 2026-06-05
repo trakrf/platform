@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import TabNavigation from '@/components/TabNavigation';
-import { useUIStore, useDeviceStore } from '@/stores';
+import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 import { appVersion } from '@/version';
 
@@ -11,10 +11,13 @@ describe('TabNavigation', () => {
     // Set default store states
     useUIStore.setState({ activeTab: 'home' });
     useDeviceStore.setState({ readerState: ReaderState.DISCONNECTED });
+    // Default to no org role; device-management tests opt into a role.
+    useOrgStore.setState({ currentRole: null });
   });
 
   afterEach(() => {
     cleanup();
+    useOrgStore.setState({ currentRole: null });
   });
 
   it('should render all navigation items with correct labels', () => {
@@ -139,13 +142,71 @@ describe('TabNavigation', () => {
   it('should verify Settings tooltip was updated', async () => {
     render(<TabNavigation />);
     const settingsButton = screen.getByText('Settings').closest('button');
-    
+
     fireEvent.mouseEnter(settingsButton!);
-    
+
     await waitFor(() => {
       expect(screen.getByText(/Configure device and application settings/)).toBeInTheDocument();
     });
-    
+
     fireEvent.mouseLeave(settingsButton!);
+  });
+
+  describe('device management under Settings (TRA-930)', () => {
+    it('should not show Scan Devices, Output Devices, or Live Reads as top-level items', () => {
+      useOrgStore.setState({ currentRole: 'owner' });
+      render(<TabNavigation />);
+
+      // Old top-level labels are gone; replaced by Settings sub-options.
+      expect(screen.queryByText('Scan Devices')).not.toBeInTheDocument();
+      expect(screen.queryByText('Output Devices')).not.toBeInTheDocument();
+      expect(screen.queryByText('Live Reads')).not.toBeInTheDocument();
+    });
+
+    it('should show Readers, Live feed, and Outputs sub-options for an operator', () => {
+      useOrgStore.setState({ currentRole: 'operator' });
+      render(<TabNavigation />);
+
+      expect(screen.getByText('Readers')).toBeInTheDocument();
+      expect(screen.getByText('Live feed')).toBeInTheDocument();
+      expect(screen.getByText('Outputs')).toBeInTheDocument();
+    });
+
+    it('should show device-management sub-options for owner/admin/manager', () => {
+      for (const role of ['owner', 'admin', 'manager'] as const) {
+        useOrgStore.setState({ currentRole: role });
+        const { unmount } = render(<TabNavigation />);
+        expect(screen.getByText('Readers')).toBeInTheDocument();
+        expect(screen.getByText('Outputs')).toBeInTheDocument();
+        unmount();
+      }
+    });
+
+    it('should hide device-management sub-options from a viewer', () => {
+      useOrgStore.setState({ currentRole: 'viewer' });
+      render(<TabNavigation />);
+
+      expect(screen.queryByText('Readers')).not.toBeInTheDocument();
+      expect(screen.queryByText('Live feed')).not.toBeInTheDocument();
+      expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
+      // The Settings entry itself remains visible to everyone.
+      expect(screen.getByText('Settings')).toBeInTheDocument();
+    });
+
+    it('should navigate to the correct tab when clicking each sub-option', () => {
+      const mockSetActiveTab = vi.fn();
+      useUIStore.getState().setActiveTab = mockSetActiveTab;
+      useOrgStore.setState({ currentRole: 'operator' });
+      render(<TabNavigation />);
+
+      fireEvent.click(screen.getByText('Readers').closest('button')!);
+      expect(mockSetActiveTab).toHaveBeenCalledWith('scan-devices');
+
+      fireEvent.click(screen.getByText('Live feed').closest('button')!);
+      expect(mockSetActiveTab).toHaveBeenCalledWith('live-reads');
+
+      fireEvent.click(screen.getByText('Outputs').closest('button')!);
+      expect(mockSetActiveTab).toHaveBeenCalledWith('output-devices');
+    });
   });
 });

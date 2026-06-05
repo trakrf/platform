@@ -55,9 +55,11 @@ export default function TabNavigation() {
   const currentRole = useOrgStore((state) => state.currentRole);
   const { setActiveTab } = useUIStore.getState();
 
-  // Scan device management mirrors the org-management surfaces (API Keys,
-  // Members) which are owner/admin-only.
-  const canManageScanDevices = currentRole === 'owner' || currentRole === 'admin';
+  // Device management (Readers, Outputs, Live feed) lives under Settings and is
+  // reachable by Operator and above. Org/user/billing settings stay owner/admin
+  // only — those are gated separately in OrgSwitcher.
+  const canManageDevices =
+    !!currentRole && ['owner', 'admin', 'manager', 'operator'].includes(currentRole);
   
   // Handle browser back button navigation
   React.useEffect(() => {
@@ -211,39 +213,6 @@ export default function TabNavigation() {
             tooltip="Manage your locations - create, view, and organize location data"
           />
 
-          {canManageScanDevices && (
-            <NavItem
-              id="scan-devices"
-              label="Scan Devices"
-              isActive={activeTab === 'scan-devices'}
-              onClick={() => handleTabClick('scan-devices')}
-              icon={<RadioTower className="w-5 h-5" />}
-              tooltip="Manage scan devices (readers) and their scan points"
-            />
-          )}
-
-          {canManageScanDevices && (
-            <NavItem
-              id="output-devices"
-              label="Output Devices"
-              isActive={activeTab === 'output-devices'}
-              onClick={() => handleTabClick('output-devices')}
-              icon={<Siren className="w-5 h-5" />}
-              tooltip="Manage output devices (e.g. Shelly relays) and test-fire them"
-            />
-          )}
-
-          {canManageScanDevices && (
-            <NavItem
-              id="live-reads"
-              label="Live Reads"
-              isActive={activeTab === 'live-reads'}
-              onClick={() => handleTabClick('live-reads')}
-              icon={<Radio className="w-5 h-5" />}
-              tooltip="Live reader feed — every tag read with age expiry, for antenna placement and RSSI coverage tuning"
-            />
-          )}
-
           <NavItem
             id="reports"
             label="Reports"
@@ -261,7 +230,40 @@ export default function TabNavigation() {
             icon={<Settings className="w-5 h-5" />}
             tooltip="Configure device and application settings"
           />
-          
+
+          {/* Device-management sub-options under Settings — Operator and above.
+              Live feed lives in the Readers area, alongside the reader list. */}
+          {canManageDevices && (
+            <div className="ml-4 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2">
+              <NavItem
+                id="scan-devices"
+                label="Readers"
+                isActive={activeTab === 'scan-devices'}
+                onClick={() => handleTabClick('scan-devices')}
+                icon={<RadioTower className="w-5 h-5" />}
+                tooltip="Manage scan devices (readers) and their scan points"
+              />
+
+              <NavItem
+                id="live-reads"
+                label="Live feed"
+                isActive={activeTab === 'live-reads'}
+                onClick={() => handleTabClick('live-reads')}
+                icon={<Radio className="w-5 h-5" />}
+                tooltip="Live reader feed — every tag read with age expiry, for antenna placement and RSSI coverage tuning"
+              />
+
+              <NavItem
+                id="output-devices"
+                label="Outputs"
+                isActive={activeTab === 'output-devices'}
+                onClick={() => handleTabClick('output-devices')}
+                icon={<Siren className="w-5 h-5" />}
+                tooltip="Manage output devices (e.g. Shelly relays) and test-fire them"
+              />
+            </div>
+          )}
+
           <NavItem
             id="help"
             label="Help"
