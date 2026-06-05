@@ -1,23 +1,23 @@
 /**
- * Alarm Device Management Types
+ * Output Device Management Types
  *
- * Core TypeScript types for alarm output device (e.g. Shelly Gen4 relay)
+ * Core TypeScript types for output device (e.g. Shelly Gen4 relay)
  * management. Matches the internal, session-authenticated backend endpoints
- * under /api/v1/alarm-devices (TRA-903).
+ * under /api/v1/output-devices (TRA-903).
  */
 
-export type AlarmDeviceType = 'shelly_gen4';
+export type OutputDeviceType = 'shelly_gen4';
 
 export type AlarmTransport = 'http' | 'mqtt';
 
 /**
- * Core AlarmDevice entity — matches the backend alarm_devices JSON shape.
+ * Core OutputDevice entity — matches the backend output_devices JSON shape.
  */
-export interface AlarmDevice {
+export interface OutputDevice {
   id: number;
   org_id: number;
   name: string;
-  type: AlarmDeviceType;
+  type: OutputDeviceType;
   transport: AlarmTransport;
   base_url: string;
   switch_id: number;
@@ -30,9 +30,9 @@ export interface AlarmDevice {
   deleted_at?: string | null;
 }
 
-export interface CreateAlarmDeviceRequest {
+export interface CreateOutputDeviceRequest {
   name: string;
-  type?: AlarmDeviceType;
+  type?: OutputDeviceType;
   transport?: AlarmTransport;
   base_url?: string;
   switch_id?: number;
@@ -42,9 +42,9 @@ export interface CreateAlarmDeviceRequest {
   metadata?: Record<string, unknown>;
 }
 
-export interface UpdateAlarmDeviceRequest {
+export interface UpdateOutputDeviceRequest {
   name?: string;
-  type?: AlarmDeviceType;
+  type?: OutputDeviceType;
   transport?: AlarmTransport;
   base_url?: string;
   switch_id?: number;
@@ -60,11 +60,11 @@ export interface Pagination {
   total: number;
 }
 
-export interface AlarmDeviceResponse {
-  data: AlarmDevice;
+export interface OutputDeviceResponse {
+  data: OutputDevice;
 }
 
-export interface ListAlarmDevicesResponse {
-  data: AlarmDevice[];
+export interface ListOutputDevicesResponse {
+  data: OutputDevice[];
   pagination: Pagination;
 }

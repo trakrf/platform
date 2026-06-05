@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 )
 
 // httpSetter drives a device over local HTTP; *shelly.Client satisfies it.
@@ -21,7 +21,7 @@ type mqttPublisher interface {
 // Dispatcher routes a fire to the right transport per device (TRA-906): http
 // devices go over local HTTP, mqtt devices publish to the broker. It is the
 // single Set(device, on) seam used by both the geofence Firer and the
-// alarm-device test-fire/reset handlers.
+// output-device test-fire/reset handlers.
 type Dispatcher struct {
 	http httpSetter
 	mqtt mqttPublisher // may be nil when the broker is disabled
@@ -34,8 +34,8 @@ func NewDispatcher(http httpSetter, mqtt mqttPublisher) Dispatcher {
 }
 
 // Set drives the device on/off using its configured transport.
-func (d Dispatcher) Set(ctx context.Context, dev alarmdevice.AlarmDevice, on bool) error {
-	if dev.Transport == alarmdevice.TransportMQTT {
+func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on bool) error {
+	if dev.Transport == outputdevice.TransportMQTT {
 		if d.mqtt == nil {
 			return fmt.Errorf("alarm: device %d uses mqtt transport but the broker is not configured", dev.ID)
 		}

@@ -2,20 +2,20 @@ import { useState, useEffect, FormEvent } from 'react';
 import { validateName } from '@/lib/location/validators';
 import { useLocations } from '@/hooks/locations';
 import type {
-  AlarmDevice,
-  AlarmDeviceType,
+  OutputDevice,
+  OutputDeviceType,
   AlarmTransport,
-  CreateAlarmDeviceRequest,
-  UpdateAlarmDeviceRequest,
-} from '@/types/alarmdevices';
+  CreateOutputDeviceRequest,
+  UpdateOutputDeviceRequest,
+} from '@/types/outputdevices';
 
-const DEVICE_TYPES: { value: AlarmDeviceType; label: string }[] = [
+const DEVICE_TYPES: { value: OutputDeviceType; label: string }[] = [
   { value: 'shelly_gen4', label: 'Shelly Gen4' },
 ];
 
-interface AlarmDeviceFormData {
+interface OutputDeviceFormData {
   name: string;
-  type: AlarmDeviceType;
+  type: OutputDeviceType;
   transport: AlarmTransport;
   base_url: string; // http transport
   command_topic: string; // mqtt transport (Shelly topic prefix)
@@ -29,10 +29,10 @@ const TRANSPORTS: { value: AlarmTransport; label: string }[] = [
   { value: 'mqtt', label: 'MQTT (broker)' },
 ];
 
-interface AlarmDeviceFormProps {
+interface OutputDeviceFormProps {
   mode: 'create' | 'edit';
-  device?: AlarmDevice;
-  onSubmit: (data: CreateAlarmDeviceRequest | UpdateAlarmDeviceRequest) => void;
+  device?: OutputDevice;
+  onSubmit: (data: CreateOutputDeviceRequest | UpdateOutputDeviceRequest) => void;
   onCancel: () => void;
   loading?: boolean;
   error?: string | null;
@@ -45,7 +45,7 @@ interface FieldErrors {
   switch_id?: string;
 }
 
-const EMPTY_FORM: AlarmDeviceFormData = {
+const EMPTY_FORM: OutputDeviceFormData = {
   name: '',
   type: 'shelly_gen4',
   transport: 'http',
@@ -62,15 +62,15 @@ function validateBaseURL(url: string): string | null {
   return null;
 }
 
-export function AlarmDeviceForm({
+export function OutputDeviceForm({
   mode,
   device,
   onSubmit,
   onCancel,
   loading = false,
   error = null,
-}: AlarmDeviceFormProps) {
-  const [formData, setFormData] = useState<AlarmDeviceFormData>(EMPTY_FORM);
+}: OutputDeviceFormProps) {
+  const [formData, setFormData] = useState<OutputDeviceFormData>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const { locations } = useLocations();
 
@@ -112,9 +112,9 @@ export function AlarmDeviceForm({
     return Object.keys(errors).length === 0;
   };
 
-  const handleChange = <K extends keyof AlarmDeviceFormData>(
+  const handleChange = <K extends keyof OutputDeviceFormData>(
     field: K,
-    value: AlarmDeviceFormData[K]
+    value: OutputDeviceFormData[K]
   ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -144,9 +144,9 @@ export function AlarmDeviceForm({
     };
 
     if (mode === 'create') {
-      onSubmit(common as CreateAlarmDeviceRequest);
+      onSubmit(common as CreateOutputDeviceRequest);
     } else {
-      onSubmit(common as UpdateAlarmDeviceRequest);
+      onSubmit(common as UpdateOutputDeviceRequest);
     }
   };
 
@@ -189,7 +189,7 @@ export function AlarmDeviceForm({
           <select
             id="type"
             value={formData.type}
-            onChange={(e) => handleChange('type', e.target.value as AlarmDeviceType)}
+            onChange={(e) => handleChange('type', e.target.value as OutputDeviceType)}
             disabled={loading}
             className={inputClass(false)}
           >
@@ -343,7 +343,7 @@ export function AlarmDeviceForm({
           disabled={loading}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
         >
-          {loading ? 'Saving...' : mode === 'create' ? 'Create Alarm Device' : 'Update Alarm Device'}
+          {loading ? 'Saving...' : mode === 'create' ? 'Create Output Device' : 'Update Output Device'}
         </button>
       </div>
     </form>

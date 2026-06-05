@@ -20,7 +20,7 @@ const HelpScreen = lazyWithRetry(() => import('@/components/HelpScreen'));
 const AssetsScreen = lazyWithRetry(() => import('@/components/AssetsScreen'));
 const LocationsScreen = lazyWithRetry(() => import('@/components/LocationsScreen'));
 const ScanDevicesScreen = lazyWithRetry(() => import('@/components/ScanDevicesScreen'));
-const AlarmDevicesScreen = lazyWithRetry(() => import('@/components/AlarmDevicesScreen'));
+const OutputDevicesScreen = lazyWithRetry(() => import('@/components/OutputDevicesScreen'));
 const LiveReadsScreen = lazyWithRetry(() => import('@/components/LiveReadsScreen'));
 const LoginScreen = lazyWithRetry(() => import('@/components/LoginScreen'));
 const SignupScreen = lazyWithRetry(() => import('@/components/SignupScreen'));
@@ -34,7 +34,7 @@ const APIKeysScreen = lazyWithRetry(() => import('@/components/APIKeysScreen'));
 const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'alarm-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite', 'api-keys'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite', 'api-keys'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -198,7 +198,7 @@ export default function App() {
       assets: AssetsScreen,
       locations: LocationsScreen,
       'scan-devices': ScanDevicesScreen,
-      'alarm-devices': AlarmDevicesScreen,
+      'output-devices': OutputDevicesScreen,
       'live-reads': LiveReadsScreen,
       settings: SettingsScreen,
       help: HelpScreen,
@@ -223,7 +223,7 @@ export default function App() {
       assets: LoadingScreen,
       locations: LoadingScreen,
       'scan-devices': LoadingScreen,
-      'alarm-devices': LoadingScreen,
+      'output-devices': LoadingScreen,
       'live-reads': LoadingScreen,
       settings: SettingsLoadingScreen,
       help: HelpLoadingScreen,

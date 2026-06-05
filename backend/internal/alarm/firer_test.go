@@ -9,18 +9,18 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/trakrf/platform/backend/internal/geofence"
-	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 )
 
 type fakeLookup struct {
-	devices   []alarmdevice.AlarmDevice
+	devices   []outputdevice.OutputDevice
 	err       error
 	gotOrg    int
 	gotLoc    int
 	callCount int
 }
 
-func (f *fakeLookup) ListAlarmDevicesForLocation(_ context.Context, orgID, locationID int) ([]alarmdevice.AlarmDevice, error) {
+func (f *fakeLookup) ListOutputDevicesForLocation(_ context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error) {
 	f.gotOrg, f.gotLoc = orgID, locationID
 	f.callCount++
 	return f.devices, f.err
@@ -36,7 +36,7 @@ type fakeDriver struct {
 	failOnID int // returns an error when device.ID == failOnID
 }
 
-func (d *fakeDriver) Set(_ context.Context, dev alarmdevice.AlarmDevice, on bool) error {
+func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool) error {
 	d.calls = append(d.calls, setCall{dev.ID, on})
 	if dev.ID == d.failOnID {
 		return errors.New("boom")
@@ -55,7 +55,7 @@ func newTestFirer(lookup deviceLookup, drv deviceSetter) Firer {
 }
 
 func TestFirer_FiresEachBoundDevice(t *testing.T) {
-	lookup := &fakeLookup{devices: []alarmdevice.AlarmDevice{
+	lookup := &fakeLookup{devices: []outputdevice.OutputDevice{
 		{ID: 1, BaseURL: "http://a", SwitchID: 0},
 		{ID: 2, BaseURL: "http://b", SwitchID: 1},
 	}}
@@ -93,7 +93,7 @@ func TestFirer_NoDevicesNoCalls(t *testing.T) {
 }
 
 func TestFirer_NilLocationIsNoOp(t *testing.T) {
-	lookup := &fakeLookup{devices: []alarmdevice.AlarmDevice{{ID: 1, BaseURL: "http://a"}}}
+	lookup := &fakeLookup{devices: []outputdevice.OutputDevice{{ID: 1, BaseURL: "http://a"}}}
 	drv := &fakeDriver{}
 	f := newTestFirer(lookup, drv)
 
@@ -112,7 +112,7 @@ func TestFirer_NilLocationIsNoOp(t *testing.T) {
 }
 
 func TestFirer_DriverErrorAggregatedNotFatal(t *testing.T) {
-	lookup := &fakeLookup{devices: []alarmdevice.AlarmDevice{
+	lookup := &fakeLookup{devices: []outputdevice.OutputDevice{
 		{ID: 1, BaseURL: "http://ok", SwitchID: 0},
 		{ID: 2, BaseURL: "http://bad", SwitchID: 0},
 	}}

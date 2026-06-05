@@ -1,8 +1,8 @@
-// Package alarmdevices provides internal (session-authenticated) CRUD handlers
-// for alarm_devices plus test-fire and reset actions. These are management-
+// Package outputdevices provides internal (session-authenticated) CRUD handlers
+// for output_devices plus test-fire and reset actions. These are management-
 // surface endpoints — NOT part of the public API (no ,public swagger tag, no
-// RequireScope) because alarm devices are internal physical-layer data (TRA-903).
-package alarmdevices
+// RequireScope) because output devices are internal physical-layer data (TRA-903).
+package outputdevices
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/trakrf/platform/backend/internal/middleware"
-	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -28,14 +28,14 @@ var validate = func() *validator.Validate {
 	return v
 }()
 
-// actuator drives one alarm device on/off using its configured transport
+// actuator drives one output device on/off using its configured transport
 // (http or mqtt); alarm.Dispatcher satisfies it. Narrowed so the handler can be
 // tested with a fake and no real device/broker.
 type actuator interface {
-	Set(ctx context.Context, dev alarmdevice.AlarmDevice, on bool) error
+	Set(ctx context.Context, dev outputdevice.OutputDevice, on bool) error
 }
 
-// Handler serves alarm-device CRUD + actions.
+// Handler serves output-device CRUD + actions.
 type Handler struct {
 	storage   *storage.Storage
 	actuator  actuator
@@ -48,16 +48,16 @@ func NewHandler(storage *storage.Storage, act actuator, testPulse time.Duration)
 	return &Handler{storage: storage, actuator: act, testPulse: testPulse}
 }
 
-// RegisterRoutes wires alarm-device routes onto r. Mount inside the session-auth
+// RegisterRoutes wires output-device routes onto r. Mount inside the session-auth
 // (middleware.Auth) group.
 func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/alarm-devices", h.List)
-	r.Post("/api/v1/alarm-devices", h.Create)
-	r.Get("/api/v1/alarm-devices/{alarm_device_id}", h.Get)
-	r.Patch("/api/v1/alarm-devices/{alarm_device_id}", h.Update)
-	r.Delete("/api/v1/alarm-devices/{alarm_device_id}", h.Delete)
-	r.Post("/api/v1/alarm-devices/{alarm_device_id}/test", h.Test)
-	r.Post("/api/v1/alarm-devices/{alarm_device_id}/reset", h.Reset)
+	r.Get("/api/v1/output-devices", h.List)
+	r.Post("/api/v1/output-devices", h.Create)
+	r.Get("/api/v1/output-devices/{output_device_id}", h.Get)
+	r.Patch("/api/v1/output-devices/{output_device_id}", h.Update)
+	r.Delete("/api/v1/output-devices/{output_device_id}", h.Delete)
+	r.Post("/api/v1/output-devices/{output_device_id}/test", h.Test)
+	r.Post("/api/v1/output-devices/{output_device_id}/reset", h.Reset)
 }
 
 // transportFieldsError enforces the transport-specific fields of an alarm
@@ -67,7 +67,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 // a struct `url` tag keeps base_url from being rejected for mqtt devices, where
 // it is not applicable (TRA-928). Returns "" when valid.
 func transportFieldsError(transport, baseURL, commandTopic string) string {
-	if transport == alarmdevice.TransportMQTT {
+	if transport == outputdevice.TransportMQTT {
 		if commandTopic == "" {
 			return "command_topic is required for mqtt transport"
 		}
@@ -110,12 +110,12 @@ func parseListLimitOffset(r *http.Request) (limit, offset int) {
 	return
 }
 
-// @Summary  List alarm devices
-// @Tags     alarmdevices,internal
-// @ID       alarmdevices.list
+// @Summary  List output devices
+// @Tags     outputdevices,internal
+// @ID       outputdevices.list
 // @Produce  json
 // @Success  200 {object} map[string]interface{}
-// @Router   /api/v1/alarm-devices [get]
+// @Router   /api/v1/output-devices [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -124,12 +124,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, offset := parseListLimitOffset(r)
-	devices, err := h.storage.ListAlarmDevices(r.Context(), orgID, limit, offset)
+	devices, err := h.storage.ListOutputDevices(r.Context(), orgID, limit, offset)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
-	total, err := h.storage.CountAlarmDevices(r.Context(), orgID)
+	total, err := h.storage.CountOutputDevices(r.Context(), orgID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
@@ -140,14 +140,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// @Summary  Create an alarm device
-// @Tags     alarmdevices,internal
-// @ID       alarmdevices.create
+// @Summary  Create an output device
+// @Tags     outputdevices,internal
+// @ID       outputdevices.create
 // @Accept   json
 // @Produce  json
-// @Param    request body alarmdevice.CreateAlarmDeviceRequest true "Alarm device"
-// @Success  201 {object} alarmdevice.AlarmDeviceResponse
-// @Router   /api/v1/alarm-devices [post]
+// @Param    request body outputdevice.CreateOutputDeviceRequest true "Alarm device"
+// @Success  201 {object} outputdevice.OutputDeviceResponse
+// @Router   /api/v1/output-devices [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -155,7 +155,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
-	var req alarmdevice.CreateAlarmDeviceRequest
+	var req outputdevice.CreateOutputDeviceRequest
 	if err := httputil.DecodeJSONStrict(r, &req); err != nil {
 		httputil.RespondDecodeError(w, r, err, reqID)
 		return
@@ -167,28 +167,28 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// Transport-specific validation (transport defaults to http).
 	transport := req.Transport
 	if transport == "" {
-		transport = alarmdevice.TransportHTTP
+		transport = outputdevice.TransportHTTP
 	}
 	if msg := transportFieldsError(transport, req.BaseURL, deref(req.CommandTopic)); msg != "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
 	}
-	device, err := h.storage.CreateAlarmDevice(r.Context(), orgID, req)
+	device, err := h.storage.CreateOutputDevice(r.Context(), orgID, req)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
-	w.Header().Set("Location", "/api/v1/alarm-devices/"+strconv.Itoa(device.ID))
-	httputil.WriteJSON(w, http.StatusCreated, alarmdevice.AlarmDeviceResponse{Data: *device})
+	w.Header().Set("Location", "/api/v1/output-devices/"+strconv.Itoa(device.ID))
+	httputil.WriteJSON(w, http.StatusCreated, outputdevice.OutputDeviceResponse{Data: *device})
 }
 
-// @Summary  Get an alarm device
-// @Tags     alarmdevices,internal
-// @ID       alarmdevices.get
+// @Summary  Get an output device
+// @Tags     outputdevices,internal
+// @ID       outputdevices.get
 // @Produce  json
-// @Param    alarm_device_id path int true "Alarm device id"
-// @Success  200 {object} alarmdevice.AlarmDeviceResponse
-// @Router   /api/v1/alarm-devices/{alarm_device_id} [get]
+// @Param    output_device_id path int true "Alarm device id"
+// @Success  200 {object} outputdevice.OutputDeviceResponse
+// @Router   /api/v1/output-devices/{output_device_id} [get]
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -200,18 +200,18 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, alarmdevice.AlarmDeviceResponse{Data: *device})
+	httputil.WriteJSON(w, http.StatusOK, outputdevice.OutputDeviceResponse{Data: *device})
 }
 
-// @Summary  Update an alarm device
-// @Tags     alarmdevices,internal
-// @ID       alarmdevices.update
+// @Summary  Update an output device
+// @Tags     outputdevices,internal
+// @ID       outputdevices.update
 // @Accept   json
 // @Produce  json
-// @Param    alarm_device_id path int true "Alarm device id"
-// @Param    request body alarmdevice.UpdateAlarmDeviceRequest true "Fields to update"
-// @Success  200 {object} alarmdevice.AlarmDeviceResponse
-// @Router   /api/v1/alarm-devices/{alarm_device_id} [patch]
+// @Param    output_device_id path int true "Alarm device id"
+// @Param    request body outputdevice.UpdateOutputDeviceRequest true "Fields to update"
+// @Success  200 {object} outputdevice.OutputDeviceResponse
+// @Router   /api/v1/output-devices/{output_device_id} [patch]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -219,12 +219,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
-	id, err := httputil.ParseSurrogateID("alarm_device_id", chi.URLParam(r, "alarm_device_id"))
+	id, err := httputil.ParseSurrogateID("output_device_id", chi.URLParam(r, "output_device_id"))
 	if err != nil {
 		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
-	var req alarmdevice.UpdateAlarmDeviceRequest
+	var req outputdevice.UpdateOutputDeviceRequest
 	if err := httputil.DecodeJSONStrict(r, &req); err != nil {
 		httputil.RespondDecodeError(w, r, err, reqID)
 		return
@@ -236,13 +236,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	// Resolve effective state for transport-aware validation: a patch may change
 	// transport without resending base_url/command_topic, so merge the request
 	// over the stored device before checking (TRA-928).
-	existing, err := h.storage.GetAlarmDeviceByID(r.Context(), orgID, id)
+	existing, err := h.storage.GetOutputDeviceByID(r.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
 	if existing == nil {
-		httputil.Respond404(w, r, "alarm device not found", reqID)
+		httputil.Respond404(w, r, "output device not found", reqID)
 		return
 	}
 	transport := existing.Transport
@@ -261,24 +261,24 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
 	}
-	device, err := h.storage.UpdateAlarmDevice(r.Context(), orgID, id, req)
+	device, err := h.storage.UpdateOutputDevice(r.Context(), orgID, id, req)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
 	if device == nil {
-		httputil.Respond404(w, r, "alarm device not found", reqID)
+		httputil.Respond404(w, r, "output device not found", reqID)
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, alarmdevice.AlarmDeviceResponse{Data: *device})
+	httputil.WriteJSON(w, http.StatusOK, outputdevice.OutputDeviceResponse{Data: *device})
 }
 
-// @Summary  Delete an alarm device
-// @Tags     alarmdevices,internal
-// @ID       alarmdevices.delete
-// @Param    alarm_device_id path int true "Alarm device id"
+// @Summary  Delete an output device
+// @Tags     outputdevices,internal
+// @ID       outputdevices.delete
+// @Param    output_device_id path int true "Alarm device id"
 // @Success  204
-// @Router   /api/v1/alarm-devices/{alarm_device_id} [delete]
+// @Router   /api/v1/output-devices/{output_device_id} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -286,30 +286,30 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
-	id, err := httputil.ParseSurrogateID("alarm_device_id", chi.URLParam(r, "alarm_device_id"))
+	id, err := httputil.ParseSurrogateID("output_device_id", chi.URLParam(r, "output_device_id"))
 	if err != nil {
 		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
-	ok, err := h.storage.DeleteAlarmDevice(r.Context(), orgID, id)
+	ok, err := h.storage.DeleteOutputDevice(r.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
 	if !ok {
-		httputil.Respond404(w, r, "alarm device not found", reqID)
+		httputil.Respond404(w, r, "output device not found", reqID)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// @Summary  Test-fire an alarm device (pulse on then off)
-// @Tags     alarmdevices,internal
-// @ID       alarmdevices.test
+// @Summary  Test-fire an output device (pulse on then off)
+// @Tags     outputdevices,internal
+// @ID       outputdevices.test
 // @Produce  json
-// @Param    alarm_device_id path int true "Alarm device id"
+// @Param    output_device_id path int true "Alarm device id"
 // @Success  200 {object} map[string]interface{}
-// @Router   /api/v1/alarm-devices/{alarm_device_id}/test [post]
+// @Router   /api/v1/output-devices/{output_device_id}/test [post]
 func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -323,7 +323,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	if err := h.actuator.Set(ctx, *device, true); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "alarm device unreachable: "+err.Error(), reqID)
+		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}
 	if h.testPulse > 0 {
@@ -334,13 +334,13 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
-// @Summary  Reset (turn off) an alarm device
-// @Tags     alarmdevices,internal
-// @ID       alarmdevices.reset
+// @Summary  Reset (turn off) an output device
+// @Tags     outputdevices,internal
+// @ID       outputdevices.reset
 // @Produce  json
-// @Param    alarm_device_id path int true "Alarm device id"
+// @Param    output_device_id path int true "Alarm device id"
 // @Success  200 {object} map[string]interface{}
-// @Router   /api/v1/alarm-devices/{alarm_device_id}/reset [post]
+// @Router   /api/v1/output-devices/{output_device_id}/reset [post]
 func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -353,7 +353,7 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.actuator.Set(r.Context(), *device, false); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "alarm device unreachable: "+err.Error(), reqID)
+		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
@@ -361,19 +361,19 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 
 // load parses the id path param and fetches the device, writing the appropriate
 // error response (400/404/500) and returning ok=false when it can't.
-func (h *Handler) load(w http.ResponseWriter, r *http.Request, orgID int, reqID string) (*alarmdevice.AlarmDevice, bool) {
-	id, err := httputil.ParseSurrogateID("alarm_device_id", chi.URLParam(r, "alarm_device_id"))
+func (h *Handler) load(w http.ResponseWriter, r *http.Request, orgID int, reqID string) (*outputdevice.OutputDevice, bool) {
+	id, err := httputil.ParseSurrogateID("output_device_id", chi.URLParam(r, "output_device_id"))
 	if err != nil {
 		httputil.RespondPathParamError(w, r, err, reqID)
 		return nil, false
 	}
-	device, err := h.storage.GetAlarmDeviceByID(r.Context(), orgID, id)
+	device, err := h.storage.GetOutputDeviceByID(r.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return nil, false
 	}
 	if device == nil {
-		httputil.Respond404(w, r, "alarm device not found", reqID)
+		httputil.Respond404(w, r, "output device not found", reqID)
 		return nil, false
 	}
 	return device, true

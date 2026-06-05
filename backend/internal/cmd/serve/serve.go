@@ -14,7 +14,6 @@ import (
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/geofence"
-	alarmdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -23,6 +22,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
+	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
@@ -91,7 +91,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// TRA-903/906: the alarm Dispatcher routes a fire to the right transport per
 	// device — local HTTP (Shelly RPC) or MQTT publish to the shared broker. It
 	// is shared by the geofence firer (auto-fire on boundary trip) and the
-	// alarm-device test-fire/reset endpoints. The MQTT publisher only exists when
+	// output-device test-fire/reset endpoints. The MQTT publisher only exists when
 	// the broker is configured; when it isn't, mqtt-transport devices fail with a
 	// clear error and the http path is unaffected.
 	shellyClient := shelly.New(0)
@@ -147,7 +147,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	scanPointsHandler := scanpointshandler.NewHandler(store)
 	// 2s test-fire pulse: long enough for an operator to see the strobe, short
 	// enough not to leave the relay latched after a confidence check.
-	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
+	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	// TRA-924: Live Reads is now served by the org-enforced SSE endpoint, so the
@@ -158,7 +158,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, alarmDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useOrgStore } from '@/stores/orgStore';
-import { alarmDevicesApi } from '@/lib/api/alarmdevices';
+import { outputDevicesApi } from '@/lib/api/outputdevices';
 
-export interface UseAlarmDevicesOptions {
+export interface UseOutputDevicesOptions {
   enabled?: boolean;
   refetchOnMount?: boolean;
 }
@@ -10,18 +10,18 @@ export interface UseAlarmDevicesOptions {
 const PER_PAGE = 100;
 
 /**
- * Fetch all alarm devices for the current org. The list endpoint paginates;
+ * Fetch all output devices for the current org. The list endpoint paginates;
  * walk pages until we've collected `total`.
  */
-async function fetchAllAlarmDevices() {
-  const first = await alarmDevicesApi.list({ page: 1, per_page: PER_PAGE });
+async function fetchAllOutputDevices() {
+  const first = await outputDevicesApi.list({ page: 1, per_page: PER_PAGE });
   const all = [...first.data.data];
   const total = first.data.pagination?.total ?? all.length;
 
   let page = 1;
   while (all.length < total) {
     page += 1;
-    const next = await alarmDevicesApi.list({ page, per_page: PER_PAGE });
+    const next = await outputDevicesApi.list({ page, per_page: PER_PAGE });
     if (next.data.data.length === 0) break; // Safety: no more data
     all.push(...next.data.data);
   }
@@ -29,20 +29,20 @@ async function fetchAllAlarmDevices() {
   return { data: all, total };
 }
 
-export function useAlarmDevices(options: UseAlarmDevicesOptions = {}) {
+export function useOutputDevices(options: UseOutputDevicesOptions = {}) {
   const { enabled = true, refetchOnMount = true } = options;
   const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const query = useQuery({
-    queryKey: ['alarmDevices', currentOrg?.id],
-    queryFn: fetchAllAlarmDevices,
+    queryKey: ['outputDevices', currentOrg?.id],
+    queryFn: fetchAllOutputDevices,
     enabled,
     refetchOnMount,
     staleTime: 60 * 60 * 1000,
   });
 
   return {
-    alarmDevices: query.data?.data ?? [],
+    outputDevices: query.data?.data ?? [],
     totalCount: query.data?.total ?? 0,
     isLoading: query.isLoading,
     isRefetching: query.isRefetching,

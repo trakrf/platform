@@ -1,4 +1,4 @@
-package alarmdevices
+package outputdevices
 
 import "testing"
 

@@ -2,54 +2,54 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type {
-  AlarmDevice,
-  CreateAlarmDeviceRequest,
-  UpdateAlarmDeviceRequest,
-} from '@/types/alarmdevices';
-import { AlarmDeviceForm } from './AlarmDeviceForm';
-import { useAlarmDeviceMutations } from '@/hooks/alarmdevices';
+  OutputDevice,
+  CreateOutputDeviceRequest,
+  UpdateOutputDeviceRequest,
+} from '@/types/outputdevices';
+import { OutputDeviceForm } from './OutputDeviceForm';
+import { useOutputDeviceMutations } from '@/hooks/outputdevices';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 
-interface AlarmDeviceFormModalProps {
+interface OutputDeviceFormModalProps {
   isOpen: boolean;
   mode: 'create' | 'edit';
-  device?: AlarmDevice;
+  device?: OutputDevice;
   onClose: () => void;
 }
 
 // Outer gate returns null when closed so the stateful body unmounts each
 // open/close cycle (mirrors ScanDeviceFormModal — TRA-817).
-export function AlarmDeviceFormModal(props: AlarmDeviceFormModalProps) {
+export function OutputDeviceFormModal(props: OutputDeviceFormModalProps) {
   if (!props.isOpen) {
     return null;
   }
-  return <AlarmDeviceFormModalBody {...props} />;
+  return <OutputDeviceFormModalBody {...props} />;
 }
 
-function AlarmDeviceFormModalBody({ isOpen, mode, device, onClose }: AlarmDeviceFormModalProps) {
+function OutputDeviceFormModalBody({ isOpen, mode, device, onClose }: OutputDeviceFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { create, update } = useAlarmDeviceMutations();
+  const { create, update } = useOutputDeviceMutations();
 
   useEscapeToClose(isOpen, onClose, loading);
 
-  const handleSubmit = async (data: CreateAlarmDeviceRequest | UpdateAlarmDeviceRequest) => {
+  const handleSubmit = async (data: CreateOutputDeviceRequest | UpdateOutputDeviceRequest) => {
     setLoading(true);
     setError(null);
 
     try {
       if (mode === 'create') {
-        const created = await create(data as CreateAlarmDeviceRequest);
-        toast.success(`Alarm device "${created.name}" created successfully`);
+        const created = await create(data as CreateOutputDeviceRequest);
+        toast.success(`Output device "${created.name}" created successfully`);
       } else if (mode === 'edit' && device) {
-        const updated = await update({ id: device.id, updates: data as UpdateAlarmDeviceRequest });
-        toast.success(`Alarm device "${updated.name}" updated successfully`);
+        const updated = await update({ id: device.id, updates: data as UpdateOutputDeviceRequest });
+        toast.success(`Output device "${updated.name}" updated successfully`);
       }
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Failed to save alarm device. Please try again.'));
+      setError(getApiErrorMessage(err, 'Failed to save output device. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -69,7 +69,7 @@ function AlarmDeviceFormModalBody({ isOpen, mode, device, onClose }: AlarmDevice
       <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {mode === 'create' ? 'Create New Alarm Device' : `Edit Alarm Device: ${device?.name}`}
+            {mode === 'create' ? 'Create New Output Device' : `Edit Output Device: ${device?.name}`}
           </h2>
           <button
             onClick={onClose}
@@ -82,7 +82,7 @@ function AlarmDeviceFormModalBody({ isOpen, mode, device, onClose }: AlarmDevice
         </div>
 
         <div className="px-6 py-6">
-          <AlarmDeviceForm
+          <OutputDeviceForm
             mode={mode}
             device={device}
             onSubmit={handleSubmit}

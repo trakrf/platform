@@ -1,6 +1,6 @@
 //go:build integration
 
-package alarmdevices_test
+package outputdevices_test
 
 import (
 	"bytes"
@@ -15,9 +15,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/trakrf/platform/backend/internal/handlers/alarmdevices"
+	"github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	"github.com/trakrf/platform/backend/internal/middleware"
-	"github.com/trakrf/platform/backend/internal/models/alarmdevice"
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -38,7 +38,7 @@ type fakeDriver struct {
 	failURL string
 }
 
-func (d *fakeDriver) Set(_ context.Context, dev alarmdevice.AlarmDevice, on bool) error {
+func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool) error {
 	d.calls = append(d.calls, setCall{dev.BaseURL, dev.SwitchID, on})
 	if dev.BaseURL == d.failURL {
 		return errors.New("device unreachable")
@@ -53,11 +53,11 @@ func newTestServer(t *testing.T, drv *fakeDriver) (*chi.Mux, int) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	// testPulse 0: no blocking sleep in tests.
-	alarmdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r)
 	return r, orgID
 }
 
-func TestAlarmDevicesHandler_RoundTrip(t *testing.T) {
+func TestOutputDevicesHandler_RoundTrip(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
@@ -76,7 +76,7 @@ func TestAlarmDevicesHandler_RoundTrip(t *testing.T) {
 	}
 
 	// Create with defaults.
-	rec := do(http.MethodPost, "/api/v1/alarm-devices", map[string]any{
+	rec := do(http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Demo Strobe", "base_url": "http://192.168.50.66",
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
@@ -95,40 +95,40 @@ func TestAlarmDevicesHandler_RoundTrip(t *testing.T) {
 	id := created.Data.ID
 
 	// Get.
-	rec = do(http.MethodGet, "/api/v1/alarm-devices/"+itoa(id), nil)
+	rec = do(http.MethodGet, "/api/v1/output-devices/"+itoa(id), nil)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
 	// List.
-	rec = do(http.MethodGet, "/api/v1/alarm-devices", nil)
+	rec = do(http.MethodGet, "/api/v1/output-devices", nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Update.
-	rec = do(http.MethodPatch, "/api/v1/alarm-devices/"+itoa(id), map[string]any{"name": "Renamed"})
+	rec = do(http.MethodPatch, "/api/v1/output-devices/"+itoa(id), map[string]any{"name": "Renamed"})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
 	// Delete.
-	rec = do(http.MethodDelete, "/api/v1/alarm-devices/"+itoa(id), nil)
+	rec = do(http.MethodDelete, "/api/v1/output-devices/"+itoa(id), nil)
 	require.Equal(t, http.StatusNoContent, rec.Code)
 
 	// Get after delete -> 404.
-	rec = do(http.MethodGet, "/api/v1/alarm-devices/"+itoa(id), nil)
+	rec = do(http.MethodGet, "/api/v1/output-devices/"+itoa(id), nil)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-func TestAlarmDevicesHandler_CreateValidation(t *testing.T) {
+func TestOutputDevicesHandler_CreateValidation(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 	// Missing name + bad base_url.
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{"base_url": "not-a-url"}))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
 
-func TestAlarmDevicesHandler_CreateMQTT(t *testing.T) {
+func TestOutputDevicesHandler_CreateMQTT(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
@@ -136,7 +136,7 @@ func TestAlarmDevicesHandler_CreateMQTT(t *testing.T) {
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
 		"name": "Dock Strobe", "transport": "mqtt", "command_topic": "trakrf.id/dock-strobe",
 	}))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
@@ -153,7 +153,7 @@ func TestAlarmDevicesHandler_CreateMQTT(t *testing.T) {
 	require.Equal(t, "trakrf.id/dock-strobe", created.Data.CommandTopic)
 }
 
-func TestAlarmDevicesHandler_MQTTRequiresCommandTopic(t *testing.T) {
+func TestOutputDevicesHandler_MQTTRequiresCommandTopic(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
@@ -161,14 +161,14 @@ func TestAlarmDevicesHandler_MQTTRequiresCommandTopic(t *testing.T) {
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
 		"name": "Dock Strobe", "transport": "mqtt", // no command_topic
 	}))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
 
-func TestAlarmDevicesHandler_HTTPRequiresBaseURL(t *testing.T) {
+func TestOutputDevicesHandler_HTTPRequiresBaseURL(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
@@ -176,50 +176,50 @@ func TestAlarmDevicesHandler_HTTPRequiresBaseURL(t *testing.T) {
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
 		"name": "Dock Strobe", // default http transport, no base_url
 	}))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
 
-// TestAlarmDevicesHandler_UpdateMQTTIgnoresEmptyBaseURL reproduces TRA-928:
-// editing an mqtt-transport alarm device while the client still sends an empty
+// TestOutputDevicesHandler_UpdateMQTTIgnoresEmptyBaseURL reproduces TRA-928:
+// editing an mqtt-transport output device while the client still sends an empty
 // base_url (as the form historically did) must succeed — base_url is not
 // applicable to mqtt and must not be validated as a URL.
-func TestAlarmDevicesHandler_UpdateMQTTIgnoresEmptyBaseURL(t *testing.T) {
+func TestOutputDevicesHandler_UpdateMQTTIgnoresEmptyBaseURL(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
 	id := createMQTTDevice(t, r, orgID, "trakrf.id/dock-strobe")
 
-	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/alarm-devices/"+itoa(id), map[string]any{
+	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/output-devices/"+itoa(id), map[string]any{
 		"transport": "mqtt", "command_topic": "trakrf.id/dock-strobe", "base_url": "",
 	})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
 
-// TestAlarmDevicesHandler_UpdateHTTPRejectsInvalidBaseURL asserts the other half
+// TestOutputDevicesHandler_UpdateHTTPRejectsInvalidBaseURL asserts the other half
 // of TRA-928: http transport still requires a valid base_url on update.
-func TestAlarmDevicesHandler_UpdateHTTPRejectsInvalidBaseURL(t *testing.T) {
+func TestOutputDevicesHandler_UpdateHTTPRejectsInvalidBaseURL(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
 	id := createDevice(t, r, orgID, "http://192.168.50.66")
 
-	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/alarm-devices/"+itoa(id), map[string]any{
+	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/output-devices/"+itoa(id), map[string]any{
 		"base_url": "not-a-url",
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
 
-func TestAlarmDevicesHandler_TestFirePulses(t *testing.T) {
+func TestOutputDevicesHandler_TestFirePulses(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
 	id := createDevice(t, r, orgID, "http://192.168.50.66")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices/"+itoa(id)+"/test", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices/"+itoa(id)+"/test", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -231,35 +231,35 @@ func TestAlarmDevicesHandler_TestFirePulses(t *testing.T) {
 	}, drv.calls)
 }
 
-func TestAlarmDevicesHandler_TestFireUnreachableIs502(t *testing.T) {
+func TestOutputDevicesHandler_TestFireUnreachableIs502(t *testing.T) {
 	drv := &fakeDriver{failURL: "http://192.168.50.66"}
 	r, orgID := newTestServer(t, drv)
 
 	id := createDevice(t, r, orgID, "http://192.168.50.66")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices/"+itoa(id)+"/test", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices/"+itoa(id)+"/test", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusBadGateway, rec.Code, rec.Body.String())
 }
 
-func TestAlarmDevicesHandler_ResetTurnsOff(t *testing.T) {
+func TestOutputDevicesHandler_ResetTurnsOff(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
 	id := createDevice(t, r, orgID, "http://192.168.50.66")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices/"+itoa(id)+"/reset", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices/"+itoa(id)+"/reset", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, []setCall{{"http://192.168.50.66", 0, false}}, drv.calls)
 }
 
-func TestAlarmDevicesHandler_TestFireMissingIs404(t *testing.T) {
+func TestOutputDevicesHandler_TestFireMissingIs404(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices/99999999/test", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices/99999999/test", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusNotFound, rec.Code)
@@ -285,7 +285,7 @@ func doReq(t *testing.T, r *chi.Mux, orgID int, method, path string, body any) *
 
 func createMQTTDevice(t *testing.T, r *chi.Mux, orgID int, topic string) int {
 	t.Helper()
-	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/alarm-devices", map[string]any{
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "D", "transport": "mqtt", "command_topic": topic,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
@@ -302,7 +302,7 @@ func createDevice(t *testing.T, r *chi.Mux, orgID int, baseURL string) int {
 	t.Helper()
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{"name": "D", "base_url": baseURL}))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarm-devices", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withOrg(req, orgID))
