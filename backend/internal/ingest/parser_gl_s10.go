@@ -24,6 +24,16 @@ type glS10Entry struct {
 	TS   int64  `json:"ts"`   // milliseconds since epoch (CS463 uses microseconds)
 }
 
+// parseGLS10 decodes a GL-S10 BLE gateway message into one read per detected
+// advertisement. Two provisioning contracts make those reads resolve to
+// asset_scans downstream (storage.PersistReads); both are pinned by the
+// integration test and hold for the live preview registration:
+//   - The device must be registered with external_key == dev_ble_mac, so the
+//     synthesized capture point {dev_ble_mac}-1 matches the scan_point that
+//     CreateScanDevice auto-provisions as {external_key}-1.
+//   - The BLE MAC must be registered as a type='rfid' tag value: membership
+//     resolution is rfid-only (TRA-900). A MAC registered as type='ble' parses
+//     fine here but silently never produces an asset_scan.
 func parseGLS10(payload []byte) ([]scanread.Read, error) {
 	var p glS10Payload
 	if err := json.Unmarshal(payload, &p); err != nil {
