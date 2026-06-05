@@ -90,9 +90,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req scanpoint.UpdateScanPointRequest
-	// Tolerate explicit JSON null on location_id (detach zone) without tripping
-	// the strict-decode unknown/null check; nulls reported separately.
-	nulls, _, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(r, &req, []string{"location_id"})
+	// Decode normally — location_id is a writable field, NOT read-only, so it
+	// must stay in the body to populate req.LocationID. (It was previously in
+	// the decoder's `drop` set, which silently stripped it and made every
+	// location_id edit a no-op 200 — TRA-931.) The nulls map still distinguishes
+	// an explicit `location_id: null` (detach the zone) from an omitted field.
+	nulls, _, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(r, &req, nil)
 	if err != nil {
 		httputil.RespondDecodeError(w, r, err, reqID)
 		return
