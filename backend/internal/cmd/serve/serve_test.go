@@ -50,7 +50,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil), 0)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
-	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")
+	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "", frontendhandler.ReaderFeedConfig{})
 	testHandler := testhandler.NewHandler(store)
 
 	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, alarmDevicesHandler, lookupHandler, healthHandler, frontendHandler, testHandler, store)

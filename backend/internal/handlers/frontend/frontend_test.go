@@ -14,10 +14,14 @@ const testIndexHTML = `<!DOCTYPE html>
 <body><div id="root"></div></body></html>`
 
 func newTestHandler(label string, index string) *Handler {
+	return newTestHandlerWithFeed(label, index, ReaderFeedConfig{})
+}
+
+func newTestHandlerWithFeed(label string, index string, feed ReaderFeedConfig) *Handler {
 	mapFS := fstest.MapFS{
 		"frontend/dist/index.html": &fstest.MapFile{Data: []byte(index)},
 	}
-	return NewHandler(mapFS, "frontend/dist", label)
+	return NewHandler(mapFS, "frontend/dist", label, feed)
 }
 
 func serveSPA(t *testing.T, h *Handler) string {
@@ -34,7 +38,7 @@ func serveSPA(t *testing.T, h *Handler) string {
 func TestServeSPA_InjectsLabel(t *testing.T) {
 	body := serveSPA(t, newTestHandler("GKE pre-prod", testIndexHTML))
 
-	want := `<script>window.__APP_CONFIG__ = {"environmentLabel":"GKE pre-prod"};</script>`
+	want := `<script>window.__APP_CONFIG__ = {"environmentLabel":"GKE pre-prod","readerFeed":{"url":"","username":"","password":"","topic":""}};</script>`
 	if !strings.Contains(body, want) {
 		t.Errorf("body missing injected config script.\nwant substring: %s\ngot:\n%s", want, body)
 	}
@@ -46,9 +50,24 @@ func TestServeSPA_InjectsLabel(t *testing.T) {
 func TestServeSPA_EmptyLabel(t *testing.T) {
 	body := serveSPA(t, newTestHandler("", testIndexHTML))
 
-	want := `{"environmentLabel":""}`
+	want := `{"environmentLabel":"","readerFeed":{"url":"","username":"","password":"","topic":""}}`
 	if !strings.Contains(body, want) {
 		t.Errorf("body missing empty-label config.\nwant substring: %s\ngot:\n%s", want, body)
+	}
+}
+
+func TestServeSPA_InjectsReaderFeed(t *testing.T) {
+	feed := ReaderFeedConfig{
+		URL:      "wss://mqtt.preview.gke.trakrf.id:8084/mqtt",
+		Username: "frontend-readonly",
+		Password: "s3cret",
+		Topic:    "trakrf.id/+/reads",
+	}
+	body := serveSPA(t, newTestHandlerWithFeed("preview", testIndexHTML, feed))
+
+	want := `"readerFeed":{"url":"wss://mqtt.preview.gke.trakrf.id:8084/mqtt","username":"frontend-readonly","password":"s3cret","topic":"trakrf.id/+/reads"}`
+	if !strings.Contains(body, want) {
+		t.Errorf("body missing injected reader-feed config.\nwant substring: %s\ngot:\n%s", want, body)
 	}
 }
 
@@ -95,7 +114,7 @@ func TestNewHandler_SubFS(t *testing.T) {
 		"frontend/dist/index.html":    &fstest.MapFile{Data: []byte(testIndexHTML)},
 		"frontend/dist/assets/app.js": &fstest.MapFile{Data: []byte("console.log(1)")},
 	}
-	h := NewHandler(mapFS, "frontend/dist", "preview")
+	h := NewHandler(mapFS, "frontend/dist", "preview", ReaderFeedConfig{})
 	if _, err := fs.Stat(mapFS, "frontend/dist/assets/app.js"); err != nil {
 		t.Fatalf("test fixture missing asset: %v", err)
 	}

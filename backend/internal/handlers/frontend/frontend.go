@@ -15,7 +15,21 @@ import (
 const appConfigPlaceholder = "<!--__APP_CONFIG__-->"
 
 type appConfig struct {
-	EnvironmentLabel string `json:"environmentLabel"`
+	EnvironmentLabel string           `json:"environmentLabel"`
+	ReaderFeed       ReaderFeedConfig `json:"readerFeed"`
+}
+
+// ReaderFeedConfig is the browser-side MQTT-over-WebSocket config for the
+// reader live-feed (TRA-902), sourced from pod env at the composition root and
+// injected into window.__APP_CONFIG__ — runtime config, not baked into the
+// bundle. These values are publicly visible (served in pre-auth index.html), so
+// the broker user MUST be least-privilege, subscribe-only. An empty URL leaves
+// the feed disabled in the SPA.
+type ReaderFeedConfig struct {
+	URL      string `json:"url"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Topic    string `json:"topic"`
 }
 
 type Handler struct {
@@ -27,7 +41,8 @@ type Handler struct {
 // NewHandler creates a new frontend handler instance. environmentLabel is the
 // runtime ENVIRONMENT_LABEL value (read at the composition root); it drives the
 // banner and non-prod gates in the SPA. Empty means production (no banner).
-func NewHandler(frontendFS fs.FS, distPath string, environmentLabel string) *Handler {
+// readerFeed carries the runtime reader live-feed MQTT config (empty URL = off).
+func NewHandler(frontendFS fs.FS, distPath string, environmentLabel string, readerFeed ReaderFeedConfig) *Handler {
 	subFS, err := fs.Sub(frontendFS, distPath)
 	if err != nil {
 		panic("failed to create sub filesystem: " + err.Error())
@@ -38,18 +53,18 @@ func NewHandler(frontendFS fs.FS, distPath string, environmentLabel string) *Han
 	return &Handler{
 		fileServer:      cacheControlMiddleware(fileServer),
 		frontendFS:      frontendFS,
-		appConfigScript: buildAppConfigScript(environmentLabel),
+		appConfigScript: buildAppConfigScript(environmentLabel, readerFeed),
 	}
 }
 
 // buildAppConfigScript renders the inline script that publishes runtime config
 // onto window.__APP_CONFIG__. json.Marshal HTML-escapes '<' '>' '&' by default,
-// so a label containing "</script>" becomes "</script>" and cannot
+// so any value containing "</script>" becomes "</script>" and cannot
 // break out of the inline <script> tag.
-func buildAppConfigScript(environmentLabel string) string {
-	b, err := json.Marshal(appConfig{EnvironmentLabel: environmentLabel})
+func buildAppConfigScript(environmentLabel string, readerFeed ReaderFeedConfig) string {
+	b, err := json.Marshal(appConfig{EnvironmentLabel: environmentLabel, ReaderFeed: readerFeed})
 	if err != nil {
-		b = []byte(`{"environmentLabel":""}`)
+		b = []byte(`{"environmentLabel":"","readerFeed":{"url":"","username":"","password":"","topic":""}}`)
 	}
 	return "<script>window.__APP_CONFIG__ = " + string(b) + ";</script>"
 }

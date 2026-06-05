@@ -148,9 +148,10 @@ function NotConfigured() {
       <WifiOff className="w-10 h-10 mb-3 text-gray-400" />
       <p className="font-medium text-gray-700 dark:text-gray-300">Live feed not configured</p>
       <p className="max-w-md text-sm mt-1">
-        The reader feed needs a broker WebSocket URL. Set{' '}
-        <code className="font-mono text-xs">VITE_READER_FEED_MQTT_URL</code> (and a read-only
-        broker user) once the MQTT WebSocket listener is exposed for this environment.
+        The reader feed needs a broker WebSocket URL. Set the{' '}
+        <code className="font-mono text-xs">READER_FEED_MQTT_*</code> environment variables on
+        the backend (and a read-only broker user) once the MQTT WebSocket listener is exposed
+        for this environment.
       </p>
     </div>
   );

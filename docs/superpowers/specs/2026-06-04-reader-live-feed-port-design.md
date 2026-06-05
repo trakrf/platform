@@ -87,20 +87,28 @@ count, and the RSSI range in view (the coverage-tuning numbers).
 
 Age bands (TTL 15s): ≤1s fresh (green tint) → ≤3s → ≤6s → >6s fading/muted.
 
-## Configuration
+## Configuration (runtime, not build-time)
 
-Browser-side MQTT config via **`VITE_READER_FEED_MQTT_*`** env (prefixed
-distinctly from the backend's `MQTT_*`; `VITE_` vars are public/baked into the
-bundle, so these must be **least-privilege, read-only** broker creds):
+Browser-side MQTT config is injected at **runtime** via
+`window.__APP_CONFIG__.readerFeed`, reusing the TRA-853 mechanism: the backend
+frontend handler replaces a placeholder in `index.html` at serve time with an
+inline `<script>` carrying config from pod env. One immutable bundle connects
+to whatever broker the pod points at — infra flips the feed on by setting env
+vars, **no frontend rebuild**. (We deliberately avoid build-time `VITE_*` vars;
+project preference is runtime config wherever possible.)
 
-- `VITE_READER_FEED_MQTT_URL` — `wss://host:port/path`; **empty disables the
-  feed** (keeps default builds/tests/preview inert and the PR safe to land
-  before infra exposes WS).
-- `VITE_READER_FEED_MQTT_USERNAME` / `_PASSWORD`
-- `VITE_READER_FEED_MQTT_TOPIC` — default `trakrf.id/+/reads`
+Backend pod env (sourced at the composition root, `cmd/serve`):
 
-When unset, the page renders a clear "live feed not configured" empty state
-rather than erroring.
+- `READER_FEED_MQTT_URL` — `wss://host:port/path`; **empty disables the feed**
+  (the default everywhere — builds/tests/preview stay inert until infra exposes
+  WS, so the PR is safe to land first).
+- `READER_FEED_MQTT_USERNAME` / `_PASSWORD`
+- `READER_FEED_MQTT_TOPIC` — frontend defaults to `trakrf.id/+/reads` when blank.
+
+These land in pre-auth `index.html`, so they are **public** — the broker user
+MUST be least-privilege, subscribe-only (same exposure as a baked bundle, but
+runtime-toggleable). When the URL is empty the page renders a clear "live feed
+not configured" empty state rather than erroring.
 
 ### Infra prerequisite (out of this PR)
 

@@ -142,7 +142,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	alarmDevicesHandler := alarmdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
-	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"))
+	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"), frontendhandler.ReaderFeedConfig{
+		URL:      os.Getenv("READER_FEED_MQTT_URL"),
+		Username: os.Getenv("READER_FEED_MQTT_USERNAME"),
+		Password: os.Getenv("READER_FEED_MQTT_PASSWORD"),
+		Topic:    os.Getenv("READER_FEED_MQTT_TOPIC"),
+	})
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
