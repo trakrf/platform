@@ -201,6 +201,67 @@ describe('OutputDeviceFormModal', () => {
     expect(screen.queryByRole('button', { name: /Reset/i })).not.toBeInTheDocument();
   });
 
+  describe('rule config fields (TRA-943/935)', () => {
+    it('renders the rule-config fields', () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+      expect(screen.getByLabelText(/Mode/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Age-out/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Auto-off/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/RSSI/i)).toBeInTheDocument();
+    });
+
+    it('disables auto-off when mode is presence', () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+      fireEvent.change(screen.getByLabelText(/Mode/i), { target: { value: 'presence' } });
+      expect(screen.getByLabelText(/Auto-off/i)).toBeDisabled();
+    });
+
+    it('submits metadata with the rule fields', async () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Strobe' } });
+      fireEvent.change(screen.getByLabelText(/Base URL/), {
+        target: { value: 'http://192.168.50.66' },
+      });
+      fireEvent.change(screen.getByLabelText(/Age-out/i), { target: { value: '30' } });
+      fireEvent.change(screen.getByLabelText(/RSSI/i), { target: { value: '-60' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      await waitFor(() => {
+        expect(outputDevicesApi.create).toHaveBeenCalledTimes(1);
+      });
+      expect(outputDevicesApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            mode: 'egress',
+            age_out_seconds: 30,
+            rssi_threshold: -60,
+          }),
+        })
+      );
+    });
+
+    it('omits auto_off_seconds from metadata in presence mode', async () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Light' } });
+      fireEvent.change(screen.getByLabelText(/Base URL/), {
+        target: { value: 'http://192.168.50.66' },
+      });
+      fireEvent.change(screen.getByLabelText(/Mode/i), { target: { value: 'presence' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      await waitFor(() => {
+        expect(outputDevicesApi.create).toHaveBeenCalledTimes(1);
+      });
+      const payload = (outputDevicesApi.create as any).mock.calls[0][0];
+      expect(payload.metadata.mode).toBe('presence');
+      expect(payload.metadata).not.toHaveProperty('auto_off_seconds');
+    });
+  });
+
   describe('inline variant (TRA-938 row expander)', () => {
     it('renders the edit form without modal chrome', () => {
       render(
