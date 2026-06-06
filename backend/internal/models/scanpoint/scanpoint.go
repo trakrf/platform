@@ -13,7 +13,6 @@ type ScanPoint struct {
 	ExternalKey  string     `json:"external_key"`
 	Name         string     `json:"name"`
 	AntennaPort  *int       `json:"antenna_port,omitempty"`
-	IsBoundary   bool       `json:"is_boundary"`
 	Description  string     `json:"description"`
 	Metadata     any        `json:"metadata"`
 	ValidFrom    time.Time  `json:"valid_from"`
@@ -29,7 +28,6 @@ type CreateScanPointRequest struct {
 	Name        string         `json:"name" validate:"required,min=1,max=255" example:"Antenna 1"`
 	LocationID  *int           `json:"location_id,omitempty" validate:"omitempty,min=1"`
 	AntennaPort *int           `json:"antenna_port,omitempty" validate:"omitempty,min=0"`
-	IsBoundary  *bool          `json:"is_boundary,omitempty"`
 	Description *string        `json:"description,omitempty" validate:"omitempty,max=1024"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 	IsActive    *bool          `json:"is_active,omitempty"`
@@ -39,7 +37,6 @@ type UpdateScanPointRequest struct {
 	Name        *string         `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
 	LocationID  *int            `json:"location_id,omitempty" validate:"omitempty,min=1"`
 	AntennaPort *int            `json:"antenna_port,omitempty" validate:"omitempty,min=0"`
-	IsBoundary  *bool           `json:"is_boundary,omitempty"`
 	Description *string         `json:"description,omitempty" validate:"omitempty,max=1024"`
 	Metadata    *map[string]any `json:"metadata,omitempty"`
 	IsActive    *bool           `json:"is_active,omitempty"`

@@ -87,17 +87,17 @@ func TestScanDevicesHandler_RoundTrip(t *testing.T) {
 
 	// Add a second antenna via the nested route.
 	rec = do(http.MethodPost, devicePath+"/scan-points", map[string]any{
-		"external_key": "cs463-214-2", "name": "Antenna 2", "antenna_port": 2, "is_boundary": true,
+		"external_key": "cs463-214-2", "name": "Antenna 2", "antenna_port": 2,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var pt struct {
 		Data struct {
-			ID         int  `json:"id"`
-			IsBoundary bool `json:"is_boundary"`
+			ID   int    `json:"id"`
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &pt))
-	require.True(t, pt.Data.IsBoundary)
+	require.Equal(t, "Antenna 2", pt.Data.Name)
 
 	// List points — both the auto antenna 1 and the added antenna 2.
 	rec = do(http.MethodGet, devicePath+"/scan-points", nil)

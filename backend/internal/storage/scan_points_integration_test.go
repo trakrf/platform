@@ -30,7 +30,6 @@ func TestScanPoint_CRUD(t *testing.T) {
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
 	require.Equal(t, dev.ID, created.ScanDeviceID)
-	require.False(t, created.IsBoundary, "is_boundary defaults false")
 	require.Nil(t, created.LocationID)
 
 	got, err := db.Store.GetScanPointByID(ctx, orgID, created.ID)
@@ -41,13 +40,13 @@ func TestScanPoint_CRUD(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 2, "auto-created antenna 1 + the added antenna 2")
 
-	// Toggle boundary on.
-	boundary := true
+	// Update a field.
+	newName := "Dock Antenna"
 	updated, err := db.Store.UpdateScanPoint(ctx, orgID, created.ID, scanpoint.UpdateScanPointRequest{
-		IsBoundary: &boundary,
+		Name: &newName,
 	})
 	require.NoError(t, err)
-	require.True(t, updated.IsBoundary)
+	require.Equal(t, "Dock Antenna", updated.Name)
 
 	ok, err := db.Store.DeleteScanPoint(ctx, orgID, created.ID)
 	require.NoError(t, err)
@@ -74,7 +73,6 @@ func TestScanDevice_AutoCreatesAntenna1(t *testing.T) {
 	require.Equal(t, "cs463-214-1", pts[0].ExternalKey, "external_key follows {device}-{port}")
 	require.NotNil(t, pts[0].AntennaPort)
 	require.Equal(t, 1, *pts[0].AntennaPort)
-	require.False(t, pts[0].IsBoundary)
 	require.Nil(t, pts[0].LocationID)
 }
 
