@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   render as rtlRender,
   screen,
+  fireEvent,
   cleanup,
   type RenderOptions,
 } from '@testing-library/react';
@@ -14,6 +15,14 @@ import { useAuthStore } from '@/stores/authStore';
 import type { ScanDevice } from '@/types/scandevices';
 
 vi.mock('@/hooks/scandevices');
+// Stub the device-edit surfaces so the screen test isolates the row-expander
+// navigation (which row is open) rather than the hook-backed edit form (TRA-938).
+vi.mock('@/components/scandevices', () => ({
+  ScanDeviceFormModal: () => null,
+  ScanDeviceEditPanel: ({ device }: { device: ScanDevice }) => (
+    <div data-testid="edit-panel">editing:{device.external_key}</div>
+  ),
+}));
 
 const wrapper = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({
@@ -74,5 +83,64 @@ describe('ScanDevicesScreen flat list', () => {
     render(<ScanDevicesScreen />);
     // ScanPointsPanel's "Add Scan Point" affordance must not appear in the list.
     expect(screen.queryByRole('button', { name: /Add Scan Point/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('ScanDevicesScreen row expander (TRA-938)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ isAuthenticated: true });
+    (useScanDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      scanDevices: [
+        device({ id: 1, external_key: 'dock_reader_1' }),
+        device({ id: 2, external_key: 'dock_reader_2' }),
+      ],
+      isLoading: false,
+    });
+    (useScanDeviceMutations as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      delete: vi.fn(),
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('reveals the inline edit panel when a row toggle is clicked', () => {
+    render(<ScanDevicesScreen />);
+    expect(screen.queryByTestId('edit-panel')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_1'));
+
+    expect(screen.getByTestId('edit-panel')).toHaveTextContent('editing:dock_reader_1');
+  });
+
+  it('collapses the row when its toggle is clicked again', () => {
+    render(<ScanDevicesScreen />);
+    const toggle = screen.getByLabelText('Edit scan device dock_reader_1');
+
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('edit-panel')).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId('edit-panel')).not.toBeInTheDocument();
+  });
+
+  it('keeps only one row open at a time (single-open accordion)', () => {
+    render(<ScanDevicesScreen />);
+
+    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_1'));
+    expect(screen.getByTestId('edit-panel')).toHaveTextContent('editing:dock_reader_1');
+
+    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_2'));
+    const panels = screen.getAllByTestId('edit-panel');
+    expect(panels).toHaveLength(1);
+    expect(panels[0]).toHaveTextContent('editing:dock_reader_2');
+  });
+
+  it('marks the toggle expanded state for assistive tech', () => {
+    render(<ScanDevicesScreen />);
+    const toggle = screen.getByLabelText('Edit scan device dock_reader_1');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 });

@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
-import { OutputDeviceFormModal } from './OutputDeviceFormModal';
+import { OutputDeviceFormModal, OutputDeviceEditPanel } from './OutputDeviceFormModal';
 import { outputDevicesApi } from '@/lib/api/outputdevices';
 import type { OutputDevice } from '@/types/outputdevices';
 
@@ -57,6 +57,8 @@ describe('OutputDeviceFormModal', () => {
     vi.clearAllMocks();
     (outputDevicesApi.create as any).mockResolvedValue({ data: { data: mockDevice } });
     (outputDevicesApi.update as any).mockResolvedValue({ data: { data: mockDevice } });
+    (outputDevicesApi.test as any).mockResolvedValue({ data: { status: 'ok' } });
+    (outputDevicesApi.reset as any).mockResolvedValue({ data: { status: 'ok' } });
   });
 
   afterEach(() => {
@@ -190,5 +192,74 @@ describe('OutputDeviceFormModal', () => {
     });
     expect(outputDevicesApi.create).not.toHaveBeenCalled();
     expect(mockOnClose).not.toHaveBeenCalled();
+  });
+
+  it('does not show test-fire / reset controls in create mode', () => {
+    render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+    expect(screen.queryByRole('button', { name: /Test-fire/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Reset/i })).not.toBeInTheDocument();
+  });
+
+  describe('inline variant (TRA-938 row expander)', () => {
+    it('renders the edit form without modal chrome', () => {
+      render(
+        <OutputDeviceFormModal
+          isOpen={true}
+          mode="edit"
+          device={mockDevice}
+          variant="inline"
+          onClose={mockOnClose}
+        />
+      );
+
+      expect(
+        screen.getByRole('button', { name: /Update Output Device/i })
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText('Close modal')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(`Edit Output Device: ${mockDevice.name}`)
+      ).not.toBeInTheDocument();
+    });
+
+    it('exposes inline test-fire and reset controls that drive the device', async () => {
+      render(
+        <OutputDeviceFormModal
+          isOpen={true}
+          mode="edit"
+          device={mockDevice}
+          variant="inline"
+          onClose={mockOnClose}
+        />
+      );
+
+      fireEvent.click(
+        screen.getByRole('button', { name: `Test-fire output device ${mockDevice.name}` })
+      );
+      await waitFor(() => {
+        expect(outputDevicesApi.test).toHaveBeenCalledWith(mockDevice.id);
+      });
+
+      fireEvent.click(
+        screen.getByRole('button', { name: `Reset output device ${mockDevice.name}` })
+      );
+      await waitFor(() => {
+        expect(outputDevicesApi.reset).toHaveBeenCalledWith(mockDevice.id);
+      });
+    });
+  });
+
+  describe('OutputDeviceEditPanel', () => {
+    it('renders the inline edit surface with test-fire / reset for the device', () => {
+      render(<OutputDeviceEditPanel device={mockDevice} onClose={mockOnClose} />);
+
+      expect(
+        screen.getByRole('button', { name: /Update Output Device/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: `Test-fire output device ${mockDevice.name}` })
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText('Close modal')).not.toBeInTheDocument();
+    });
   });
 });

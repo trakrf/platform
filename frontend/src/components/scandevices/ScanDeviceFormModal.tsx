@@ -19,6 +19,10 @@ interface ScanDeviceFormModalProps {
   mode: 'create' | 'edit';
   device?: ScanDevice;
   onClose: () => void;
+  // 'modal' (default) renders the full backdrop + chrome; 'inline' renders the
+  // same form + commissioning sections bare, for embedding in a row expander
+  // (TRA-938). Submit/loading/error logic is shared across both.
+  variant?: 'modal' | 'inline';
 }
 
 // Outer gate returns null when closed so the stateful body unmounts each
@@ -30,13 +34,35 @@ export function ScanDeviceFormModal(props: ScanDeviceFormModalProps) {
   return <ScanDeviceFormModalBody {...props} />;
 }
 
-function ScanDeviceFormModalBody({ isOpen, mode, device, onClose }: ScanDeviceFormModalProps) {
+// Inline (row-expander) presentation of the device edit surface (TRA-938).
+// Thin wrapper so call sites read clearly; all logic lives in the shared body.
+export function ScanDeviceEditPanel({
+  device,
+  onClose,
+}: {
+  device: ScanDevice;
+  onClose: () => void;
+}) {
+  return (
+    <ScanDeviceFormModal isOpen mode="edit" device={device} onClose={onClose} variant="inline" />
+  );
+}
+
+function ScanDeviceFormModalBody({
+  isOpen,
+  mode,
+  device,
+  onClose,
+  variant = 'modal',
+}: ScanDeviceFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { create, update } = useScanDeviceMutations();
 
-  useEscapeToClose(isOpen, onClose, loading);
+  // Escape-to-close only applies to the modal; collapsing a row mid-edit on a
+  // stray Escape would be surprising.
+  useEscapeToClose(isOpen, onClose, loading || variant !== 'modal');
 
   const handleSubmit = async (data: CreateScanDeviceRequest | UpdateScanDeviceRequest) => {
     setLoading(true);
@@ -64,6 +90,48 @@ function ScanDeviceFormModalBody({ isOpen, mode, device, onClose }: ScanDeviceFo
     }
   };
 
+  // Shared body: the form plus, in edit mode, the single commissioning surface
+  // (TRA-931) — antennas/location + the reader-scoped live feed. Both are
+  // skipped on create (they key off the saved device id). Rendered identically
+  // whether wrapped in modal chrome or inline (TRA-938).
+  const content = (
+    <>
+      <ScanDeviceForm
+        mode={mode}
+        device={device}
+        onSubmit={handleSubmit}
+        onCancel={onClose}
+        loading={loading}
+        error={error}
+      />
+
+      {mode === 'edit' && device && (
+        <>
+          <section className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
+              Antennas &amp; Location
+            </h3>
+            <ReaderPointsSection device={device} />
+          </section>
+
+          <section className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
+              Live Reads
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              Reads off this reader only — for antenna placement and RSSI tuning.
+            </p>
+            <LiveReadsFeed filterReaderKey={readerKeyForDevice(device)} compact />
+          </section>
+        </>
+      )}
+    </>
+  );
+
+  if (variant === 'inline') {
+    return <div className="px-1 py-2">{content}</div>;
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
@@ -88,41 +156,7 @@ function ScanDeviceFormModalBody({ isOpen, mode, device, onClose }: ScanDeviceFo
           </button>
         </div>
 
-        <div className="px-6 py-6">
-          <ScanDeviceForm
-            mode={mode}
-            device={device}
-            onSubmit={handleSubmit}
-            onCancel={onClose}
-            loading={loading}
-            error={error}
-          />
-
-          {/* Reader edit is the single commissioning surface (TRA-931): once the
-              device exists, manage its antennas/location and watch its live feed
-              right here. Both are skipped on create — they key off the saved
-              device id. */}
-          {mode === 'edit' && device && (
-            <>
-              <section className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
-                  Antennas &amp; Location
-                </h3>
-                <ReaderPointsSection device={device} />
-              </section>
-
-              <section className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
-                  Live Reads
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  Reads off this reader only — for antenna placement and RSSI tuning.
-                </p>
-                <LiveReadsFeed filterReaderKey={readerKeyForDevice(device)} compact />
-              </section>
-            </>
-          )}
-        </div>
+        <div className="px-6 py-6">{content}</div>
       </div>
     </div>
   );

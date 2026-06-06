@@ -1,25 +1,29 @@
-import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Zap, Power } from 'lucide-react';
+import { useState, useEffect, Fragment } from 'react';
+import { Plus, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useOutputDevices, useOutputDeviceMutations } from '@/hooks/outputdevices';
 import { useLocations } from '@/hooks/locations';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
 import { ConfirmModal } from '@/components/shared';
-import { OutputDeviceFormModal } from '@/components/outputdevices';
+import { OutputDeviceFormModal, OutputDeviceEditPanel } from '@/components/outputdevices';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import type { OutputDevice } from '@/types/outputdevices';
 
+// Editing happens inline via a single-open row expander (TRA-938): the config
+// form plus test-fire/reset controls open under the row rather than in a modal.
 export default function OutputDevicesScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingDevice, setEditingDevice] = useState<OutputDevice | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deletingDevice, setDeletingDevice] = useState<OutputDevice | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
 
   const { outputDevices, isLoading } = useOutputDevices();
   const { locations } = useLocations();
-  const { delete: deleteOutputDevice, test, reset } = useOutputDeviceMutations();
+  const { delete: deleteOutputDevice } = useOutputDeviceMutations();
   const { setActiveTab } = useUIStore();
+
+  const toggleExpanded = (id: number) =>
+    setExpandedId((current) => (current === id ? null : id));
 
   const locationName = (id?: number | null) =>
     id == null ? '—' : (locations.find((l) => l.id === id)?.name ?? `#${id}`);
@@ -36,30 +40,6 @@ export default function OutputDevicesScreen() {
       setDeletingDevice(null);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Failed to delete output device'));
-    }
-  };
-
-  const handleTest = async (device: OutputDevice) => {
-    setBusyId(device.id);
-    try {
-      await test(device.id);
-      toast.success(`Test-fired "${device.name}"`);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Output device unreachable'));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const handleReset = async (device: OutputDevice) => {
-    setBusyId(device.id);
-    try {
-      await reset(device.id);
-      toast.success(`Reset "${device.name}"`);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Output device unreachable'));
-    } finally {
-      setBusyId(null);
     }
   };
 
@@ -100,60 +80,57 @@ export default function OutputDevicesScreen() {
                 </tr>
               </thead>
               <tbody>
-                {outputDevices.map((device) => (
-                  <tr
-                    key={device.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                  >
-                    <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
-                    <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
-                      {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
-                    </td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.switch_id}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>
-                    <td className="px-3 text-right whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => handleTest(device)}
-                        disabled={busyId === device.id}
-                        className="p-1.5 text-gray-500 hover:text-amber-600 dark:text-gray-400 dark:hover:text-amber-400 disabled:opacity-40"
-                        aria-label={`Test-fire output device ${device.name}`}
-                        title="Test-fire"
-                      >
-                        <Zap className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleReset(device)}
-                        disabled={busyId === device.id}
-                        className="p-1.5 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 disabled:opacity-40"
-                        aria-label={`Reset output device ${device.name}`}
-                        title="Reset (off)"
-                      >
-                        <Power className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingDevice(device)}
-                        className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                        aria-label={`Edit output device ${device.name}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingDevice(device)}
-                        className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                        aria-label={`Delete output device ${device.name}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {outputDevices.map((device) => {
+                  const isExpanded = expandedId === device.id;
+                  return (
+                    <Fragment key={device.id}>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
+                        <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
+                          {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
+                        </td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.switch_id}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>
+                        <td className="px-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(device.id)}
+                            className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+                            aria-label={`Edit output device ${device.name}`}
+                            aria-expanded={isExpanded}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingDevice(device)}
+                            className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                            aria-label={`Delete output device ${device.name}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                          <td colSpan={8} className="px-3 py-4">
+                            <OutputDeviceEditPanel
+                              device={device}
+                              onClose={() => setExpandedId(null)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -164,15 +141,6 @@ export default function OutputDevicesScreen() {
           mode="create"
           onClose={() => setIsCreateModalOpen(false)}
         />
-
-        {editingDevice && (
-          <OutputDeviceFormModal
-            isOpen={true}
-            mode="edit"
-            device={editingDevice}
-            onClose={() => setEditingDevice(null)}
-          />
-        )}
 
         <ConfirmModal
           isOpen={!!deletingDevice}
