@@ -1,13 +1,13 @@
-// SSE transport for the reader live-feed (TRA-924). Replaces the direct-browser
-// MQTT client: the backend now streams already-parsed, org-filtered reads over
-// an authenticated SSE endpoint, so the browser holds no broker creds and only
-// ever sees its own org's reads.
+// SSE transport for the tag-presence feed (TRA-936, originally TRA-924). The
+// backend streams already-parsed, org-filtered presence deltas over an
+// authenticated SSE endpoint, so the browser holds no broker creds and only ever
+// sees its own org's tags.
 //
 // We consume the stream with fetch() + ReadableStream rather than the native
 // EventSource because EventSource can't set the Authorization header — and the
 // endpoint rides the same JWT bearer as the REST API.
 
-import type { ParsedRead } from '@/types/readerfeed';
+import type { LeavePayload, PresenceEvent, SnapshotPayload, TagState } from '@/types/readerfeed';
 
 /** Path appended to the API base URL (e.g. `/api/v1`) for the read stream. */
 export const READ_STREAM_PATH = '/reads/stream';
@@ -16,36 +16,67 @@ export interface SSEParseState {
   buffer: string;
 }
 
+/** Validate + shape a raw (eventType, data) pair into a typed PresenceEvent, or
+ *  null if the type is unknown or the payload is malformed. */
+function toEvent(type: string, data: unknown): PresenceEvent | null {
+  const d = data as Record<string, unknown>;
+  switch (type) {
+    case 'snapshot':
+      if (Array.isArray((d as { tags?: unknown }).tags)) {
+        return { type: 'snapshot', data: data as SnapshotPayload };
+      }
+      return null;
+    case 'enter':
+    case 'update':
+      if (typeof d.epc === 'string' && d.epc !== '' && typeof d.readerKey === 'string') {
+        return { type, data: data as TagState };
+      }
+      return null;
+    case 'leave':
+      if (typeof d.epc === 'string' && typeof d.readerKey === 'string') {
+        return { type: 'leave', data: data as LeavePayload };
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
 /**
- * Feed raw SSE text; returns any complete `data:` frames parsed into reads.
- * Comment lines (`:` heartbeats) are ignored, and an incomplete trailing frame
- * stays buffered in `state` for the next chunk. Never throws — malformed frames
- * are dropped.
+ * Feed raw SSE text; returns any complete frames parsed into presence events.
+ * A frame's `event:` line names the type and its `data:` line carries JSON.
+ * Comment lines (`:` heartbeats) are ignored, an incomplete trailing frame stays
+ * buffered for the next chunk, and malformed/unknown frames are dropped. Never
+ * throws.
  */
-export function parseSSEChunk(state: SSEParseState, chunk: string): ParsedRead[] {
+export function parseSSEChunk(state: SSEParseState, chunk: string): PresenceEvent[] {
   state.buffer += chunk;
-  const reads: ParsedRead[] = [];
+  const events: PresenceEvent[] = [];
   let sep: number;
   while ((sep = state.buffer.indexOf('\n\n')) !== -1) {
     const frame = state.buffer.slice(0, sep);
     state.buffer = state.buffer.slice(sep + 2);
+
+    let type = '';
+    let dataLine = '';
     for (const line of frame.split('\n')) {
-      if (!line.startsWith('data:')) continue;
-      const json = line.slice(5).trim();
-      if (!json) continue;
-      try {
-        const r = JSON.parse(json) as ParsedRead;
-        if (typeof r.epc === 'string' && r.epc !== '') reads.push(r);
-      } catch {
-        // malformed frame; skip
-      }
+      if (line.startsWith('event:')) type = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLine = line.slice(5).trim();
+    }
+    if (!type || !dataLine) continue; // heartbeat/comment or partial
+
+    try {
+      const ev = toEvent(type, JSON.parse(dataLine));
+      if (ev) events.push(ev);
+    } catch {
+      // malformed frame; skip
     }
   }
-  return reads;
+  return events;
 }
 
 export interface ReadStreamCallbacks {
-  onReads: (reads: ParsedRead[]) => void;
+  onEvents: (events: PresenceEvent[]) => void;
   onOpen: () => void;
   onError: (err: unknown) => void;
 }
@@ -58,7 +89,7 @@ const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 15_000;
 
 /**
- * Open the org-scoped live-reads SSE stream over fetch (carries the JWT bearer).
+ * Open the org-scoped presence SSE stream over fetch (carries the JWT bearer).
  * Auto-reconnects with exponential backoff. On a 401 it calls onUnauthorized
  * (which should refresh the token) and retries immediately if that succeeds.
  */
@@ -101,8 +132,8 @@ export function openReadStream(opts: {
         for (;;) {
           const { value, done } = await reader.read();
           if (done) break;
-          const reads = parseSSEChunk(state, decoder.decode(value, { stream: true }));
-          if (reads.length > 0) opts.callbacks.onReads(reads);
+          const events = parseSSEChunk(state, decoder.decode(value, { stream: true }));
+          if (events.length > 0) opts.callbacks.onEvents(events);
         }
       } catch (err) {
         if (closed) return;
