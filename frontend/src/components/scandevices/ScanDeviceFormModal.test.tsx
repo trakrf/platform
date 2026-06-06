@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
-import { ScanDeviceFormModal } from './ScanDeviceFormModal';
+import { ScanDeviceFormModal, ScanDeviceEditPanel } from './ScanDeviceFormModal';
 import { scanDevicesApi } from '@/lib/api/scandevices';
 import type { ScanDevice } from '@/types/scandevices';
 
@@ -171,5 +171,60 @@ describe('ScanDeviceFormModal', () => {
 
     expect(screen.queryByTestId('reader-points')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scoped-feed')).not.toBeInTheDocument();
+  });
+
+  describe('inline variant (TRA-938 row expander)', () => {
+    it('renders the edit form and commissioning sections without modal chrome', () => {
+      render(
+        <ScanDeviceFormModal
+          isOpen={true}
+          mode="edit"
+          device={mockDevice}
+          variant="inline"
+          onClose={mockOnClose}
+        />
+      );
+
+      // The edit form itself is present…
+      expect(
+        screen.getByRole('button', { name: /Update Scan Device/i })
+      ).toBeInTheDocument();
+      // …along with the scoped commissioning sections…
+      expect(screen.getByTestId('reader-points')).toHaveTextContent('points:csl_cs463');
+      expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:dock_reader_1');
+      // …but the modal chrome (backdrop close button + title bar) is gone.
+      expect(screen.queryByLabelText('Close modal')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(`Edit Scan Device: ${mockDevice.external_key}`)
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not close on Escape in inline mode', () => {
+      render(
+        <ScanDeviceFormModal
+          isOpen={true}
+          mode="edit"
+          device={mockDevice}
+          variant="inline"
+          onClose={mockOnClose}
+        />
+      );
+
+      fireEvent.keyDown(document, { key: 'Escape' });
+
+      expect(mockOnClose).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ScanDeviceEditPanel', () => {
+    it('renders the inline edit surface for the device', () => {
+      render(<ScanDeviceEditPanel device={mockDevice} onClose={mockOnClose} />);
+
+      expect(
+        screen.getByRole('button', { name: /Update Scan Device/i })
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:dock_reader_1');
+      expect(screen.queryByLabelText('Close modal')).not.toBeInTheDocument();
+    });
   });
 });
