@@ -4,6 +4,7 @@ import {
   render as rtlRender,
   screen,
   fireEvent,
+  waitFor,
   cleanup,
   type RenderOptions,
 } from '@testing-library/react';
@@ -142,5 +143,18 @@ describe('ScanDevicesScreen row expander (TRA-938)', () => {
 
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('collapses the open row when that device is deleted', async () => {
+    render(<ScanDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_1'));
+    expect(screen.getByTestId('edit-panel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Delete scan device dock_reader_1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('edit-panel')).not.toBeInTheDocument();
+    });
   });
 });

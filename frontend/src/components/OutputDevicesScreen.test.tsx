@@ -4,6 +4,7 @@ import {
   render as rtlRender,
   screen,
   fireEvent,
+  waitFor,
   cleanup,
   type RenderOptions,
 } from '@testing-library/react';
@@ -139,5 +140,18 @@ describe('OutputDevicesScreen row expander (TRA-938)', () => {
 
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('collapses the open row when that device is deleted', async () => {
+    render(<OutputDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Edit output device Dock Strobe'));
+    expect(screen.getByTestId('edit-panel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Delete output device Dock Strobe'));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('edit-panel')).not.toBeInTheDocument();
+    });
   });
 });

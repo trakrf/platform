@@ -37,6 +37,7 @@ export default function OutputDevicesScreen() {
     try {
       await deleteOutputDevice(deletingDevice.id);
       toast.success(`Output device "${deletingDevice.name}" deleted successfully`);
+      if (expandedId === deletingDevice.id) setExpandedId(null);
       setDeletingDevice(null);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Failed to delete output device'));

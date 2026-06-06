@@ -34,6 +34,7 @@ export default function ScanDevicesScreen() {
     try {
       await deleteScanDevice(deletingDevice.id);
       toast.success(`Scan device "${deletingDevice.external_key}" deleted successfully`);
+      if (expandedId === deletingDevice.id) setExpandedId(null);
       setDeletingDevice(null);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Failed to delete scan device'));
