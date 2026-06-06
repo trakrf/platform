@@ -5,7 +5,6 @@
 package readstream
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -21,13 +20,13 @@ import (
 // inside the server IdleTimeout.
 const heartbeatInterval = 20 * time.Second
 
-// Handler streams org-filtered live reads over SSE.
+// Handler streams org-filtered live presence deltas over SSE.
 type Handler struct {
-	broadcaster *rs.Broadcaster
+	tracker *rs.Tracker
 }
 
-// NewHandler builds the SSE handler over the shared read broadcaster.
-func NewHandler(b *rs.Broadcaster) *Handler { return &Handler{broadcaster: b} }
+// NewHandler builds the SSE handler over the shared presence tracker.
+func NewHandler(t *rs.Tracker) *Handler { return &Handler{tracker: t} }
 
 // RegisterRoutes mounts the SSE endpoint. The caller must apply session auth
 // (the route lives in the authenticated group).
@@ -68,7 +67,7 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, ": connected\n\n")
 	_ = rc.Flush()
 
-	ch, cancel := h.broadcaster.Subscribe(orgID)
+	ch, cancel := h.tracker.Subscribe(orgID)
 	defer cancel()
 
 	hb := time.NewTicker(heartbeatInterval)
@@ -90,11 +89,9 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			b, err := json.Marshal(ev)
-			if err != nil {
-				continue
-			}
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+			// Named SSE event (snapshot|enter|update|leave) so the client reducer
+			// can dispatch without sniffing the payload.
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, ev.Data); err != nil {
 				return
 			}
 			if err := rc.Flush(); err != nil {
