@@ -1,21 +1,25 @@
-import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { useState, useEffect, Fragment } from 'react';
+import { Plus, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useScanDevices, useScanDeviceMutations } from '@/hooks/scandevices';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
 import { ConfirmModal } from '@/components/shared';
-import { ScanDeviceFormModal } from '@/components/scandevices';
+import { ScanDeviceFormModal, ScanDeviceEditPanel } from '@/components/scandevices';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import type { ScanDevice } from '@/types/scandevices';
 
 // The reader list is flat (TRA-931): scan_devices only, no scan_point tree.
-// Antennas/locations are edited inside reader edit (ScanDeviceFormModal), which
-// is now the single commissioning surface for a device.
+// Editing happens inline via a single-open row expander (TRA-938) — the
+// commissioning surface (antennas/location + scoped live feed) opens under the
+// row rather than in a modal, so tuning stays a stay-on-the-list activity.
 export default function ScanDevicesScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingDevice, setEditingDevice] = useState<ScanDevice | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deletingDevice, setDeletingDevice] = useState<ScanDevice | null>(null);
+
+  const toggleExpanded = (id: number) =>
+    setExpandedId((current) => (current === id ? null : id));
 
   const { scanDevices, isLoading } = useScanDevices();
   const { delete: deleteScanDevice } = useScanDeviceMutations();
@@ -30,6 +34,7 @@ export default function ScanDevicesScreen() {
     try {
       await deleteScanDevice(deletingDevice.id);
       toast.success(`Scan device "${deletingDevice.external_key}" deleted successfully`);
+      if (expandedId === deletingDevice.id) setExpandedId(null);
       setDeletingDevice(null);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Failed to delete scan device'));
@@ -62,6 +67,7 @@ export default function ScanDevicesScreen() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                  <th className="w-8 px-2"></th>
                   <th className="py-2 px-3 font-medium">External Key</th>
                   <th className="px-3 font-medium">Name</th>
                   <th className="px-3 font-medium">Type</th>
@@ -72,43 +78,62 @@ export default function ScanDevicesScreen() {
                 </tr>
               </thead>
               <tbody>
-                {scanDevices.map((device) => (
-                  <tr
-                    key={device.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                  >
-                    <td className="py-2 px-3 font-mono text-xs text-gray-900 dark:text-gray-100">
-                      {device.external_key}
-                    </td>
-                    <td className="px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
-                    <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
-                      {device.publish_topic || '—'}
-                    </td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">
-                      {device.is_active ? 'Yes' : 'No'}
-                    </td>
-                    <td className="px-3 text-right whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => setEditingDevice(device)}
-                        className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                        aria-label={`Edit scan device ${device.external_key}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingDevice(device)}
-                        className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                        aria-label={`Delete scan device ${device.external_key}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {scanDevices.map((device) => {
+                  const isExpanded = expandedId === device.id;
+                  return (
+                    <Fragment key={device.id}>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="w-8 px-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(device.id)}
+                            className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+                            aria-label={`Edit scan device ${device.external_key}`}
+                            aria-expanded={isExpanded}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
+                        <td className="py-2 px-3 font-mono text-xs text-gray-900 dark:text-gray-100">
+                          {device.external_key}
+                        </td>
+                        <td className="px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
+                        <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
+                          {device.publish_topic || '—'}
+                        </td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">
+                          {device.is_active ? 'Yes' : 'No'}
+                        </td>
+                        <td className="px-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setDeletingDevice(device)}
+                            className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                            aria-label={`Delete scan device ${device.external_key}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                          <td colSpan={8} className="px-3 py-4">
+                            <ScanDeviceEditPanel
+                              device={device}
+                              onClose={() => setExpandedId(null)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -119,15 +144,6 @@ export default function ScanDevicesScreen() {
           mode="create"
           onClose={() => setIsCreateModalOpen(false)}
         />
-
-        {editingDevice && (
-          <ScanDeviceFormModal
-            isOpen={true}
-            mode="edit"
-            device={editingDevice}
-            onClose={() => setEditingDevice(null)}
-          />
-        )}
 
         <ConfirmModal
           isOpen={!!deletingDevice}

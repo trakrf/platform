@@ -1,2 +1,2 @@
 export { OutputDeviceForm } from './OutputDeviceForm';
-export { OutputDeviceFormModal } from './OutputDeviceFormModal';
+export { OutputDeviceFormModal, OutputDeviceEditPanel } from './OutputDeviceFormModal';
