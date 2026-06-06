@@ -1,34 +1,57 @@
 // Types for the reader live-feed / coverage diagnostic.
 //
-// As of TRA-924 reads arrive already parsed and org-filtered from the backend
-// SSE proxy (each SSE `data:` frame is one ParsedRead). The CS463 wire payload
-// is parsed server-side now (internal/ingest/parser_cs463.go), so the browser
-// no longer sees raw broker payloads.
+// As of TRA-936 the backend owns a server-authoritative tag-presence set and
+// streams ItemTest-style "Inventory" deltas over SSE: a snapshot on connect (and
+// as a periodic keyframe), then enter/update/leave transitions. Read count and
+// RSSI aggregates are computed server-side (the only place that sees every read),
+// so the browser is a thin reducer over TagState — it no longer aggregates raw
+// reads itself.
 
 /**
- * A single parsed read, device-agnostic. `rssi` is a number (0 when unknown).
- * `readerTimestampMs` is the reader's own clock (informational — display only).
- * `readerKey` is the `{key}` segment of the source topic.
+ * One tag's presence record, keyed server-side by (reader, epc). This is the
+ * ItemTest Inventory row. `firstSeen`/`lastSeen` are server epoch-ms (immune to
+ * reader clock skew); the staleness gradient and "time since last seen" derive
+ * from `lastSeen` on a local tick — no network traffic animates the fade.
  */
-export interface ParsedRead {
-  epc: string;
+export interface TagState {
   readerKey: string;
-  capturePointName: string;
+  epc: string;
+  /** Resolved asset name, when known. Optional — asset-name resolution is a follow-up. */
+  alias?: string;
+  /** Most recent antenna port. */
   antennaPort: number;
-  rssi: number;
-  readerTimestampMs: number;
+  /** Server epoch-ms of first sight. */
+  firstSeen: number;
+  /** Server epoch-ms of most recent sight. */
+  lastSeen: number;
+  readCount: number;
+  lastRssi: number;
+  rssiAvg: number;
+  rssiMin: number;
+  rssiMax: number;
+}
+
+/** Snapshot payload: full presence set + footer stats (ItemTest's Unique Tags + Read Rate). */
+export interface SnapshotPayload {
+  tags: TagState[];
+  uniqueTags: number;
+  readRate: number;
+}
+
+/** Leave payload: identifies the evicted tag. */
+export interface LeavePayload {
+  readerKey: string;
+  epc: string;
 }
 
 /**
- * A read as held in the live store: the parsed read plus the browser receive
- * time. Age and expiry are derived from `receivedAt` (not the reader clock) so
- * the 15s aging primitive is immune to reader clock skew.
+ * A presence delta parsed off the SSE stream. `upsert` covers both first sight
+ * and re-sight (same full-TagState payload, same client handling); the reducer
+ * tells "new" from "seen" by map membership if it ever needs to.
  */
-export interface LiveRead extends ParsedRead {
-  /** EPC — table row key. */
-  id: string;
-  /** Browser clock (ms) when this read was last observed. */
-  receivedAt: number;
-}
+export type PresenceEvent =
+  | { type: 'snapshot'; data: SnapshotPayload }
+  | { type: 'upsert'; data: TagState }
+  | { type: 'leave'; data: LeavePayload };
 
 export type ReaderFeedStatus = 'connecting' | 'connected' | 'error' | 'closed';

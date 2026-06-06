@@ -1,20 +1,22 @@
-// LiveReadsFeed — the reusable reader live-feed (TRA-931, extracted from the
-// TRA-902 LiveReadsScreen). Renders the connection status, coverage stat strip
-// and the firehose table for the org's tag reads. Owns the once-per-second tick
-// so the Age column and row coloring advance even between reads.
+// LiveReadsFeed — the reusable tag-presence inventory (TRA-936), modeled on
+// Impinj ItemTest's Inventory view: one row per present (reader,epc) tag with
+// read count, RSSI aggregates (last/avg/min/max), first/last seen and a live
+// "age" that drives a smooth staleness gradient. A header session timer and a
+// footer (Tags in view + Read Rate) mirror ItemTest's chrome.
 //
 // One component, two mounts:
 //   - global Live Reads page  — <LiveReadsFeed />               (whole org feed)
 //   - reader-scoped panel      — <LiveReadsFeed filterReaderKey={key} compact />
 //
-// Filtering is delegated to useReaderFeed; this component never talks to the
-// stream directly, so the scoped panel and the global page share one feed.
+// Presence + aggregation are server-authoritative (useReaderFeed reduces SSE
+// deltas); this component only renders. The gradient and age recompute locally
+// on a 1s tick from server `lastSeen`, so the fade costs zero network.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useReaderFeed } from '@/hooks/readerfeed/useReaderFeed';
-import { ageSeconds, ageBandClass, READ_TTL_SECONDS } from '@/lib/readerfeed/store';
-import type { ReaderFeedStatus } from '@/types/readerfeed';
+import { ageSeconds, gradientBackground } from '@/lib/readerfeed/store';
+import type { ReaderFeedStatus, TagState } from '@/types/readerfeed';
 
 const STATUS_LABEL: Record<ReaderFeedStatus, string> = {
   connecting: 'Connecting…',
@@ -35,40 +37,46 @@ export interface LiveReadsFeedProps {
   filterReaderKey?: string;
   /**
    * Tighter layout for an embedded panel: drops the (always-one) Readers stat
-   * and caps the table height. The global page leaves this off.
+   * and the secondary RSSI columns, and caps the table height.
    */
   compact?: boolean;
 }
 
 export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFeedProps) {
-  const { reads, status, error, readerCount } = useReaderFeed(filterReaderKey);
+  const { tags, status, error, readerCount, readRate } = useReaderFeed(filterReaderKey);
 
-  // Re-render once per second so the live Age column and row coloring advance
-  // even between reads.
+  // Re-render once per second so the live Age column, gradient and session timer
+  // advance even between reads.
   const [now, setNow] = useState(() => Date.now());
+  const startedAt = useRef(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const sorted = [...reads].sort((a, b) => b.receivedAt - a.receivedAt);
-  const rssiValues = reads.map((r) => r.rssi).filter((v) => v !== 0);
+  const sorted = [...tags].sort((a, b) => b.lastSeen - a.lastSeen);
+  const rssiValues = tags.map((t) => t.lastRssi).filter((v) => v !== 0);
   const rssiRange =
     rssiValues.length > 0 ? `${Math.min(...rssiValues)} … ${Math.max(...rssiValues)} dBm` : '—';
 
   return (
     <div className={`flex flex-col gap-4 ${compact ? '' : 'h-full min-h-0'}`}>
-      <div className="flex items-center justify-end text-sm text-gray-600 dark:text-gray-300">
-        <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${STATUS_DOT[status]}`} />
-        {STATUS_LABEL[status]}
+      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+        <span className="font-mono tabular-nums text-gray-500 dark:text-gray-400">
+          {formatElapsed(now - startedAt.current)}
+        </span>
+        <span className="flex items-center">
+          <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${STATUS_DOT[status]}`} />
+          {STATUS_LABEL[status]}
+        </span>
       </div>
 
       {/* Coverage stat strip */}
       <div className={`grid gap-3 ${compact ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
-        <Stat label="Tags in view" value={String(reads.length)} />
+        <Stat label="Tags in view" value={String(tags.length)} />
         {!compact && <Stat label="Readers" value={String(readerCount)} />}
         <Stat label="RSSI range" value={rssiRange} />
-        <Stat label="Window" value={`${READ_TTL_SECONDS}s`} />
+        <Stat label="Read rate" value={readRate > 0 ? `${readRate.toFixed(1)}/s` : '—'} />
       </div>
 
       <div
@@ -84,7 +92,7 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
               <p className="text-gray-500 dark:text-gray-400 break-all">{error}</p>
             </div>
           </div>
-        ) : reads.length === 0 ? (
+        ) : tags.length === 0 ? (
           <p className="p-4 text-sm text-gray-600 dark:text-gray-400">
             {status === 'connected'
               ? 'Connected — waiting for reads…'
@@ -96,36 +104,48 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
               <tr className="text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
                 <th className="py-2.5 px-3">EPC</th>
                 <th className="px-3">Reader</th>
-                <th className="px-3">Capture Point</th>
-                <th className="px-3 text-right">Antenna</th>
-                <th className="px-3 text-right">RSSI</th>
+                <th className="px-3 text-right">Ant</th>
+                <th className="px-3 text-right">Reads</th>
+                <th className="px-3 text-right">Last RSSI</th>
+                <th className="px-3 text-right">Avg</th>
+                {!compact && <th className="px-3 text-right">Min</th>}
+                {!compact && <th className="px-3 text-right">Max</th>}
                 <th className="px-3 text-right">Age</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((r) => {
-                const age = ageSeconds(r, now);
-                return (
-                  <tr
-                    key={r.id}
-                    className={`border-b border-gray-100 dark:border-gray-800 transition-colors ${ageBandClass(age)}`}
-                  >
-                    <td className="py-2 px-3 font-mono text-xs text-gray-900 dark:text-gray-100">{r.epc}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{r.readerKey}</td>
-                    <td className="px-3 text-gray-700 dark:text-gray-300">{r.capturePointName || '—'}</td>
-                    <td className="px-3 text-right text-gray-700 dark:text-gray-300">{r.antennaPort}</td>
-                    <td className="px-3 text-right font-mono text-gray-700 dark:text-gray-300">
-                      {r.rssi === 0 ? '—' : `${r.rssi}`}
-                    </td>
-                    <td className="px-3 text-right tabular-nums text-gray-600 dark:text-gray-400">{age}s</td>
-                  </tr>
-                );
-              })}
+              {sorted.map((t) => (
+                <Row key={`${t.readerKey} ${t.epc}`} tag={t} now={now} compact={compact} />
+              ))}
             </tbody>
           </table>
         )}
       </div>
     </div>
+  );
+}
+
+function Row({ tag, now, compact }: { tag: TagState; now: number; compact: boolean }) {
+  const age = ageSeconds(tag.lastSeen, now);
+  const cell = 'px-3 text-right tabular-nums text-gray-700 dark:text-gray-300';
+  return (
+    <tr
+      className="border-b border-gray-100 dark:border-gray-800 transition-colors"
+      style={{ backgroundColor: gradientBackground(age) }}
+      title={`First seen ${formatClock(tag.firstSeen)} · Last seen ${formatClock(tag.lastSeen)}`}
+    >
+      <td className="py-2 px-3 font-mono text-xs text-gray-900 dark:text-gray-100">
+        {tag.alias || tag.epc}
+      </td>
+      <td className="px-3 text-gray-700 dark:text-gray-300">{tag.readerKey}</td>
+      <td className={cell}>{tag.antennaPort}</td>
+      <td className={`${cell} font-medium`}>{tag.readCount}</td>
+      <td className={`${cell} font-mono`}>{tag.lastRssi === 0 ? '—' : tag.lastRssi}</td>
+      <td className={`${cell} font-mono`}>{tag.rssiAvg === 0 ? '—' : tag.rssiAvg}</td>
+      {!compact && <td className={`${cell} font-mono`}>{tag.rssiMin}</td>}
+      {!compact && <td className={`${cell} font-mono`}>{tag.rssiMax}</td>}
+      <td className={`${cell} text-gray-600 dark:text-gray-400`}>{age}s</td>
+    </tr>
   );
 }
 
@@ -136,4 +156,17 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-lg font-semibold text-gray-900 dark:text-white">{value}</div>
     </div>
   );
+}
+
+/** mm:ss elapsed for the session timer (ItemTest's run stopwatch). */
+function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+/** Local wall-clock HH:MM:SS for first/last-seen tooltips. */
+function formatClock(epochMs: number): string {
+  return new Date(epochMs).toLocaleTimeString();
 }

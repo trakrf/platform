@@ -1,22 +1,52 @@
 import { describe, it, expect } from 'vitest';
-import { parseSSEChunk, type SSEParseState } from './stream';
-import type { ParsedRead } from '@/types/readerfeed';
+import { parseSSEChunk, streamURL, type SSEParseState } from './stream';
+import type { TagState } from '@/types/readerfeed';
 
-const ev: ParsedRead = {
-  epc: 'E1',
+const tag: TagState = {
   readerKey: 'dock-9',
-  capturePointName: 'cp',
+  epc: 'E1',
   antennaPort: 1,
-  rssi: -50,
-  readerTimestampMs: 10,
+  firstSeen: 10,
+  lastSeen: 20,
+  readCount: 3,
+  lastRssi: -50,
+  rssiAvg: -52,
+  rssiMin: -60,
+  rssiMax: -40,
 };
 
-describe('parseSSEChunk', () => {
-  it('parses a complete data frame into a read', () => {
+const frame = (type: string, data: unknown) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+
+describe('streamURL', () => {
+  it('returns the bare stream path for the whole-org feed', () => {
+    expect(streamURL('/api/v1')).toBe('/api/v1/reads/stream');
+  });
+
+  it('appends an encoded ?reader= when scoped to a reader', () => {
+    expect(streamURL('/api/v1', 'dock 9/a')).toBe('/api/v1/reads/stream?reader=dock%209%2Fa');
+  });
+});
+
+describe('parseSSEChunk (named presence events)', () => {
+  it('parses an upsert frame into a typed event', () => {
     const st: SSEParseState = { buffer: '' };
-    const reads = parseSSEChunk(st, `data: ${JSON.stringify(ev)}\n\n`);
-    expect(reads).toHaveLength(1);
-    expect(reads[0]).toMatchObject(ev);
+    const evs = parseSSEChunk(st, frame('upsert', tag));
+    expect(evs).toHaveLength(1);
+    expect(evs[0].type).toBe('upsert');
+    expect(evs[0].data).toMatchObject(tag);
+  });
+
+  it('parses a snapshot frame', () => {
+    const st: SSEParseState = { buffer: '' };
+    const evs = parseSSEChunk(st, frame('snapshot', { tags: [tag], uniqueTags: 1, readRate: 4.5 }));
+    expect(evs[0].type).toBe('snapshot');
+    expect(evs[0].data).toMatchObject({ uniqueTags: 1, readRate: 4.5 });
+  });
+
+  it('parses a leave frame', () => {
+    const st: SSEParseState = { buffer: '' };
+    const evs = parseSSEChunk(st, frame('leave', { readerKey: 'dock-9', epc: 'E1' }));
+    expect(evs[0]).toMatchObject({ type: 'leave', data: { readerKey: 'dock-9', epc: 'E1' } });
   });
 
   it('ignores comment/heartbeat frames', () => {
@@ -27,30 +57,35 @@ describe('parseSSEChunk', () => {
 
   it('buffers a frame split across chunks', () => {
     const st: SSEParseState = { buffer: '' };
-    const full = `data: ${JSON.stringify(ev)}\n\n`;
+    const full = frame('upsert', tag);
     const mid = Math.floor(full.length / 2);
     expect(parseSSEChunk(st, full.slice(0, mid))).toHaveLength(0);
-    const reads = parseSSEChunk(st, full.slice(mid));
-    expect(reads).toHaveLength(1);
-    expect(reads[0].epc).toBe('E1');
+    const evs = parseSSEChunk(st, full.slice(mid));
+    expect(evs).toHaveLength(1);
+    expect((evs[0].data as TagState).epc).toBe('E1');
   });
 
   it('parses multiple frames in one chunk', () => {
     const st: SSEParseState = { buffer: '' };
-    const reads = parseSSEChunk(
+    const evs = parseSSEChunk(
       st,
-      `data: ${JSON.stringify({ ...ev, epc: 'A' })}\n\ndata: ${JSON.stringify({ ...ev, epc: 'B' })}\n\n`,
+      frame('upsert', { ...tag, epc: 'A' }) + frame('upsert', { ...tag, epc: 'B' }),
     );
-    expect(reads.map((r) => r.epc)).toEqual(['A', 'B']);
+    expect(evs.map((e) => e.type)).toEqual(['upsert', 'upsert']);
   });
 
   it('drops malformed JSON without throwing', () => {
     const st: SSEParseState = { buffer: '' };
-    expect(parseSSEChunk(st, 'data: not-json\n\n')).toHaveLength(0);
+    expect(parseSSEChunk(st, 'event: upsert\ndata: not-json\n\n')).toHaveLength(0);
   });
 
-  it('drops frames without an epc string', () => {
+  it('drops frames with an unknown event type', () => {
     const st: SSEParseState = { buffer: '' };
-    expect(parseSSEChunk(st, `data: ${JSON.stringify({ readerKey: 'x' })}\n\n`)).toHaveLength(0);
+    expect(parseSSEChunk(st, frame('bogus', tag))).toHaveLength(0);
+  });
+
+  it('drops upsert frames without an epc string', () => {
+    const st: SSEParseState = { buffer: '' };
+    expect(parseSSEChunk(st, frame('upsert', { readerKey: 'x' }))).toHaveLength(0);
   });
 });

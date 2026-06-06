@@ -101,6 +101,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// ingestion is off); the subscriber publishes parsed reads into it. Single
 	// replica only — multi-replica fan-out is deferred (TRA-907).
 	readBroadcaster := readstreamsvc.New()
+	defer readBroadcaster.Stop()
 
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher

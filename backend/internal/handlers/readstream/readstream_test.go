@@ -39,6 +39,7 @@ func read(epc string) []scanread.Read {
 // request write deadline is cleared).
 func TestStream_OrgFilteredFramingSurvivesWriteTimeout(t *testing.T) {
 	b := rs.New()
+	t.Cleanup(b.Stop)
 	h := rshandler.NewHandler(b)
 
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +103,7 @@ func TestStream_OrgFilteredFramingSurvivesWriteTimeout(t *testing.T) {
 // survives a low WriteTimeout end-to-end.
 func TestStream_ThroughRealWrapperChain(t *testing.T) {
 	b := rs.New()
+	t.Cleanup(b.Stop)
 	h := rshandler.NewHandler(b)
 
 	inject := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +153,7 @@ func TestStream_ThroughRealWrapperChain(t *testing.T) {
 
 func TestStream_MissingOrgContext(t *testing.T) {
 	b := rs.New()
+	t.Cleanup(b.Stop)
 	h := rshandler.NewHandler(b)
 
 	// No claims injected → no org context.
