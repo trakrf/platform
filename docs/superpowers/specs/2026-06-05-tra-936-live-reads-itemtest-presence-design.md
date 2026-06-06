@@ -93,15 +93,16 @@ type TagState struct {
 - **30s sliding window**: stale when `now - LastSeen >= 30s`. No fixed/max-dwell toggle (YAGNI; `expireFirstSeen` is a later knob).
 - Sweep at a **fraction of the threshold** (e.g. 1s ticker), never `== threshold` (handoff §3.2 — that bug doubles LEAVE latency). Per-tag deadline timers are an acceptable alternative; a 1s sweep is simplest and adequate at our population.
 
-### 5.3a Lazy tracking (count semantics)
+### 5.3a Per-session lazy tracking (count semantics)
 
-Presence is tracked **only while an org has ≥1 connected subscriber**. `Publish`
-is a no-op for unwatched orgs, and the last unsubscribe **discards** the org's
-presence + rate state. So a read count means "reads since you started watching"
-(the operator's mental model), idle orgs cost nothing, and Clear (TRA-937) ≈
-reconnect resets counts naturally. Caveat: state is shared per-org, so a second
-viewer joining an in-progress session sees the first viewer's running counts —
-acceptable for a single-operator commissioning tool.
+Presence is tracked **per browser session, not per org**: each subscriber owns
+its own store, created empty at connect and discarded on disconnect. `Publish`
+folds reads into every *watching* session's store independently, so a read count
+means "reads since **you** started watching" and two operators tuning the same
+readers never share counts (Mike's and Tim's sessions are independent). Reads for
+an org with no watchers are dropped (lazy — nothing tracked). Clear (TRA-937) ≈
+reconnect, which starts a fresh empty store. This is a setup/tuning activity, not
+steady state, so the per-session memory is immaterial.
 
 ### 5.4 Concurrency (handoff §3.1)
 

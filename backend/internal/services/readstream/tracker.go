@@ -1,7 +1,7 @@
-// Package readstream maintains a server-authoritative tag-presence set per org
-// and streams it to the browser as ItemTest-style "Inventory" deltas over SSE
-// (TRA-936). It taps the ingest parsed-read stream pre-membership, so unknown
-// EPCs surface too — Live Reads is a coverage diagnostic.
+// Package readstream maintains a tag-presence set per browser session and
+// streams it as ItemTest-style "Inventory" deltas over SSE (TRA-936). It taps
+// the ingest parsed-read stream pre-membership, so unknown EPCs surface too —
+// Live Reads is a coverage diagnostic.
 //
 // The server (not the browser) owns presence because read count and RSSI
 // averages are aggregates that need every read: pushing per-tag state deltas
@@ -9,6 +9,12 @@
 // counts correct. ENTER fires on first sight, UPDATE is coalesced on re-sight,
 // LEAVE fires on expiry; a snapshot seeds each connection and a periodic
 // keyframe self-heals any dropped delta.
+//
+// Presence is tracked PER SESSION, not per org: each connection gets its own
+// store, starting empty at connect, so a read count means "reads since you
+// started watching" and two operators tuning the same readers never share
+// counts. This is a setup/tuning activity, not steady state, so the per-session
+// memory is immaterial.
 //
 // Single-replica only. Multi-replica fan-out needs shared pub/sub or sticky
 // sessions; deferred and aligned to TRA-907 (keep one backend replica).
@@ -56,8 +62,45 @@ type leavePayload struct {
 	EPC       string `json:"epc"`
 }
 
+// subscriber is one browser session: its own presence store and read-rate
+// accounting, plus the delivery channel.
 type subscriber struct {
-	ch chan Event
+	ch    chan Event
+	orgID int
+	store *store
+
+	readTotal int64     // reads folded in since the last rate refresh
+	rateSince time.Time // start of the current rate window
+	lastRate  float64   // reads/sec at the last keyframe
+}
+
+func (s *subscriber) send(ev Event) {
+	select {
+	case s.ch <- ev:
+	default: // slow client; drop, keyframe will re-seed
+	}
+}
+
+// snapshotEvent builds this session's snapshot (its own presence + footer stats).
+func (s *subscriber) snapshotEvent() Event {
+	p := snapshotPayload{
+		Tags:       s.store.snapshot(s.orgID),
+		UniqueTags: s.store.uniqueTags(s.orgID),
+		ReadRate:   s.lastRate,
+	}
+	data, _ := json.Marshal(p)
+	return Event{Type: eventSnapshot, Data: data}
+}
+
+// refreshRate computes reads/sec since the last refresh and resets the window.
+func (s *subscriber) refreshRate(now time.Time) {
+	if !s.rateSince.IsZero() {
+		if elapsed := now.Sub(s.rateSince).Seconds(); elapsed > 0 {
+			s.lastRate = float64(s.readTotal) / elapsed
+		}
+	}
+	s.readTotal = 0
+	s.rateSince = now
 }
 
 // TrackerConfig tunes the presence windows and background cadences.
@@ -84,20 +127,14 @@ func (c TrackerConfig) withDefaults() TrackerConfig {
 	return c
 }
 
-// Tracker is the concurrency-safe presence hub: it owns the pure store, fans
-// presence deltas out to per-org SSE subscribers, and runs the flush/sweep/
-// keyframe loop.
+// Tracker fans parsed reads out to per-session presence stores and runs the
+// flush/sweep/keyframe loop. It holds no shared presence state — each
+// subscriber owns its own.
 type Tracker struct {
 	cfg TrackerConfig
 
-	mu    sync.Mutex
-	store *store
-	subs  map[int]map[*subscriber]struct{}
-
-	// read-rate accounting (footer stat); reads since the last keyframe per org.
-	readTotals map[int]int64
-	rateSince  map[int]time.Time
-	lastRate   map[int]float64
+	mu   sync.Mutex
+	subs map[int]map[*subscriber]struct{}
 
 	now      func() time.Time
 	stop     chan struct{}
@@ -112,16 +149,11 @@ func New() *Tracker { return NewTracker(TrackerConfig{}) }
 // NewTracker builds a Tracker with the given config (zero fields take defaults)
 // and starts its background loop.
 func NewTracker(cfg TrackerConfig) *Tracker {
-	cfg = cfg.withDefaults()
 	t := &Tracker{
-		cfg:        cfg,
-		store:      newStore(cfg.TTL, cfg.Coalesce),
-		subs:       make(map[int]map[*subscriber]struct{}),
-		readTotals: make(map[int]int64),
-		rateSince:  make(map[int]time.Time),
-		lastRate:   make(map[int]float64),
-		now:        time.Now,
-		stop:       make(chan struct{}),
+		cfg:  cfg.withDefaults(),
+		subs: make(map[int]map[*subscriber]struct{}),
+		now:  time.Now,
+		stop: make(chan struct{}),
 	}
 	t.wg.Add(1)
 	go t.run()
@@ -134,21 +166,26 @@ func (t *Tracker) Stop() {
 	t.wg.Wait()
 }
 
-// Subscribe registers a client for an org's presence stream and seeds it with a
-// snapshot. The returned cancel func unsubscribes (safe to call repeatedly).
+// Subscribe registers a session for an org's read stream with its own presence
+// store and seeds it with an (empty) snapshot. The returned cancel func
+// unsubscribes (safe to call repeatedly); the session's store is dropped with it.
 //
 // The channel is deliberately never closed: closing would race the fan-out send
 // (done outside the lock). The SSE handler exits on its request context instead;
 // map removal stops further sends and the buffered channel is GC'd.
 func (t *Tracker) Subscribe(orgID int) (<-chan Event, func()) {
-	s := &subscriber{ch: make(chan Event, clientBuffer)}
+	s := &subscriber{
+		ch:    make(chan Event, clientBuffer),
+		orgID: orgID,
+		store: newStore(t.cfg.TTL, t.cfg.Coalesce),
+	}
 
 	t.mu.Lock()
 	if t.subs[orgID] == nil {
 		t.subs[orgID] = make(map[*subscriber]struct{})
 	}
 	t.subs[orgID][s] = struct{}{}
-	seed := t.snapshotEventLocked(orgID)
+	seed := s.snapshotEvent()
 	t.mu.Unlock()
 
 	// Non-blocking: a fresh buffered channel always has room for the seed.
@@ -162,12 +199,6 @@ func (t *Tracker) Subscribe(orgID int) (<-chan Event, func()) {
 				delete(set, s)
 				if len(set) == 0 {
 					delete(t.subs, orgID)
-					// Last watcher gone: discard presence + rate state so the next
-					// session's counts start from zero (lazy tracking).
-					t.store.reset(orgID)
-					delete(t.readTotals, orgID)
-					delete(t.rateSince, orgID)
-					delete(t.lastRate, orgID)
 				}
 			}
 			t.mu.Unlock()
@@ -176,8 +207,16 @@ func (t *Tracker) Subscribe(orgID int) (<-chan Event, func()) {
 	return s.ch, cancel
 }
 
-// Publish folds a batch of parsed reads into the presence set and fans out any
-// resulting ENTER deltas immediately. Implements ingest.ReadPublisher.
+// delivery pairs a session with the events destined for it.
+type delivery struct {
+	s   *subscriber
+	evs []orgEvent
+}
+
+// Publish folds a batch of parsed reads into every watching session's presence
+// store and fans out the resulting deltas. Implements ingest.ReadPublisher.
+// Sessions are the only place reads are tracked, so reads for an unwatched org
+// are dropped (lazy, per session).
 func (t *Tracker) Publish(orgID int, topic string, reads []scanread.Read) {
 	if len(reads) == 0 {
 		return
@@ -186,23 +225,23 @@ func (t *Tracker) Publish(orgID int, topic string, reads []scanread.Read) {
 	now := t.now()
 
 	t.mu.Lock()
-	// Lazy tracking: only accumulate while someone is watching this org, so read
-	// counts mean "reads since you started watching" (and idle orgs cost nothing).
-	if len(t.subs[orgID]) == 0 {
-		t.mu.Unlock()
-		return
-	}
-	var evs []orgEvent
-	for _, r := range reads {
-		evs = append(evs, t.store.ingest(orgID, key, r, now)...)
-	}
-	t.readTotals[orgID] += int64(len(reads))
-	if _, ok := t.rateSince[orgID]; !ok {
-		t.rateSince[orgID] = now
+	var out []delivery
+	for s := range t.subs[orgID] {
+		var evs []orgEvent
+		for _, r := range reads {
+			evs = append(evs, s.store.ingest(orgID, key, r, now)...)
+		}
+		s.readTotal += int64(len(reads))
+		if s.rateSince.IsZero() {
+			s.rateSince = now
+		}
+		if len(evs) > 0 {
+			out = append(out, delivery{s, evs})
+		}
 	}
 	t.mu.Unlock()
 
-	t.fanout(evs)
+	deliver(out)
 }
 
 // run drives the flush/sweep tick and the keyframe broadcast.
@@ -220,84 +259,57 @@ func (t *Tracker) run() {
 		case <-tick.C:
 			now := t.now()
 			t.mu.Lock()
-			evs := append(t.store.flush(now), t.store.sweep(now)...)
+			var out []delivery
+			for _, set := range t.subs {
+				for s := range set {
+					if evs := append(s.store.flush(now), s.store.sweep(now)...); len(evs) > 0 {
+						out = append(out, delivery{s, evs})
+					}
+				}
+			}
 			t.mu.Unlock()
-			t.fanout(evs)
+			deliver(out)
 		case <-keyframe.C:
 			t.broadcastKeyframes()
 		}
 	}
 }
 
-// broadcastKeyframes recomputes per-org read rate and pushes a fresh snapshot to
-// every subscriber, self-healing any delta dropped by a slow client.
+// broadcastKeyframes refreshes each session's read rate and pushes it a fresh
+// snapshot of its own presence, self-healing any delta it dropped.
 func (t *Tracker) broadcastKeyframes() {
 	now := t.now()
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	for orgID, set := range t.subs {
-		t.refreshRateLocked(orgID, now)
-		seed := t.snapshotEventLocked(orgID)
+	type seed struct {
+		s  *subscriber
+		ev Event
+	}
+	var seeds []seed
+	for _, set := range t.subs {
 		for s := range set {
-			select {
-			case s.ch <- seed:
-			default:
-			}
+			s.refreshRate(now)
+			seeds = append(seeds, seed{s, s.snapshotEvent()})
 		}
+	}
+	t.mu.Unlock()
+	for _, sd := range seeds {
+		sd.s.send(sd.ev)
 	}
 }
 
-// refreshRateLocked computes reads/sec for an org since the last refresh and
-// resets the window. Caller holds the lock.
-func (t *Tracker) refreshRateLocked(orgID int, now time.Time) {
-	since, ok := t.rateSince[orgID]
-	if ok {
-		if elapsed := now.Sub(since).Seconds(); elapsed > 0 {
-			t.lastRate[orgID] = float64(t.readTotals[orgID]) / elapsed
-		}
-	}
-	t.readTotals[orgID] = 0
-	t.rateSince[orgID] = now
-}
-
-// snapshotEventLocked builds a snapshot Event for an org. Caller holds the lock.
-func (t *Tracker) snapshotEventLocked(orgID int) Event {
-	p := snapshotPayload{
-		Tags:       t.store.snapshot(orgID),
-		UniqueTags: t.store.uniqueTags(orgID),
-		ReadRate:   t.lastRate[orgID],
-	}
-	data, _ := json.Marshal(p)
-	return Event{Type: eventSnapshot, Data: data}
-}
-
-// fanout marshals presence deltas and non-blocking-sends each to its org's
-// subscribers. A full client buffer drops the event (self-heals on keyframe).
-func (t *Tracker) fanout(evs []orgEvent) {
-	for _, oe := range evs {
-		ev, ok := marshalEvent(oe)
-		if !ok {
-			continue
-		}
-		t.mu.Lock()
-		set := t.subs[oe.orgID]
-		targets := make([]*subscriber, 0, len(set))
-		for s := range set {
-			targets = append(targets, s)
-		}
-		t.mu.Unlock()
-
-		for _, s := range targets {
-			select {
-			case s.ch <- ev:
-			default: // slow client; drop, keyframe will re-seed
+// deliver marshals each session's deltas and sends them to that session only.
+func deliver(out []delivery) {
+	for _, d := range out {
+		for _, oe := range d.evs {
+			if ev, ok := marshalEvent(oe); ok {
+				d.s.send(ev)
 			}
 		}
 	}
 }
 
 // marshalEvent renders an orgEvent to its wire Event. Snapshot events are built
-// elsewhere (they carry footer stats); only deltas pass through here.
+// per session (they carry footer stats); only deltas pass through here.
 func marshalEvent(oe orgEvent) (Event, bool) {
 	switch oe.typ {
 	case eventEnter, eventUpdate:

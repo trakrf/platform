@@ -34,18 +34,10 @@ func mustNoEvent(t *testing.T, ch <-chan Event, within time.Duration) {
 	}
 }
 
-func TestTracker_SubscribeSeedsSnapshot(t *testing.T) {
+func TestTracker_FreshSubscriberSeedIsEmpty(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	// A first watcher makes the org tracked; the read is then accumulated.
-	chA, cancelA := tr.Subscribe(7)
-	defer cancelA()
-	recv(t, chA, time.Second) // drain A's (empty) seed
-	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
-	recv(t, chA, time.Second) // enter
-
-	// A second subscriber's seed reflects the current presence set.
 	ch, cancel := tr.Subscribe(7)
 	defer cancel()
 
@@ -57,11 +49,50 @@ func TestTracker_SubscribeSeedsSnapshot(t *testing.T) {
 	if err := json.Unmarshal(ev.Data, &p); err != nil {
 		t.Fatalf("bad snapshot json: %v", err)
 	}
-	if len(p.Tags) != 1 || p.Tags[0].EPC != "EPC1" {
-		t.Fatalf("snapshot must contain EPC1, got %+v", p.Tags)
+	if len(p.Tags) != 0 {
+		t.Fatalf("a fresh session starts empty (counts since you started watching), got %+v", p.Tags)
 	}
-	if p.UniqueTags != 1 {
-		t.Fatalf("want uniqueTags 1, got %d", p.UniqueTags)
+}
+
+// TestTracker_PerSessionCountsIndependent is the core guarantee: two operators
+// tuning at once do NOT share counts, and a later-joining session does not
+// inherit the earlier one's history.
+func TestTracker_PerSessionCountsIndependent(t *testing.T) {
+	tr := NewTracker(idleCfg())
+	defer tr.Stop()
+
+	chA, cancelA := tr.Subscribe(7)
+	defer cancelA()
+	recv(t, chA, time.Second) // A seed (empty)
+
+	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
+	evA := recv(t, chA, time.Second)
+	if evA.Type != eventEnter {
+		t.Fatalf("A should get an enter, got %s", evA.Type)
+	}
+
+	// B joins AFTER the first read — it must not see that read in its seed.
+	chB, cancelB := tr.Subscribe(7)
+	defer cancelB()
+	seedB := recv(t, chB, time.Second)
+	var pB snapshotPayload
+	if err := json.Unmarshal(seedB.Data, &pB); err != nil {
+		t.Fatalf("bad seed json: %v", err)
+	}
+	if len(pB.Tags) != 0 {
+		t.Fatalf("B joined late and must start empty, got %+v", pB.Tags)
+	}
+
+	// A second read: B sees its FIRST sight (count 1), even though the tag has
+	// been read twice globally — counts are per session.
+	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -60, 1)})
+	evB := recv(t, chB, time.Second)
+	var tsB TagState
+	if err := json.Unmarshal(evB.Data, &tsB); err != nil {
+		t.Fatalf("bad enter json: %v", err)
+	}
+	if evB.Type != eventEnter || tsB.ReadCount != 1 {
+		t.Fatalf("B must count from its own connect (enter, count 1), got %s count=%d", evB.Type, tsB.ReadCount)
 	}
 }
 
