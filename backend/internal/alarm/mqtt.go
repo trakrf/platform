@@ -14,6 +14,14 @@ import (
 
 const publishTimeout = 5 * time.Second
 
+// srcReplyTopic is the "src" set on every Switch.Set frame. Shelly Gen4 firmware
+// requires a src to PROCESS an RPC request, not merely to route the reply: a frame
+// without src is silently dropped (TRA-941). The device publishes its reply to
+// <srcReplyTopic>/rpc; we never subscribe, so it is discarded. Kept inside the
+// broker ACL namespace (trakrf.id/#) so the reply publish is authorized rather
+// than logged as an ACL violation on every fire.
+const srcReplyTopic = "trakrf.id/_backend"
+
 // MQTTPublisher fires an output device by publishing a Shelly Gen2+ RPC frame to
 // the shared broker (TRA-906/TRA-934): a Switch.Set request on <commandTopic>/rpc.
 // The Shelly, subscribed there, actuates — no inbound connection to the device is
@@ -29,15 +37,17 @@ type MQTTPublisher struct {
 // offAfterSec > 0 the frame includes toggle_after, so the device turns on and
 // flips itself off after the delay (survives a backend restart; no second
 // message). offAfterSec is omitted for off commands and when 0 (stay on until an
-// explicit off). No "src" is set: we publish-and-trust and want no reply on the
-// broker. Success means the broker accepted the message, not that the relay
-// confirmed (MQTT is fire-and-forget).
+// explicit off). The frame carries a srcReplyTopic "src" (required by Gen4
+// firmware to process the request, see the const); we never read the reply.
+// Success means the broker accepted the message, not that the relay confirmed
+// (MQTT is fire-and-forget).
 func (p *MQTTPublisher) Publish(_ context.Context, commandTopic string, switchID int, on bool, offAfterSec int) error {
 	params := map[string]any{"id": switchID, "on": on}
 	if on && offAfterSec > 0 {
 		params["toggle_after"] = offAfterSec
 	}
 	frame, err := json.Marshal(map[string]any{
+		"src":    srcReplyTopic,
 		"id":     1,
 		"method": "Switch.Set",
 		"params": params,
