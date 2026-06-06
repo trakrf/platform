@@ -173,6 +173,83 @@ func TestPersistReads_RegisteredAssetProducesScan(t *testing.T) {
 	assert.Equal(t, tagScanID, gotTagScanID)
 }
 
+// TRA-944: a tag registered by its short barcode value resolves a full-width EPC
+// read (and the reverse), matching the handheld getMatchingKey normalization.
+func TestPersistReads_LeadingZeroNormalizedMatch(t *testing.T) {
+	ctx := context.Background()
+
+	const fullEPC = "000000000000000000010023"
+	const shortValue = "10023"
+
+	// Fresh DB per subtest: CreateTestAccount uses a fixed org identifier, so each
+	// scenario needs its own database (one account per DB). Separate orgs also keep
+	// the short and full registrations from colliding on normalized_value.
+	t.Run("short tag value matches full EPC read", func(t *testing.T) {
+		db := testutil.SetupTestDBFull(t)
+		orgID := testutil.CreateTestAccount(t, db.AdminPool)
+		registerDevice(t, db, orgID, "cs463-214")
+		registerRFIDTag(t, db, orgID, shortValue) // registered short
+
+		reads := []scanread.Read{{EPC: fullEPC, CapturePointName: "cs463-214-1", RSSI: -56}}
+		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		require.NoError(t, err)
+		assert.Equal(t, 1, res.Inserted, "full EPC read resolves the short-value tag")
+		assert.Empty(t, res.Dropped)
+		require.Equal(t, 1, countAssetScans(t, db, orgID))
+	})
+
+	t.Run("full tag value matches short EPC read", func(t *testing.T) {
+		db := testutil.SetupTestDBFull(t)
+		orgID := testutil.CreateTestAccount(t, db.AdminPool)
+		registerDevice(t, db, orgID, "cs463-214")
+		registerRFIDTag(t, db, orgID, fullEPC) // registered full
+
+		reads := []scanread.Read{{EPC: shortValue, CapturePointName: "cs463-214-1", RSSI: -56}}
+		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		require.NoError(t, err)
+		assert.Equal(t, 1, res.Inserted, "short EPC read resolves the full-value tag")
+		assert.Empty(t, res.Dropped)
+	})
+}
+
+// TRA-944: BLE MAC registered lowercase resolves an uppercase read, and non-hex
+// junk tag values never match anything.
+func TestPersistReads_NormalizationEdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("ble mac case-insensitive", func(t *testing.T) {
+		db := testutil.SetupTestDBFull(t)
+		orgID := testutil.CreateTestAccount(t, db.AdminPool)
+		registerGLS10Device(t, db, orgID, "C4DEE229A176")
+		registerBLETag(t, db, orgID, "c4dee229a176aa") // lowercase placeholder asset MAC
+
+		// Reader-side parsers emit uppercase MAC; ensure it still resolves.
+		reads := []scanread.Read{{EPC: "C4DEE229A176AA", CapturePointName: "C4DEE229A176-1", RSSI: -56}}
+		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		require.NoError(t, err)
+		assert.Equal(t, 1, res.Inserted, "uppercase read resolves lowercase-registered MAC")
+		assert.Empty(t, res.Dropped)
+	})
+
+	t.Run("non-hex junk value matches nothing", func(t *testing.T) {
+		db := testutil.SetupTestDBFull(t)
+		orgID := testutil.CreateTestAccount(t, db.AdminPool)
+		registerDevice(t, db, orgID, "cs463-214")
+		// "X With Space" normalizes to "" (no hex chars) and must not match a read.
+		asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "junk-asset")
+		_, err := db.AdminPool.Exec(ctx,
+			`INSERT INTO trakrf.tags (org_id, asset_id, type, value) VALUES ($1, $2, 'rfid', 'X With Space')`,
+			orgID, asset.ID)
+		require.NoError(t, err)
+
+		reads := []scanread.Read{{EPC: "AABBCC", CapturePointName: "cs463-214-1"}}
+		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		require.NoError(t, err)
+		assert.Equal(t, 0, res.Inserted)
+		assert.Equal(t, 1, res.Dropped["no_asset"], "junk tag value normalizes to empty and never matches")
+	})
+}
+
 func TestPersistReads_UnregisteredEPCDropsRead(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
