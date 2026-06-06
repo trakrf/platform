@@ -162,6 +162,12 @@ func (t *Tracker) Subscribe(orgID int) (<-chan Event, func()) {
 				delete(set, s)
 				if len(set) == 0 {
 					delete(t.subs, orgID)
+					// Last watcher gone: discard presence + rate state so the next
+					// session's counts start from zero (lazy tracking).
+					t.store.reset(orgID)
+					delete(t.readTotals, orgID)
+					delete(t.rateSince, orgID)
+					delete(t.lastRate, orgID)
 				}
 			}
 			t.mu.Unlock()
@@ -180,6 +186,12 @@ func (t *Tracker) Publish(orgID int, topic string, reads []scanread.Read) {
 	now := t.now()
 
 	t.mu.Lock()
+	// Lazy tracking: only accumulate while someone is watching this org, so read
+	// counts mean "reads since you started watching" (and idle orgs cost nothing).
+	if len(t.subs[orgID]) == 0 {
+		t.mu.Unlock()
+		return
+	}
 	var evs []orgEvent
 	for _, r := range reads {
 		evs = append(evs, t.store.ingest(orgID, key, r, now)...)

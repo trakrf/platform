@@ -37,8 +37,15 @@ func mustNoEvent(t *testing.T, ch <-chan Event, within time.Duration) {
 func TestTracker_SubscribeSeedsSnapshot(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
-	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
 
+	// A first watcher makes the org tracked; the read is then accumulated.
+	chA, cancelA := tr.Subscribe(7)
+	defer cancelA()
+	recv(t, chA, time.Second) // drain A's (empty) seed
+	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
+	recv(t, chA, time.Second) // enter
+
+	// A second subscriber's seed reflects the current presence set.
 	ch, cancel := tr.Subscribe(7)
 	defer cancel()
 
@@ -99,6 +106,48 @@ func TestTracker_OrgIsolation(t *testing.T) {
 		t.Fatalf("org 1 subscriber should get the enter, got %s", ev.Type)
 	}
 	mustNoEvent(t, chB, 100*time.Millisecond) // org 2 must not see org 1's read
+}
+
+func TestTracker_LazyDoesNotTrackWithoutSubscribers(t *testing.T) {
+	tr := NewTracker(idleCfg())
+	defer tr.Stop()
+
+	// Reads arriving with nobody watching are not accumulated.
+	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
+
+	ch, cancel := tr.Subscribe(7)
+	defer cancel()
+	ev := recv(t, ch, time.Second)
+	var p snapshotPayload
+	if err := json.Unmarshal(ev.Data, &p); err != nil {
+		t.Fatalf("bad snapshot json: %v", err)
+	}
+	if len(p.Tags) != 0 {
+		t.Fatalf("nothing should be tracked before the first subscriber, got %d tags", len(p.Tags))
+	}
+}
+
+func TestTracker_LazyResetsAfterLastUnsubscribe(t *testing.T) {
+	tr := NewTracker(idleCfg())
+	defer tr.Stop()
+
+	ch, cancel := tr.Subscribe(7)
+	recv(t, ch, time.Second) // seed snapshot (empty)
+	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
+	recv(t, ch, time.Second) // enter — tag is now tracked
+
+	cancel() // last subscriber leaves → org state discarded
+
+	ch2, cancel2 := tr.Subscribe(7)
+	defer cancel2()
+	ev := recv(t, ch2, time.Second)
+	var p snapshotPayload
+	if err := json.Unmarshal(ev.Data, &p); err != nil {
+		t.Fatalf("bad snapshot json: %v", err)
+	}
+	if len(p.Tags) != 0 {
+		t.Fatalf("counts must reset when nobody is watching; got %d tags on re-subscribe", len(p.Tags))
+	}
 }
 
 func TestTracker_CancelStopsDelivery(t *testing.T) {

@@ -176,3 +176,7 @@ func (s *store) snapshot(orgID int) []TagState {
 
 // uniqueTags is the count of tags currently present for an org (footer stat).
 func (s *store) uniqueTags(orgID int) int { return len(s.orgs[orgID]) }
+
+// reset discards all presence state for an org (last watcher disconnected, so
+// the next session's read counts start from zero).
+func (s *store) reset(orgID int) { delete(s.orgs, orgID) }
