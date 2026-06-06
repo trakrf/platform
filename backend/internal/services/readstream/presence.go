@@ -23,18 +23,17 @@ const (
 // correct). Timestamps are server-side epoch milliseconds; the reader clock is
 // informational only.
 type TagState struct {
-	ReaderKey        string `json:"readerKey"`
-	EPC              string `json:"epc"`
-	Alias            string `json:"alias,omitempty"` // optional; asset-name resolution is a follow-up
-	CapturePointName string `json:"capturePointName"`
-	AntennaPort      int    `json:"antennaPort"` // most recent
-	FirstSeenMs      int64  `json:"firstSeen"`
-	LastSeenMs       int64  `json:"lastSeen"`
-	ReadCount        int64  `json:"readCount"`
-	LastRSSI         int    `json:"lastRssi"`
-	RSSIAvg          int    `json:"rssiAvg"`
-	RSSIMin          int    `json:"rssiMin"`
-	RSSIMax          int    `json:"rssiMax"`
+	ReaderKey   string `json:"readerKey"`
+	EPC         string `json:"epc"`
+	Alias       string `json:"alias,omitempty"` // optional; asset-name resolution is a follow-up
+	AntennaPort int    `json:"antennaPort"`     // most recent
+	FirstSeenMs int64  `json:"firstSeen"`
+	LastSeenMs  int64  `json:"lastSeen"`
+	ReadCount   int64  `json:"readCount"`
+	LastRSSI    int    `json:"lastRssi"`
+	RSSIAvg     int    `json:"rssiAvg"`
+	RSSIMin     int    `json:"rssiMin"`
+	RSSIMax     int    `json:"rssiMax"`
 }
 
 // orgEvent is a presence transition destined for one org's subscribers. For
@@ -89,17 +88,16 @@ func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Ti
 	if a == nil {
 		a = &tagAgg{
 			state: TagState{
-				ReaderKey:        readerKey,
-				EPC:              r.EPC,
-				CapturePointName: r.CapturePointName,
-				AntennaPort:      r.AntennaPort,
-				FirstSeenMs:      nowMs,
-				LastSeenMs:       nowMs,
-				ReadCount:        1,
-				LastRSSI:         r.RSSI,
-				RSSIAvg:          r.RSSI,
-				RSSIMin:          r.RSSI,
-				RSSIMax:          r.RSSI,
+				ReaderKey:   readerKey,
+				EPC:         r.EPC,
+				AntennaPort: r.AntennaPort,
+				FirstSeenMs: nowMs,
+				LastSeenMs:  nowMs,
+				ReadCount:   1,
+				LastRSSI:    r.RSSI,
+				RSSIAvg:     r.RSSI,
+				RSSIMin:     r.RSSI,
+				RSSIMax:     r.RSSI,
 			},
 			rssiSum:  int64(r.RSSI),
 			lastEmit: now,
@@ -119,7 +117,6 @@ func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Ti
 	}
 	a.state.RSSIAvg = int(a.rssiSum / a.state.ReadCount)
 	a.state.AntennaPort = r.AntennaPort
-	a.state.CapturePointName = r.CapturePointName
 	a.state.LastSeenMs = nowMs
 	a.dirty = true
 	return nil

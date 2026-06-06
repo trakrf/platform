@@ -14,7 +14,6 @@ import type { TagState } from '@/types/readerfeed';
 const tag = (over: Partial<TagState> = {}): TagState => ({
   readerKey: 'dock-1',
   epc: 'AAA',
-  capturePointName: 'Dock 1',
   antennaPort: 1,
   firstSeen: 1000,
   lastSeen: 1000,

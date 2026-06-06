@@ -104,7 +104,6 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
               <tr className="text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
                 <th className="py-2.5 px-3">EPC</th>
                 <th className="px-3">Reader</th>
-                {!compact && <th className="px-3">Capture Point</th>}
                 <th className="px-3 text-right">Ant</th>
                 <th className="px-3 text-right">Reads</th>
                 <th className="px-3 text-right">Last RSSI</th>
@@ -139,9 +138,6 @@ function Row({ tag, now, compact }: { tag: TagState; now: number; compact: boole
         {tag.alias || tag.epc}
       </td>
       <td className="px-3 text-gray-700 dark:text-gray-300">{tag.readerKey}</td>
-      {!compact && (
-        <td className="px-3 text-gray-700 dark:text-gray-300">{tag.capturePointName || '—'}</td>
-      )}
       <td className={cell}>{tag.antennaPort}</td>
       <td className={`${cell} font-medium`}>{tag.readCount}</td>
       <td className={`${cell} font-mono`}>{tag.lastRssi === 0 ? '—' : tag.lastRssi}</td>

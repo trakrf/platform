@@ -5,7 +5,6 @@ import type { TagState } from '@/types/readerfeed';
 const tag: TagState = {
   readerKey: 'dock-9',
   epc: 'E1',
-  capturePointName: 'cp',
   antennaPort: 1,
   firstSeen: 10,
   lastSeen: 20,

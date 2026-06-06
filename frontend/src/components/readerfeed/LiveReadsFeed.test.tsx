@@ -10,7 +10,6 @@ vi.mock('@/hooks/readerfeed/useReaderFeed');
 const tag = (over: Partial<TagState> = {}): TagState => ({
   epc: 'EPC-A',
   readerKey: 'dock-1',
-  capturePointName: 'Dock 1',
   antennaPort: 2,
   firstSeen: Date.now(),
   lastSeen: Date.now(),
@@ -39,13 +38,12 @@ describe('LiveReadsFeed', () => {
   });
   afterEach(() => cleanup());
 
-  it('renders the ItemTest inventory columns: EPC, reader, capture point, antenna, read count and RSSI', () => {
+  it('renders the ItemTest inventory columns: EPC, reader, antenna, read count and RSSI', () => {
     mockFeed({ tags: [tag()] });
     render(<LiveReadsFeed />);
 
     expect(screen.getByText('EPC-A')).toBeInTheDocument();
     expect(screen.getByText('dock-1')).toBeInTheDocument();
-    expect(screen.getByText('Dock 1')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument(); // antenna
     expect(screen.getByText('9')).toBeInTheDocument(); // read count
     expect(screen.getByText('-55')).toBeInTheDocument(); // last RSSI
@@ -88,12 +86,13 @@ describe('LiveReadsFeed', () => {
     expect(useReaderFeed).toHaveBeenCalledWith(undefined);
   });
 
-  it('hides the Readers stat and secondary columns in compact mode', () => {
+  it('hides the Readers stat and secondary RSSI columns in compact mode', () => {
     mockFeed({ tags: [tag()], readerCount: 1 });
     render(<LiveReadsFeed compact />);
 
     expect(screen.queryByText('Readers')).not.toBeInTheDocument();
-    expect(screen.queryByText('Capture Point')).not.toBeInTheDocument();
+    expect(screen.queryByText('Min')).not.toBeInTheDocument();
+    expect(screen.queryByText('Max')).not.toBeInTheDocument();
     // The shared coverage stats remain.
     expect(screen.getByText('Tags in view')).toBeInTheDocument();
   });

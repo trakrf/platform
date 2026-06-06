@@ -18,7 +18,6 @@ export interface TagState {
   epc: string;
   /** Resolved asset name, when known. Optional — asset-name resolution is a follow-up. */
   alias?: string;
-  capturePointName: string;
   /** Most recent antenna port. */
   antennaPort: number;
   /** Server epoch-ms of first sight. */
