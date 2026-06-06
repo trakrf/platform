@@ -18,7 +18,6 @@ const point = (over: Partial<ScanPoint>): ScanPoint => ({
   external_key: 'dock_1_port_1',
   name: 'Dock 1 Port 1',
   antenna_port: 1,
-  is_boundary: false,
   description: '',
   metadata: {},
   valid_from: '2024-01-01T00:00:00Z',

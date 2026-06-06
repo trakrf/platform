@@ -42,7 +42,6 @@ const point = (over: Partial<ScanPoint>): ScanPoint => ({
   external_key: 'gateway_1-point-1',
   name: 'Gateway 1',
   antenna_port: null,
-  is_boundary: true,
   description: '',
   metadata: {},
   valid_from: '2024-01-01T00:00:00Z',
@@ -115,7 +114,6 @@ describe('SinglePointLocationField', () => {
         external_key: 'gateway_1-point-1',
         name: 'Gateway 1',
         location_id: 200,
-        is_boundary: true,
       })
     );
     expect(update).not.toHaveBeenCalled();
