@@ -70,6 +70,7 @@ export default function OutputDevicesScreen() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                  <th className="w-8 px-2"></th>
                   <th className="py-2 px-3 font-medium">Name</th>
                   <th className="px-3 font-medium">Type</th>
                   <th className="px-3 font-medium">Transport</th>
@@ -86,16 +87,7 @@ export default function OutputDevicesScreen() {
                   return (
                     <Fragment key={device.id}>
                       <tr className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
-                        <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
-                          {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
-                        </td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.switch_id}</td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>
-                        <td className="px-3 text-right whitespace-nowrap">
+                        <td className="w-8 px-2">
                           <button
                             type="button"
                             onClick={() => toggleExpanded(device.id)}
@@ -109,6 +101,17 @@ export default function OutputDevicesScreen() {
                               <ChevronRight className="w-4 h-4" />
                             )}
                           </button>
+                        </td>
+                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
+                        <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
+                          {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
+                        </td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.switch_id}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>
+                        <td className="px-3 text-right whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => setDeletingDevice(device)}
@@ -121,7 +124,7 @@ export default function OutputDevicesScreen() {
                       </tr>
                       {isExpanded && (
                         <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
-                          <td colSpan={8} className="px-3 py-4">
+                          <td colSpan={9} className="px-3 py-4">
                             <OutputDeviceEditPanel
                               device={device}
                               onClose={() => setExpandedId(null)}
