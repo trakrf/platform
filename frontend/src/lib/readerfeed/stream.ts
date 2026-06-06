@@ -12,6 +12,16 @@ import type { LeavePayload, PresenceEvent, SnapshotPayload, TagState } from '@/t
 /** Path appended to the API base URL (e.g. `/api/v1`) for the read stream. */
 export const READ_STREAM_PATH = '/reads/stream';
 
+/**
+ * Build the stream URL, optionally scoping to one reader server-side. A scoped
+ * panel passes its reader key so the backend never streams (or tracks) other
+ * readers' reads for that session.
+ */
+export function streamURL(baseURL: string, readerKey?: string): string {
+  const url = baseURL + READ_STREAM_PATH;
+  return readerKey ? `${url}?reader=${encodeURIComponent(readerKey)}` : url;
+}
+
 export interface SSEParseState {
   buffer: string;
 }
@@ -94,6 +104,8 @@ const MAX_BACKOFF_MS = 15_000;
  */
 export function openReadStream(opts: {
   baseURL: string;
+  /** Scope the stream to one reader server-side; omit for the whole org feed. */
+  readerKey?: string;
   getToken: () => string | null;
   onUnauthorized: () => Promise<boolean>;
   callbacks: ReadStreamCallbacks;
@@ -108,7 +120,7 @@ export function openReadStream(opts: {
       const state: SSEParseState = { buffer: '' };
       try {
         const token = opts.getToken();
-        const resp = await fetch(opts.baseURL + READ_STREAM_PATH, {
+        const resp = await fetch(streamURL(opts.baseURL, opts.readerKey), {
           headers: {
             Accept: 'text/event-stream',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),

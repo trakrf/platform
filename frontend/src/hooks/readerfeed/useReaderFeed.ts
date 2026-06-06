@@ -43,10 +43,12 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   const [error, setError] = useState<string | null>(null);
   const [readRate, setReadRate] = useState(0);
 
-  // SSE stream lifecycle.
+  // SSE stream lifecycle. The reader scope is applied server-side (the backend
+  // only streams/tracks that reader for this session), so changing it reconnects.
   useEffect(() => {
     const handle = openReadStream({
       baseURL: API_BASE_URL,
+      readerKey: filterReaderKey,
       getToken: () => useAuthStore.getState().token,
       onUnauthorized: async () => {
         try {
@@ -78,7 +80,7 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
       },
     });
     return () => handle.close();
-  }, []);
+  }, [filterReaderKey]);
 
   // Backstop expiry tick — only catches a LEAVE dropped during a reconnect.
   useEffect(() => {

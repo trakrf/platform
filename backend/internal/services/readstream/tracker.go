@@ -65,9 +65,10 @@ type leavePayload struct {
 // subscriber is one browser session: its own presence store and read-rate
 // accounting, plus the delivery channel.
 type subscriber struct {
-	ch    chan Event
-	orgID int
-	store *store
+	ch        chan Event
+	orgID     int
+	readerKey string // scope to one reader; "" = whole org feed
+	store     *store
 
 	readTotal int64     // reads folded in since the last rate refresh
 	rateSince time.Time // start of the current rate window
@@ -173,11 +174,13 @@ func (t *Tracker) Stop() {
 // The channel is deliberately never closed: closing would race the fan-out send
 // (done outside the lock). The SSE handler exits on its request context instead;
 // map removal stops further sends and the buffered channel is GC'd.
-func (t *Tracker) Subscribe(orgID int) (<-chan Event, func()) {
+// readerKey scopes the session to a single reader ("" = whole org feed).
+func (t *Tracker) Subscribe(orgID int, readerKey string) (<-chan Event, func()) {
 	s := &subscriber{
-		ch:    make(chan Event, clientBuffer),
-		orgID: orgID,
-		store: newStore(t.cfg.TTL, t.cfg.Coalesce),
+		ch:        make(chan Event, clientBuffer),
+		orgID:     orgID,
+		readerKey: readerKey,
+		store:     newStore(t.cfg.TTL, t.cfg.Coalesce),
 	}
 
 	t.mu.Lock()
@@ -227,6 +230,11 @@ func (t *Tracker) Publish(orgID int, topic string, reads []scanread.Read) {
 	t.mu.Lock()
 	var out []delivery
 	for s := range t.subs[orgID] {
+		// Server-side reader scoping: a session bound to one reader never sees,
+		// tracks, or counts another reader's reads.
+		if s.readerKey != "" && s.readerKey != key {
+			continue
+		}
 		var evs []orgEvent
 		for _, r := range reads {
 			evs = append(evs, s.store.ingest(orgID, key, r, now)...)

@@ -120,6 +120,8 @@ event: upsert    data: TagStateWire                                             
 event: leave     data: { readerKey, epc }
 ```
 
+The endpoint takes an optional `?reader=<key>` query param: when present, the session is scoped server-side to that reader (its store only ingests/streams that reader's reads); when absent, it's the whole-org feed. So the global page and the scoped reader panel hit the same endpoint, scoping included.
+
 `TagStateWire = { readerKey, epc, alias, antennaPort, firstSeen, lastSeen, readCount, lastRssi, rssiAvg, rssiMin, rssiMax }` (capturePointName dropped — see §4 note). Timestamps as epoch-millis (consistent with current `ReaderTimestampMs`). Keep the `: ping` heartbeat.
 
 - **Snapshot on connect** seeds client state (per-org filtered).
@@ -144,7 +146,7 @@ Transport and pure modules stay; semantics change.
   - snapshot → replace/reconcile; upsert → set; leave → delete.
   - Client TTL = **backstop only** (`now - lastSeen > 30s + grace`) for a LEAVE missed during a reconnect blip (handoff §5). Not primary.
   - `gradient(ageSeconds)` — smooth, dark-theme-adapted. KEYPR formula is `max(255 - age*4, 192)` grayscale (white→#c0c0c0 by ~16s on a light table). Our table is dark, so invert: fresh = bright/accent, fading to the base row bg by ~16s. Pure function of `now - lastSeen`; recomputed locally each tick — **zero network to animate** (handoff §5).
-- **`hooks/readerfeed/useReaderFeed.ts`** — dispatch typed events into the reducer; keep the 1s render tick (drives gradient + "time since" recompute) and the optional `filterReaderKey` (now filters by `readerKey` on `TagState`). Remove the client-as-primary 15s expiry (server owns LEAVE; keep only the backstop).
+- **`hooks/readerfeed/useReaderFeed.ts`** — dispatch typed events into the reducer; keep the 1s render tick (drives gradient + "time since" recompute). `filterReaderKey` is applied **server-side**: it's passed to the stream as `?reader=<key>`, so a scoped session's backend store only ingests/streams that reader (no other reader's reads cross the wire or get tracked). The client `filterByReader` stays as a cheap reconnect-window safeguard. Changing the scope reconnects the stream. Remove the client-as-primary 15s expiry (server owns LEAVE; keep only the backstop).
 - **`components/readerfeed/LiveReadsFeed.tsx`** — render the ItemTest **Inventory** column set in this order (matching Fig 40): `# · Tag (alias || epc) · Read Count · Reader (Last Read From) · First Seen · Last Seen · Time Since Last Seen · Last RSSI · RSSI Avg · RSSI Max · RSSI Min · Antenna`; row bg = `gradient(age)`. **Time Since Last Seen** ticks live (ItemTest renders these as relative seconds, e.g. `0.071`, not wall-clock — recomputed client-side from `lastSeen` each tick). Header shows the **session timer**; footer shows **Unique Tags** + **Read Rate (reads/s)**. Keep the scoped/global reuse intact — scoped (single reader) naturally renders one row per tag (= pure ItemTest); global shows (reader,epc) rows.
 
 ## 7. Decisions / defaults (overridable at review)

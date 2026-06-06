@@ -38,7 +38,7 @@ func TestTracker_FreshSubscriberSeedIsEmpty(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7)
+	ch, cancel := tr.Subscribe(7, "")
 	defer cancel()
 
 	ev := recv(t, ch, time.Second)
@@ -61,7 +61,7 @@ func TestTracker_PerSessionCountsIndependent(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	chA, cancelA := tr.Subscribe(7)
+	chA, cancelA := tr.Subscribe(7, "")
 	defer cancelA()
 	recv(t, chA, time.Second) // A seed (empty)
 
@@ -72,7 +72,7 @@ func TestTracker_PerSessionCountsIndependent(t *testing.T) {
 	}
 
 	// B joins AFTER the first read — it must not see that read in its seed.
-	chB, cancelB := tr.Subscribe(7)
+	chB, cancelB := tr.Subscribe(7, "")
 	defer cancelB()
 	seedB := recv(t, chB, time.Second)
 	var pB snapshotPayload
@@ -100,7 +100,7 @@ func TestTracker_PublishDeliversUpsert(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7)
+	ch, cancel := tr.Subscribe(7, "")
 	defer cancel()
 	recv(t, ch, time.Second) // drain the seed snapshot
 
@@ -123,9 +123,9 @@ func TestTracker_OrgIsolation(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	chA, cancelA := tr.Subscribe(1)
+	chA, cancelA := tr.Subscribe(1, "")
 	defer cancelA()
-	chB, cancelB := tr.Subscribe(2)
+	chB, cancelB := tr.Subscribe(2, "")
 	defer cancelB()
 	recv(t, chA, time.Second) // drain snapshots
 	recv(t, chB, time.Second)
@@ -146,7 +146,7 @@ func TestTracker_LazyDoesNotTrackWithoutSubscribers(t *testing.T) {
 	// Reads arriving with nobody watching are not accumulated.
 	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
 
-	ch, cancel := tr.Subscribe(7)
+	ch, cancel := tr.Subscribe(7, "")
 	defer cancel()
 	ev := recv(t, ch, time.Second)
 	var p snapshotPayload
@@ -162,14 +162,14 @@ func TestTracker_LazyResetsAfterLastUnsubscribe(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7)
+	ch, cancel := tr.Subscribe(7, "")
 	recv(t, ch, time.Second) // seed snapshot (empty)
 	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
 	recv(t, ch, time.Second) // upsert — tag is now tracked
 
 	cancel() // last subscriber leaves → org state discarded
 
-	ch2, cancel2 := tr.Subscribe(7)
+	ch2, cancel2 := tr.Subscribe(7, "")
 	defer cancel2()
 	ev := recv(t, ch2, time.Second)
 	var p snapshotPayload
@@ -181,11 +181,35 @@ func TestTracker_LazyResetsAfterLastUnsubscribe(t *testing.T) {
 	}
 }
 
+func TestTracker_ScopedSubscriberOnlySeesItsReader(t *testing.T) {
+	tr := NewTracker(idleCfg())
+	defer tr.Stop()
+
+	ch, cancel := tr.Subscribe(7, "dock-1") // scoped to dock-1
+	defer cancel()
+	recv(t, ch, time.Second) // seed
+
+	// A read from another reader must not reach (or be tracked by) this session.
+	tr.Publish(7, "trakrf.id/dock-2/reads", []scanread.Read{read("OTHER", -50, 1)})
+	mustNoEvent(t, ch, 100*time.Millisecond)
+
+	// A read from the scoped reader does.
+	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("MINE", -50, 1)})
+	ev := recv(t, ch, time.Second)
+	var ts TagState
+	if err := json.Unmarshal(ev.Data, &ts); err != nil {
+		t.Fatalf("bad upsert json: %v", err)
+	}
+	if ev.Type != eventUpsert || ts.EPC != "MINE" || ts.ReaderKey != "dock-1" {
+		t.Fatalf("scoped session should see only dock-1's read, got %s %+v", ev.Type, ts)
+	}
+}
+
 func TestTracker_CancelStopsDelivery(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7)
+	ch, cancel := tr.Subscribe(7, "")
 	recv(t, ch, time.Second) // snapshot
 	cancel()
 

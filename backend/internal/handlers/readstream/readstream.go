@@ -67,7 +67,9 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, ": connected\n\n")
 	_ = rc.Flush()
 
-	ch, cancel := h.tracker.Subscribe(orgID)
+	// Optional ?reader=<key> scopes the stream to one reader server-side, so a
+	// scoped panel never receives (or tracks) other readers' reads.
+	ch, cancel := h.tracker.Subscribe(orgID, r.URL.Query().Get("reader"))
 	defer cancel()
 
 	hb := time.NewTicker(heartbeatInterval)

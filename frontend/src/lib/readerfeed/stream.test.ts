@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSSEChunk, type SSEParseState } from './stream';
+import { parseSSEChunk, streamURL, type SSEParseState } from './stream';
 import type { TagState } from '@/types/readerfeed';
 
 const tag: TagState = {
@@ -16,6 +16,16 @@ const tag: TagState = {
 };
 
 const frame = (type: string, data: unknown) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+
+describe('streamURL', () => {
+  it('returns the bare stream path for the whole-org feed', () => {
+    expect(streamURL('/api/v1')).toBe('/api/v1/reads/stream');
+  });
+
+  it('appends an encoded ?reader= when scoped to a reader', () => {
+    expect(streamURL('/api/v1', 'dock 9/a')).toBe('/api/v1/reads/stream?reader=dock%209%2Fa');
+  });
+});
 
 describe('parseSSEChunk (named presence events)', () => {
   it('parses an upsert frame into a typed event', () => {
