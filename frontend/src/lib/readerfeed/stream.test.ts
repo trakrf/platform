@@ -18,11 +18,11 @@ const tag: TagState = {
 const frame = (type: string, data: unknown) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
 
 describe('parseSSEChunk (named presence events)', () => {
-  it('parses an enter frame into a typed event', () => {
+  it('parses an upsert frame into a typed event', () => {
     const st: SSEParseState = { buffer: '' };
-    const evs = parseSSEChunk(st, frame('enter', tag));
+    const evs = parseSSEChunk(st, frame('upsert', tag));
     expect(evs).toHaveLength(1);
-    expect(evs[0].type).toBe('enter');
+    expect(evs[0].type).toBe('upsert');
     expect(evs[0].data).toMatchObject(tag);
   });
 
@@ -47,7 +47,7 @@ describe('parseSSEChunk (named presence events)', () => {
 
   it('buffers a frame split across chunks', () => {
     const st: SSEParseState = { buffer: '' };
-    const full = frame('enter', tag);
+    const full = frame('upsert', tag);
     const mid = Math.floor(full.length / 2);
     expect(parseSSEChunk(st, full.slice(0, mid))).toHaveLength(0);
     const evs = parseSSEChunk(st, full.slice(mid));
@@ -59,14 +59,14 @@ describe('parseSSEChunk (named presence events)', () => {
     const st: SSEParseState = { buffer: '' };
     const evs = parseSSEChunk(
       st,
-      frame('enter', { ...tag, epc: 'A' }) + frame('update', { ...tag, epc: 'B' }),
+      frame('upsert', { ...tag, epc: 'A' }) + frame('upsert', { ...tag, epc: 'B' }),
     );
-    expect(evs.map((e) => e.type)).toEqual(['enter', 'update']);
+    expect(evs.map((e) => e.type)).toEqual(['upsert', 'upsert']);
   });
 
   it('drops malformed JSON without throwing', () => {
     const st: SSEParseState = { buffer: '' };
-    expect(parseSSEChunk(st, 'event: enter\ndata: not-json\n\n')).toHaveLength(0);
+    expect(parseSSEChunk(st, 'event: upsert\ndata: not-json\n\n')).toHaveLength(0);
   });
 
   it('drops frames with an unknown event type', () => {
@@ -74,8 +74,8 @@ describe('parseSSEChunk (named presence events)', () => {
     expect(parseSSEChunk(st, frame('bogus', tag))).toHaveLength(0);
   });
 
-  it('drops enter/update frames without an epc string', () => {
+  it('drops upsert frames without an epc string', () => {
     const st: SSEParseState = { buffer: '' };
-    expect(parseSSEChunk(st, frame('enter', { readerKey: 'x' }))).toHaveLength(0);
+    expect(parseSSEChunk(st, frame('upsert', { readerKey: 'x' }))).toHaveLength(0);
   });
 });

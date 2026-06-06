@@ -312,7 +312,7 @@ func deliver(out []delivery) {
 // per session (they carry footer stats); only deltas pass through here.
 func marshalEvent(oe orgEvent) (Event, bool) {
 	switch oe.typ {
-	case eventEnter, eventUpdate:
+	case eventUpsert:
 		data, err := json.Marshal(oe.tag)
 		if err != nil {
 			return Event{}, false

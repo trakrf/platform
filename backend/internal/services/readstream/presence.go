@@ -11,9 +11,12 @@ type EventType string
 
 const (
 	eventSnapshot EventType = "snapshot"
-	eventEnter    EventType = "enter"
-	eventUpdate   EventType = "update"
-	eventLeave    EventType = "leave"
+	// eventUpsert covers both first sight and re-sight: the payload is the full
+	// TagState and the client upserts it into its map either way. They differ only
+	// in timing (first sight emits immediately; re-sight is coalesced), and the
+	// client can tell "new" from "seen" by map membership, so one event suffices.
+	eventUpsert EventType = "upsert"
+	eventLeave  EventType = "leave"
 )
 
 // TagState is the per-(reader,epc) presence record streamed to the browser. It
@@ -37,8 +40,8 @@ type TagState struct {
 }
 
 // orgEvent is a presence transition destined for one org's subscribers. For
-// enter/update, tag is the full current state; for leave, only ReaderKey+EPC
-// are populated.
+// upsert, tag is the full current state; for leave, only ReaderKey+EPC are
+// populated.
 type orgEvent struct {
 	orgID int
 	typ   EventType
@@ -71,8 +74,8 @@ func newStore(ttl, coalesce time.Duration) *store {
 func tagKey(readerKey, epc string) string { return readerKey + "\x00" + epc }
 
 // ingest records one read. On the first sight of a (reader,epc) it inserts the
-// tag and returns an ENTER immediately; on a re-sight it folds the read into the
-// aggregates and returns nil — the UPDATE is emitted later by flush (coalesced),
+// tag and returns an upsert immediately; on a re-sight it folds the read into the
+// aggregates and returns nil — the (coalesced) upsert is emitted later by flush,
 // so a continuously-present tag does not firehose the stream.
 func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Time) []orgEvent {
 	om := s.orgs[orgID]
@@ -103,7 +106,7 @@ func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Ti
 			lastEmit: now,
 		}
 		om[key] = a
-		return []orgEvent{{orgID: orgID, typ: eventEnter, tag: a.state}}
+		return []orgEvent{{orgID: orgID, typ: eventUpsert, tag: a.state}}
 	}
 
 	a.state.ReadCount++
@@ -122,7 +125,7 @@ func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Ti
 	return nil
 }
 
-// flush emits a coalesced UPDATE for every tag that has been re-sighted since
+// flush emits a coalesced upsert for every tag that has been re-sighted since
 // its last emit and whose coalesce interval has elapsed. Render rate is thereby
 // decoupled from read rate.
 func (s *store) flush(now time.Time) []orgEvent {
@@ -132,7 +135,7 @@ func (s *store) flush(now time.Time) []orgEvent {
 			if a.dirty && now.Sub(a.lastEmit) >= s.coalesce {
 				a.dirty = false
 				a.lastEmit = now
-				out = append(out, orgEvent{orgID: orgID, typ: eventUpdate, tag: a.state})
+				out = append(out, orgEvent{orgID: orgID, typ: eventUpsert, tag: a.state})
 			}
 		}
 	}

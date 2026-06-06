@@ -30,7 +30,7 @@ func TestIngest_FirstSightEmitsEnter(t *testing.T) {
 		t.Fatalf("want 1 event, got %d", len(evs))
 	}
 	e := evs[0]
-	if e.orgID != 7 || e.typ != eventEnter {
+	if e.orgID != 7 || e.typ != eventUpsert {
 		t.Fatalf("want enter for org 7, got %v org=%d", e.typ, e.orgID)
 	}
 	ts := e.tag
@@ -93,7 +93,7 @@ func TestFlush_EmitsCoalescedUpdateAfterInterval(t *testing.T) {
 	}
 	// after the interval: exactly one UPDATE carrying current state
 	evs := s.flush(t0.Add(1100 * time.Millisecond))
-	if len(evs) != 1 || evs[0].typ != eventUpdate {
+	if len(evs) != 1 || evs[0].typ != eventUpsert {
 		t.Fatalf("want 1 update, got %d (%v)", len(evs), evs)
 	}
 	if evs[0].tag.ReadCount != 2 || evs[0].tag.LastRSSI != -55 {
@@ -131,7 +131,7 @@ func TestKeying_SameEPCDifferentReadersAreDistinct(t *testing.T) {
 	t0 := time.UnixMilli(1_000_000)
 	s.ingest(7, "dock-1", read("EPC1", -50, 1), t0)
 	evs := s.ingest(7, "dock-2", read("EPC1", -50, 1), t0)
-	if len(evs) != 1 || evs[0].typ != eventEnter {
+	if len(evs) != 1 || evs[0].typ != eventUpsert {
 		t.Fatalf("same EPC at a second reader must ENTER as a distinct tag, got %v", evs)
 	}
 	if len(s.snapshot(7)) != 2 {

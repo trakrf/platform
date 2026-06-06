@@ -35,15 +35,15 @@ describe('applyEvent', () => {
     expect([...out.keys()].sort()).toEqual([tagKey('dock-1', 'A'), tagKey('dock-1', 'B')].sort());
   });
 
-  it('enter inserts a tag', () => {
-    const out = applyEvent(new Map(), { type: 'enter', data: tag({ epc: 'A' }) });
+  it('upsert inserts a tag', () => {
+    const out = applyEvent(new Map(), { type: 'upsert', data: tag({ epc: 'A' }) });
     expect(out.get(tagKey('dock-1', 'A'))?.epc).toBe('A');
   });
 
-  it('update replaces the tag state (refreshed aggregates)', () => {
-    let m = applyEvent(new Map(), { type: 'enter', data: tag({ epc: 'A', readCount: 1 }) });
+  it('upsert replaces the tag state (refreshed aggregates)', () => {
+    let m = applyEvent(new Map(), { type: 'upsert', data: tag({ epc: 'A', readCount: 1 }) });
     m = applyEvent(m, {
-      type: 'update',
+      type: 'upsert',
       data: tag({ epc: 'A', readCount: 7, lastRssi: -40, lastSeen: 9000 }),
     });
     const t = m.get(tagKey('dock-1', 'A'))!;
@@ -53,20 +53,20 @@ describe('applyEvent', () => {
   });
 
   it('leave deletes the tag', () => {
-    let m = applyEvent(new Map(), { type: 'enter', data: tag({ epc: 'A' }) });
+    let m = applyEvent(new Map(), { type: 'upsert', data: tag({ epc: 'A' }) });
     m = applyEvent(m, { type: 'leave', data: { readerKey: 'dock-1', epc: 'A' } });
     expect(m.has(tagKey('dock-1', 'A'))).toBe(false);
   });
 
   it('keys the same EPC at different readers distinctly', () => {
-    let m = applyEvent(new Map(), { type: 'enter', data: tag({ readerKey: 'dock-1', epc: 'A' }) });
-    m = applyEvent(m, { type: 'enter', data: tag({ readerKey: 'dock-2', epc: 'A' }) });
+    let m = applyEvent(new Map(), { type: 'upsert', data: tag({ readerKey: 'dock-1', epc: 'A' }) });
+    m = applyEvent(m, { type: 'upsert', data: tag({ readerKey: 'dock-2', epc: 'A' }) });
     expect(m.size).toBe(2);
   });
 
   it('does not mutate the input map', () => {
     const before = new Map<string, TagState>();
-    applyEvent(before, { type: 'enter', data: tag({ epc: 'A' }) });
+    applyEvent(before, { type: 'upsert', data: tag({ epc: 'A' }) });
     expect(before.size).toBe(0);
   });
 });

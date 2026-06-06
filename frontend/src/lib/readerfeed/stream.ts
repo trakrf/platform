@@ -26,10 +26,9 @@ function toEvent(type: string, data: unknown): PresenceEvent | null {
         return { type: 'snapshot', data: data as SnapshotPayload };
       }
       return null;
-    case 'enter':
-    case 'update':
+    case 'upsert':
       if (typeof d.epc === 'string' && d.epc !== '' && typeof d.readerKey === 'string') {
-        return { type, data: data as TagState };
+        return { type: 'upsert', data: data as TagState };
       }
       return null;
     case 'leave':

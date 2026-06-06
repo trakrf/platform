@@ -44,11 +44,14 @@ export interface LeavePayload {
   epc: string;
 }
 
-/** A presence delta parsed off the SSE stream. */
+/**
+ * A presence delta parsed off the SSE stream. `upsert` covers both first sight
+ * and re-sight (same full-TagState payload, same client handling); the reducer
+ * tells "new" from "seen" by map membership if it ever needs to.
+ */
 export type PresenceEvent =
   | { type: 'snapshot'; data: SnapshotPayload }
-  | { type: 'enter'; data: TagState }
-  | { type: 'update'; data: TagState }
+  | { type: 'upsert'; data: TagState }
   | { type: 'leave'; data: LeavePayload };
 
 export type ReaderFeedStatus = 'connecting' | 'connected' | 'error' | 'closed';

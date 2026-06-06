@@ -67,8 +67,8 @@ func TestTracker_PerSessionCountsIndependent(t *testing.T) {
 
 	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
 	evA := recv(t, chA, time.Second)
-	if evA.Type != eventEnter {
-		t.Fatalf("A should get an enter, got %s", evA.Type)
+	if evA.Type != eventUpsert {
+		t.Fatalf("A should get an upsert, got %s", evA.Type)
 	}
 
 	// B joins AFTER the first read — it must not see that read in its seed.
@@ -89,14 +89,14 @@ func TestTracker_PerSessionCountsIndependent(t *testing.T) {
 	evB := recv(t, chB, time.Second)
 	var tsB TagState
 	if err := json.Unmarshal(evB.Data, &tsB); err != nil {
-		t.Fatalf("bad enter json: %v", err)
+		t.Fatalf("bad upsert json: %v", err)
 	}
-	if evB.Type != eventEnter || tsB.ReadCount != 1 {
-		t.Fatalf("B must count from its own connect (enter, count 1), got %s count=%d", evB.Type, tsB.ReadCount)
+	if evB.Type != eventUpsert || tsB.ReadCount != 1 {
+		t.Fatalf("B must count from its own connect (upsert, count 1), got %s count=%d", evB.Type, tsB.ReadCount)
 	}
 }
 
-func TestTracker_PublishDeliversEnter(t *testing.T) {
+func TestTracker_PublishDeliversUpsert(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
@@ -107,15 +107,15 @@ func TestTracker_PublishDeliversEnter(t *testing.T) {
 	tr.Publish(7, "trakrf.id/dock-9/reads", []scanread.Read{read("EPC2", -42, 3)})
 
 	ev := recv(t, ch, time.Second)
-	if ev.Type != eventEnter {
-		t.Fatalf("want enter, got %s", ev.Type)
+	if ev.Type != eventUpsert {
+		t.Fatalf("want upsert, got %s", ev.Type)
 	}
 	var ts TagState
 	if err := json.Unmarshal(ev.Data, &ts); err != nil {
-		t.Fatalf("bad enter json: %v", err)
+		t.Fatalf("bad upsert json: %v", err)
 	}
 	if ts.EPC != "EPC2" || ts.ReaderKey != "dock-9" || ts.AntennaPort != 3 {
-		t.Fatalf("unexpected enter tag: %+v", ts)
+		t.Fatalf("unexpected upsert tag: %+v", ts)
 	}
 }
 
@@ -133,8 +133,8 @@ func TestTracker_OrgIsolation(t *testing.T) {
 	tr.Publish(1, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
 
 	ev := recv(t, chA, time.Second)
-	if ev.Type != eventEnter {
-		t.Fatalf("org 1 subscriber should get the enter, got %s", ev.Type)
+	if ev.Type != eventUpsert {
+		t.Fatalf("org 1 subscriber should get the upsert, got %s", ev.Type)
 	}
 	mustNoEvent(t, chB, 100*time.Millisecond) // org 2 must not see org 1's read
 }
@@ -165,7 +165,7 @@ func TestTracker_LazyResetsAfterLastUnsubscribe(t *testing.T) {
 	ch, cancel := tr.Subscribe(7)
 	recv(t, ch, time.Second) // seed snapshot (empty)
 	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
-	recv(t, ch, time.Second) // enter — tag is now tracked
+	recv(t, ch, time.Second) // upsert — tag is now tracked
 
 	cancel() // last subscriber leaves → org state discarded
 

@@ -84,9 +84,11 @@ type TagState struct {
 
 ### 5.2 Transitions (handoff §1.2)
 
-- **ENTER** — first sight of a key: insert, `FirstSeen=LastSeen=now`, init aggregates. Emit ENTER promptly (don't wait for the coalesce tick).
-- **UPDATE** — re-sight: `ReadCount++`, update `LastRSSI/rssiSum/RSSIMin/RSSIMax/AntennaPort`, `LastSeen=now`; mark dirty. Emit **coalesced ≤1/s** per tag (flush dirty set on a ticker). Render rate ≠ network rate (handoff §5).
-- **LEAVE** — expiry: remove key, emit one LEAVE **per evicted tag** (handoff §3.3).
+- **First sight** — insert, `FirstSeen=LastSeen=now`, init aggregates. Emit an **upsert** promptly (don't wait for the coalesce tick).
+- **Re-sight** — `ReadCount++`, update `LastRSSI/rssiSum/RSSIMin/RSSIMax/AntennaPort`, `LastSeen=now`; mark dirty. Emit a **coalesced ≤1/s** upsert per tag (flush dirty set on a ticker). Render rate ≠ network rate (handoff §5).
+- **Expiry** — remove key, emit one **leave** **per evicted tag** (handoff §3.3).
+
+ENTER and UPDATE are collapsed into a single **`upsert`** event: both carry the full `TagState` and the client reducer handles them identically (`map.set`), so a separate event type is redundant — the client derives "new vs seen" from map membership if it ever needs an enter animation. They differ only in timing (first sight immediate, re-sight coalesced), which is a backend concern, not a wire distinction.
 
 ### 5.3 Expiration
 
@@ -113,13 +115,12 @@ State is touched by ingest publishes, the coalesce ticker, the sweep ticker, and
 Replaces the current bare `data:` raw-read frames:
 
 ```
-event: snapshot  data: { "tags": [ TagStateWire, ... ] }   // on connect + periodic keyframe
-event: enter     data: TagStateWire
-event: update    data: { readerKey, epc, lastSeen, readCount, lastRssi, rssiAvg, rssiMin, rssiMax, antennaPort }
+event: snapshot  data: { "tags": [ TagStateWire, ... ], "uniqueTags": N, "readRate": R }   // on connect + periodic keyframe
+event: upsert    data: TagStateWire                                                        // first sight (immediate) or re-sight (coalesced ≤1/s)
 event: leave     data: { readerKey, epc }
 ```
 
-`TagStateWire = { readerKey, epc, alias, capturePointName, antennaPort, firstSeen, lastSeen, readCount, lastRssi, rssiAvg, rssiMin, rssiMax }`. Timestamps as epoch-millis (consistent with current `ReaderTimestampMs`). Keep the `: ping` heartbeat.
+`TagStateWire = { readerKey, epc, alias, antennaPort, firstSeen, lastSeen, readCount, lastRssi, rssiAvg, rssiMin, rssiMax }` (capturePointName dropped — see §4 note). Timestamps as epoch-millis (consistent with current `ReaderTimestampMs`). Keep the `: ping` heartbeat.
 
 - **Snapshot on connect** seeds client state (per-org filtered).
 - **Periodic keyframe** every 30–60s so any missed delta self-heals (I-frame/P-frame, handoff §5).
@@ -140,7 +141,7 @@ Transport and pure modules stay; semantics change.
 - **`types/readerfeed/index.ts`** — replace `ParsedRead`/`LiveRead` with `TagState` (mirror wire) + delta payload types + event-union type.
 - **`lib/readerfeed/stream.ts`** — parse the SSE **event type** (currently only reads `data:`), emit typed events to callbacks (`onSnapshot/onEnter/onUpdate/onLeave`). Reconnect/backoff/401-refresh unchanged.
 - **`lib/readerfeed/store.ts`** — reducer over `Map<"readerKey\x00epc", TagState>`:
-  - snapshot → replace/reconcile; enter → set; update → merge fields; leave → delete.
+  - snapshot → replace/reconcile; upsert → set; leave → delete.
   - Client TTL = **backstop only** (`now - lastSeen > 30s + grace`) for a LEAVE missed during a reconnect blip (handoff §5). Not primary.
   - `gradient(ageSeconds)` — smooth, dark-theme-adapted. KEYPR formula is `max(255 - age*4, 192)` grayscale (white→#c0c0c0 by ~16s on a light table). Our table is dark, so invert: fresh = bright/accent, fading to the base row bg by ~16s. Pure function of `now - lastSeen`; recomputed locally each tick — **zero network to animate** (handoff §5).
 - **`hooks/readerfeed/useReaderFeed.ts`** — dispatch typed events into the reducer; keep the 1s render tick (drives gradient + "time since" recompute) and the optional `filterReaderKey` (now filters by `readerKey` on `TagState`). Remove the client-as-primary 15s expiry (server owns LEAVE; keep only the backstop).
@@ -160,7 +161,7 @@ Multi-replica fan-out (TRA-907); alarm/geofence changes; FastID/TID/Power/Dopple
 ## 9. Test plan
 
 - **Backend:** table-driven unit tests for the presence reducer — ENTER on first sight; UPDATE aggregates (count, avg/min/max, last) over a read sequence; coalescing (N sights in <1s → ≤1 UPDATE); sliding expiry → exactly one LEAVE per evicted tag; sweep period ≪ TTL; per-org isolation; snapshot reflects current set. Concurrency: race detector over concurrent publish+sweep+snapshot.
-- **Frontend:** pure-reducer tests for snapshot/enter/update/leave; gradient monotonicity over age; backstop TTL only fires when no LEAVE arrives; stream parser dispatches named events and ignores heartbeats/malformed frames.
+- **Frontend:** pure-reducer tests for snapshot/upsert/leave; gradient monotonicity over age; backstop TTL only fires when no LEAVE arrives; stream parser dispatches named events and ignores heartbeats/malformed frames.
 - **Manual:** preview against live MQTT (or replay), compared side-by-side with live KEYPR for parity feel.
 
 ## 10. Risks
