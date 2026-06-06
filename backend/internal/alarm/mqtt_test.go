@@ -7,8 +7,8 @@ import (
 )
 
 // decodeFrame unmarshals the published RPC frame and returns the top-level
-// fields plus the params object.
-func decodeFrame(t *testing.T, payload []byte) (method string, params map[string]any) {
+// fields plus the params object. src is "" when absent.
+func decodeFrame(t *testing.T, payload []byte) (method, src string, params map[string]any) {
 	t.Helper()
 	var frame struct {
 		ID     int            `json:"id"`
@@ -20,9 +20,9 @@ func decodeFrame(t *testing.T, payload []byte) (method string, params map[string
 		t.Fatalf("payload is not valid JSON: %v (%s)", err, payload)
 	}
 	if frame.Src != nil {
-		t.Errorf("frame.src = %q, want absent (we publish-and-trust, no reply topic)", *frame.Src)
+		src = *frame.Src
 	}
-	return frame.Method, frame.Params
+	return frame.Method, src, frame.Params
 }
 
 func TestMQTTPublisher_PublishesSwitchSetRPC_OnRPCTopic(t *testing.T) {
@@ -39,9 +39,15 @@ func TestMQTTPublisher_PublishesSwitchSetRPC_OnRPCTopic(t *testing.T) {
 	if gotTopic != "trakrf.id/dock-strobe/rpc" {
 		t.Errorf("topic = %q, want trakrf.id/dock-strobe/rpc", gotTopic)
 	}
-	method, params := decodeFrame(t, gotPayload)
+	method, src, params := decodeFrame(t, gotPayload)
 	if method != "Switch.Set" {
 		t.Errorf("method = %q, want Switch.Set", method)
+	}
+	// Gen4 firmware requires a src to PROCESS the request, not just to route a
+	// reply; without it the device silently drops the frame (TRA-941). We point
+	// it inside the broker ACL namespace and never subscribe — the reply is dropped.
+	if src != srcReplyTopic {
+		t.Errorf("src = %q, want %q", src, srcReplyTopic)
 	}
 	if params["id"] != float64(0) {
 		t.Errorf("params.id = %v, want 0 (switch id)", params["id"])
@@ -64,7 +70,7 @@ func TestMQTTPublisher_IncludesToggleAfter_WhenDurationSet(t *testing.T) {
 	if err := p.Publish(context.Background(), "trakrf.id/dock", 2, true, 30); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
-	_, params := decodeFrame(t, gotPayload)
+	_, _, params := decodeFrame(t, gotPayload)
 	if params["id"] != float64(2) {
 		t.Errorf("params.id = %v, want 2", params["id"])
 	}
@@ -84,7 +90,7 @@ func TestMQTTPublisher_OffOmitsToggleAfter(t *testing.T) {
 	if err := p.Publish(context.Background(), "trakrf.id/dock", 0, false, 30); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
-	_, params := decodeFrame(t, gotPayload)
+	_, _, params := decodeFrame(t, gotPayload)
 	if params["on"] != false {
 		t.Errorf("params.on = %v, want false", params["on"])
 	}
