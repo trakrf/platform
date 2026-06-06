@@ -2,6 +2,7 @@ package alarm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -13,26 +14,38 @@ import (
 
 const publishTimeout = 5 * time.Second
 
-// MQTTPublisher fires an alarm device by publishing a Shelly native MQTT control
-// command to the shared broker (TRA-906): payload "on"/"off" to
-// <commandTopic>/command/switch:<switchID>. The Shelly, subscribed under that
-// prefix, actuates — no inbound connection to the device is needed.
+// MQTTPublisher fires an output device by publishing a Shelly Gen2+ RPC frame to
+// the shared broker (TRA-906/TRA-934): a Switch.Set request on <commandTopic>/rpc.
+// The Shelly, subscribed there, actuates — no inbound connection to the device is
+// needed. RPC (not the plain <commandTopic>/command/switch:<id> on/off interface)
+// is used so the frame can carry toggle_after, the device-side one-shot off timer.
 type MQTTPublisher struct {
 	// publish is the transport seam (topic, payload) -> error; the real impl
 	// wraps a paho client, tests inject a fake.
 	publish func(topic string, payload []byte) error
 }
 
-// Publish sends the on/off command for one relay channel. It does not wait for
-// device acknowledgement (publish-and-trust): success means the broker accepted
-// the message, not that the relay confirmed (MQTT is fire-and-forget).
-func (p *MQTTPublisher) Publish(_ context.Context, commandTopic string, switchID int, on bool) error {
-	topic := fmt.Sprintf("%s/command/switch:%d", commandTopic, switchID)
-	payload := "off"
-	if on {
-		payload = "on"
+// Publish drives one relay channel via a Switch.Set RPC frame. When on and
+// offAfterSec > 0 the frame includes toggle_after, so the device turns on and
+// flips itself off after the delay (survives a backend restart; no second
+// message). offAfterSec is omitted for off commands and when 0 (stay on until an
+// explicit off). No "src" is set: we publish-and-trust and want no reply on the
+// broker. Success means the broker accepted the message, not that the relay
+// confirmed (MQTT is fire-and-forget).
+func (p *MQTTPublisher) Publish(_ context.Context, commandTopic string, switchID int, on bool, offAfterSec int) error {
+	params := map[string]any{"id": switchID, "on": on}
+	if on && offAfterSec > 0 {
+		params["toggle_after"] = offAfterSec
 	}
-	return p.publish(topic, []byte(payload))
+	frame, err := json.Marshal(map[string]any{
+		"id":     1,
+		"method": "Switch.Set",
+		"params": params,
+	})
+	if err != nil {
+		return fmt.Errorf("alarm: marshal rpc frame: %w", err)
+	}
+	return p.publish(commandTopic+"/rpc", frame)
 }
 
 // NewMQTTPublisher connects a dedicated publish client to the broker described

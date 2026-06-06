@@ -25,7 +25,7 @@ type deviceLookup interface {
 // deviceSetter drives one output device on/off using its configured transport;
 // Dispatcher satisfies it. Narrowed so tests can inject a fake.
 type deviceSetter interface {
-	Set(ctx context.Context, dev outputdevice.OutputDevice, on bool) error
+	Set(ctx context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error
 }
 
 // Firer drives output devices when the geofence engine fires. Construct with
@@ -47,9 +47,11 @@ func NewFirer(store deviceLookup, act deviceSetter, log *zerolog.Logger) Firer {
 }
 
 // Fire logs the boundary alarm, then turns on every active output device bound
-// to the event's scan point. A device-drive failure is logged (fail-quiet) and
-// folded into the returned error so the engine's fire-error metric increments;
-// the engine never lets that block ingestion.
+// to the event's scan point. Each device's metadata.auto_off_seconds becomes the
+// device-side flip-back timer (0 = stay on until manual reset). A device-drive
+// failure is logged (fail-quiet) and folded into the returned error so the
+// engine's fire-error metric increments; the engine never lets that block
+// ingestion.
 func (f Firer) Fire(ctx context.Context, ev geofence.AlarmEvent) error {
 	f.log.Warn().
 		Int("org_id", ev.OrgID).
@@ -74,7 +76,7 @@ func (f Firer) Fire(ctx context.Context, ev geofence.AlarmEvent) error {
 
 	var errs []error
 	for _, d := range devices {
-		if err := f.act.Set(ctx, d, true); err != nil {
+		if err := f.act.Set(ctx, d, true, d.AutoOffSeconds()); err != nil {
 			f.log.Error().Err(err).
 				Int("output_device_id", d.ID).
 				Str("transport", d.Transport).

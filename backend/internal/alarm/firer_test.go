@@ -27,8 +27,9 @@ func (f *fakeLookup) ListOutputDevicesForLocation(_ context.Context, orgID, loca
 }
 
 type setCall struct {
-	deviceID int
-	on       bool
+	deviceID    int
+	on          bool
+	offAfterSec int
 }
 
 type fakeDriver struct {
@@ -36,8 +37,8 @@ type fakeDriver struct {
 	failOnID int // returns an error when device.ID == failOnID
 }
 
-func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool) error {
-	d.calls = append(d.calls, setCall{dev.ID, on})
+func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error {
+	d.calls = append(d.calls, setCall{dev.ID, on, offAfterSec})
 	if dev.ID == d.failOnID {
 		return errors.New("boom")
 	}
@@ -71,7 +72,26 @@ func TestFirer_FiresEachBoundDevice(t *testing.T) {
 	if len(drv.calls) != 2 {
 		t.Fatalf("driver calls = %d, want 2", len(drv.calls))
 	}
-	want := []setCall{{1, true}, {2, true}}
+	want := []setCall{{1, true, 0}, {2, true, 0}}
+	for i, c := range drv.calls {
+		if c != want[i] {
+			t.Errorf("call[%d] = %+v, want %+v", i, c, want[i])
+		}
+	}
+}
+
+func TestFirer_PassesAutoOffSecondsFromMetadata(t *testing.T) {
+	lookup := &fakeLookup{devices: []outputdevice.OutputDevice{
+		{ID: 1, Metadata: map[string]any{"auto_off_seconds": float64(30)}},
+		{ID: 2, Metadata: map[string]any{}}, // no auto-off -> 0
+	}}
+	drv := &fakeDriver{}
+	f := newTestFirer(lookup, drv)
+
+	if err := f.Fire(context.Background(), testEvent()); err != nil {
+		t.Fatalf("Fire returned error: %v", err)
+	}
+	want := []setCall{{1, true, 30}, {2, true, 0}}
 	for i, c := range drv.calls {
 		if c != want[i] {
 			t.Errorf("call[%d] = %+v, want %+v", i, c, want[i])
