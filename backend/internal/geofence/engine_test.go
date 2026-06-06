@@ -91,7 +91,7 @@ func newTestEngine(cfg Config, s engineStore, d outputDriver) *Engine {
 		store:    s,
 		driver:   d,
 		latch:    newLatch(0, clk),
-		presence: newPresence(d, 0, clk, log),
+		presence: newPresence(d, log),
 		log:      log,
 	}
 }
