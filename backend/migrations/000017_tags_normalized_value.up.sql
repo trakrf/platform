@@ -8,10 +8,20 @@
 -- a leading-zero trim is safe across the board.
 SET search_path = trakrf, public;
 
+-- Single source of truth for the normalization, shared by the generated column
+-- below and the ingest membership query (storage/ingest.go), so the two can
+-- never drift. SQL (not plpgsql) + IMMUTABLE so it's usable in a generated
+-- column and inlinable by the planner on the per-read query path.
+CREATE FUNCTION normalize_tag_value(v text) RETURNS text
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$
+        SELECT regexp_replace(regexp_replace(upper(v), '[^0-9A-F]', '', 'g'), '^0+(?=[0-9])', '')
+    $$;
+
+COMMENT ON FUNCTION normalize_tag_value(text) IS 'TRA-944: hex tag-value match key (uppercase, strip non-hex, strip leading zeros keeping >=1 digit); mirrors handheld getMatchingKey. Shared by tags.normalized_value and the ingest query.';
+
 ALTER TABLE tags ADD COLUMN normalized_value text
-    GENERATED ALWAYS AS (
-        regexp_replace(regexp_replace(upper(value), '[^0-9A-F]', '', 'g'), '^0+(?=[0-9])', '')
-    ) STORED;
+    GENERATED ALWAYS AS (normalize_tag_value(value)) STORED;
 
 -- Match path is (org_id, normalized_value) restricted to live, asset-linked tags.
 CREATE INDEX idx_tags_normalized_value ON tags (org_id, normalized_value)

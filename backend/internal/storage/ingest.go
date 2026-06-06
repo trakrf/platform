@@ -112,7 +112,7 @@ func (s *Storage) PersistReads(ctx context.Context, orgID int, tagScanID int64, 
 			err = tx.QueryRow(ctx,
 				`SELECT asset_id FROM trakrf.tags
 				 WHERE org_id = $1
-				   AND normalized_value = regexp_replace(regexp_replace(upper($2), '[^0-9A-F]', '', 'g'), '^0+(?=[0-9])', '')
+				   AND normalized_value = trakrf.normalize_tag_value($2)
 				   AND asset_id IS NOT NULL AND deleted_at IS NULL
 				 LIMIT 1`,
 				orgID, rd.EPC,
