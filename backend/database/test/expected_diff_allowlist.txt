@@ -91,8 +91,9 @@ these categories represents a regression that requires investigation.
        'csl_cs463').
     c. Added columns: scan_devices.transport (scan_transport, default 'mqtt'),
        scan_devices.publish_topic (varchar, nullable) + idx_scan_devices_publish_topic
-       and the partial-unique idx_scan_devices_publish_topic_unique; and
-       scan_points.is_boundary (bool, default false).
+       and the partial-unique idx_scan_devices_publish_topic_unique.
+       (scan_points.is_boundary was added in 000011 then dropped in 000018 / TRA-943,
+       so it is absent from the current schema.)
     d. process_tag_scans body change: external_key column refs, and removal of the
        scan_devices / scan_points / locations auto-create INSERT blocks (devices and
        points are now CRUD-managed). Asset/tag auto-create from EPC retained.

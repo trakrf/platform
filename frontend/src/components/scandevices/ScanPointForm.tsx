@@ -24,7 +24,6 @@ interface ScanPointFormData {
   external_key: string;
   name: string;
   antenna_port: string;
-  is_boundary: boolean;
   location_id: string;
   description: string;
 }
@@ -48,7 +47,6 @@ const EMPTY_FORM: ScanPointFormData = {
   external_key: '',
   name: '',
   antenna_port: '',
-  is_boundary: false,
   location_id: '',
   description: '',
 };
@@ -77,7 +75,6 @@ export function ScanPointForm({
         external_key: point.external_key,
         name: point.name,
         antenna_port: point.antenna_port != null ? String(point.antenna_port) : '',
-        is_boundary: point.is_boundary,
         location_id: point.location_id != null ? String(point.location_id) : '',
         description: point.description ?? '',
       });
@@ -139,7 +136,6 @@ export function ScanPointForm({
         name: formData.name,
         location_id,
         antenna_port,
-        is_boundary: formData.is_boundary,
         description,
       };
       onSubmit(submitData);
@@ -149,7 +145,6 @@ export function ScanPointForm({
         name: formData.name,
         location_id,
         antenna_port,
-        is_boundary: formData.is_boundary,
         description,
       };
       onSubmit(submitData);
@@ -256,20 +251,6 @@ export function ScanPointForm({
             Optional but recommended — the zone this antenna is mounted in.
           </p>
         </div>
-      </div>
-
-      <div className="flex items-center">
-        <input
-          type="checkbox"
-          id="sp_is_boundary"
-          checked={formData.is_boundary}
-          onChange={(e) => handleChange('is_boundary', e.target.checked)}
-          disabled={loading}
-          className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
-        />
-        <label htmlFor="sp_is_boundary" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          Boundary scan point
-        </label>
       </div>
 
       <div>

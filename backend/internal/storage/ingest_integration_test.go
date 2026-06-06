@@ -124,16 +124,6 @@ func TestInsertRawTagScan(t *testing.T) {
 	assert.Greater(t, id, int64(0))
 }
 
-// setBoundary marks a scan_point (by external_key) as a geofence boundary and
-// optionally sets a per-point RSSI threshold in metadata.
-func setBoundary(t *testing.T, db *testutil.TestDB, orgID int, externalKey string) {
-	t.Helper()
-	_, err := db.AdminPool.Exec(context.Background(),
-		`UPDATE trakrf.scan_points SET is_boundary = true WHERE org_id = $1 AND external_key = $2`,
-		orgID, externalKey)
-	require.NoError(t, err)
-}
-
 func TestPersistReads_RegisteredAssetProducesScan(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
@@ -153,13 +143,12 @@ func TestPersistReads_RegisteredAssetProducesScan(t *testing.T) {
 	require.Equal(t, 1, countAssetScans(t, db, orgID))
 
 	// Resolved enrichment for the geofence engine (TRA-901): one membership-passing
-	// read, not a boundary by default, carrying the read's RSSI.
+	// read carrying the read's RSSI. Rule config (mode/age-out/rssi) lives on the
+	// output device now (TRA-943), not on the resolved read.
 	require.Len(t, res.Resolved, 1)
-	assert.False(t, res.Resolved[0].IsBoundary)
 	assert.Equal(t, testEPC, res.Resolved[0].EPC)
 	assert.Equal(t, -56, res.Resolved[0].RSSI)
 	assert.Greater(t, res.Resolved[0].ScanPointID, 0)
-	assert.Nil(t, res.Resolved[0].RSSIThresholdRaw, "no per-point override set by default")
 
 	// Resolved to the registered scan_point and linked to the source audit row.
 	var spExternalKey string
@@ -300,27 +289,6 @@ func TestPersistReads_DuplicateEPCInBatchDedups(t *testing.T) {
 	// Both reads passed membership, so both appear in Resolved even though the
 	// second was an asset_scans dedup conflict — presence is the geofence signal.
 	assert.Len(t, res.Resolved, 2, "conflict-deduped read still counts as a boundary observation")
-}
-
-func TestPersistReads_BoundaryAndPerPointThresholdResolved(t *testing.T) {
-	db := testutil.SetupTestDBFull(t)
-	ctx := context.Background()
-	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerDevice(t, db, orgID, "cs463-214")
-	registerRFIDTag(t, db, orgID, testEPC)
-	setBoundary(t, db, orgID, "cs463-214-1")
-	_, err := db.AdminPool.Exec(ctx,
-		`UPDATE trakrf.scan_points SET metadata = '{"rssi_threshold":"-55"}'::jsonb
-		 WHERE org_id = $1 AND external_key = $2`, orgID, "cs463-214-1")
-	require.NoError(t, err)
-
-	reads := []scanread.Read{{EPC: testEPC, CapturePointName: "cs463-214-1", RSSI: -50}}
-	res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
-	require.NoError(t, err)
-	require.Len(t, res.Resolved, 1)
-	assert.True(t, res.Resolved[0].IsBoundary, "scan_point marked boundary must surface IsBoundary")
-	require.NotNil(t, res.Resolved[0].RSSIThresholdRaw)
-	assert.Equal(t, "-55", *res.Resolved[0].RSSIThresholdRaw)
 }
 
 // TestGLS10_ParseToAssetScan exercises the full GL-S10 path end to end (TRA-925):

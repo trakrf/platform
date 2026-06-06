@@ -61,8 +61,8 @@ func (s *Storage) CreateScanDevice(ctx context.Context, orgID int, req scandevic
 		// ({device}-{port}), so for CS463 it matches live reads out of the box.
 		_, err := tx.Exec(ctx, `
 			INSERT INTO trakrf.scan_points
-			(org_id, scan_device_id, external_key, name, antenna_port, is_boundary)
-			VALUES ($1, $2, $3, 'Antenna 1', 1, false)`,
+			(org_id, scan_device_id, external_key, name, antenna_port)
+			VALUES ($1, $2, $3, 'Antenna 1', 1)`,
 			orgID, d.ID, d.ExternalKey+"-1")
 		return err
 	})

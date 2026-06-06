@@ -110,7 +110,6 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
               <th className="font-medium">Name</th>
               <th className="font-medium">Location</th>
               <th className="font-medium">Antenna Port</th>
-              <th className="font-medium">Boundary</th>
               <th className="font-medium">Active</th>
               <th></th>
             </tr>
@@ -122,7 +121,6 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
                 <td className="text-gray-900 dark:text-gray-100">{sp.name}</td>
                 <td className="text-gray-700 dark:text-gray-300">{locationName(sp.location_id) ?? '—'}</td>
                 <td className="text-gray-700 dark:text-gray-300">{sp.antenna_port ?? '—'}</td>
-                <td className="text-gray-700 dark:text-gray-300">{sp.is_boundary ? 'Yes' : 'No'}</td>
                 <td className="text-gray-700 dark:text-gray-300">{sp.is_active ? 'Yes' : 'No'}</td>
                 <td className="text-right whitespace-nowrap">
                   <button

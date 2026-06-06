@@ -1,91 +1,89 @@
-// Package geofence is the real-time geofence rules engine (TRA-901). It sits on
-// the MQTT ingest path: after the subscriber derives asset_scans for the reads
-// that pass the membership filter, it hands those resolved reads here, and the
-// engine decides whether a registered asset crossing a boundary capture point
-// should fire an alarm.
+// Package geofence is the real-time geofence rules engine (TRA-901, TRA-943). It
+// sits on the MQTT ingest path: after the subscriber derives asset_scans for the
+// reads that pass the membership filter, it hands those resolved reads here, and
+// the engine decides whether to drive the output devices bound to the read's
+// location.
 //
-// The decision is: registered asset (membership, already enforced upstream by
-// the tag-resolution in PersistReads) × boundary scan_point × RSSI above the
-// trip line × not currently latched. Membership is therefore implicit — only
-// membership-passing reads ever reach Evaluate. Firing writes an alarm_events
-// row and invokes the Firer; both are best-effort and never block ingestion or
-// the authoritative asset_scans write.
+// All rule config lives on output_device.metadata (TRA-943): mode (egress|
+// presence), age_out_seconds, rssi_threshold, auto_off_seconds. The engine
+// resolves location -> outputs and keys its dedup/presence state per (output,
+// epc). Membership is implicit — only membership-passing reads ever reach
+// Evaluate. Firing writes an alarm_events row and drives the device; both are
+// best-effort and never block ingestion or the authoritative asset_scans write.
 package geofence
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
-// AlarmEvent describes one fired boundary alarm. It is persisted to alarm_events
-// and handed to the Firer.
-type AlarmEvent struct {
-	OrgID       int
-	AssetID     int
-	ScanPointID int
-	LocationID  *int
-	EPC         string
-	RSSI        int
-	TagScanID   int64
-	FiredAt     time.Time
-}
-
-// alarmWriter is the storage dependency the engine needs; *storage.Storage
-// satisfies it. Narrowed to an interface so unit tests can inject a fake.
-type alarmWriter interface {
+// engineStore is the storage surface the engine needs; *storage.Storage
+// satisfies it. Narrowed so unit tests can inject a fake.
+type engineStore interface {
 	InsertAlarmEvent(ctx context.Context, orgID int, ev storage.AlarmEventRow) error
+	ListOutputDevicesForLocation(ctx context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error)
 }
 
-// Engine evaluates resolved reads and fires boundary alarms. Construct with
+// outputDriver drives one output device on/off via its transport;
+// alarm.Dispatcher satisfies it. Defined here (not imported from alarm) to avoid
+// an import cycle — alarm depends on geofence, not vice versa.
+type outputDriver interface {
+	Set(ctx context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error
+}
+
+// Engine evaluates resolved reads and drives output devices. Construct with
 // NewEngine; call Start before use and Stop on shutdown.
 type Engine struct {
-	cfg   Config
-	store alarmWriter
-	firer Firer
-	latch *latch
-	log   zerolog.Logger
+	cfg      Config
+	store    engineStore
+	driver   outputDriver
+	latch    *latch    // egress dedup, keyed per (org, output, epc)
+	presence *presence // presence tracker, keyed per (org, output)
+	log      zerolog.Logger
 }
 
-// NewEngine builds an engine with a real-clock latch sweeper.
-func NewEngine(cfg Config, store *storage.Storage, firer Firer, log *zerolog.Logger) *Engine {
+// NewEngine builds an engine with real-clock latch + presence sweepers.
+func NewEngine(cfg Config, store *storage.Storage, driver outputDriver, log *zerolog.Logger) *Engine {
+	l := log.With().Str("component", "geofence").Logger()
+	clk := RealClock{}
 	return &Engine{
-		cfg:   cfg,
-		store: store,
-		firer: firer,
-		latch: newLatch(cfg.LatchTTL, cfg.SweepInterval, RealClock{}),
-		log:   log.With().Str("component", "geofence").Logger(),
+		cfg:      cfg,
+		store:    store,
+		driver:   driver,
+		latch:    newLatch(cfg.SweepInterval, clk),
+		presence: newPresence(driver, cfg.SweepInterval, clk, l),
+		log:      l,
 	}
 }
 
-// Start is a no-op today (the latch sweeper starts in newLatch) but keeps the
+// Start is a no-op today (the sweepers start in their constructors) but keeps the
 // Start/Stop lifecycle symmetric with the subscriber for the serve wiring.
 func (e *Engine) Start() {}
 
-// Stop stops the latch sweeper. Idempotent.
+// Stop stops the latch + presence sweepers. Idempotent.
 func (e *Engine) Stop() {
 	if e.latch != nil {
 		e.latch.Close()
 	}
+	if e.presence != nil {
+		e.presence.Close()
+	}
 }
 
-// Evaluate runs the geofence decision over every membership-passing read of one
-// MQTT message. It never returns an error: side effects are best-effort and
-// failures are logged + metriced so a slow/broken alarm path can never lose a
-// scan or kill ingestion. receivedAt (server time) is both the latch timestamp
-// and the alarm's FiredAt.
+// Evaluate runs the rule decision over every membership-passing read of one MQTT
+// message. It never returns an error: side effects are best-effort and failures
+// are logged + metriced so a slow/broken output path can never lose a scan or
+// kill ingestion. For each read it resolves the location's active output devices
+// and applies each device's mode. receivedAt (server time) is both the
+// dedup/presence timestamp and the alarm's FiredAt.
 func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []storage.ResolvedRead) {
 	for _, rd := range reads {
 		metricEvaluated.Inc()
-
-		if !rd.IsBoundary {
-			metricSuppressed.WithLabelValues("not_boundary").Inc()
-			continue
-		}
 
 		// RSSI gate. A 0 RSSI is the parser's "no usable RSSI" sentinel — 0 dBm is
 		// physically implausible for RFID — so it never fires (conservative).
@@ -93,68 +91,92 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 			metricSuppressed.WithLabelValues("no_rssi").Inc()
 			continue
 		}
-		threshold := e.thresholdFor(rd)
-		if rd.RSSI < threshold {
-			metricSuppressed.WithLabelValues("rssi_below_threshold").Inc()
+		// Outputs are location-bound. A read whose scan point has no location can
+		// match no output, so nothing to drive.
+		if rd.LocationID == nil {
+			metricSuppressed.WithLabelValues("no_location").Inc()
 			continue
 		}
 
-		// Dedup latch: suppress while the tag is present at this boundary.
-		if !e.latch.admit(keyFor(orgID, rd.ScanPointID, rd.EPC), receivedAt) {
-			metricSuppressed.WithLabelValues("latched").Inc()
-			continue
-		}
-
-		ev := AlarmEvent{
-			OrgID:       orgID,
-			AssetID:     rd.AssetID,
-			ScanPointID: rd.ScanPointID,
-			LocationID:  rd.LocationID,
-			EPC:         rd.EPC,
-			RSSI:        rd.RSSI,
-			TagScanID:   tagScanID,
-			FiredAt:     receivedAt,
-		}
-
-		// Durable record first, then the physical action — both best-effort.
-		if err := e.store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
-			AssetID:     ev.AssetID,
-			ScanPointID: ev.ScanPointID,
-			LocationID:  ev.LocationID,
-			EPC:         ev.EPC,
-			RSSI:        ev.RSSI,
-			TagScanID:   ev.TagScanID,
-			FiredAt:     ev.FiredAt,
-		}); err != nil {
-			e.log.Error().Err(err).Int("org_id", orgID).Str("epc", ev.EPC).Msg("alarm_events write failed")
-			metricEventWriteErrors.Inc()
-		}
-
-		if err := e.firer.Fire(ctx, ev); err != nil {
-			e.log.Error().Err(err).Int("org_id", orgID).Str("epc", ev.EPC).Msg("alarm firer failed")
+		devices, err := e.store.ListOutputDevicesForLocation(ctx, orgID, *rd.LocationID)
+		if err != nil {
+			e.log.Error().Err(err).Int("org_id", orgID).Int("location_id", *rd.LocationID).Msg("output device lookup failed")
 			metricFireErrors.Inc()
+			continue
 		}
 
-		metricFired.Inc()
-		e.log.Info().
-			Int("org_id", orgID).
-			Int("asset_id", ev.AssetID).
-			Int("scan_point_id", ev.ScanPointID).
-			Str("epc", ev.EPC).
-			Int("rssi", ev.RSSI).
-			Msg("geofence alarm fired")
+		firedAny := false
+		for _, dev := range devices {
+			threshold := e.cfg.RSSIThreshold
+			if t, ok := dev.RSSIThreshold(); ok {
+				threshold = t
+			}
+			if rd.RSSI < threshold {
+				metricSuppressed.WithLabelValues("rssi_below_threshold").Inc()
+				continue
+			}
+
+			ttl := e.cfg.LatchTTL
+			if s, ok := dev.AgeOutSeconds(); ok {
+				ttl = time.Duration(s) * time.Second
+			}
+
+			if dev.Mode() == outputdevice.ModePresence {
+				// Presence: ON on the 0->1 edge; OFF is driven by the sweeper when
+				// the last member ages out. auto_off is ignored (engine owns OFF).
+				if e.presence.observe(orgID, dev, ttl, rd.EPC, receivedAt) {
+					firedAny = true
+					e.drive(ctx, orgID, dev, true, 0)
+				}
+				continue
+			}
+
+			// Egress: fire ON, then latch for the per-output re-arm window.
+			if !e.latch.admit(latchKey(orgID, dev.ID, rd.EPC), receivedAt, ttl) {
+				metricSuppressed.WithLabelValues("latched").Inc()
+				continue
+			}
+			firedAny = true
+			e.drive(ctx, orgID, dev, true, dev.AutoOffSeconds())
+		}
+
+		if firedAny {
+			e.recordFire(ctx, orgID, tagScanID, receivedAt, rd)
+		}
 	}
 }
 
-// thresholdFor returns the RSSI trip line for a read: the per-scan-point override
-// (metadata.rssi_threshold) when present and parseable, else the global default.
-// A malformed override is ignored (falls back to global) so bad metadata never
-// silences or misfires the gate unexpectedly.
-func (e *Engine) thresholdFor(rd storage.ResolvedRead) int {
-	if rd.RSSIThresholdRaw != nil {
-		if n, err := strconv.Atoi(*rd.RSSIThresholdRaw); err == nil {
-			return n
-		}
+// drive turns a device on/off, folding any error into the best-effort metric.
+func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDevice, on bool, offAfter int) {
+	if err := e.driver.Set(ctx, dev, on, offAfter); err != nil {
+		e.log.Error().Err(err).Int("org_id", orgID).Int("output_device_id", dev.ID).Bool("on", on).Msg("output device drive failed (best-effort)")
+		metricFireErrors.Inc()
 	}
-	return e.cfg.RSSIThreshold
+}
+
+// recordFire writes the durable alarm_events row for a read that drove at least
+// one device on, and logs/metrics the fire. Best-effort: a write error never
+// blocks ingestion.
+func (e *Engine) recordFire(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, rd storage.ResolvedRead) {
+	if err := e.store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
+		AssetID:     rd.AssetID,
+		ScanPointID: rd.ScanPointID,
+		LocationID:  rd.LocationID,
+		EPC:         rd.EPC,
+		RSSI:        rd.RSSI,
+		TagScanID:   tagScanID,
+		FiredAt:     receivedAt,
+	}); err != nil {
+		e.log.Error().Err(err).Int("org_id", orgID).Str("epc", rd.EPC).Msg("alarm_events write failed")
+		metricEventWriteErrors.Inc()
+	}
+
+	metricFired.Inc()
+	e.log.Info().
+		Int("org_id", orgID).
+		Int("asset_id", rd.AssetID).
+		Int("scan_point_id", rd.ScanPointID).
+		Str("epc", rd.EPC).
+		Int("rssi", rd.RSSI).
+		Msg("geofence rule fired")
 }

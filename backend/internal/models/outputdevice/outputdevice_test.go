@@ -32,3 +32,44 @@ func TestAutoOffSeconds(t *testing.T) {
 		})
 	}
 }
+
+func dev(meta map[string]any) OutputDevice { return OutputDevice{Metadata: meta} }
+
+func TestMode(t *testing.T) {
+	if got := dev(nil).Mode(); got != ModeEgress {
+		t.Fatalf("nil metadata should default to egress, got %q", got)
+	}
+	if got := dev(map[string]any{"mode": "presence"}).Mode(); got != ModePresence {
+		t.Fatalf("expected presence, got %q", got)
+	}
+	if got := dev(map[string]any{"mode": "garbage"}).Mode(); got != ModeEgress {
+		t.Fatalf("unknown mode should default to egress, got %q", got)
+	}
+}
+
+func TestAgeOutSeconds(t *testing.T) {
+	if _, ok := dev(nil).AgeOutSeconds(); ok {
+		t.Fatal("nil metadata should report no override")
+	}
+	if _, ok := dev(map[string]any{"age_out_seconds": float64(0)}).AgeOutSeconds(); ok {
+		t.Fatal("zero should report no override (fall back to global)")
+	}
+	v, ok := dev(map[string]any{"age_out_seconds": float64(30)}).AgeOutSeconds()
+	if !ok || v != 30 {
+		t.Fatalf("expected (30,true), got (%d,%v)", v, ok)
+	}
+}
+
+func TestRSSIThreshold(t *testing.T) {
+	if _, ok := dev(nil).RSSIThreshold(); ok {
+		t.Fatal("nil metadata should report no override")
+	}
+	// RSSI is dBm — negatives are valid and must NOT be rejected.
+	v, ok := dev(map[string]any{"rssi_threshold": float64(-55)}).RSSIThreshold()
+	if !ok || v != -55 {
+		t.Fatalf("expected (-55,true), got (%d,%v)", v, ok)
+	}
+	if _, ok := dev(map[string]any{"rssi_threshold": "nope"}).RSSIThreshold(); ok {
+		t.Fatal("non-numeric should report no override")
+	}
+}

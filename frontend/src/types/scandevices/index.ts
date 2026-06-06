@@ -69,7 +69,6 @@ export interface ScanPoint {
   external_key: string;
   name: string;
   antenna_port?: number | null;
-  is_boundary: boolean;
   description: string;
   metadata?: Record<string, unknown>;
   valid_from: string;
@@ -85,7 +84,6 @@ export interface CreateScanPointRequest {
   name: string;
   location_id?: number | null;
   antenna_port?: number | null;
-  is_boundary?: boolean;
   description?: string | null;
   metadata?: Record<string, unknown>;
   is_active?: boolean;
@@ -95,7 +93,6 @@ export interface UpdateScanPointRequest {
   name?: string;
   location_id?: number | null;
   antenna_port?: number | null;
-  is_boundary?: boolean;
   description?: string | null;
   metadata?: Record<string, unknown>;
   is_active?: boolean;

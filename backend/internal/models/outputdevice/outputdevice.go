@@ -17,6 +17,13 @@ const (
 	TransportMQTT = "mqtt" // publish to the shared broker (firewall-friendly)
 )
 
+// Rule modes (TRA-943). egress = fire ON on a crossing then latch; presence =
+// ON while >=1 member tag is present, OFF when the last ages out.
+const (
+	ModeEgress   = "egress"
+	ModePresence = "presence"
+)
+
 // OutputDevice is an output device row.
 type OutputDevice struct {
 	ID           int        `json:"id"`
@@ -35,37 +42,72 @@ type OutputDevice struct {
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
 }
 
-// AutoOffSeconds returns the per-device auto-off duration in seconds from
-// metadata.auto_off_seconds, or 0 when unset, zero, negative, or non-numeric.
-// 0 means "stay on until manual reset" (the latch default). This mirrors the
-// per-scan-point metadata tuning used for rssi_threshold (geofence engine).
-// Metadata arrives as map[string]any from jsonb, so numbers are float64.
-func (d OutputDevice) AutoOffSeconds() int {
+// metaInt reads metadata[key] as an int. Metadata arrives as map[string]any from
+// jsonb, so numbers are float64; int/int64/json.Number are tolerated too. ok is
+// false when the key is absent or not numeric.
+func (d OutputDevice) metaInt(key string) (int, bool) {
 	m, ok := d.Metadata.(map[string]any)
 	if !ok {
-		return 0
+		return 0, false
 	}
-	var sec int
-	switch n := m["auto_off_seconds"].(type) {
+	switch n := m[key].(type) {
 	case float64:
-		sec = int(n)
+		return int(n), true
 	case int:
-		sec = n
+		return n, true
 	case int64:
-		sec = int(n)
+		return int(n), true
 	case json.Number:
 		i, err := n.Int64()
 		if err != nil {
-			return 0
+			return 0, false
 		}
-		sec = int(i)
+		return int(i), true
 	default:
+		return 0, false
+	}
+}
+
+// AutoOffSeconds returns metadata.auto_off_seconds, or 0 when unset, zero,
+// negative, or non-numeric. 0 means "stay on until manual reset" (the latch
+// default). Device-side (Shelly toggle_after); ignored by the engine in
+// presence mode (the engine owns the OFF edge).
+func (d OutputDevice) AutoOffSeconds() int {
+	v, ok := d.metaInt("auto_off_seconds")
+	if !ok || v < 0 {
 		return 0
 	}
-	if sec < 0 {
-		return 0
+	return v
+}
+
+// Mode returns metadata.mode, defaulting to ModeEgress for unset/unknown values.
+func (d OutputDevice) Mode() string {
+	m, ok := d.Metadata.(map[string]any)
+	if ok {
+		if s, _ := m["mode"].(string); s == ModePresence {
+			return ModePresence
+		}
 	}
-	return sec
+	return ModeEgress
+}
+
+// AgeOutSeconds returns the per-output age-out override from
+// metadata.age_out_seconds. ok is false (caller falls back to the global TTL)
+// when unset, non-numeric, or <= 0. Egress: re-arm window. Presence: departure
+// window.
+func (d OutputDevice) AgeOutSeconds() (int, bool) {
+	v, ok := d.metaInt("age_out_seconds")
+	if !ok || v <= 0 {
+		return 0, false
+	}
+	return v, true
+}
+
+// RSSIThreshold returns the per-output RSSI trip line from
+// metadata.rssi_threshold (dBm; negatives valid). ok is false (caller falls back
+// to the global threshold) when unset or non-numeric.
+func (d OutputDevice) RSSIThreshold() (int, bool) {
+	return d.metaInt("rssi_threshold")
 }
 
 // CreateOutputDeviceRequest is the create payload. type/switch_id/is_active/

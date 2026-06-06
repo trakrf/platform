@@ -11,6 +11,12 @@ export type OutputDeviceType = 'shelly_gen4';
 export type AlarmTransport = 'http' | 'mqtt';
 
 /**
+ * Rule mode (TRA-943), stored in metadata.mode. egress = fire on a crossing then
+ * latch; presence = on while a member tag is present, off when the last ages out.
+ */
+export type OutputDeviceMode = 'egress' | 'presence';
+
+/**
  * Core OutputDevice entity — matches the backend output_devices JSON shape.
  */
 export interface OutputDevice {

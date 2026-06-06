@@ -4,6 +4,7 @@ import { useLocations } from '@/hooks/locations';
 import type {
   OutputDevice,
   OutputDeviceType,
+  OutputDeviceMode,
   AlarmTransport,
   CreateOutputDeviceRequest,
   UpdateOutputDeviceRequest,
@@ -22,6 +23,12 @@ interface OutputDeviceFormData {
   switch_id: string; // string in the form; coerced to number on submit
   location_id: string; // optional; blank -> null (the location, not the antenna)
   is_active: boolean;
+  // Rule config (TRA-943/935), persisted to metadata. Strings in the form;
+  // coerced to numbers on submit. Blank = "system default" (omit the key).
+  mode: OutputDeviceMode;
+  age_out_seconds: string;
+  auto_off_seconds: string;
+  rssi_threshold: string; // dBm; may be negative
 }
 
 const TRANSPORTS: { value: AlarmTransport; label: string }[] = [
@@ -43,6 +50,9 @@ interface FieldErrors {
   base_url?: string;
   command_topic?: string;
   switch_id?: string;
+  age_out_seconds?: string;
+  auto_off_seconds?: string;
+  rssi_threshold?: string;
 }
 
 const EMPTY_FORM: OutputDeviceFormData = {
@@ -54,11 +64,29 @@ const EMPTY_FORM: OutputDeviceFormData = {
   switch_id: '0',
   location_id: '',
   is_active: true,
+  mode: 'egress',
+  age_out_seconds: '',
+  auto_off_seconds: '',
+  rssi_threshold: '',
 };
 
 function validateBaseURL(url: string): string | null {
   if (url.trim() === '') return 'Base URL is required';
   if (!/^https?:\/\/.+/i.test(url.trim())) return 'Base URL must start with http:// or https://';
+  return null;
+}
+
+// metaNum renders a metadata numeric value as a form string ('' when unset).
+function metaNum(v: unknown): string {
+  return typeof v === 'number' ? String(v) : '';
+}
+
+// validateOptInt validates an optional integer field. '' is allowed (unset).
+function validateOptInt(s: string, opts: { allowNegative?: boolean }): string | null {
+  const t = s.trim();
+  if (t === '') return null;
+  const re = opts.allowNegative ? /^-?\d+$/ : /^\d+$/;
+  if (!re.test(t)) return opts.allowNegative ? 'Must be an integer' : 'Must be a non-negative integer';
   return null;
 }
 
@@ -85,6 +113,10 @@ export function OutputDeviceForm({
         switch_id: String(device.switch_id),
         location_id: device.location_id != null ? String(device.location_id) : '',
         is_active: device.is_active,
+        mode: device.metadata?.mode === 'presence' ? 'presence' : 'egress',
+        age_out_seconds: metaNum(device.metadata?.age_out_seconds),
+        auto_off_seconds: metaNum(device.metadata?.auto_off_seconds),
+        rssi_threshold: metaNum(device.metadata?.rssi_threshold),
       });
     } else if (mode === 'create') {
       setFormData(EMPTY_FORM);
@@ -107,6 +139,15 @@ export function OutputDeviceForm({
     if (formData.switch_id.trim() !== '' && !/^\d+$/.test(formData.switch_id.trim())) {
       errors.switch_id = 'Switch ID must be a non-negative integer';
     }
+
+    const ageErr = validateOptInt(formData.age_out_seconds, {});
+    if (ageErr) errors.age_out_seconds = ageErr;
+    if (formData.mode === 'egress') {
+      const offErr = validateOptInt(formData.auto_off_seconds, {});
+      if (offErr) errors.auto_off_seconds = offErr;
+    }
+    const rssiErr = validateOptInt(formData.rssi_threshold, { allowNegative: true });
+    if (rssiErr) errors.rssi_threshold = rssiErr;
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -131,6 +172,17 @@ export function OutputDeviceForm({
     // Only submit the field that applies to the selected transport. Sending a
     // stale/empty base_url for mqtt trips the backend's url validation and is
     // an unrecoverable dead end since the field isn't shown (TRA-928).
+    // Rule config (TRA-943/935) round-trips through the metadata jsonb. Blank
+    // numeric fields are omitted (= system default). auto_off only applies to
+    // egress — presence owns the OFF edge, so the engine ignores it.
+    const metadata: Record<string, number | string> = { mode: formData.mode };
+    if (formData.age_out_seconds.trim() !== '')
+      metadata.age_out_seconds = parseInt(formData.age_out_seconds.trim(), 10);
+    if (formData.rssi_threshold.trim() !== '')
+      metadata.rssi_threshold = parseInt(formData.rssi_threshold.trim(), 10);
+    if (formData.mode === 'egress' && formData.auto_off_seconds.trim() !== '')
+      metadata.auto_off_seconds = parseInt(formData.auto_off_seconds.trim(), 10);
+
     const common = {
       name: formData.name,
       type: formData.type,
@@ -138,6 +190,7 @@ export function OutputDeviceForm({
       switch_id,
       location_id,
       is_active: formData.is_active,
+      metadata,
       ...(formData.transport === 'http'
         ? { base_url: formData.base_url.trim() }
         : { command_topic: formData.command_topic.trim() }),
@@ -311,6 +364,107 @@ export function OutputDeviceForm({
           </select>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Fires when an asset is seen at this location (any reader/antenna). Leave blank to manage manually.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label htmlFor="mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Mode
+          </label>
+          <select
+            id="mode"
+            value={formData.mode}
+            onChange={(e) => handleChange('mode', e.target.value as OutputDeviceMode)}
+            disabled={loading}
+            className={inputClass(false)}
+          >
+            <option value="egress">Egress — fire on crossing, then latch</option>
+            <option value="presence">Presence — on while present, off when clear</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Egress alerts when an asset crosses. Presence stays on while an asset is here and clears
+            it when the last one leaves.
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="rssi_threshold"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            RSSI threshold (dBm)
+          </label>
+          <input
+            type="number"
+            id="rssi_threshold"
+            value={formData.rssi_threshold}
+            onChange={(e) => handleChange('rssi_threshold', e.target.value)}
+            disabled={loading}
+            className={inputClass(!!fieldErrors.rssi_threshold)}
+            placeholder="System default"
+          />
+          {fieldErrors.rssi_threshold && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.rssi_threshold}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Minimum signal strength for this output to react (stronger is closer to 0). Blank = system
+            default.
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="age_out_seconds"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            Age-out (seconds)
+          </label>
+          <input
+            type="number"
+            id="age_out_seconds"
+            min={0}
+            value={formData.age_out_seconds}
+            onChange={(e) => handleChange('age_out_seconds', e.target.value)}
+            disabled={loading}
+            className={inputClass(!!fieldErrors.age_out_seconds)}
+            placeholder="System default"
+          />
+          {fieldErrors.age_out_seconds && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.age_out_seconds}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {formData.mode === 'presence'
+              ? 'How long after the last read before the output clears.'
+              : 'Re-arm window before the same tag can fire again.'}
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="auto_off_seconds"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            Auto-off (seconds)
+          </label>
+          <input
+            type="number"
+            id="auto_off_seconds"
+            min={0}
+            value={formData.mode === 'presence' ? '' : formData.auto_off_seconds}
+            onChange={(e) => handleChange('auto_off_seconds', e.target.value)}
+            disabled={loading || formData.mode === 'presence'}
+            className={inputClass(!!fieldErrors.auto_off_seconds)}
+            placeholder="0 = until manual reset"
+          />
+          {fieldErrors.auto_off_seconds && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.auto_off_seconds}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {formData.mode === 'presence'
+              ? 'Managed automatically by presence detection.'
+              : 'Device flips itself off after N seconds. 0 or blank = stay on until manual reset.'}
           </p>
         </div>
       </div>

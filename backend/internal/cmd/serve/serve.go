@@ -111,11 +111,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		defer stopPublisher()
 		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher)
 
-		// TRA-901: geofence engine evaluates the membership-passing reads the
-		// subscriber derives, firing boundary alarms. Its lifecycle is tied to the
-		// subscriber's (only meaningful when ingestion is on). TRA-903/906: the
-		// alarm.Firer drives the bound devices via the Dispatcher.
-		geofenceEngine := geofence.NewEngine(geofence.ConfigFromEnv(), store, alarm.NewFirer(store, alarmDispatcher, log), log)
+		// TRA-901/943: geofence engine evaluates the membership-passing reads the
+		// subscriber derives, resolving each read's location to its output devices
+		// and driving them per the device's rule mode (egress|presence). Its
+		// lifecycle is tied to the subscriber's (only meaningful when ingestion is
+		// on). TRA-903/906: it drives the bound devices via the Dispatcher.
+		geofenceEngine := geofence.NewEngine(geofence.ConfigFromEnv(), store, alarmDispatcher, log)
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 

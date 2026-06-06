@@ -55,13 +55,11 @@ export function SinglePointLocationField({ device }: SinglePointLocationFieldPro
       if (point) {
         await update({ id: point.id, updates: { location_id } });
       } else {
-        // No scan_point yet — mint point 1. A fixed gateway's one point IS its
-        // geofence boundary, so it is created as a boundary point.
+        // No scan_point yet — mint point 1.
         await create({
           external_key: `${device.external_key}-point-1`,
           name: device.name,
           location_id,
-          is_boundary: true,
         });
       }
       toast.success('Location saved');

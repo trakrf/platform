@@ -10,26 +10,21 @@ import (
 )
 
 const scanPointColumns = `id, org_id, scan_device_id, location_id, external_key, name, antenna_port,
-	is_boundary, COALESCE(description, ''), metadata,
+	COALESCE(description, ''), metadata,
 	valid_from, valid_to, is_active, created_at, updated_at, deleted_at`
 
 func scanScanPoint(row pgx.Row, p *scanpoint.ScanPoint) error {
 	return row.Scan(&p.ID, &p.OrgID, &p.ScanDeviceID, &p.LocationID, &p.ExternalKey, &p.Name, &p.AntennaPort,
-		&p.IsBoundary, &p.Description, &p.Metadata,
+		&p.Description, &p.Metadata,
 		&p.ValidFrom, &p.ValidTo, &p.IsActive, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
 }
 
-// CreateScanPoint inserts a scan point under the given device. is_boundary
-// defaults to false. The FK to scan_devices (+ RLS) enforces that the device
-// exists and belongs to the org.
+// CreateScanPoint inserts a scan point under the given device. The FK to
+// scan_devices (+ RLS) enforces that the device exists and belongs to the org.
 func (s *Storage) CreateScanPoint(ctx context.Context, orgID, scanDeviceID int, req scanpoint.CreateScanPointRequest) (*scanpoint.ScanPoint, error) {
 	isActive := true
 	if req.IsActive != nil {
 		isActive = *req.IsActive
-	}
-	isBoundary := false
-	if req.IsBoundary != nil {
-		isBoundary = *req.IsBoundary
 	}
 	metadata := req.Metadata
 	if metadata == nil {
@@ -38,14 +33,14 @@ func (s *Storage) CreateScanPoint(ctx context.Context, orgID, scanDeviceID int, 
 
 	query := `
 		INSERT INTO trakrf.scan_points
-		(org_id, scan_device_id, location_id, external_key, name, antenna_port, is_boundary, description, metadata, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		(org_id, scan_device_id, location_id, external_key, name, antenna_port, description, metadata, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING ` + scanPointColumns
 
 	var p scanpoint.ScanPoint
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return scanScanPoint(tx.QueryRow(ctx, query, orgID, scanDeviceID, req.LocationID, req.ExternalKey,
-			req.Name, req.AntennaPort, isBoundary, req.Description, metadata, isActive), &p)
+			req.Name, req.AntennaPort, req.Description, metadata, isActive), &p)
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -129,9 +124,6 @@ func (s *Storage) UpdateScanPoint(ctx context.Context, orgID, id int, req scanpo
 	}
 	if req.AntennaPort != nil {
 		add("antenna_port", *req.AntennaPort)
-	}
-	if req.IsBoundary != nil {
-		add("is_boundary", *req.IsBoundary)
 	}
 	if req.Description != nil {
 		add("description", *req.Description)
