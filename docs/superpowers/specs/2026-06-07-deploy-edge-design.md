@@ -7,7 +7,13 @@
 
 ## Context & goal
 
-A self-contained, offline demo box — HP EliteDesk, **Zorin OS 18.1 (Ubuntu 24.04, amd64), hostname `trakrf-demo`** — running the full TrakRF fixed-reader stack for **conference-room demos**. Tim drives the demo from **his own laptop over the Slate WiFi**; there is no on-box kiosk (see Decisions). The box is set up at Mike's, ships to Tim, and runs **fully offline at the venue** (relies on no network). Mike remote-maintains it over Tailscale during the build/test phase only.
+A self-contained, offline-capable demo box — HP EliteDesk, **Zorin OS 18.1 (Ubuntu 24.04, amd64), hostname `trakrf-demo`** — running the full TrakRF fixed-reader stack for **conference-room demos**. Tim drives the demo from **his own laptop over the Slate WiFi**; there is no on-box kiosk (see Decisions). The box is set up at Mike's, then ships to Tim.
+
+**Operational model (two network postures):**
+- **During a demo — offline floor.** The demo must run with no network dependency (worst-case assumption: the venue may or may not have internet). Nothing in the demo path relies on an uplink.
+- **Between demos — uplink window.** At Tim's, Tim connects the Slate to his **house WiFi**, giving the box internet. This window is when (a) the box pulls **promoted** image updates and (b) Mike **remote-supports over Tailscale** to resolve issues seen during demos.
+
+So remote maintenance + updates happen whenever the Slate has an uplink — build/test at Mike's *and* between demos at Tim's — and are never relied upon *during* a live demo.
 
 The application pipeline (MQTT ingest → geofence rules engine → fire Shelly) is **already merged and amd64-capable** — TRA-899/900/901/903/909 are all Done. This work is the **runtime that hosts those images on the box**, plus the TLS edge Tim's laptop needs. It lives at `deploy/edge/` in the platform (app) repo.
 
@@ -75,7 +81,7 @@ The backend ships distinct `migrate` and `serve` subcommands; prod helm invokes 
 
 ### Image lifecycle / promote
 - `podman login ghcr.io` (using `GH_TOKEN`) → pull `ghcr.io/trakrf/backend:preview` → resolve & **pin `Image=ghcr.io/trakrf/backend@sha256:<digest>`** in the migrate + backend quadlets.
-- `AutoUpdate=registry` label + enable `podman-auto-update.timer`. While digest-pinned this is a no-op; **promote = deliberately re-pin** the current `preview` digest, vet, pull. The box only has a GHCR uplink during pre-event prep, never at the venue.
+- `AutoUpdate=registry` label + enable `podman-auto-update.timer`. While digest-pinned this is a no-op; **promote = deliberately re-pin** the current `preview` digest, vet, pull. The box only has a GHCR uplink when the Slate has internet — pre-event prep at Mike's **and between demos at Tim's** (Slate on house WiFi) — never during a live demo, so a promoted build can land in either window but never surprises a demo in progress.
 - Requires TRA-909 multi-arch (Done) so `preview` carries an amd64 image.
 
 ### TLS edge & DNS (laptop secure-context requirement)
