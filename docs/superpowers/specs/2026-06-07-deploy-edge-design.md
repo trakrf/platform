@@ -77,17 +77,19 @@ CS463 / GL-S10 / Moko ──MQTT (trakrf.id/#)──────┘  (hardware, 
 The backend ships distinct `migrate` and `serve` subcommands; no DDL at runtime (TRA-85). Infra runs migrations **out-of-band** from serve as a Helm `pre-install,pre-upgrade` **hook Job** using the **same backend image** (`/server migrate`, `hook-weight: -5` so it precedes the rollout) — so a tag bump migrates and serves consistently (TRA-367). The box mirrors this:
 - `migrate` one-shot quadlet, **same pinned image** as backend, ordered `After=` Timescale-healthy.
 - backend `Requires=` + `After=` the migrate unit, and migrate has **no `RemainAfterExit`**, so **migrate runs before `serve` on every backend start — boot, restart, and image update** — not just first bring-up. `golang-migrate` short-circuits when already at the latest version, so re-running is a cheap idempotent no-op.
-- **Promote = re-pin the new digest on *both* the migrate and backend quadlets**, then restart backend (which re-triggers migrate first). This is the box analog of `helm upgrade` firing the pre-upgrade hook — satisfies the "migrate on update" requirement.
+- On update, `podman auto-update` pulls the new `:preview` image and restarts backend; because backend `Requires=`+`After=` the (non-`RemainAfterExit`) migrate one-shot — same `:preview` image — **migrate runs first with the new image, then `serve`**. Box analog of `helm upgrade` firing the pre-upgrade hook — satisfies "migrate on update."
 - Also validates the full migration set against a vanilla Timescale image (a TRA-898 scope item).
 - *DB roles:* prod splits a DDL `trakrf-migrate` role from the backend's DML-only serve role. The box may collapse to a single local role for simplicity (offline, single-tenant); note the split if tighter parity is wanted later.
 
 ### Secrets
 `POSTGRES_PASSWORD`, the box-local Mosquitto password, and `JWT_SECRET` live in a gitignored `deploy/edge/.env` consumed via `EnvironmentFile=`. `.env.example` is committed. Rationale: simplest for a sealed, offline, single-tenant box where break-glass is a shell. Podman secrets are the hygienic upgrade if ever wanted.
 
-### Image lifecycle / promote
-- Pull `ghcr.io/trakrf/backend:preview` — the repo is **public** (BSL / source-available; images aren't secret). Verified anonymously pullable (HTTP 200, no login), so **no `podman login` / GHCR creds needed**. Resolve & **pin the multi-arch index digest** `Image=ghcr.io/trakrf/backend@sha256:<digest>` in the migrate + backend quadlets — pin the *index* digest (not the arch-specific one) so podman still selects the amd64 sub-manifest at pull (verified present in the index).
-- `AutoUpdate=registry` label + enable `podman-auto-update.timer`. While digest-pinned this is a no-op; **promote = deliberately re-pin** the current `preview` digest, vet, pull. The box only has a GHCR uplink when the Slate has internet — pre-event prep at Mike's **and between demos at Tim's** (Slate on house WiFi) — never during a live demo, so a promoted build can land in either window but never surprises a demo in progress.
-- Multi-arch comes from TRA-909 (PR #454, merged 2026-06-04): a **single canonical multi-arch tag** — per-arch tags were explicitly rejected — which is exactly why we pin the *index* digest. Base images (`timescaledb`, `mosquitto`, `golang`) are already multi-arch, so the whole stack runs on amd64.
+### Image lifecycle / updates (track `:preview`)
+- **Track the floating `:preview` tag** (decided). Quadlets use `Image=ghcr.io/trakrf/backend:preview` (the tag, *not* a pinned digest) + `AutoUpdate=registry`; the `podman-auto-update.timer` pulls the new `preview` digest whenever it changes and the box has uplink. The repo is **public** (BSL / source-available; verified anon-pullable, HTTP 200, no login), so no GHCR creds. `:preview` is a multi-arch manifest list, so podman resolves the amd64 sub-manifest at pull automatically.
+- **Safety net — no uplink during a demo.** The box only reaches GHCR when the Slate has internet — prep at Mike's and between demos at Tim's (house WiFi) — **never during a live demo**. So an auto-update can never change the running build mid-demo; updates only land *between* demos.
+- **Accepted tradeoff + discipline.** `preview` is the dogfooded integration branch — not 100% stable. Tracking it trades pre-demo vetting for hands-off operation. Discipline: Mike generally knows when Tim is demoing and **stays hands-off on `preview` during those windows** (doesn't push what he doesn't want landing); if a bad build lands between demos, Mike fixes it over Tailscale before the next one.
+- **Next iteration (documented, not built yet):** if `preview` instability bites, add a **`demo` tag that defaults to tracking `prod`** (stable) and point the box at `:demo`; Mike pushes `preview → demo` only when he deliberately wants a newer build to land for Tim. Strictly better than a manually-pinned promote tag because *forgetting leaves the box on stable prod*, not a stale pin. Deferred now to avoid the extra tag; this is the planned next step if discipline alone isn't enough.
+- Multi-arch comes from TRA-909 (PR #454, merged 2026-06-04): a **single canonical multi-arch tag** — per-arch tags were explicitly rejected — so `:preview` resolves to the amd64 sub-manifest at pull with no arch-awareness needed. Base images (`timescaledb`, `mosquitto`, `golang`) are already multi-arch, so the whole stack runs on amd64.
 
 ### TLS edge & DNS (laptop secure-context requirement)
 Tim demos the **CS108 handheld over Web Bluetooth from his laptop**. Web Bluetooth (+ clipboard/Web-Share) require a **secure context**, and the laptop hits the box at a non-localhost LAN origin — so **HTTPS is mandatory** (the localhost exemption does not apply). Web BLE is **Chromium-only** (Chrome/Edge/Opera; not Firefox/Safari/iOS).
@@ -114,7 +116,7 @@ A committed `smoke-test.sh` that, on the live box:
 1. `sudo apt install -y podman` (passwordless sudo confirmed available).
 2. `loginctl enable-linger mike`; create `~/.config/containers/systemd/`.
 3. Author `deploy/edge/` files; link/copy quadlets into the systemd user dir.
-4. Pull `ghcr.io/trakrf/backend:preview` (public — no login); resolve the index digest; pin both the migrate and backend quadlets.
+4. Pull `ghcr.io/trakrf/backend:preview` (public — no login); migrate + backend quadlets reference the `:preview` tag with `AutoUpdate=registry`; enable `podman-auto-update.timer`.
 5. Generate `passwd` (`mosquitto_passwd`) + `.env` (JWT via `openssl rand`).
 6. `systemctl --user daemon-reload`; start `timescaledb` (await healthy) → `mosquitto` → `migrate` (oneshot) → `backend`; `curl localhost:8080/health`.
 7. Run `smoke-test.sh`; confirm the chain green.
@@ -132,7 +134,8 @@ A committed `smoke-test.sh` that, on the live box:
 - **No TLS on the broker:** offline single-LAN, Slate is the perimeter (no WAN forward); also sidesteps the TRA-827 TLS-1.2/GL-S10 constraint.
 - **TLS on the app is mandatory** (Web BLE secure context from the laptop); scoped LE cert + Slate authoritative DNS, per above.
 - **Traefik over Caddy for the edge:** Traefik is already the prod edge (IngressRoute/middleware), so prod-parity, and it's the operator's stronger skill set. Auto-HTTPS is moot since we serve a statically-issued cert. On the box: standalone file-provider config, not k8s IngressRoute CRDs.
-- **Migrate out-of-band, on every update:** mirrors infra's `pre-install,pre-upgrade` hook Job (same image, `/server migrate`). On the box, backend `Requires=`+`After=` an idempotent migrate one-shot, so a digest re-pin migrates before it serves.
+- **Migrate out-of-band, on every update:** mirrors infra's `pre-install,pre-upgrade` hook Job (same image, `/server migrate`). On the box, backend `Requires=`+`After=` an idempotent migrate one-shot, so an auto-update migrates before it serves.
+- **Track the floating `:preview` tag** (not digest-pin): hands-off updates for a solo-operated box, safe from mid-demo surprise because the box is offline during demos. `preview` isn't 100% stable, so the planned **next iteration** is a `demo` tag that defaults to tracking `prod`, with manual `preview → demo` promotion — *forgetting leaves the box on stable prod*, not a stale pin. Chosen over a manual pin Mike could forget to advance.
 - **Kiosk dropped** for conference-room demos (Tim's call); reopen for a booth.
 
 ## Repo home
