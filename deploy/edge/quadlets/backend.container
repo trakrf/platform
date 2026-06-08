@@ -1,0 +1,19 @@
+[Unit]
+Description=TrakRF backend (serve)
+After=migrate.service mosquitto.service
+Requires=migrate.service
+
+[Container]
+ContainerName=backend
+Image=ghcr.io/trakrf/backend:preview
+Network=trakrf.network
+EnvironmentFile=%h/platform/deploy/edge/.env
+Exec=/server serve
+PublishPort=127.0.0.1:8080:8080
+AutoUpdate=registry
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

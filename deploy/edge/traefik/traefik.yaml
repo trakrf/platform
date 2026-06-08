@@ -1,0 +1,9 @@
+entryPoints:
+  websecure:
+    address: ":443"
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yaml
+    watch: true
+log:
+  level: INFO

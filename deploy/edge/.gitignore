@@ -1,0 +1,6 @@
+# Secrets and generated artifacts — never commit
+.env
+cloudflared.env
+mosquitto/passwd
+traefik/certs/
+traefik/lego/

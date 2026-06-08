@@ -1,0 +1,16 @@
+[Unit]
+Description=Mosquitto broker (demo box)
+
+[Container]
+ContainerName=mosquitto
+Image=docker.io/library/eclipse-mosquitto:2.0.21
+Network=trakrf.network
+Volume=%h/platform/deploy/edge/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro,Z
+Volume=%h/platform/deploy/edge/mosquitto/passwd:/mosquitto/config/passwd:ro,Z
+PublishPort=1883:1883
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
