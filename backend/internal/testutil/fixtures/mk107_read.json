@@ -1,0 +1,73 @@
+{
+  "msg_id": 3004,
+  "device_info": {
+    "device_id": "409151a65c96",
+    "mac": "409151A65C96"
+  },
+  "data": [
+    {
+      "type": 0,
+      "value": {
+        "mac": "F95BC0EC4E56",
+        "timestamp": "2026-6-8&21:43:48+00",
+        "type": "Unknown",
+        "rssi": -53,
+        "raw data": "020106020A001216ABFE4000140B980001F95BC0EC4E56200107094E6F74696679",
+        "name": "Notify"
+      }
+    },
+    {
+      "type": 0,
+      "value": {
+        "mac": "0C3E0557C5AF",
+        "timestamp": "2026-6-8&21:43:48+00",
+        "type": "Unknown",
+        "rssi": -68,
+        "raw data": "1EFF060001092022E3AB3615F0F7B92334317BF088F91A65C80BAAE542CC01"
+      }
+    },
+    {
+      "type": 0,
+      "value": {
+        "mac": "02E223E9E3F7",
+        "timestamp": "2026-6-8&21:43:48+00",
+        "type": "Unknown",
+        "rssi": -27,
+        "raw data": "0201021916F1FC0452E9B00CCFE32855EC45B05D512B58DB3C9229ED4C"
+      }
+    },
+    {
+      "type": 1,
+      "value": {
+        "mac": "12F534BA0D99",
+        "timestamp": "2026-6-8&21:43:48+00",
+        "type": "iBeacon",
+        "rssi": -58,
+        "uuid": "2686F39CBADA4658854AA62E7E5E8B8D",
+        "major": 1,
+        "minor": 0,
+        "rssi@1m": -55
+      }
+    },
+    {
+      "type": 0,
+      "value": {
+        "mac": "7B2C5E8B8E5D",
+        "timestamp": "2026-6-8&21:43:48+00",
+        "type": "Unknown",
+        "rssi": -61,
+        "raw data": "09FF7CE913296A3100000505015DF5DA"
+      }
+    },
+    {
+      "type": 0,
+      "value": {
+        "mac": "16CB1934C5D1",
+        "timestamp": "2026-6-8&21:43:48+00",
+        "type": "Unknown",
+        "rssi": -54,
+        "raw data": "0201061916F7FD01C3EF4F0575AB4F048FDE2A4649372E1B0000000003"
+      }
+    }
+  ]
+}

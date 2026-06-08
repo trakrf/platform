@@ -21,6 +21,8 @@ func Parse(deviceType string, payload []byte) ([]scanread.Read, error) {
 		return parseCS463(payload)
 	case scandevice.DeviceTypeGLS10:
 		return parseGLS10(payload)
+	case scandevice.DeviceTypeMK107:
+		return parseMK107(payload)
 	default:
 		return nil, ErrUnsupportedDevice
 	}
