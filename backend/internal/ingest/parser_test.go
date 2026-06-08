@@ -145,3 +145,77 @@ func TestParseGLS10_MalformedJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, ErrUnsupportedDevice)
 }
+
+// mk107_read.json is a real MOKO MK107 Pro scan report captured from preview
+// (gateway 409151A65C96 / mk107-5c96) on 2026-06-08: a msg_id 3004 batch with
+// six heard advertisements (five raw "Unknown" + one pre-decoded iBeacon).
+// Every data[] entry becomes one read; the membership layer drops unregistered
+// MACs from asset_scans.
+func TestParseMK107_RealCapture(t *testing.T) {
+	reads, err := Parse(scandevice.DeviceTypeMK107, loadFixture(t, "mk107_read.json"))
+	require.NoError(t, err)
+	require.Len(t, reads, 6)
+
+	// The gateway is a single capture point: every read carries the derived
+	// scan_point external_key {gateway mac}-1 and antenna port 1.
+	for _, r := range reads {
+		assert.Equal(t, "409151A65C96-1", r.CapturePointName)
+		assert.Equal(t, 1, r.AntennaPort)
+		// The MK107 timestamp is non-standard and intentionally ignored; server
+		// receivedAt is authoritative, so ReaderTimestamp is left zero.
+		assert.True(t, r.ReaderTimestamp.IsZero(), "MK107 timestamp is ignored")
+	}
+
+	// EPC is the heard device MAC. The registered demo fob (MAC F95BC0EC4E56)
+	// is the first entry, an "Unknown" raw advertisement at -53 dBm.
+	r := reads[0]
+	assert.Equal(t, "F95BC0EC4E56", r.EPC)
+	assert.Equal(t, -53, r.RSSI)
+
+	// The pre-decoded iBeacon entry is read identically: EPC = its MAC.
+	var foundIBeacon bool
+	for _, r := range reads {
+		if r.EPC == "12F534BA0D99" {
+			foundIBeacon = true
+			assert.Equal(t, -58, r.RSSI)
+		}
+	}
+	assert.True(t, foundIBeacon, "iBeacon entry parsed by MAC like any other read")
+}
+
+// Status/heartbeat frames (msg_id 3003) carry an object `data`, not the scan
+// array; they must be ignored without error and yield no reads.
+func TestParseMK107_IgnoresHeartbeat(t *testing.T) {
+	payload := []byte(`{"msg_id":3003,"device_info":{"device_id":"409151a65c96","mac":"409151A65C96"},"data":{"net_state":"online"}}`)
+	reads, err := Parse(scandevice.DeviceTypeMK107, payload)
+	require.NoError(t, err)
+	assert.Empty(t, reads)
+}
+
+func TestParseMK107_Empty(t *testing.T) {
+	payload := []byte(`{"msg_id":3004,"device_info":{"mac":"409151A65C96"},"data":[]}`)
+	reads, err := Parse(scandevice.DeviceTypeMK107, payload)
+	require.NoError(t, err)
+	assert.Empty(t, reads)
+}
+
+// MACs are case-insensitive on the wire, but tags.value and
+// scan_points.external_key are matched case-sensitively and registered
+// uppercase. Normalize both the gateway and heard MAC so a lowercase wire
+// payload still resolves to its asset and capture point.
+func TestParseMK107_MACUppercased(t *testing.T) {
+	payload := []byte(`{"msg_id":3004,"device_info":{"mac":"409151a65c96"},"data":[
+		{"type":0,"value":{"mac":"f95bc0ec4e56","rssi":-53}}
+	]}`)
+	reads, err := Parse(scandevice.DeviceTypeMK107, payload)
+	require.NoError(t, err)
+	require.Len(t, reads, 1)
+	assert.Equal(t, "F95BC0EC4E56", reads[0].EPC)
+	assert.Equal(t, "409151A65C96-1", reads[0].CapturePointName)
+}
+
+func TestParseMK107_MalformedJSON(t *testing.T) {
+	_, err := Parse(scandevice.DeviceTypeMK107, []byte("not json"))
+	assert.Error(t, err)
+	assert.NotErrorIs(t, err, ErrUnsupportedDevice)
+}

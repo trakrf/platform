@@ -10,6 +10,7 @@ import "time"
 const (
 	DeviceTypeCS463    = "csl_cs463"
 	DeviceTypeGLS10    = "gl_s10"
+	DeviceTypeMK107    = "moko_mk107"
 	DeviceTypeESP32BLE = "esp32_ble_generic"
 	DeviceTypeCS108    = "csl_cs108"
 
@@ -40,7 +41,7 @@ type ScanDevice struct {
 type CreateScanDeviceRequest struct {
 	ExternalKey  string         `json:"external_key" validate:"required,min=1,max=255" example:"cs463-214"`
 	Name         string         `json:"name" validate:"required,min=1,max=255" example:"Dock Door Reader"`
-	Type         string         `json:"type" validate:"required,oneof=csl_cs463 gl_s10 esp32_ble_generic csl_cs108" example:"csl_cs463"`
+	Type         string         `json:"type" validate:"required,oneof=csl_cs463 gl_s10 moko_mk107 esp32_ble_generic csl_cs108" example:"csl_cs463"`
 	Transport    string         `json:"transport,omitempty" validate:"omitempty,oneof=mqtt web_ble" example:"mqtt"`
 	PublishTopic *string        `json:"publish_topic,omitempty" validate:"omitempty,min=1,max=255" example:"trakrf.id/cs463-214/reads"`
 	SerialNumber *string        `json:"serial_number,omitempty" validate:"omitempty,max=255"`
@@ -52,7 +53,7 @@ type CreateScanDeviceRequest struct {
 
 type UpdateScanDeviceRequest struct {
 	Name         *string         `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
-	Type         *string         `json:"type,omitempty" validate:"omitempty,oneof=csl_cs463 gl_s10 esp32_ble_generic csl_cs108"`
+	Type         *string         `json:"type,omitempty" validate:"omitempty,oneof=csl_cs463 gl_s10 moko_mk107 esp32_ble_generic csl_cs108"`
 	Transport    *string         `json:"transport,omitempty" validate:"omitempty,oneof=mqtt web_ble"`
 	PublishTopic *string         `json:"publish_topic,omitempty" validate:"omitempty,min=1,max=255"`
 	SerialNumber *string         `json:"serial_number,omitempty" validate:"omitempty,max=255"`
