@@ -37,9 +37,13 @@ sed -i "s|mqtt://trakrf-mqtt:CHANGEME@|mqtt://trakrf-mqtt:$MQPW@|" deploy/edge/.
 sed -i "s|JWT_SECRET=CHANGEME|JWT_SECRET=$(openssl rand -hex 32)|" deploy/edge/.env
 sed -i "s|OBFUSCATION_KEY=CHANGEME|OBFUSCATION_KEY=$(openssl rand -hex 32)|" deploy/edge/.env
 # broker passwd (hashed) — same value as MQTT_URL above
-touch deploy/edge/mosquitto/passwd && chmod 600 deploy/edge/mosquitto/passwd
+touch deploy/edge/mosquitto/passwd
 podman run --rm -v "$PWD/deploy/edge/mosquitto/passwd:/passwd:Z" \
   --entrypoint mosquitto_passwd docker.io/library/eclipse-mosquitto:2.0.21 -b /passwd trakrf-mqtt "$MQPW"
+chmod 600 deploy/edge/mosquitto/passwd
+# rootless: hand the file to the container's mosquitto uid (1883) so the broker can read
+# it at 0600 (mosquitto runs as 1883, not container-root). Re-run after any passwd change.
+podman unshare chown 1883:1883 deploy/edge/mosquitto/passwd
 
 # 3. Install quadlets + start (Timescale must be up before db-init/migrate)
 deploy/edge/install.sh
