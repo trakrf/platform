@@ -1,0 +1,18 @@
+[Unit]
+Description=TrakRF DB migrate (runs before backend, every start)
+After=timescaledb.service
+Requires=timescaledb.service
+
+[Container]
+ContainerName=trakrf-migrate
+Image=ghcr.io/trakrf/backend:preview
+Network=trakrf.network
+EnvironmentFile=%h/platform/deploy/edge/.env
+Exec=/server migrate
+AutoUpdate=registry
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+# Wait up to 60s for Postgres to accept connections before migrating.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do podman exec timescaledb pg_isready -U postgres -q && exit 0; sleep 2; done; exit 1'
