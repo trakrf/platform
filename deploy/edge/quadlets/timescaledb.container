@@ -1,0 +1,20 @@
+[Unit]
+Description=TimescaleDB (demo box)
+
+[Container]
+ContainerName=timescaledb
+Image=docker.io/timescale/timescaledb-ha:pg17.9-ts2.26.4
+Network=trakrf.network
+Volume=timescale_data:/home/postgres/pgdata/data
+EnvironmentFile=%h/platform/deploy/edge/.env
+PublishPort=127.0.0.1:5432:5432
+HealthCmd=pg_isready -U postgres
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=5
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

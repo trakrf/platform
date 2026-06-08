@@ -56,7 +56,7 @@ func NewEngine(cfg Config, store *storage.Storage, driver outputDriver, log *zer
 		store:    store,
 		driver:   driver,
 		latch:    newLatch(cfg.SweepInterval, clk),
-		presence: newPresence(driver, cfg.SweepInterval, clk, l),
+		presence: newPresence(driver, l),
 		log:      l,
 	}
 }
@@ -122,9 +122,10 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 			}
 
 			if dev.Mode() == outputdevice.ModePresence {
-				// Presence: ON on the 0->1 edge; OFF is driven by the sweeper when
-				// the last member ages out. auto_off is ignored (engine owns OFF).
-				if e.presence.observe(orgID, dev, ttl, rd.EPC, receivedAt) {
+				// Presence: ON on the 0->1 edge; OFF fires from the output's age-out
+				// timer when no member is read for age-out. auto_off is ignored
+				// (the engine owns the OFF edge).
+				if e.presence.observe(orgID, dev, ttl, rd.EPC) {
 					firedAny = true
 					e.drive(ctx, orgID, dev, true, 0)
 				}

@@ -1,7 +1,6 @@
 package geofence
 
 import (
-	"context"
 	"io"
 	"testing"
 	"time"
@@ -11,68 +10,136 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 )
 
+// recordedTimer is a fake timer the test fires manually. Stop() reports whether
+// it was still pending (matching *time.Timer semantics) and prevents a later
+// manual fire from running the callback.
+type recordedTimer struct {
+	d       time.Duration
+	f       func()
+	stopped bool
+}
+
+func (t *recordedTimer) Stop() bool {
+	was := t.stopped
+	t.stopped = true
+	return !was
+}
+
+// fire runs the callback if the timer is still pending (mirrors a real timer:
+// a stopped timer never fires).
+func (t *recordedTimer) fire() {
+	if !t.stopped {
+		t.stopped = true
+		t.f()
+	}
+}
+
+// newTestPresence builds a presence tracker whose timers are captured for manual
+// firing instead of running on the wall clock.
+func newTestPresence(driver outputDriver) (*presence, *[]*recordedTimer) {
+	p := newPresence(driver, zerolog.New(io.Discard))
+	timers := &[]*recordedTimer{}
+	p.afterFunc = func(d time.Duration, f func()) timerHandle {
+		rt := &recordedTimer{d: d, f: f}
+		*timers = append(*timers, rt)
+		return rt
+	}
+	return p, timers
+}
+
 func TestPresence_FirstObserveFiresOnReObserveDoesNot(t *testing.T) {
-	d := &fakeDriver{}
-	p := newPresence(d, 0, NewFakeClock(time.Unix(0, 0)), zerolog.New(io.Discard))
+	p, _ := newTestPresence(&fakeDriver{})
 	defer p.Close()
 	dev := outputdevice.OutputDevice{ID: 5}
 
-	if !p.observe(1, dev, time.Minute, "EPC", time.Unix(100, 0)) {
-		t.Fatal("first observe must report ON edge")
+	if !p.observe(1, dev, time.Minute, "EPC") {
+		t.Fatal("first observe must report the ON edge")
 	}
-	if p.observe(1, dev, time.Minute, "EPC", time.Unix(110, 0)) {
+	if p.observe(1, dev, time.Minute, "EPC") {
 		t.Fatal("re-observe while present must not report a new ON edge")
 	}
 }
 
-func TestPresence_SweepFiresOffWhenLastMemberAgesOut(t *testing.T) {
+func TestPresence_TimerFiresOffAfterAgeOut(t *testing.T) {
 	d := &fakeDriver{}
-	clk := NewFakeClock(time.Unix(100, 0))
-	p := newPresence(d, 0, clk, zerolog.New(io.Discard))
+	p, timers := newTestPresence(d)
 	defer p.Close()
 	dev := outputdevice.OutputDevice{ID: 5}
 
-	p.observe(1, dev, 10*time.Second, "EPC", time.Unix(100, 0))
-
-	// 5s later: still within the 10s window, no OFF.
-	clk.Advance(5 * time.Second)
-	p.sweep(context.Background())
-	if d.offCount() != 0 {
-		t.Fatalf("member still present; expected 0 off, got %d", d.offCount())
+	p.observe(1, dev, 6*time.Second, "EPC")
+	if len(*timers) != 1 || (*timers)[0].d != 6*time.Second {
+		t.Fatalf("expected one timer armed at 6s, got %+v", *timers)
 	}
 
-	// 20s after last seen: aged out -> exactly one OFF for device 5.
-	clk.Advance(15 * time.Second)
-	p.sweep(context.Background())
+	(*timers)[0].fire() // age-out elapsed with no further read
 	if d.offCount() != 1 {
-		t.Fatalf("aged-out member should drive one OFF, got %d", d.offCount())
+		t.Fatalf("age-out must drive exactly one OFF, got %d", d.offCount())
+	}
+
+	// After OFF the output is forgotten: the next read is a fresh ON edge.
+	if !p.observe(1, dev, 6*time.Second, "EPC") {
+		t.Fatal("observe after OFF must report a new ON edge")
 	}
 }
 
-func TestPresence_TwoMembersOffOnlyWhenBothLeave(t *testing.T) {
+func TestPresence_ReadResetsTimerPreventingPrematureOff(t *testing.T) {
 	d := &fakeDriver{}
-	clk := NewFakeClock(time.Unix(100, 0))
-	p := newPresence(d, 0, clk, zerolog.New(io.Discard))
+	p, timers := newTestPresence(d)
 	defer p.Close()
 	dev := outputdevice.OutputDevice{ID: 5}
 
-	p.observe(1, dev, 10*time.Second, "A", time.Unix(100, 0))
-	// B arrives 8s later; not an ON edge (already present), keeps the output alive.
-	if p.observe(1, dev, 10*time.Second, "B", time.Unix(108, 0)) {
-		t.Fatal("second member must not report a new ON edge")
-	}
+	p.observe(1, dev, 6*time.Second, "EPC") // arms timer[0]
+	p.observe(1, dev, 6*time.Second, "EPC") // a read within age-out: stops timer[0], arms timer[1]
 
-	// At t=112: A (last seen 100) aged out, B (last seen 108) still present.
-	clk.Advance(12 * time.Second)
-	p.sweep(context.Background())
+	// The stale timer[0] firing late (lost the race) must not drive OFF.
+	(*timers)[0].fire()
 	if d.offCount() != 0 {
-		t.Fatalf("one member still present; expected 0 off, got %d", d.offCount())
+		t.Fatalf("a reset (stale) timer must not fire OFF, got %d", d.offCount())
 	}
 
-	// At t=120: B aged out too -> OFF.
-	clk.Advance(8 * time.Second)
-	p.sweep(context.Background())
+	// The current timer firing does drive OFF.
+	(*timers)[1].fire()
 	if d.offCount() != 1 {
-		t.Fatalf("expected one off after both members left, got %d", d.offCount())
+		t.Fatalf("current timer must drive OFF, got %d", d.offCount())
+	}
+}
+
+func TestPresence_TwoMembersOffOnlyAfterLastGoesQuiet(t *testing.T) {
+	d := &fakeDriver{}
+	p, timers := newTestPresence(d)
+	defer p.Close()
+	dev := outputdevice.OutputDevice{ID: 5}
+
+	if !p.observe(1, dev, 6*time.Second, "A") {
+		t.Fatal("first member is the ON edge")
+	}
+	if p.observe(1, dev, 6*time.Second, "B") {
+		t.Fatal("second member must not be a new ON edge")
+	}
+	// Each read reset the single per-output timer; only the latest is live.
+	(*timers)[0].fire() // A's reset timer — stale
+	if d.offCount() != 0 {
+		t.Fatalf("output must stay on while a member is still being read, got %d off", d.offCount())
+	}
+	(*timers)[len(*timers)-1].fire() // last armed timer: no read for age-out
+	if d.offCount() != 1 {
+		t.Fatalf("OFF once the last member goes quiet, got %d", d.offCount())
+	}
+}
+
+func TestPresence_CloseStopsTimersAndBlocksObserve(t *testing.T) {
+	d := &fakeDriver{}
+	p, timers := newTestPresence(d)
+	dev := outputdevice.OutputDevice{ID: 5}
+
+	p.observe(1, dev, 6*time.Second, "EPC")
+	p.Close()
+	// A timer that fires after Close was stopped, so it no-ops.
+	(*timers)[0].fire()
+	if d.offCount() != 0 {
+		t.Fatalf("timers stopped on Close must not fire, got %d", d.offCount())
+	}
+	if p.observe(1, dev, 6*time.Second, "EPC") {
+		t.Fatal("observe after Close must be a no-op (return false)")
 	}
 }

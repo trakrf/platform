@@ -1,0 +1,25 @@
+[Unit]
+Description=Cloudflare Tunnel (public access to the demo app)
+# Origin is Traefik; start after it so the tunnel doesn't come up pointing at nothing.
+After=traefik.service
+Wants=traefik.service
+
+[Container]
+ContainerName=cloudflared
+# TODO: pin to a specific release tag to match repo convention (cf. traefik:v3.3, mosquitto:2.0.21).
+Image=docker.io/cloudflare/cloudflared:latest
+# Must share trakrf.network so the dashboard/Terraform ingress can target https://traefik:443 by name.
+Network=trakrf.network
+# Token only — kept out of the shared .env so DB/JWT secrets aren't exposed to this sidecar.
+# Managed by trakrf/infra Terraform (TRA-957); drop the real value in deploy/edge/cloudflared.env.
+EnvironmentFile=%h/platform/deploy/edge/cloudflared.env
+# Outbound-only: no PublishPort (the whole point — no inbound, NAT/double-NAT agnostic).
+# cloudflared reads the tunnel token from $TUNNEL_TOKEN. Public hostname -> service ingress
+# (app.demo.trakrf.id -> https://traefik:443) is configured in Cloudflare, not here.
+Exec=tunnel --no-autoupdate run
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
