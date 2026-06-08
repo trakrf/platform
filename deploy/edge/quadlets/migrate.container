@@ -14,5 +14,9 @@ AutoUpdate=registry
 [Service]
 Type=oneshot
 RemainAfterExit=no
-# Wait up to 60s for Postgres to accept connections before migrating.
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do podman exec timescaledb pg_isready -U postgres -q && exit 0; sleep 2; done; exit 1'
+# Wait for Postgres, then pre-create the trakrf schema + pin the DB search_path.
+# Required so golang-migrate's schema_migrations table always lands in `trakrf`
+# (on a vanilla DB, trakrf doesn't exist at first connect, so CURRENT_SCHEMA()
+# would otherwise resolve to public on run 1 and trakrf on run 2 — losing the
+# version and replaying migrations). See backend/justfile.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do podman exec timescaledb pg_isready -U postgres -q && break || sleep 2; done; podman exec timescaledb psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS trakrf; ALTER DATABASE postgres SET search_path = trakrf, public;"'
