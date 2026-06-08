@@ -1,0 +1,16 @@
+http:
+  routers:
+    app:
+      rule: "Host(`app.demo.trakrf.id`)"
+      entryPoints: [websecure]
+      service: backend
+      tls: {}
+  services:
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8080"
+tls:
+  certificates:
+    - certFile: /certs/app.demo.trakrf.id.crt
+      keyFile: /certs/app.demo.trakrf.id.key

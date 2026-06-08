@@ -1,0 +1,19 @@
+[Unit]
+Description=Traefik TLS edge
+After=backend.service
+Requires=backend.service
+
+[Container]
+ContainerName=traefik
+Image=docker.io/library/traefik:v3.3
+Network=trakrf.network
+Volume=%h/platform/deploy/edge/traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro,Z
+Volume=%h/platform/deploy/edge/traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro,Z
+Volume=%h/platform/deploy/edge/traefik/certs:/certs:ro,Z
+PublishPort=443:443
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
