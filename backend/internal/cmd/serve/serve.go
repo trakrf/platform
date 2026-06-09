@@ -175,7 +175,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	locationsHandler := locationshandler.NewHandler(store)
 	inventoryHandler := inventoryhandler.NewHandler(store)
 	reportsHandler := reportshandler.NewHandler(store)
-	scanDevicesHandler := scandeviceshandler.NewHandler(store)
+	scanDevicesHandler := scandeviceshandler.NewHandler(store, topicRegistry)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
 	// 2s test-fire pulse: long enough for an operator to see the strobe, short
 	// enough not to leave the relay latched after a confidence check.

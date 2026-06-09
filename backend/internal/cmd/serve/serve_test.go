@@ -47,7 +47,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	locationsHandler := locationshandler.NewHandler(store)
 	inventoryHandler := inventoryhandler.NewHandler(store)
 	reportsHandler := reportshandler.NewHandler(store)
-	scanDevicesHandler := scandeviceshandler.NewHandler(store)
+	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil), 0)
 	lookupHandler := lookuphandler.NewHandler(store)
