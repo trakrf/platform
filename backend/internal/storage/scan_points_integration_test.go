@@ -76,6 +76,33 @@ func TestScanDevice_AutoCreatesAntenna1(t *testing.T) {
 	require.Nil(t, pts[0].LocationID)
 }
 
+// TRA-956: (scan_device_id, antenna_port) is the read correlation key, so a
+// device may have at most one live scan_point per antenna port. The partial
+// unique index enforces it — a second antenna-1 point (the auto-provisioned one
+// already exists) is rejected. A blank antenna_port also defaults to 1.
+func TestScanPoint_DuplicateAntennaPortRejected(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Reader", Type: scandevice.DeviceTypeCS463,
+	})
+	require.NoError(t, err) // auto-provisions antenna 1
+
+	port1 := 1
+	_, err = db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
+		Name: "Antenna 1 (dup)", AntennaPort: &port1,
+	})
+	require.Error(t, err, "explicit duplicate antenna 1 must be rejected")
+
+	// Omitting antenna_port defaults to 1, which also collides with the auto point.
+	_, err = db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
+		Name: "Antenna default",
+	})
+	require.Error(t, err, "blank antenna_port defaults to 1 and collides")
+}
+
 func TestScanPoint_DeviceDeleteCascades(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()

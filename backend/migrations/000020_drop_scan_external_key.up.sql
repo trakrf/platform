@@ -36,9 +36,19 @@ ALTER TABLE scan_devices DROP COLUMN external_key;
 ALTER TABLE scan_points  DROP COLUMN external_key;
 
 -- ---- per-device antenna correlation key --------------------------------------
+-- antenna_port is now the read→scan_point correlation key (storage.PersistReads),
+-- so it must always have a concrete value: a NULL port can never match a read and
+-- would escape the uniqueness guarantee below (NULLs are distinct in a unique
+-- index). Backfill any legacy NULLs to antenna 1, then make the column NOT NULL
+-- DEFAULT 1.
+UPDATE scan_points SET antenna_port = 1 WHERE antenna_port IS NULL;
+ALTER TABLE scan_points
+    ALTER COLUMN antenna_port SET DEFAULT 1,
+    ALTER COLUMN antenna_port SET NOT NULL;
+
 -- A live device resolves at most one scan_point per antenna port; this is the
--- key reads are matched on (storage.PersistReads). Partial on live rows so a
--- soft-deleted point never blocks re-provisioning the same antenna.
+-- key reads are matched on. Partial on live rows so a soft-deleted point never
+-- blocks re-provisioning the same antenna.
 CREATE UNIQUE INDEX idx_scan_points_device_antenna_unique
     ON scan_points (scan_device_id, antenna_port)
     WHERE deleted_at IS NULL;

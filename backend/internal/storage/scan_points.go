@@ -86,7 +86,7 @@ func (s *Storage) ListScanPointsByDevice(ctx context.Context, orgID, scanDeviceI
 	query := `SELECT ` + scanPointColumns + `
 		FROM trakrf.scan_points
 		WHERE org_id = $1 AND scan_device_id = $2 AND deleted_at IS NULL
-		ORDER BY antenna_port NULLS FIRST, created_at`
+		ORDER BY antenna_port, created_at`
 	points := []scanpoint.ScanPoint{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, orgID, scanDeviceID)

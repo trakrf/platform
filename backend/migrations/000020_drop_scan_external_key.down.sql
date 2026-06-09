@@ -5,6 +5,11 @@ SET search_path = trakrf, public;
 
 DROP INDEX IF EXISTS idx_scan_points_device_antenna_unique;
 
+-- antenna_port was nullable with no default before TRA-956.
+ALTER TABLE scan_points
+    ALTER COLUMN antenna_port DROP NOT NULL,
+    ALTER COLUMN antenna_port DROP DEFAULT;
+
 ALTER TABLE scan_devices ADD COLUMN external_key VARCHAR(255);
 ALTER TABLE scan_points  ADD COLUMN external_key VARCHAR(255);
 
