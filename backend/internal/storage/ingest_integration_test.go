@@ -23,15 +23,21 @@ import (
 
 const testEPC = "E2801190A503006543E21224"
 
-// registerDevice creates a CS463 device (auto-provisions scan_point
-// {externalKey}-1) and returns nothing; publish_topic defaults to
-// trakrf.id/{externalKey}/reads.
-func registerDevice(t *testing.T, db *testutil.TestDB, orgID int, externalKey string) {
+// publishTopic builds the routing key for a device key (TRA-956: publish_topic
+// is set directly; there is no external_key default anymore).
+func publishTopic(key string) string { return "trakrf.id/" + key + "/reads" }
+
+// registerDevice creates a CS463 device publishing on trakrf.id/{key}/reads
+// (auto-provisions antenna-1 scan_point) and returns it so the caller can pass
+// its id to PersistReads.
+func registerDevice(t *testing.T, db *testutil.TestDB, orgID int, key string) *scandevice.ScanDevice {
 	t.Helper()
-	_, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: externalKey, Name: "Test Reader", Type: scandevice.DeviceTypeCS463,
+	topic := publishTopic(key)
+	d, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Test Reader", Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
 	})
 	require.NoError(t, err)
+	return d
 }
 
 // registerRFIDTag links an rfid tag value (EPC) to a new asset.
@@ -57,16 +63,18 @@ func registerTag(t *testing.T, db *testutil.TestDB, orgID int, tagType, value st
 	require.NoError(t, err)
 }
 
-// registerGLS10Device creates a GL-S10 BLE gateway (auto-provisions scan_point
-// {externalKey}-1, same TRA-899 invariant as CS463). external_key must equal
-// the gateway's dev_ble_mac for parsed reads' {dev_ble_mac}-1 capture point to
-// match.
-func registerGLS10Device(t *testing.T, db *testutil.TestDB, orgID int, externalKey string) {
+// registerGLS10Device creates a GL-S10 BLE gateway publishing on
+// trakrf.id/{key}/reads (auto-provisions antenna-1 scan_point, same TRA-899
+// invariant as CS463) and returns it. The gateway is a single capture point, so
+// its reads resolve to antenna 1 (TRA-956).
+func registerGLS10Device(t *testing.T, db *testutil.TestDB, orgID int, key string) *scandevice.ScanDevice {
 	t.Helper()
-	_, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: externalKey, Name: "Test Gateway", Type: scandevice.DeviceTypeGLS10,
+	topic := publishTopic(key)
+	d, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Test Gateway", Type: scandevice.DeviceTypeGLS10, PublishTopic: &topic,
 	})
 	require.NoError(t, err)
+	return d
 }
 
 func countAssetScans(t *testing.T, db *testutil.TestDB, orgID int) int {
@@ -81,31 +89,14 @@ func TestResolveScanTopic_ByPublishTopic(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerDevice(t, db, orgID, "cs463-214")
+	dev := registerDevice(t, db, orgID, "cs463-214")
 
 	route, found, err := db.Store.ResolveScanTopic(ctx, "trakrf.id/cs463-214/reads")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, orgID, route.OrgID)
+	assert.Equal(t, dev.ID, route.ScanDeviceID)
 	assert.Equal(t, scandevice.DeviceTypeCS463, route.DeviceType)
-}
-
-func TestResolveScanTopic_ByExternalKeyDefault(t *testing.T) {
-	db := testutil.SetupTestDBFull(t)
-	ctx := context.Background()
-	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-
-	// Device with an explicitly NULL publish_topic: resolution must fall back to
-	// the documented default topic trakrf.id/{external_key}/reads.
-	_, err := db.AdminPool.Exec(ctx,
-		`INSERT INTO trakrf.scan_devices (org_id, external_key, name, type, transport, publish_topic)
-		 VALUES ($1, 'cs463-299', 'Null-Topic Reader', 'csl_cs463', 'mqtt', NULL)`, orgID)
-	require.NoError(t, err)
-
-	route, found, err := db.Store.ResolveScanTopic(ctx, "trakrf.id/cs463-299/reads")
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, orgID, route.OrgID)
 }
 
 func TestResolveScanTopic_UnknownTopic(t *testing.T) {
@@ -128,15 +119,15 @@ func TestPersistReads_RegisteredAssetProducesScan(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerDevice(t, db, orgID, "cs463-214")
+	dev := registerDevice(t, db, orgID, "cs463-214")
 	registerRFIDTag(t, db, orgID, testEPC)
 
 	tagScanID, err := db.Store.InsertRawTagScan(ctx, "trakrf.id/cs463-214/reads", []byte(`{}`))
 	require.NoError(t, err)
 
 	receivedAt := time.Now()
-	reads := []scanread.Read{{EPC: testEPC, CapturePointName: "cs463-214-1", AntennaPort: 1, RSSI: -56}}
-	res, err := db.Store.PersistReads(ctx, orgID, tagScanID, receivedAt, reads)
+	reads := []scanread.Read{{EPC: testEPC, AntennaPort: 1, RSSI: -56}}
+	res, err := db.Store.PersistReads(ctx, orgID, dev.ID, tagScanID, receivedAt, reads)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Inserted)
 	assert.Empty(t, res.Dropped)
@@ -150,15 +141,17 @@ func TestPersistReads_RegisteredAssetProducesScan(t *testing.T) {
 	assert.Equal(t, -56, res.Resolved[0].RSSI)
 	assert.Greater(t, res.Resolved[0].ScanPointID, 0)
 
-	// Resolved to the registered scan_point and linked to the source audit row.
-	var spExternalKey string
+	// Resolved to the device's antenna-1 scan_point and linked to the source audit row.
+	var spDeviceID int
+	var spAntenna int
 	var gotTagScanID int64
 	require.NoError(t, db.AdminPool.QueryRow(ctx, `
-		SELECT sp.external_key, a.tag_scan_id
+		SELECT sp.scan_device_id, sp.antenna_port, a.tag_scan_id
 		FROM trakrf.asset_scans a
 		JOIN trakrf.scan_points sp ON sp.id = a.scan_point_id
-		WHERE a.org_id = $1`, orgID).Scan(&spExternalKey, &gotTagScanID))
-	assert.Equal(t, "cs463-214-1", spExternalKey)
+		WHERE a.org_id = $1`, orgID).Scan(&spDeviceID, &spAntenna, &gotTagScanID))
+	assert.Equal(t, dev.ID, spDeviceID)
+	assert.Equal(t, 1, spAntenna)
 	assert.Equal(t, tagScanID, gotTagScanID)
 }
 
@@ -176,11 +169,11 @@ func TestPersistReads_LeadingZeroNormalizedMatch(t *testing.T) {
 	t.Run("short tag value matches full EPC read", func(t *testing.T) {
 		db := testutil.SetupTestDBFull(t)
 		orgID := testutil.CreateTestAccount(t, db.AdminPool)
-		registerDevice(t, db, orgID, "cs463-214")
+		dev := registerDevice(t, db, orgID, "cs463-214")
 		registerRFIDTag(t, db, orgID, shortValue) // registered short
 
-		reads := []scanread.Read{{EPC: fullEPC, CapturePointName: "cs463-214-1", RSSI: -56}}
-		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		reads := []scanread.Read{{EPC: fullEPC, AntennaPort: 1, RSSI: -56}}
+		res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, time.Now(), reads)
 		require.NoError(t, err)
 		assert.Equal(t, 1, res.Inserted, "full EPC read resolves the short-value tag")
 		assert.Empty(t, res.Dropped)
@@ -190,11 +183,11 @@ func TestPersistReads_LeadingZeroNormalizedMatch(t *testing.T) {
 	t.Run("full tag value matches short EPC read", func(t *testing.T) {
 		db := testutil.SetupTestDBFull(t)
 		orgID := testutil.CreateTestAccount(t, db.AdminPool)
-		registerDevice(t, db, orgID, "cs463-214")
+		dev := registerDevice(t, db, orgID, "cs463-214")
 		registerRFIDTag(t, db, orgID, fullEPC) // registered full
 
-		reads := []scanread.Read{{EPC: shortValue, CapturePointName: "cs463-214-1", RSSI: -56}}
-		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		reads := []scanread.Read{{EPC: shortValue, AntennaPort: 1, RSSI: -56}}
+		res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, time.Now(), reads)
 		require.NoError(t, err)
 		assert.Equal(t, 1, res.Inserted, "short EPC read resolves the full-value tag")
 		assert.Empty(t, res.Dropped)
@@ -209,12 +202,12 @@ func TestPersistReads_NormalizationEdgeCases(t *testing.T) {
 	t.Run("ble mac case-insensitive", func(t *testing.T) {
 		db := testutil.SetupTestDBFull(t)
 		orgID := testutil.CreateTestAccount(t, db.AdminPool)
-		registerGLS10Device(t, db, orgID, "C4DEE229A176")
+		dev := registerGLS10Device(t, db, orgID, "C4DEE229A176")
 		registerBLETag(t, db, orgID, "c4dee229a176aa") // lowercase placeholder asset MAC
 
 		// Reader-side parsers emit uppercase MAC; ensure it still resolves.
-		reads := []scanread.Read{{EPC: "C4DEE229A176AA", CapturePointName: "C4DEE229A176-1", RSSI: -56}}
-		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		reads := []scanread.Read{{EPC: "C4DEE229A176AA", AntennaPort: 1, RSSI: -56}}
+		res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, time.Now(), reads)
 		require.NoError(t, err)
 		assert.Equal(t, 1, res.Inserted, "uppercase read resolves lowercase-registered MAC")
 		assert.Empty(t, res.Dropped)
@@ -223,7 +216,7 @@ func TestPersistReads_NormalizationEdgeCases(t *testing.T) {
 	t.Run("non-hex junk value matches nothing", func(t *testing.T) {
 		db := testutil.SetupTestDBFull(t)
 		orgID := testutil.CreateTestAccount(t, db.AdminPool)
-		registerDevice(t, db, orgID, "cs463-214")
+		dev := registerDevice(t, db, orgID, "cs463-214")
 		// "X With Space" normalizes to "" (no hex chars) and must not match a read.
 		asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "junk-asset")
 		_, err := db.AdminPool.Exec(ctx,
@@ -231,8 +224,8 @@ func TestPersistReads_NormalizationEdgeCases(t *testing.T) {
 			orgID, asset.ID)
 		require.NoError(t, err)
 
-		reads := []scanread.Read{{EPC: "AABBCC", CapturePointName: "cs463-214-1"}}
-		res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+		reads := []scanread.Read{{EPC: "AABBCC", AntennaPort: 1}}
+		res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, time.Now(), reads)
 		require.NoError(t, err)
 		assert.Equal(t, 0, res.Inserted)
 		assert.Equal(t, 1, res.Dropped["no_asset"], "junk tag value normalizes to empty and never matches")
@@ -243,11 +236,11 @@ func TestPersistReads_UnregisteredEPCDropsRead(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerDevice(t, db, orgID, "cs463-214")
+	dev := registerDevice(t, db, orgID, "cs463-214")
 	// No rfid tag registered for testEPC.
 
-	reads := []scanread.Read{{EPC: testEPC, CapturePointName: "cs463-214-1"}}
-	res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+	reads := []scanread.Read{{EPC: testEPC, AntennaPort: 1}}
+	res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, time.Now(), reads)
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.Inserted)
 	assert.Equal(t, 1, res.Dropped["no_asset"])
@@ -258,11 +251,13 @@ func TestPersistReads_UnknownScanPointDropsRead(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerDevice(t, db, orgID, "cs463-214")
+	dev := registerDevice(t, db, orgID, "cs463-214")
 	registerRFIDTag(t, db, orgID, testEPC)
 
-	reads := []scanread.Read{{EPC: testEPC, CapturePointName: "cs463-214-9"}} // not a registered capture point
-	res, err := db.Store.PersistReads(ctx, orgID, 1, time.Now(), reads)
+	// Device only has the auto-provisioned antenna 1; a read on antenna 9 has no
+	// scan_point and is a clean no_scan_point miss (TRA-956).
+	reads := []scanread.Read{{EPC: testEPC, AntennaPort: 9}}
+	res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, time.Now(), reads)
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.Inserted)
 	assert.Equal(t, 1, res.Dropped["no_scan_point"])
@@ -273,15 +268,15 @@ func TestPersistReads_DuplicateEPCInBatchDedups(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerDevice(t, db, orgID, "cs463-214")
+	dev := registerDevice(t, db, orgID, "cs463-214")
 	registerRFIDTag(t, db, orgID, testEPC)
 
 	receivedAt := time.Now()
 	reads := []scanread.Read{
-		{EPC: testEPC, CapturePointName: "cs463-214-1"},
-		{EPC: testEPC, CapturePointName: "cs463-214-1"},
+		{EPC: testEPC, AntennaPort: 1},
+		{EPC: testEPC, AntennaPort: 1},
 	}
-	res, err := db.Store.PersistReads(ctx, orgID, 1, receivedAt, reads)
+	res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, receivedAt, reads)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Inserted)
 	assert.Equal(t, 1, res.Dropped["conflict"], "same (timestamp, org, asset) dedups on the content PK")
@@ -300,7 +295,7 @@ func TestGLS10_ParseToAssetScan(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerGLS10Device(t, db, orgID, "C4DEE229A176") // auto scan_point C4DEE229A176-1
+	dev := registerGLS10Device(t, db, orgID, "C4DEE229A176") // auto antenna-1 scan_point
 	const assetMAC = "F95BC0EC4E56"
 	registerRFIDTag(t, db, orgID, assetMAC)
 
@@ -315,19 +310,20 @@ func TestGLS10_ParseToAssetScan(t *testing.T) {
 
 	tagScanID, err := db.Store.InsertRawTagScan(ctx, "trakrf.id/C4DEE229A176/reads", payload)
 	require.NoError(t, err)
-	res, err := db.Store.PersistReads(ctx, orgID, tagScanID, time.Now(), reads)
+	res, err := db.Store.PersistReads(ctx, orgID, dev.ID, tagScanID, time.Now(), reads)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Inserted, "registered asset MAC lands as a scan")
 	assert.Equal(t, 1, res.Dropped["no_asset"], "unregistered BLE noise drops at membership")
 	require.Equal(t, 1, countAssetScans(t, db, orgID))
 
-	// The asset_scan resolved to the gateway's single auto-provisioned capture point.
-	var spExternalKey string
+	// The asset_scan resolved to the gateway's single auto-provisioned antenna-1 scan_point.
+	var spDeviceID, spAntenna int
 	require.NoError(t, db.AdminPool.QueryRow(ctx, `
-		SELECT sp.external_key FROM trakrf.asset_scans a
+		SELECT sp.scan_device_id, sp.antenna_port FROM trakrf.asset_scans a
 		JOIN trakrf.scan_points sp ON sp.id = a.scan_point_id
-		WHERE a.org_id = $1`, orgID).Scan(&spExternalKey))
-	assert.Equal(t, "C4DEE229A176-1", spExternalKey)
+		WHERE a.org_id = $1`, orgID).Scan(&spDeviceID, &spAntenna))
+	assert.Equal(t, dev.ID, spDeviceID)
+	assert.Equal(t, 1, spAntenna)
 }
 
 // TestGLS10_BLETagProducesScan mirrors TestGLS10_ParseToAssetScan but registers
@@ -338,7 +334,7 @@ func TestGLS10_BLETagProducesScan(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerGLS10Device(t, db, orgID, "C4DEE229A176") // auto scan_point C4DEE229A176-1
+	dev := registerGLS10Device(t, db, orgID, "C4DEE229A176") // auto antenna-1 scan_point
 	const assetMAC = "F95BC0EC4E56"
 	registerBLETag(t, db, orgID, assetMAC) // registered as ble, not rfid
 
@@ -352,7 +348,7 @@ func TestGLS10_BLETagProducesScan(t *testing.T) {
 
 	tagScanID, err := db.Store.InsertRawTagScan(ctx, "trakrf.id/C4DEE229A176/reads", payload)
 	require.NoError(t, err)
-	res, err := db.Store.PersistReads(ctx, orgID, tagScanID, time.Now(), reads)
+	res, err := db.Store.PersistReads(ctx, orgID, dev.ID, tagScanID, time.Now(), reads)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Inserted, "ble-registered asset MAC lands as a scan")
 	assert.Equal(t, 1, res.Dropped["no_asset"], "unregistered BLE noise still drops at membership")

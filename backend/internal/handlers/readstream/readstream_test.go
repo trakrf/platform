@@ -25,11 +25,10 @@ func orgClaims(orgID int) *jwt.Claims {
 
 func read(epc string) []scanread.Read {
 	return []scanread.Read{{
-		EPC:              epc,
-		CapturePointName: "cp",
-		AntennaPort:      1,
-		RSSI:             -50,
-		ReaderTimestamp:  time.UnixMilli(1234),
+		EPC:             epc,
+		AntennaPort:     1,
+		RSSI:            -50,
+		ReaderTimestamp: time.UnixMilli(1234),
 	}}
 }
 

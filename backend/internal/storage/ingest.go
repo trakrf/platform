@@ -74,6 +74,8 @@ type ResolvedRead struct {
 }
 
 // PersistReads writes asset_scans for parsed reads under org context (RLS).
+// scanDeviceID is the device the MQTT topic routed to (resolve_scan_topic); each
+// read is correlated to its scan_point by (scan_device_id, antenna_port) (TRA-956).
 // Asset resolution is tag-based with NO auto-create (TRA-900): a read records a
 // scan only if its EPC already has a live tag linked to an asset. Membership is
 // tag-class agnostic (TRA-927) — the read identifier is matched against the tag
@@ -83,24 +85,32 @@ type ResolvedRead struct {
 // registered by its short barcode value resolves the reader's full-width EPC.
 // receivedAt (server time) is authoritative for asset_scans.timestamp; the
 // reader clock is ignored.
-func (s *Storage) PersistReads(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (PersistResult, error) {
+func (s *Storage) PersistReads(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (PersistResult, error) {
 	res := PersistResult{Dropped: map[string]int{}}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		for _, rd := range reads {
+			// Correlate the read to its scan_point by (device, antenna_port)
+			// (TRA-956). The device is the one the topic routed to; the antenna
+			// is on the read, defaulting to 1 for single-antenna devices. A read
+			// for an unprovisioned antenna is a clean no_scan_point miss.
+			antennaPort := rd.AntennaPort
+			if antennaPort < 1 {
+				antennaPort = 1
+			}
 			var scanPointID int
 			var locationID *int
 			err := tx.QueryRow(ctx,
 				`SELECT id, location_id
 				 FROM trakrf.scan_points
-				 WHERE org_id = $1 AND external_key = $2 AND deleted_at IS NULL`,
-				orgID, rd.CapturePointName,
+				 WHERE org_id = $1 AND scan_device_id = $2 AND antenna_port = $3 AND deleted_at IS NULL`,
+				orgID, scanDeviceID, antennaPort,
 			).Scan(&scanPointID, &locationID)
 			if errors.Is(err, pgx.ErrNoRows) {
 				res.Dropped["no_scan_point"]++
 				continue
 			}
 			if err != nil {
-				return fmt.Errorf("resolve scan_point %q: %w", rd.CapturePointName, err)
+				return fmt.Errorf("resolve scan_point for device %d antenna %d: %w", scanDeviceID, antennaPort, err)
 			}
 
 			var assetID int

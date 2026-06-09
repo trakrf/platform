@@ -18,14 +18,14 @@ func TestScanPoint_CRUD(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-214", Name: "Reader", Type: scandevice.DeviceTypeCS463,
+		Name: "Reader", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
 
-	// The device auto-creates antenna 1 (cs463-214-1); add a second antenna.
+	// The device auto-creates antenna 1; add a second antenna.
 	port := 2
 	created, err := db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
-		ExternalKey: "cs463-214-2", Name: "Antenna 2", AntennaPort: &port,
+		Name: "Antenna 2", AntennaPort: &port,
 	})
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
@@ -62,15 +62,15 @@ func TestScanDevice_AutoCreatesAntenna1(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-214", Name: "Reader", Type: scandevice.DeviceTypeCS463,
+		Name: "Reader", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
 
-	// Every device gets scan_point 1 for free (TRA-899 invariant).
+	// Every device gets scan_point 1 for free (TRA-899 invariant), keyed on
+	// antenna_port = 1 (TRA-956).
 	pts, err := db.Store.ListScanPointsByDevice(ctx, orgID, dev.ID)
 	require.NoError(t, err)
 	require.Len(t, pts, 1)
-	require.Equal(t, "cs463-214-1", pts[0].ExternalKey, "external_key follows {device}-{port}")
 	require.NotNil(t, pts[0].AntennaPort)
 	require.Equal(t, 1, *pts[0].AntennaPort)
 	require.Nil(t, pts[0].LocationID)
@@ -82,12 +82,13 @@ func TestScanPoint_DeviceDeleteCascades(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-9", Name: "R", Type: scandevice.DeviceTypeCS463,
+		Name: "R", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
-	// device auto-creates cs463-9-1; add a second so we prove BOTH cascade.
+	// device auto-creates antenna 1; add a second so we prove BOTH cascade.
+	port2 := 2
 	_, err = db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
-		ExternalKey: "cs463-9-2", Name: "A2",
+		Name: "A2", AntennaPort: &port2,
 	})
 	require.NoError(t, err)
 
@@ -112,11 +113,12 @@ func TestScanPoint_ClearLocation(t *testing.T) {
 		INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1, 'zone-1', 'Zone 1') RETURNING id`, orgID).Scan(&locID))
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-z", Name: "R", Type: scandevice.DeviceTypeCS463,
+		Name: "R", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
+	port2 := 2
 	pt, err := db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
-		ExternalKey: "cs463-z-2", Name: "A2", LocationID: &locID,
+		Name: "A2", AntennaPort: &port2, LocationID: &locID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, pt.LocationID)

@@ -9,18 +9,20 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/scanpoint"
 )
 
-const scanPointColumns = `id, org_id, scan_device_id, location_id, external_key, name, antenna_port,
+const scanPointColumns = `id, org_id, scan_device_id, location_id, name, antenna_port,
 	COALESCE(description, ''), metadata,
 	valid_from, valid_to, is_active, created_at, updated_at, deleted_at`
 
 func scanScanPoint(row pgx.Row, p *scanpoint.ScanPoint) error {
-	return row.Scan(&p.ID, &p.OrgID, &p.ScanDeviceID, &p.LocationID, &p.ExternalKey, &p.Name, &p.AntennaPort,
+	return row.Scan(&p.ID, &p.OrgID, &p.ScanDeviceID, &p.LocationID, &p.Name, &p.AntennaPort,
 		&p.Description, &p.Metadata,
 		&p.ValidFrom, &p.ValidTo, &p.IsActive, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
 }
 
 // CreateScanPoint inserts a scan point under the given device. The FK to
 // scan_devices (+ RLS) enforces that the device exists and belongs to the org.
+// antenna_port is the correlation key reads resolve on (TRA-956); it defaults to
+// 1 when omitted and is unique per device among live rows.
 func (s *Storage) CreateScanPoint(ctx context.Context, orgID, scanDeviceID int, req scanpoint.CreateScanPointRequest) (*scanpoint.ScanPoint, error) {
 	isActive := true
 	if req.IsActive != nil {
@@ -30,21 +32,25 @@ func (s *Storage) CreateScanPoint(ctx context.Context, orgID, scanDeviceID int, 
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
+	antennaPort := 1
+	if req.AntennaPort != nil {
+		antennaPort = *req.AntennaPort
+	}
 
 	query := `
 		INSERT INTO trakrf.scan_points
-		(org_id, scan_device_id, location_id, external_key, name, antenna_port, description, metadata, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		(org_id, scan_device_id, location_id, name, antenna_port, description, metadata, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING ` + scanPointColumns
 
 	var p scanpoint.ScanPoint
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanScanPoint(tx.QueryRow(ctx, query, orgID, scanDeviceID, req.LocationID, req.ExternalKey,
-			req.Name, req.AntennaPort, req.Description, metadata, isActive), &p)
+		return scanScanPoint(tx.QueryRow(ctx, query, orgID, scanDeviceID, req.LocationID,
+			req.Name, antennaPort, req.Description, metadata, isActive), &p)
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, fmt.Errorf("scan point with external_key %s already exists", req.ExternalKey)
+			return nil, fmt.Errorf("scan point for antenna port %d already exists on this device", antennaPort)
 		}
 		if strings.Contains(err.Error(), "scan_device_id_fkey") {
 			return nil, fmt.Errorf("invalid scan_device_id: device does not exist")

@@ -16,15 +16,16 @@ func TestScanDevice_CRUD(t *testing.T) {
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
-	// Create with defaults (transport -> mqtt, publish_topic -> convention).
+	// Create with transport defaulting to mqtt; publish_topic set directly (TRA-956).
+	topic := "trakrf.id/cs463-214/reads"
 	created, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-214", Name: "Dock Reader", Type: scandevice.DeviceTypeCS463,
+		Name: "Dock Reader", Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
 	})
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
 	require.Equal(t, scandevice.TransportMQTT, created.Transport)
 	require.NotNil(t, created.PublishTopic)
-	require.Equal(t, "trakrf.id/cs463-214/reads", *created.PublishTopic)
+	require.Equal(t, topic, *created.PublishTopic)
 	require.True(t, created.IsActive)
 
 	// Get round-trips.
@@ -73,11 +74,11 @@ func TestScanDevice_PublishTopicUniquePerOrg(t *testing.T) {
 
 	topic := "trakrf.id/dup/reads"
 	_, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "dev-a", Name: "A", Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
+		Name: "A", Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
 	})
 	require.NoError(t, err)
 	_, err = db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "dev-b", Name: "B", Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
+		Name: "B", Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
 	})
 	require.Error(t, err, "duplicate publish_topic within an org must be rejected")
 }
@@ -93,8 +94,9 @@ func TestScanDevice_OrgIsolation(t *testing.T) {
 		INSERT INTO trakrf.organizations (name, identifier, is_active)
 		VALUES ('Org B', 'test-org-b', true) RETURNING id`).Scan(&orgB))
 
+	topicA := "trakrf.id/cs463-a/reads"
 	dev, err := db.Store.CreateScanDevice(ctx, orgA, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-a", Name: "A", Type: scandevice.DeviceTypeCS463,
+		Name: "A", Type: scandevice.DeviceTypeCS463, PublishTopic: &topicA,
 	})
 	require.NoError(t, err)
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react';
-import { validateIdentifier, validateName } from '@/lib/location/validators';
+import { validateName } from '@/lib/location/validators';
 import { useLocations } from '@/hooks/locations/useLocations';
 import type { Location } from '@/types/locations';
 import type {
@@ -21,7 +21,6 @@ function locationLabel(location: Location): string {
 }
 
 interface ScanPointFormData {
-  external_key: string;
   name: string;
   antenna_port: string;
   location_id: string;
@@ -38,13 +37,11 @@ interface ScanPointFormProps {
 }
 
 interface FieldErrors {
-  external_key?: string;
   name?: string;
   antenna_port?: string;
 }
 
 const EMPTY_FORM: ScanPointFormData = {
-  external_key: '',
   name: '',
   antenna_port: '',
   location_id: '',
@@ -72,7 +69,6 @@ export function ScanPointForm({
   useEffect(() => {
     if (mode === 'edit' && point) {
       setFormData({
-        external_key: point.external_key,
         name: point.name,
         antenna_port: point.antenna_port != null ? String(point.antenna_port) : '',
         location_id: point.location_id != null ? String(point.location_id) : '',
@@ -86,24 +82,17 @@ export function ScanPointForm({
   const validateForm = (): boolean => {
     const errors: FieldErrors = {};
 
-    if (mode === 'create' && formData.external_key.trim() === '') {
-      errors.external_key = 'External key is required';
-    } else {
-      const identifierError = validateIdentifier(formData.external_key);
-      if (identifierError) {
-        errors.external_key = identifierError;
-      }
-    }
-
     const nameError = validateName(formData.name);
     if (nameError) {
       errors.name = nameError;
     }
 
+    // antenna_port is the per-antenna correlation key (TRA-956): a positive
+    // integer, defaulting to 1 when left blank.
     if (formData.antenna_port.trim() !== '') {
       const port = Number(formData.antenna_port);
-      if (!Number.isInteger(port) || port < 0) {
-        errors.antenna_port = 'Antenna port must be a non-negative integer';
+      if (!Number.isInteger(port) || port < 1) {
+        errors.antenna_port = 'Antenna port must be a positive integer';
       }
     }
 
@@ -132,7 +121,6 @@ export function ScanPointForm({
 
     if (mode === 'create') {
       const submitData: CreateScanPointRequest = {
-        external_key: formData.external_key.trim(),
         name: formData.name,
         location_id,
         antenna_port,
@@ -140,7 +128,6 @@ export function ScanPointForm({
       };
       onSubmit(submitData);
     } else {
-      // external_key is immutable on PATCH — omit it.
       const submitData: UpdateScanPointRequest = {
         name: formData.name,
         location_id,
@@ -168,27 +155,6 @@ export function ScanPointForm({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label
-            htmlFor="sp_external_key"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
-            External Key <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id="sp_external_key"
-            value={formData.external_key}
-            onChange={(e) => handleChange('external_key', e.target.value)}
-            disabled={loading || mode === 'edit'}
-            className={inputClass(!!fieldErrors.external_key)}
-            placeholder="e.g., dock_1_port_1"
-          />
-          {fieldErrors.external_key && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.external_key}</p>
-          )}
-        </div>
-
-        <div>
           <label htmlFor="sp_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Name <span className="text-red-500">*</span>
           </label>
@@ -211,16 +177,19 @@ export function ScanPointForm({
           <input
             type="number"
             id="sp_antenna_port"
-            min={0}
+            min={1}
             value={formData.antenna_port}
             onChange={(e) => handleChange('antenna_port', e.target.value)}
             disabled={loading}
             className={inputClass(!!fieldErrors.antenna_port)}
-            placeholder="Optional"
+            placeholder="Defaults to 1"
           />
           {fieldErrors.antenna_port && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.antenna_port}</p>
           )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            The antenna reads on this port are matched to. Unique per device; single-antenna devices use 1.
+          </p>
         </div>
 
         <div>

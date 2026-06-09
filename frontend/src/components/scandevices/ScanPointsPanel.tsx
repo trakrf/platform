@@ -58,10 +58,10 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
     try {
       if (formMode === 'create') {
         const created = await create(data as CreateScanPointRequest);
-        toast.success(`Scan point "${created.external_key}" added successfully`);
+        toast.success(`Scan point "${created.name}" added successfully`);
       } else if (formMode === 'edit' && editingPoint) {
         const updated = await update({ id: editingPoint.id, updates: data as UpdateScanPointRequest });
-        toast.success(`Scan point "${updated.external_key}" updated successfully`);
+        toast.success(`Scan point "${updated.name}" updated successfully`);
       }
       closeForm();
     } catch (err) {
@@ -75,7 +75,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
     if (!deletingPoint) return;
     try {
       await deletePoint(deletingPoint.id);
-      toast.success(`Scan point "${deletingPoint.external_key}" deleted successfully`);
+      toast.success(`Scan point "${deletingPoint.name}" deleted successfully`);
       setDeletingPoint(null);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Failed to delete scan point'));
@@ -106,8 +106,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
-              <th className="py-2 font-medium">External Key</th>
-              <th className="font-medium">Name</th>
+              <th className="py-2 font-medium">Name</th>
               <th className="font-medium">Location</th>
               <th className="font-medium">Antenna Port</th>
               <th className="font-medium">Active</th>
@@ -117,8 +116,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
           <tbody>
             {scanPoints.map((sp) => (
               <tr key={sp.id} className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-2 font-mono text-xs text-gray-900 dark:text-gray-100">{sp.external_key}</td>
-                <td className="text-gray-900 dark:text-gray-100">{sp.name}</td>
+                <td className="py-2 text-gray-900 dark:text-gray-100">{sp.name}</td>
                 <td className="text-gray-700 dark:text-gray-300">{locationName(sp.location_id) ?? '—'}</td>
                 <td className="text-gray-700 dark:text-gray-300">{sp.antenna_port ?? '—'}</td>
                 <td className="text-gray-700 dark:text-gray-300">{sp.is_active ? 'Yes' : 'No'}</td>
@@ -127,7 +125,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
                     type="button"
                     onClick={() => openEdit(sp)}
                     className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                    aria-label={`Edit scan point ${sp.external_key}`}
+                    aria-label={`Edit scan point ${sp.name}`}
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
@@ -135,7 +133,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
                     type="button"
                     onClick={() => setDeletingPoint(sp)}
                     className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                    aria-label={`Delete scan point ${sp.external_key}`}
+                    aria-label={`Delete scan point ${sp.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -158,7 +156,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                 {formMode === 'create'
                   ? 'Add Scan Point'
-                  : `Edit Scan Point: ${editingPoint?.external_key}`}
+                  : `Edit Scan Point: ${editingPoint?.name}`}
               </h2>
             </div>
             <div className="px-6 py-6">
@@ -178,7 +176,7 @@ export function ScanPointsPanel({ deviceId }: ScanPointsPanelProps) {
       <ConfirmModal
         isOpen={!!deletingPoint}
         title="Delete Scan Point"
-        message={`Are you sure you want to delete "${deletingPoint?.external_key}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${deletingPoint?.name}"? This action cannot be undone.`}
         onConfirm={confirmDelete}
         onCancel={() => setDeletingPoint(null)}
       />

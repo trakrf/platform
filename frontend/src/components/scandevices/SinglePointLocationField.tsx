@@ -55,10 +55,10 @@ export function SinglePointLocationField({ device }: SinglePointLocationFieldPro
       if (point) {
         await update({ id: point.id, updates: { location_id } });
       } else {
-        // No scan_point yet — mint point 1.
+        // No scan_point yet — mint antenna 1 (the single-point correlation key).
         await create({
-          external_key: `${device.external_key}-point-1`,
           name: device.name,
+          antenna_port: 1,
           location_id,
         });
       }

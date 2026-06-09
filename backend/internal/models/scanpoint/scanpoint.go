@@ -10,7 +10,6 @@ type ScanPoint struct {
 	OrgID        int        `json:"org_id"`
 	ScanDeviceID int        `json:"scan_device_id"`
 	LocationID   *int       `json:"location_id,omitempty"`
-	ExternalKey  string     `json:"external_key"`
 	Name         string     `json:"name"`
 	AntennaPort  *int       `json:"antenna_port,omitempty"`
 	Description  string     `json:"description"`
@@ -24,10 +23,11 @@ type ScanPoint struct {
 }
 
 type CreateScanPointRequest struct {
-	ExternalKey string         `json:"external_key" validate:"required,min=1,max=255" example:"cs463-214-1"`
 	Name        string         `json:"name" validate:"required,min=1,max=255" example:"Antenna 1"`
 	LocationID  *int           `json:"location_id,omitempty" validate:"omitempty,min=1"`
-	AntennaPort *int           `json:"antenna_port,omitempty" validate:"omitempty,min=0"`
+	// AntennaPort is the per-antenna correlation key reads are matched on
+	// (TRA-956); it defaults to 1 when omitted. Unique per device among live rows.
+	AntennaPort *int           `json:"antenna_port,omitempty" validate:"omitempty,min=1" example:"1"`
 	Description *string        `json:"description,omitempty" validate:"omitempty,max=1024"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 	IsActive    *bool          `json:"is_active,omitempty"`
@@ -36,7 +36,7 @@ type CreateScanPointRequest struct {
 type UpdateScanPointRequest struct {
 	Name        *string         `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
 	LocationID  *int            `json:"location_id,omitempty" validate:"omitempty,min=1"`
-	AntennaPort *int            `json:"antenna_port,omitempty" validate:"omitempty,min=0"`
+	AntennaPort *int            `json:"antenna_port,omitempty" validate:"omitempty,min=1"`
 	Description *string         `json:"description,omitempty" validate:"omitempty,max=1024"`
 	Metadata    *map[string]any `json:"metadata,omitempty"`
 	IsActive    *bool           `json:"is_active,omitempty"`

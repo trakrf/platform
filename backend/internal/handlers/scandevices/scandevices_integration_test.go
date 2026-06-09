@@ -51,7 +51,7 @@ func TestScanDevicesHandler_RoundTrip(t *testing.T) {
 
 	// Create
 	rec := do(http.MethodPost, "/api/v1/scan-devices", map[string]any{
-		"external_key": "cs463-214", "name": "Dock Reader", "type": "csl_cs463",
+		"name": "Dock Reader", "type": "csl_cs463", "publish_topic": "trakrf.id/cs463-214/reads",
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var created struct {
@@ -77,17 +77,17 @@ func TestScanDevicesHandler_RoundTrip(t *testing.T) {
 
 	// Bad enum rejected
 	require.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/api/v1/scan-devices", map[string]any{
-		"external_key": "x", "name": "x", "type": "not_a_device",
+		"name": "x", "type": "not_a_device",
 	}).Code)
 
-	// Device create auto-provisioned antenna 1 (cs463-214-1).
+	// Device create auto-provisioned antenna 1.
 	rec = do(http.MethodGet, devicePath+"/scan-points", nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "cs463-214-1")
+	require.Contains(t, rec.Body.String(), "Antenna 1")
 
 	// Add a second antenna via the nested route.
 	rec = do(http.MethodPost, devicePath+"/scan-points", map[string]any{
-		"external_key": "cs463-214-2", "name": "Antenna 2", "antenna_port": 2,
+		"name": "Antenna 2", "antenna_port": 2,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var pt struct {
@@ -102,8 +102,8 @@ func TestScanDevicesHandler_RoundTrip(t *testing.T) {
 	// List points — both the auto antenna 1 and the added antenna 2.
 	rec = do(http.MethodGet, devicePath+"/scan-points", nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "cs463-214-1")
-	require.Contains(t, rec.Body.String(), "cs463-214-2")
+	require.Contains(t, rec.Body.String(), "Antenna 1")
+	require.Contains(t, rec.Body.String(), "Antenna 2")
 
 	// Patch device
 	rec = do(http.MethodPatch, devicePath, map[string]any{"name": "Renamed"})
@@ -153,7 +153,7 @@ func TestScanPoints_UpdateLocationIDPersists(t *testing.T) {
 
 	// A single-point gateway. Device create auto-provisions scan_point 1.
 	rec := do(http.MethodPost, "/api/v1/scan-devices", map[string]any{
-		"external_key": "gw-1", "name": "Gateway 1", "type": "gl_s10",
+		"name": "Gateway 1", "type": "gl_s10", "publish_topic": "trakrf.id/gw-1/reads",
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var dev struct {
