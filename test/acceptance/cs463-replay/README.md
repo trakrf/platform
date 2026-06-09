@@ -2,8 +2,8 @@
 
 TRA-834. Pipeline gate for the GKE Mosquitto broker (TRA-828): publish a
 corpus of real CS463 MQTT messages at `mqtt.{env}.gke.trakrf.id` and assert
-the rows land in `trakrf.tag_scans`, exercising the Redpanda Connect transform
-and DB write end to end.
+the rows land in `trakrf.tag_scans`, exercising the in-backend Go subscriber
+(TRA-900) and DB write end to end.
 
 Companion to TRA-835 (broker-liveness pub/sub ping, infra side). This deck
 deliberately doesn't test broker-liveness on its own — that's TRA-835's job.
@@ -11,9 +11,8 @@ deliberately doesn't test broker-liveness on its own — that's TRA-835's job.
 ## Layout
 
 ```
-ingester/acceptance/
+test/acceptance/cs463-replay/
 ├── README.md
-├── capture-cs463.sh      # one-shot corpus capture from live EMQX
 ├── replay-cs463.sh       # replay + DB assertion against the GKE broker
 └── corpus/
     └── cs463.tsv         # 2521 messages, 4 capture points, 71 EPCs
@@ -21,7 +20,8 @@ ingester/acceptance/
 
 `cs463.tsv` is tab-separated `topic<TAB>payload-json`, captured 2026-05-25
 from EMQX Cloud after the cs463-214 capture-point rename. Frozen as a
-fixture — EMQX Cloud is on the teardown list.
+fixture — EMQX Cloud has since been decommissioned (TRA-828), so this corpus
+is permanent and not recapturable.
 
 ## Run
 
@@ -35,7 +35,7 @@ Required env (load from `.env.local`):
 ```sh
 set -a; source .env.local; set +a
 MQTT_GKE_HOST=mqtt.preview.gke.trakrf.id \
-  ingester/acceptance/replay-cs463.sh
+  test/acceptance/cs463-replay/replay-cs463.sh
 ```
 
 Assertion runs via `kubectl exec` into the per-env CNPG primary (TRA-823 +
@@ -62,8 +62,8 @@ defaulting to `CURRENT_TIMESTAMP` (microsecond resolution). Real device
 traffic at ~1 msg/s/topic is fine. This script replays the 2521-message
 corpus in ~30s (~85 msg/s sustained), which clusters multiple same-topic
 messages into the same microsecond — the second one violates the PK and is
-dropped, with a corresponding broker backpressure event on the ingester's
-loopback subscriber. Expect ~5-10% PARTIAL on a clean run.
+dropped, with a corresponding broker backpressure event on the Go
+subscriber. Expect ~5-10% PARTIAL on a clean run.
 
 The actual schema fix lives in a separate platform ticket. Until then,
 `PARTIAL` is the steady-state expected outcome and is treated as PASS.
@@ -71,19 +71,15 @@ The actual schema fix lives in a separate platform ticket. Until then,
 ## Dependencies
 
 - TRA-828 broker deployed (`mqtt.{env}.gke.trakrf.id:8883` reachable, TLS 1.2)
-- Ingester subscribed to the broker, writing to `trakrf_preview` / `trakrf_prod`
+- In-backend Go subscriber (TRA-900) running against the broker, writing to `trakrf_preview` / `trakrf_prod`
 - `kubectl` configured for the target cluster (default access path)
 - `mosquitto_pub`, `jq`, `awk` on `PATH`
 
-## Re-capture (only while EMQX is still live)
+## Re-capture
 
-```sh
-set -a; source .env.local; set +a
-ingester/acceptance/capture-cs463.sh
-```
-
-Replaces `corpus/cs463.tsv`. Don't re-run unless you have a reason — the
-checked-in corpus is the artifact this ticket exists to preserve.
+Not possible — EMQX Cloud was decommissioned (TRA-828) and the
+`capture-cs463.sh` script was retired with it (TRA-963). The checked-in
+`corpus/cs463.tsv` is the permanent artifact this deck exists to preserve.
 
 ## Note on table name
 

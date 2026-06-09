@@ -4,7 +4,7 @@
 #
 # Pipeline under test:
 #   mosquitto_pub -> mqtt.{env}.gke.trakrf.id:8883 (Mosquitto, TLS 1.2)
-#     -> ingester (Redpanda Connect, MQTT input -> sql_raw output)
+#     -> in-backend Go MQTT subscriber (TRA-900, raw insert)
 #     -> trakrf.tag_scans (TimescaleDB hypertable in the per-env CNPG cluster)
 #
 # Each replayed payload gets a unique top-level tra834_replay_id field; the
@@ -19,12 +19,12 @@
 #
 # Env (required):
 #   MQTT_GKE_HOST       broker hostname, e.g. mqtt.preview.gke.trakrf.id
-#   MOSQUITTO_USER      broker username (matches helm/trakrf-ingester auth secret)
+#   MOSQUITTO_USER      broker username (broker auth secret, TRA-828)
 #   MOSQUITTO_PASSWORD  broker password
 #
 # Env (optional):
 #   MQTT_GKE_PORT       default 8883
-#   CORPUS              default ingester/acceptance/corpus/cs463.tsv
+#   CORPUS              default test/acceptance/cs463-replay/corpus/cs463.tsv
 #   INGEST_WAIT_SECONDS default 15
 #   ASSERT_PSQL_CMD     SQL-from-stdin invocation; defaults to:
 #                       kubectl exec -i -n trakrf-system trakrf-db-1 -c postgres \
@@ -77,7 +77,7 @@ done < <(cut -f1 "$CORPUS" | sort -u)
 
 echo "published: $published"
 
-echo "waiting ${INGEST_WAIT_SECONDS}s for ingester to drain..."
+echo "waiting ${INGEST_WAIT_SECONDS}s for the Go subscriber to drain..."
 sleep "$INGEST_WAIT_SECONDS"
 
 LANDED=$(printf "SELECT count(*) FROM trakrf.tag_scans WHERE created_at >= '%s' AND message_data ->> 'tra834_replay_id' = '%s';\n" "$T_START" "$MARKER" | assert_psql)
@@ -85,7 +85,7 @@ TOPICS=$(printf "SELECT string_agg(message_topic || ':' || c, ' ' ORDER BY messa
 echo "landed:    $LANDED / $published"
 echo "by topic:  $TOPICS"
 
-# Pipeline acceptance: landed > 0 proves broker -> ingester -> DB works end
+# Pipeline acceptance: landed > 0 proves broker -> Go subscriber -> DB works end
 # to end. A gap between landed and published is a known schema behaviour
 # under burst replay rate (tag_scans PK = (created_at, message_topic) with
 # microsecond-resolution CURRENT_TIMESTAMP — same-topic messages within one
