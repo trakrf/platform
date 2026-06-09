@@ -99,6 +99,47 @@ func TestResolveScanTopic_ByPublishTopic(t *testing.T) {
 	assert.Equal(t, scandevice.DeviceTypeCS463, route.DeviceType)
 }
 
+func TestListScanTopics(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	devA := registerDevice(t, db, orgID, "cs463-a")
+	devB := registerGLS10Device(t, db, orgID, "gls10-b")
+	// A web_ble (handheld) device has no MQTT topic and must be excluded.
+	_, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Handheld", Type: scandevice.DeviceTypeCS463, Transport: scandevice.TransportWebBLE,
+	})
+	require.NoError(t, err)
+
+	topics, err := db.Store.ListScanTopics(ctx)
+	require.NoError(t, err)
+
+	rA, okA := topics["trakrf.id/cs463-a/reads"]
+	require.True(t, okA, "device A topic must be listed")
+	assert.Equal(t, orgID, rA.OrgID)
+	assert.Equal(t, devA.ID, rA.ScanDeviceID)
+	assert.Equal(t, scandevice.DeviceTypeCS463, rA.DeviceType)
+
+	rB, okB := topics["trakrf.id/gls10-b/reads"]
+	require.True(t, okB, "device B topic must be listed")
+	assert.Equal(t, devB.ID, rB.ScanDeviceID)
+	assert.Equal(t, scandevice.DeviceTypeGLS10, rB.DeviceType)
+
+	// Exactly the two mqtt topics — web_ble device excluded.
+	assert.Len(t, topics, 2)
+
+	// Soft-deleting a device drops it from the active set.
+	ok, err := db.Store.DeleteScanDevice(ctx, orgID, devA.ID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	topics, err = db.Store.ListScanTopics(ctx)
+	require.NoError(t, err)
+	_, stillThere := topics["trakrf.id/cs463-a/reads"]
+	assert.False(t, stillThere, "soft-deleted device must drop out")
+	assert.Len(t, topics, 1)
+}
+
 func TestResolveScanTopic_UnknownTopic(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()

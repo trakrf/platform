@@ -35,6 +35,28 @@ func (s *Storage) ResolveScanTopic(ctx context.Context, topic string) (ScanRoute
 	return r, true, nil
 }
 
+// ListScanTopics returns every live mqtt device's publish_topic mapped to its
+// route, for the subscription registry (TRA-922). SECURITY DEFINER under the
+// hood, so no org context is needed — same as ResolveScanTopic.
+func (s *Storage) ListScanTopics(ctx context.Context) (map[string]ScanRoute, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT org_id, scan_device_id, device_type, publish_topic FROM trakrf.list_active_scan_topics()`)
+	if err != nil {
+		return nil, fmt.Errorf("list scan topics: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]ScanRoute{}
+	for rows.Next() {
+		var r ScanRoute
+		var topic string
+		if err := rows.Scan(&r.OrgID, &r.ScanDeviceID, &r.DeviceType, &topic); err != nil {
+			return nil, fmt.Errorf("scan scan-topic row: %w", err)
+		}
+		out[topic] = r
+	}
+	return out, rows.Err()
+}
+
 // InsertRawTagScan appends the raw MQTT message to the tag_scans audit log and
 // returns the new row id. tag_scans has no RLS, so no org context is needed.
 func (s *Storage) InsertRawTagScan(ctx context.Context, topic string, payload []byte) (int64, error) {
