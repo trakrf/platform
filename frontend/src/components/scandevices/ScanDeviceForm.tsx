@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { validateIdentifier, validateName } from '@/lib/location/validators';
+import { validateName } from '@/lib/location/validators';
 import type {
   ScanDevice,
   ScanDeviceType,
@@ -21,7 +21,6 @@ const TRANSPORTS: { value: ScanTransport; label: string }[] = [
 ];
 
 interface ScanDeviceFormData {
-  external_key: string;
   name: string;
   type: ScanDeviceType;
   transport: ScanTransport;
@@ -42,12 +41,11 @@ interface ScanDeviceFormProps {
 }
 
 interface FieldErrors {
-  external_key?: string;
   name?: string;
+  publish_topic?: string;
 }
 
 const EMPTY_FORM: ScanDeviceFormData = {
-  external_key: '',
   name: '',
   type: 'csl_cs463',
   transport: 'mqtt',
@@ -72,7 +70,6 @@ export function ScanDeviceForm({
   useEffect(() => {
     if (mode === 'edit' && device) {
       setFormData({
-        external_key: device.external_key,
         name: device.name,
         type: device.type,
         transport: device.transport,
@@ -90,20 +87,15 @@ export function ScanDeviceForm({
   const validateForm = (): boolean => {
     const errors: FieldErrors = {};
 
-    // external_key is required on create. validateIdentifier allows blank
-    // (auto-mint elsewhere), so add an explicit required check here.
-    if (mode === 'create' && formData.external_key.trim() === '') {
-      errors.external_key = 'External key is required';
-    } else {
-      const identifierError = validateIdentifier(formData.external_key);
-      if (identifierError) {
-        errors.external_key = identifierError;
-      }
-    }
-
     const nameError = validateName(formData.name);
     if (nameError) {
       errors.name = nameError;
+    }
+
+    // publish_topic is the MQTT routing key (TRA-956) — required for an mqtt
+    // device to ingest. web_ble handhelds don't publish, so it stays optional.
+    if (formData.transport === 'mqtt' && formData.publish_topic.trim() === '') {
+      errors.publish_topic = 'Publish topic is required for MQTT devices';
     }
 
     setFieldErrors(errors);
@@ -134,7 +126,6 @@ export function ScanDeviceForm({
 
     if (mode === 'create') {
       const submitData: CreateScanDeviceRequest = {
-        external_key: formData.external_key.trim(),
         name: formData.name,
         type: formData.type,
         transport: formData.transport,
@@ -146,7 +137,6 @@ export function ScanDeviceForm({
       };
       onSubmit(submitData);
     } else {
-      // external_key is immutable on PATCH — omit it from the edit body.
       const submitData: UpdateScanDeviceRequest = {
         name: formData.name,
         type: formData.type,
@@ -177,32 +167,6 @@ export function ScanDeviceForm({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label
-            htmlFor="external_key"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
-            External Key <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id="external_key"
-            value={formData.external_key}
-            onChange={(e) => handleChange('external_key', e.target.value)}
-            disabled={loading || mode === 'edit'}
-            className={inputClass(!!fieldErrors.external_key)}
-            placeholder="e.g., dock_reader_1"
-          />
-          {fieldErrors.external_key && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.external_key}</p>
-          )}
-          {mode === 'create' && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Letters, numbers, hyphens, and underscores only (no spaces).
-            </p>
-          )}
-        </div>
-
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Name <span className="text-red-500">*</span>
@@ -260,7 +224,7 @@ export function ScanDeviceForm({
 
       <div>
         <label htmlFor="publish_topic" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Publish Topic
+          Publish Topic {formData.transport === 'mqtt' && <span className="text-red-500">*</span>}
         </label>
         <input
           type="text"
@@ -268,9 +232,15 @@ export function ScanDeviceForm({
           value={formData.publish_topic}
           onChange={(e) => handleChange('publish_topic', e.target.value)}
           disabled={loading}
-          className={inputClass(false)}
-          placeholder="trakrf.id/{external_key}/reads"
+          className={inputClass(!!fieldErrors.publish_topic)}
+          placeholder="e.g., trakrf.id/dock-reader-1/reads"
         />
+        {fieldErrors.publish_topic && (
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.publish_topic}</p>
+        )}
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          The MQTT topic this device publishes reads on — the routing key that ties wire traffic to this reader.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

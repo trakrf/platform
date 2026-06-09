@@ -8,7 +8,7 @@ import (
 )
 
 func read(epc string, rssi, antenna int) scanread.Read {
-	return scanread.Read{EPC: epc, RSSI: rssi, AntennaPort: antenna, CapturePointName: "cp"}
+	return scanread.Read{EPC: epc, RSSI: rssi, AntennaPort: antenna}
 }
 
 // byKey indexes orgEvents by their tag key for order-independent assertions.

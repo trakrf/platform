@@ -71,10 +71,10 @@ function ScanDeviceFormModalBody({
     try {
       if (mode === 'create') {
         const created = await create(data as CreateScanDeviceRequest);
-        toast.success(`Scan device "${created.external_key}" created successfully`);
+        toast.success(`Scan device "${created.name}" created successfully`);
       } else if (mode === 'edit' && device) {
         const updated = await update({ id: device.id, updates: data as UpdateScanDeviceRequest });
-        toast.success(`Scan device "${updated.external_key}" updated successfully`);
+        toast.success(`Scan device "${updated.name}" updated successfully`);
       }
       onClose();
     } catch (err) {
@@ -144,7 +144,7 @@ function ScanDeviceFormModalBody({
       >
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {mode === 'create' ? 'Create New Scan Device' : `Edit Scan Device: ${device?.external_key}`}
+            {mode === 'create' ? 'Create New Scan Device' : `Edit Scan Device: ${device?.name}`}
           </h2>
           <button
             onClick={onClose}

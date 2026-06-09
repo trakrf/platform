@@ -6,11 +6,13 @@ package scanread
 
 import "time"
 
-// Read is one parsed tag observation.
+// Read is one parsed tag observation. The scan_point it belongs to is resolved
+// downstream (storage.PersistReads) from the device the topic routed to plus
+// AntennaPort — there is no device-reported capture-point string anymore
+// (TRA-956). AntennaPort defaults to 1 for single-antenna devices.
 type Read struct {
-	EPC              string
-	CapturePointName string
-	AntennaPort      int
-	RSSI             int
-	ReaderTimestamp  time.Time // informational only; server time is authoritative
+	EPC             string
+	AntennaPort     int
+	RSSI            int
+	ReaderTimestamp time.Time // informational only; server time is authoritative
 }

@@ -11,27 +11,22 @@ import (
 
 // scanDeviceColumns is the canonical SELECT/RETURNING column list, kept
 // identical across every scan_devices query so scan targets line up.
-const scanDeviceColumns = `id, org_id, external_key, name, type, transport, publish_topic,
+const scanDeviceColumns = `id, org_id, name, type, transport, publish_topic,
 	serial_number, model, COALESCE(description, ''), metadata,
 	valid_from, valid_to, is_active, created_at, updated_at, deleted_at`
 
 func scanScanDevice(row pgx.Row, d *scandevice.ScanDevice) error {
-	return row.Scan(&d.ID, &d.OrgID, &d.ExternalKey, &d.Name, &d.Type, &d.Transport, &d.PublishTopic,
+	return row.Scan(&d.ID, &d.OrgID, &d.Name, &d.Type, &d.Transport, &d.PublishTopic,
 		&d.SerialNumber, &d.Model, &d.Description, &d.Metadata,
 		&d.ValidFrom, &d.ValidTo, &d.IsActive, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt)
 }
 
-// CreateScanDevice inserts a scan device. transport defaults to mqtt and
-// publish_topic defaults to trakrf.id/{external_key}/reads when omitted.
+// CreateScanDevice inserts a scan device. transport defaults to mqtt;
+// publish_topic is the MQTT routing key, set directly by the caller (TRA-956).
 func (s *Storage) CreateScanDevice(ctx context.Context, orgID int, req scandevice.CreateScanDeviceRequest) (*scandevice.ScanDevice, error) {
 	transport := req.Transport
 	if transport == "" {
 		transport = scandevice.TransportMQTT
-	}
-	publishTopic := req.PublishTopic
-	if publishTopic == nil {
-		dt := scandevice.DefaultPublishTopic(req.ExternalKey)
-		publishTopic = &dt
 	}
 	isActive := true
 	if req.IsActive != nil {
@@ -44,31 +39,30 @@ func (s *Storage) CreateScanDevice(ctx context.Context, orgID int, req scandevic
 
 	query := `
 		INSERT INTO trakrf.scan_devices
-		(org_id, external_key, name, type, transport, publish_topic, serial_number, model, description, metadata, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		(org_id, name, type, transport, publish_topic, serial_number, model, description, metadata, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING ` + scanDeviceColumns
 
 	var d scandevice.ScanDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		if err := scanScanDevice(tx.QueryRow(ctx, query, orgID, req.ExternalKey, req.Name, req.Type,
-			transport, publishTopic, req.SerialNumber, req.Model, req.Description, metadata, isActive), &d); err != nil {
+		if err := scanScanDevice(tx.QueryRow(ctx, query, orgID, req.Name, req.Type,
+			transport, req.PublishTopic, req.SerialNumber, req.Model, req.Description, metadata, isActive), &d); err != nil {
 			return err
 		}
 		// TRA-899: every device has at least scan_point 1, uniformly (even
-		// single-point devices). Auto-create antenna 1 in the same transaction
-		// so the invariant holds for every client (API or UI), not just the
-		// create screen. external_key follows the capturePointName convention
-		// ({device}-{port}), so for CS463 it matches live reads out of the box.
+		// single-point devices). Auto-create antenna 1 in the same transaction so
+		// the invariant holds for every client (API or UI). Antenna 1 is the
+		// correlation key single-antenna reads resolve on (TRA-956).
 		_, err := tx.Exec(ctx, `
 			INSERT INTO trakrf.scan_points
-			(org_id, scan_device_id, external_key, name, antenna_port)
-			VALUES ($1, $2, $3, 'Antenna 1', 1)`,
-			orgID, d.ID, d.ExternalKey+"-1")
+			(org_id, scan_device_id, name, antenna_port)
+			VALUES ($1, $2, 'Antenna 1', 1)`,
+			orgID, d.ID)
 		return err
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, fmt.Errorf("scan device with external_key %s already exists", req.ExternalKey)
+			return nil, fmt.Errorf("scan device publish_topic already in use")
 		}
 		return nil, fmt.Errorf("failed to create scan device: %w", err)
 	}

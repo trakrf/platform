@@ -18,14 +18,14 @@ func TestScanPoint_CRUD(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-214", Name: "Reader", Type: scandevice.DeviceTypeCS463,
+		Name: "Reader", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
 
-	// The device auto-creates antenna 1 (cs463-214-1); add a second antenna.
+	// The device auto-creates antenna 1; add a second antenna.
 	port := 2
 	created, err := db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
-		ExternalKey: "cs463-214-2", Name: "Antenna 2", AntennaPort: &port,
+		Name: "Antenna 2", AntennaPort: &port,
 	})
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
@@ -62,18 +62,45 @@ func TestScanDevice_AutoCreatesAntenna1(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-214", Name: "Reader", Type: scandevice.DeviceTypeCS463,
+		Name: "Reader", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
 
-	// Every device gets scan_point 1 for free (TRA-899 invariant).
+	// Every device gets scan_point 1 for free (TRA-899 invariant), keyed on
+	// antenna_port = 1 (TRA-956).
 	pts, err := db.Store.ListScanPointsByDevice(ctx, orgID, dev.ID)
 	require.NoError(t, err)
 	require.Len(t, pts, 1)
-	require.Equal(t, "cs463-214-1", pts[0].ExternalKey, "external_key follows {device}-{port}")
 	require.NotNil(t, pts[0].AntennaPort)
 	require.Equal(t, 1, *pts[0].AntennaPort)
 	require.Nil(t, pts[0].LocationID)
+}
+
+// TRA-956: (scan_device_id, antenna_port) is the read correlation key, so a
+// device may have at most one live scan_point per antenna port. The partial
+// unique index enforces it — a second antenna-1 point (the auto-provisioned one
+// already exists) is rejected. A blank antenna_port also defaults to 1.
+func TestScanPoint_DuplicateAntennaPortRejected(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Reader", Type: scandevice.DeviceTypeCS463,
+	})
+	require.NoError(t, err) // auto-provisions antenna 1
+
+	port1 := 1
+	_, err = db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
+		Name: "Antenna 1 (dup)", AntennaPort: &port1,
+	})
+	require.Error(t, err, "explicit duplicate antenna 1 must be rejected")
+
+	// Omitting antenna_port defaults to 1, which also collides with the auto point.
+	_, err = db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
+		Name: "Antenna default",
+	})
+	require.Error(t, err, "blank antenna_port defaults to 1 and collides")
 }
 
 func TestScanPoint_DeviceDeleteCascades(t *testing.T) {
@@ -82,12 +109,13 @@ func TestScanPoint_DeviceDeleteCascades(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-9", Name: "R", Type: scandevice.DeviceTypeCS463,
+		Name: "R", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
-	// device auto-creates cs463-9-1; add a second so we prove BOTH cascade.
+	// device auto-creates antenna 1; add a second so we prove BOTH cascade.
+	port2 := 2
 	_, err = db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
-		ExternalKey: "cs463-9-2", Name: "A2",
+		Name: "A2", AntennaPort: &port2,
 	})
 	require.NoError(t, err)
 
@@ -112,11 +140,12 @@ func TestScanPoint_ClearLocation(t *testing.T) {
 		INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1, 'zone-1', 'Zone 1') RETURNING id`, orgID).Scan(&locID))
 
 	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
-		ExternalKey: "cs463-z", Name: "R", Type: scandevice.DeviceTypeCS463,
+		Name: "R", Type: scandevice.DeviceTypeCS463,
 	})
 	require.NoError(t, err)
+	port2 := 2
 	pt, err := db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
-		ExternalKey: "cs463-z-2", Name: "A2", LocationID: &locID,
+		Name: "A2", AntennaPort: &port2, LocationID: &locID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, pt.LocationID)

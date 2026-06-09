@@ -21,7 +21,7 @@ vi.mock('@/hooks/scandevices');
 vi.mock('@/components/scandevices', () => ({
   ScanDeviceFormModal: () => null,
   ScanDeviceEditPanel: ({ device }: { device: ScanDevice }) => (
-    <div data-testid="edit-panel">editing:{device.external_key}</div>
+    <div data-testid="edit-panel">editing:{device.name}</div>
   ),
 }));
 
@@ -37,7 +37,6 @@ const render = (ui: ReactElement, options?: Omit<RenderOptions, 'wrapper'>) =>
 const device = (over: Partial<ScanDevice>): ScanDevice => ({
   id: 1,
   org_id: 1,
-  external_key: 'dock_reader_1',
   name: 'Dock Reader 1',
   type: 'csl_cs463',
   transport: 'mqtt',
@@ -71,7 +70,7 @@ describe('ScanDevicesScreen flat list', () => {
 
   it('lists the device', () => {
     render(<ScanDevicesScreen />);
-    expect(screen.getByText('dock_reader_1')).toBeInTheDocument();
+    expect(screen.getByText('Dock Reader 1')).toBeInTheDocument();
   });
 
   it('has no scan-point tree expansion control', () => {
@@ -93,8 +92,8 @@ describe('ScanDevicesScreen row expander (TRA-938)', () => {
     useAuthStore.setState({ isAuthenticated: true });
     (useScanDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       scanDevices: [
-        device({ id: 1, external_key: 'dock_reader_1' }),
-        device({ id: 2, external_key: 'dock_reader_2' }),
+        device({ id: 1, name: 'Dock Reader 1' }),
+        device({ id: 2, name: 'Dock Reader 2' }),
       ],
       isLoading: false,
     });
@@ -108,14 +107,14 @@ describe('ScanDevicesScreen row expander (TRA-938)', () => {
     render(<ScanDevicesScreen />);
     expect(screen.queryByTestId('edit-panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_1'));
+    fireEvent.click(screen.getByLabelText('Edit scan device Dock Reader 1'));
 
-    expect(screen.getByTestId('edit-panel')).toHaveTextContent('editing:dock_reader_1');
+    expect(screen.getByTestId('edit-panel')).toHaveTextContent('editing:Dock Reader 1');
   });
 
   it('collapses the row when its toggle is clicked again', () => {
     render(<ScanDevicesScreen />);
-    const toggle = screen.getByLabelText('Edit scan device dock_reader_1');
+    const toggle = screen.getByLabelText('Edit scan device Dock Reader 1');
 
     fireEvent.click(toggle);
     expect(screen.getByTestId('edit-panel')).toBeInTheDocument();
@@ -127,18 +126,18 @@ describe('ScanDevicesScreen row expander (TRA-938)', () => {
   it('keeps only one row open at a time (single-open accordion)', () => {
     render(<ScanDevicesScreen />);
 
-    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_1'));
-    expect(screen.getByTestId('edit-panel')).toHaveTextContent('editing:dock_reader_1');
+    fireEvent.click(screen.getByLabelText('Edit scan device Dock Reader 1'));
+    expect(screen.getByTestId('edit-panel')).toHaveTextContent('editing:Dock Reader 1');
 
-    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_2'));
+    fireEvent.click(screen.getByLabelText('Edit scan device Dock Reader 2'));
     const panels = screen.getAllByTestId('edit-panel');
     expect(panels).toHaveLength(1);
-    expect(panels[0]).toHaveTextContent('editing:dock_reader_2');
+    expect(panels[0]).toHaveTextContent('editing:Dock Reader 2');
   });
 
   it('marks the toggle expanded state for assistive tech', () => {
     render(<ScanDevicesScreen />);
-    const toggle = screen.getByLabelText('Edit scan device dock_reader_1');
+    const toggle = screen.getByLabelText('Edit scan device Dock Reader 1');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(toggle);
@@ -147,10 +146,10 @@ describe('ScanDevicesScreen row expander (TRA-938)', () => {
 
   it('collapses the open row when that device is deleted', async () => {
     render(<ScanDevicesScreen />);
-    fireEvent.click(screen.getByLabelText('Edit scan device dock_reader_1'));
+    fireEvent.click(screen.getByLabelText('Edit scan device Dock Reader 1'));
     expect(screen.getByTestId('edit-panel')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText('Delete scan device dock_reader_1'));
+    fireEvent.click(screen.getByLabelText('Delete scan device Dock Reader 1'));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {

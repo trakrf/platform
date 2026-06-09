@@ -25,7 +25,6 @@ func TestParseCS463_SingleTag(t *testing.T) {
 	require.Len(t, reads, 1)
 	r := reads[0]
 	assert.Equal(t, "E2801190A503006543E21224", r.EPC)
-	assert.Equal(t, "cs463-214-1", r.CapturePointName)
 	assert.Equal(t, 1, r.AntennaPort)
 	assert.Equal(t, -56, r.RSSI)
 	// timeStampOfRead is microseconds since epoch.
@@ -79,10 +78,9 @@ func TestParseGLS10_RealCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reads, 42)
 
-	// The gateway is a single capture point: every read carries the derived
-	// scan_point external_key {dev_ble_mac}-1 and antenna port 1.
+	// The gateway is a single capture point: every read resolves to antenna 1
+	// (TRA-956).
 	for _, r := range reads {
-		assert.Equal(t, "C4DEE229A176-1", r.CapturePointName)
 		assert.Equal(t, 1, r.AntennaPort)
 	}
 
@@ -120,15 +118,14 @@ func TestParseGLS10_MillisTimestampAndDefaults(t *testing.T) {
 	require.Len(t, reads, 1)
 	r := reads[0]
 	assert.Equal(t, "AABBCCDDEEFF", r.EPC)
-	assert.Equal(t, "C4DEE229A176-1", r.CapturePointName)
 	assert.Equal(t, 1, r.AntennaPort)
 	assert.Equal(t, 0, r.RSSI) // missing rssi -> 0
 	assert.Equal(t, time.UnixMilli(1780625164824).UTC(), r.ReaderTimestamp)
 }
 
-// MACs are case-insensitive, but tags.value and scan_points.external_key are
-// matched case-sensitively and registered uppercase. Normalize so a lowercase
-// wire MAC still resolves to its asset and capture point.
+// MACs are case-insensitive on the wire but tags.value is registered uppercase
+// and matched case-insensitively (TRA-944). Normalize the read EPC so a
+// lowercase wire MAC still resolves to its asset.
 func TestParseGLS10_MACUppercased(t *testing.T) {
 	payload := []byte(`{"dev_ble_mac":"c4dee229a176","dev_list":[
 		{"mac":"f95bc0ec4e56","ad":"0201","ts":1780625164824,"rssi":-57}
@@ -137,7 +134,6 @@ func TestParseGLS10_MACUppercased(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reads, 1)
 	assert.Equal(t, "F95BC0EC4E56", reads[0].EPC)
-	assert.Equal(t, "C4DEE229A176-1", reads[0].CapturePointName)
 }
 
 func TestParseGLS10_MalformedJSON(t *testing.T) {
@@ -156,10 +152,9 @@ func TestParseMK107_RealCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reads, 6)
 
-	// The gateway is a single capture point: every read carries the derived
-	// scan_point external_key {gateway mac}-1 and antenna port 1.
+	// The gateway is a single capture point: every read resolves to antenna 1
+	// (TRA-956).
 	for _, r := range reads {
-		assert.Equal(t, "409151A65C96-1", r.CapturePointName)
 		assert.Equal(t, 1, r.AntennaPort)
 		// The MK107 timestamp is non-standard and intentionally ignored; server
 		// receivedAt is authoritative, so ReaderTimestamp is left zero.
@@ -199,10 +194,9 @@ func TestParseMK107_Empty(t *testing.T) {
 	assert.Empty(t, reads)
 }
 
-// MACs are case-insensitive on the wire, but tags.value and
-// scan_points.external_key are matched case-sensitively and registered
-// uppercase. Normalize both the gateway and heard MAC so a lowercase wire
-// payload still resolves to its asset and capture point.
+// MACs are case-insensitive on the wire but tags.value is registered uppercase
+// and matched case-insensitively (TRA-944). Normalize the heard MAC so a
+// lowercase wire payload still resolves to its asset.
 func TestParseMK107_MACUppercased(t *testing.T) {
 	payload := []byte(`{"msg_id":3004,"device_info":{"mac":"409151a65c96"},"data":[
 		{"type":0,"value":{"mac":"f95bc0ec4e56","rssi":-53}}
@@ -211,7 +205,6 @@ func TestParseMK107_MACUppercased(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reads, 1)
 	assert.Equal(t, "F95BC0EC4E56", reads[0].EPC)
-	assert.Equal(t, "409151A65C96-1", reads[0].CapturePointName)
 }
 
 func TestParseMK107_MalformedJSON(t *testing.T) {

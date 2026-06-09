@@ -21,7 +21,6 @@ const (
 type ScanDevice struct {
 	ID           int        `json:"id"`
 	OrgID        int        `json:"org_id"`
-	ExternalKey  string     `json:"external_key"`
 	Name         string     `json:"name"`
 	Type         string     `json:"type"`
 	Transport    string     `json:"transport"`
@@ -39,7 +38,6 @@ type ScanDevice struct {
 }
 
 type CreateScanDeviceRequest struct {
-	ExternalKey  string         `json:"external_key" validate:"required,min=1,max=255" example:"cs463-214"`
 	Name         string         `json:"name" validate:"required,min=1,max=255" example:"Dock Door Reader"`
 	Type         string         `json:"type" validate:"required,oneof=csl_cs463 gl_s10 moko_mk107 esp32_ble_generic csl_cs108" example:"csl_cs463"`
 	Transport    string         `json:"transport,omitempty" validate:"omitempty,oneof=mqtt web_ble" example:"mqtt"`
@@ -65,10 +63,4 @@ type UpdateScanDeviceRequest struct {
 
 type ScanDeviceResponse struct {
 	Data ScanDevice `json:"data"`
-}
-
-// DefaultPublishTopic is the read-channel convention applied when publish_topic
-// is omitted on create: trakrf.id/{external_key}/reads (TRA-900 routes on it).
-func DefaultPublishTopic(externalKey string) string {
-	return "trakrf.id/" + externalKey + "/reads"
 }
