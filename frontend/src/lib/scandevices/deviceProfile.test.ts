@@ -47,8 +47,12 @@ describe('deviceProfile', () => {
 });
 
 describe('readerKeyFromTopic', () => {
-  it('extracts the {key} segment from a standard reads topic', () => {
+  it('extracts the {key} segment from a grandfathered trakrf.id topic', () => {
     expect(readerKeyFromTopic('trakrf.id/dock-7/reads')).toBe('dock-7');
+  });
+
+  it('extracts the {key} segment from a new {org_slug}/ topic (TRA-922)', () => {
+    expect(readerKeyFromTopic('organized-chaos/dock-7/reads')).toBe('dock-7');
   });
 
   it('falls back to the full topic for non-matching strings', () => {

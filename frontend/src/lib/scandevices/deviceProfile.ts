@@ -29,12 +29,15 @@ export function deviceProfile(device: Pick<ScanDevice, 'type' | 'transport'>): D
   return 'single_point';
 }
 
-const TOPIC_RE = /^trakrf\.id\/([^/]+)\/reads$/;
+// TRA-922: the first segment is the org-slug prefix (was the fixed "trakrf.id"
+// root); accept any first segment so both new {org_slug}/{key}/reads topics and
+// grandfathered trakrf.id/{key}/reads topics yield the same middle key.
+const TOPIC_RE = /^[^/]+\/([^/]+)\/reads$/;
 
 /**
- * Extract the reader key from a `trakrf.id/{key}/reads` topic, mirroring the
- * backend's readerKeyFromTopic (broadcaster.go). Non-matching topics fall back
- * to the full string so the key is never empty.
+ * Extract the reader key from a `{prefix}/{key}/reads` topic, mirroring the
+ * backend's readerKeyFromTopic (tracker.go). Non-matching topics fall back to
+ * the full string so the key is never empty.
  */
 export function readerKeyFromTopic(topic: string): string {
   const m = TOPIC_RE.exec(topic);

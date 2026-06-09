@@ -20,6 +20,8 @@ export interface UserOrg {
 export interface UserOrgWithRole {
   id: number;
   name: string;
+  /** Globally-unique URL-safe slug; used to pre-fill the {org_slug}/ publish_topic prefix (TRA-922). */
+  identifier: string;
   role: OrgRole;
 }
 
