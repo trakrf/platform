@@ -15,13 +15,13 @@ import (
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
-// scanPointID returns the auto-provisioned "{externalKey}-1" capture point id.
-func scanPointID(t *testing.T, db *testutil.TestDB, orgID int, deviceExternalKey string) int {
+// scanPointID returns the device's auto-provisioned antenna-1 scan_point id (TRA-956).
+func scanPointID(t *testing.T, db *testutil.TestDB, orgID, scanDeviceID int) int {
 	t.Helper()
 	var id int
 	require.NoError(t, db.AdminPool.QueryRow(context.Background(),
-		`SELECT id FROM trakrf.scan_points WHERE org_id = $1 AND external_key = $2`,
-		orgID, deviceExternalKey+"-1").Scan(&id))
+		`SELECT id FROM trakrf.scan_points WHERE org_id = $1 AND scan_device_id = $2 AND antenna_port = 1`,
+		orgID, scanDeviceID).Scan(&id))
 	return id
 }
 
@@ -29,9 +29,9 @@ func TestInsertAlarmEvent_WritesUnderOrgContext(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	registerDevice(t, db, orgID, "cs463-214")
+	dev := registerDevice(t, db, orgID, "cs463-214")
 	asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "alarm-asset")
-	spID := scanPointID(t, db, orgID, "cs463-214")
+	spID := scanPointID(t, db, orgID, dev.ID)
 
 	firedAt := time.Now()
 	err := db.Store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
@@ -60,9 +60,9 @@ func TestInsertAlarmEvent_RLSIsolatesByOrg(t *testing.T) {
 	require.NoError(t, db.AdminPool.QueryRow(ctx,
 		`INSERT INTO trakrf.organizations (name, identifier, is_active)
 		 VALUES ('Test Organization B', 'test-org-b', true) RETURNING id`).Scan(&orgB))
-	registerDevice(t, db, orgA, "cs463-214")
+	dev := registerDevice(t, db, orgA, "cs463-214")
 	asset := testutil.CreateTestAsset(t, db.AdminPool, orgA, "alarm-asset")
-	spID := scanPointID(t, db, orgA, "cs463-214")
+	spID := scanPointID(t, db, orgA, dev.ID)
 
 	require.NoError(t, db.Store.InsertAlarmEvent(ctx, orgA, storage.AlarmEventRow{
 		AssetID: asset.ID, ScanPointID: spID, EPC: testEPC, RSSI: -50, FiredAt: time.Now(),

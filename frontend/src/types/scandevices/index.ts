@@ -16,7 +16,6 @@ export type ScanTransport = 'mqtt' | 'web_ble';
 export interface ScanDevice {
   id: number;
   org_id: number;
-  external_key: string;
   name: string;
   type: ScanDeviceType;
   transport: ScanTransport;
@@ -34,7 +33,6 @@ export interface ScanDevice {
 }
 
 export interface CreateScanDeviceRequest {
-  external_key: string;
   name: string;
   type: ScanDeviceType;
   transport?: ScanTransport;
@@ -66,7 +64,6 @@ export interface ScanPoint {
   org_id: number;
   scan_device_id: number;
   location_id?: number | null;
-  external_key: string;
   name: string;
   antenna_port?: number | null;
   description: string;
@@ -80,7 +77,6 @@ export interface ScanPoint {
 }
 
 export interface CreateScanPointRequest {
-  external_key: string;
   name: string;
   location_id?: number | null;
   antenna_port?: number | null;

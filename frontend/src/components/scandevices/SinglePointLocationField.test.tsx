@@ -16,7 +16,6 @@ vi.mock('react-hot-toast', () => ({
 const device = (over: Partial<ScanDevice> = {}): ScanDevice => ({
   id: 10,
   org_id: 1,
-  external_key: 'gateway_1',
   name: 'Gateway 1',
   type: 'gl_s10',
   transport: 'mqtt',
@@ -39,9 +38,8 @@ const point = (over: Partial<ScanPoint>): ScanPoint => ({
   org_id: 1,
   scan_device_id: 10,
   location_id: null,
-  external_key: 'gateway_1-point-1',
   name: 'Gateway 1',
-  antenna_port: null,
+  antenna_port: 1,
   description: '',
   metadata: {},
   valid_from: '2024-01-01T00:00:00Z',
@@ -111,8 +109,8 @@ describe('SinglePointLocationField', () => {
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        external_key: 'gateway_1-point-1',
         name: 'Gateway 1',
+        antenna_port: 1,
         location_id: 200,
       })
     );

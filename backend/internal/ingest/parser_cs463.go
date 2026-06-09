@@ -17,11 +17,10 @@ type cs463Payload struct {
 }
 
 type cs463Tag struct {
-	EPC              string `json:"epc"`
-	TimeStampOfRead  int64  `json:"timeStampOfRead"` // microseconds since epoch
-	AntennaPort      int    `json:"antennaPort"`
-	CapturePointName string `json:"capturePointName"`
-	RSSI             string `json:"rssi"`
+	EPC             string `json:"epc"`
+	TimeStampOfRead int64  `json:"timeStampOfRead"` // microseconds since epoch
+	AntennaPort     int    `json:"antennaPort"`
+	RSSI            string `json:"rssi"`
 }
 
 func parseCS463(payload []byte) ([]scanread.Read, error) {
@@ -39,12 +38,18 @@ func parseCS463(payload []byte) ([]scanread.Read, error) {
 		if f, err := strconv.ParseFloat(t.RSSI, 64); err == nil {
 			rssi = int(math.Round(f))
 		}
+		// AntennaPort routes the read to its per-antenna scan_point downstream
+		// (TRA-956). A payload that omits antennaPort (0) is a single-antenna
+		// read and resolves to antenna 1.
+		antennaPort := t.AntennaPort
+		if antennaPort < 1 {
+			antennaPort = 1
+		}
 		reads = append(reads, scanread.Read{
-			EPC:              t.EPC,
-			CapturePointName: t.CapturePointName,
-			AntennaPort:      t.AntennaPort,
-			RSSI:             rssi,
-			ReaderTimestamp:  time.UnixMicro(t.TimeStampOfRead).UTC(),
+			EPC:             t.EPC,
+			AntennaPort:     antennaPort,
+			RSSI:            rssi,
+			ReaderTimestamp: time.UnixMicro(t.TimeStampOfRead).UTC(),
 		})
 	}
 	return reads, nil

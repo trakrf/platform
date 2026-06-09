@@ -44,12 +44,11 @@ export function readerKeyFromTopic(topic: string): string {
 /**
  * The reader key the live feed tags this device's reads with. The backend
  * derives readerKey from the topic a device publishes on, so we derive the same
- * key from publish_topic — falling back to external_key when the device has no
- * (or a non-standard) publish_topic.
+ * key from publish_topic. A device with no publish_topic has no live-feed key.
  */
 export function readerKeyForDevice(
-  device: Pick<ScanDevice, 'external_key' | 'publish_topic'>
+  device: Pick<ScanDevice, 'publish_topic'>
 ): string {
   const topic = device.publish_topic?.trim();
-  return topic ? readerKeyFromTopic(topic) : device.external_key;
+  return topic ? readerKeyFromTopic(topic) : '';
 }

@@ -158,7 +158,7 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	// 4. Derive asset_scans under org context (RLS-correct).
 	// TRA-901 seam: `reads` is also where the geofence engine will be handed the
 	// parsed observations for the immediate-on-entry alarm decision.
-	res, err := s.store.PersistReads(ctx, route.OrgID, tagScanID, receivedAt, reads)
+	res, err := s.store.PersistReads(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads)
 	if err != nil {
 		// The raw message is already durable in tag_scans (audit row above), so a
 		// transient failure here loses only the derivation, which is reproducible

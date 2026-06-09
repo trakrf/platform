@@ -25,35 +25,28 @@ type glS10Entry struct {
 }
 
 // parseGLS10 decodes a GL-S10 BLE gateway message into one read per detected
-// advertisement. Two provisioning contracts make those reads resolve to
-// asset_scans downstream (storage.PersistReads); both are pinned by the
-// integration test and hold for the live preview registration:
-//   - The device must be registered with external_key == dev_ble_mac, so the
-//     synthesized capture point {dev_ble_mac}-1 matches the scan_point that
-//     CreateScanDevice auto-provisions as {external_key}-1.
-//   - The BLE MAC must be registered as a tag value linked to an asset.
-//     Membership is tag-class agnostic (TRA-927), so the natural type='ble'
-//     registration resolves the same as an rfid EPC.
+// advertisement. The topic routes the message to the device (resolve_scan_topic,
+// TRA-900); a BLE gateway is a single capture point, so every read carries
+// antenna port 1 and resolves to the device's antenna-1 scan_point downstream
+// (storage.PersistReads, TRA-956). The only remaining provisioning contract is
+// asset membership: the BLE MAC must be registered as a tag value linked to an
+// asset. Membership is tag-class agnostic (TRA-927), so the natural type='ble'
+// registration resolves the same as an rfid EPC.
 func parseGLS10(payload []byte) ([]scanread.Read, error) {
 	var p glS10Payload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, fmt.Errorf("gl_s10: unmarshal payload: %w", err)
 	}
-	// A BLE gateway is a single capture point and sends no per-read capture
-	// point, so we synthesize the registered scan_point external_key as
-	// {dev_ble_mac}-1 (matches the preview registration C4DEE229A176-1). The MAC
-	// is also the tag identity: it is matched case-sensitively downstream against
-	// uppercase-registered values (tags.value, scan_points.external_key), so
-	// normalize both to uppercase to tolerate lowercase wire variants.
-	capturePoint := strings.ToUpper(p.DevBLEMac) + "-1"
+	// The MAC is the tag identity: it is matched case-insensitively downstream
+	// (TRA-944) but registered uppercase, so normalize the read EPC to uppercase
+	// to tolerate lowercase wire variants.
 	reads := make([]scanread.Read, 0, len(p.DevList))
 	for _, e := range p.DevList {
 		reads = append(reads, scanread.Read{
-			EPC:              strings.ToUpper(e.MAC),
-			CapturePointName: capturePoint,
-			AntennaPort:      1,
-			RSSI:             e.RSSI,
-			ReaderTimestamp:  time.UnixMilli(e.TS).UTC(),
+			EPC:             strings.ToUpper(e.MAC),
+			AntennaPort:     1,
+			RSSI:            e.RSSI,
+			ReaderTimestamp: time.UnixMilli(e.TS).UTC(),
 		})
 	}
 	return reads, nil

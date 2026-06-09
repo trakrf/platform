@@ -47,7 +47,6 @@ describe('ScanDeviceFormModal', () => {
   const mockDevice: ScanDevice = {
     id: 1,
     org_id: 1,
-    external_key: 'dock_reader_1',
     name: 'Dock Reader 1',
     type: 'csl_cs463',
     transport: 'mqtt',
@@ -88,12 +87,12 @@ describe('ScanDeviceFormModal', () => {
     expect(screen.getByText('Create New Scan Device')).toBeInTheDocument();
   });
 
-  it('renders edit modal with device external key', () => {
+  it('renders edit modal with device name', () => {
     render(
       <ScanDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
     );
 
-    expect(screen.getByText(`Edit Scan Device: ${mockDevice.external_key}`)).toBeInTheDocument();
+    expect(screen.getByText(`Edit Scan Device: ${mockDevice.name}`)).toBeInTheDocument();
   });
 
   it('closes modal when close button is clicked', () => {
@@ -107,14 +106,14 @@ describe('ScanDeviceFormModal', () => {
   it('submits create with filled fields, calls API and fires onClose', async () => {
     render(<ScanDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
-    fireEvent.change(screen.getByLabelText(/External Key/), {
-      target: { value: 'dock_reader_1' },
-    });
     fireEvent.change(screen.getByLabelText(/Name/), {
       target: { value: 'Dock Reader 1' },
     });
     fireEvent.change(screen.getByLabelText(/Type/), {
       target: { value: 'gl_s10' },
+    });
+    fireEvent.change(screen.getByLabelText(/Publish Topic/), {
+      target: { value: 'trakrf.id/dock_reader_1/reads' },
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Create Scan Device/i }));
@@ -125,9 +124,9 @@ describe('ScanDeviceFormModal', () => {
 
     expect(scanDevicesApi.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        external_key: 'dock_reader_1',
         name: 'Dock Reader 1',
         type: 'gl_s10',
+        publish_topic: 'trakrf.id/dock_reader_1/reads',
       })
     );
 
@@ -141,8 +140,9 @@ describe('ScanDeviceFormModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Create Scan Device/i }));
 
+    // Default transport is mqtt, so the empty publish_topic blocks submit (TRA-956).
     await waitFor(() => {
-      expect(screen.getByText('External key is required')).toBeInTheDocument();
+      expect(screen.getByText('Publish topic is required for MQTT devices')).toBeInTheDocument();
     });
     expect(scanDevicesApi.create).not.toHaveBeenCalled();
     expect(mockOnClose).not.toHaveBeenCalled();
@@ -195,7 +195,7 @@ describe('ScanDeviceFormModal', () => {
       // …but the modal chrome (backdrop close button + title bar) is gone.
       expect(screen.queryByLabelText('Close modal')).not.toBeInTheDocument();
       expect(
-        screen.queryByText(`Edit Scan Device: ${mockDevice.external_key}`)
+        screen.queryByText(`Edit Scan Device: ${mockDevice.name}`)
       ).not.toBeInTheDocument();
     });
 

@@ -33,7 +33,7 @@ export default function ScanDevicesScreen() {
     if (!deletingDevice) return;
     try {
       await deleteScanDevice(deletingDevice.id);
-      toast.success(`Scan device "${deletingDevice.external_key}" deleted successfully`);
+      toast.success(`Scan device "${deletingDevice.name}" deleted successfully`);
       if (expandedId === deletingDevice.id) setExpandedId(null);
       setDeletingDevice(null);
     } catch (error) {
@@ -68,8 +68,7 @@ export default function ScanDevicesScreen() {
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                   <th className="w-8 px-2"></th>
-                  <th className="py-2 px-3 font-medium">External Key</th>
-                  <th className="px-3 font-medium">Name</th>
+                  <th className="py-2 px-3 font-medium">Name</th>
                   <th className="px-3 font-medium">Type</th>
                   <th className="px-3 font-medium">Transport</th>
                   <th className="px-3 font-medium">Publish Topic</th>
@@ -88,7 +87,7 @@ export default function ScanDevicesScreen() {
                             type="button"
                             onClick={() => toggleExpanded(device.id)}
                             className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                            aria-label={`Edit scan device ${device.external_key}`}
+                            aria-label={`Edit scan device ${device.name}`}
                             aria-expanded={isExpanded}
                           >
                             {isExpanded ? (
@@ -98,10 +97,7 @@ export default function ScanDevicesScreen() {
                             )}
                           </button>
                         </td>
-                        <td className="py-2 px-3 font-mono text-xs text-gray-900 dark:text-gray-100">
-                          {device.external_key}
-                        </td>
-                        <td className="px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
+                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
                         <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
@@ -115,7 +111,7 @@ export default function ScanDevicesScreen() {
                             type="button"
                             onClick={() => setDeletingDevice(device)}
                             className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                            aria-label={`Delete scan device ${device.external_key}`}
+                            aria-label={`Delete scan device ${device.name}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -123,7 +119,7 @@ export default function ScanDevicesScreen() {
                       </tr>
                       {isExpanded && (
                         <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
-                          <td colSpan={8} className="px-3 py-4">
+                          <td colSpan={7} className="px-3 py-4">
                             <ScanDeviceEditPanel
                               device={device}
                               onClose={() => setExpandedId(null)}
@@ -148,7 +144,7 @@ export default function ScanDevicesScreen() {
         <ConfirmModal
           isOpen={!!deletingDevice}
           title="Delete Scan Device"
-          message={`Are you sure you want to delete "${deletingDevice?.external_key}"? This action cannot be undone.`}
+          message={`Are you sure you want to delete "${deletingDevice?.name}"? This action cannot be undone.`}
           onConfirm={confirmDelete}
           onCancel={() => setDeletingDevice(null)}
         />

@@ -6,7 +6,6 @@ function device(overrides: Partial<ScanDevice>): ScanDevice {
   return {
     id: 1,
     org_id: 1,
-    external_key: 'dock_reader_1',
     name: 'Dock Reader 1',
     type: 'csl_cs463',
     transport: 'mqtt',
@@ -60,21 +59,17 @@ describe('readerKeyFromTopic', () => {
 describe('readerKeyForDevice', () => {
   it('derives the key from publish_topic when present', () => {
     expect(
-      readerKeyForDevice(
-        device({ external_key: 'dock_reader_1', publish_topic: 'trakrf.id/custom-key/reads' })
-      )
+      readerKeyForDevice(device({ publish_topic: 'trakrf.id/custom-key/reads' }))
     ).toBe('custom-key');
   });
 
-  it('falls back to external_key when publish_topic is null', () => {
-    expect(
-      readerKeyForDevice(device({ external_key: 'dock_reader_1', publish_topic: null }))
-    ).toBe('dock_reader_1');
+  // TRA-956: external_key is gone — a device with no publish_topic has no
+  // live-feed key (publish_topic is the sole routing identity).
+  it('returns an empty key when publish_topic is null', () => {
+    expect(readerKeyForDevice(device({ publish_topic: null }))).toBe('');
   });
 
-  it('falls back to external_key when publish_topic is blank', () => {
-    expect(
-      readerKeyForDevice(device({ external_key: 'dock_reader_1', publish_topic: '' }))
-    ).toBe('dock_reader_1');
+  it('returns an empty key when publish_topic is blank', () => {
+    expect(readerKeyForDevice(device({ publish_topic: '' }))).toBe('');
   });
 });
