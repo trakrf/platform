@@ -337,9 +337,12 @@ func marshalEvent(oe orgEvent) (Event, bool) {
 	}
 }
 
-var topicRe = regexp.MustCompile(`^trakrf\.id/([^/]+)/reads$`)
+// TRA-922: the first segment is the org-slug prefix (was the fixed "trakrf.id"
+// root); accept any first segment so both new {org_slug}/{key}/reads topics and
+// grandfathered trakrf.id/{key}/reads topics yield the same middle key.
+var topicRe = regexp.MustCompile(`^[^/]+/([^/]+)/reads$`)
 
-// readerKeyFromTopic extracts the reader key from a `trakrf.id/{key}/reads`
+// readerKeyFromTopic extracts the reader key from a `{prefix}/{key}/reads`
 // topic, mirroring the frontend. Non-matching topics fall back to the full topic
 // string so the key is never empty.
 func readerKeyFromTopic(topic string) string {
