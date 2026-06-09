@@ -136,11 +136,18 @@ func (s *Service) GetUserProfile(ctx context.Context, userID int) (*organization
 		if err == nil {
 			for _, org := range orgs {
 				if org.ID == currentOrgID {
-					profile.CurrentOrg = &organization.UserOrgWithRole{
+					cur := &organization.UserOrgWithRole{
 						ID:   org.ID,
 						Name: org.Name,
 						Role: string(role),
 					}
+					// TRA-922: include the org slug so the UI can pre-fill the
+					// required {org_slug}/ publish_topic prefix. Best-effort — a
+					// lookup miss leaves Identifier empty rather than failing /me.
+					if full, ferr := s.storage.GetOrganizationByID(ctx, currentOrgID); ferr == nil && full != nil {
+						cur.Identifier = full.Identifier
+					}
+					profile.CurrentOrg = cur
 					break
 				}
 			}

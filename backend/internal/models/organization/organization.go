@@ -42,7 +42,10 @@ type UserOrg struct {
 type UserOrgWithRole struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
-	Role string `json:"role"`
+	// Identifier is the org's globally-unique URL-safe slug. Surfaced so the UI
+	// can pre-fill the required {org_slug}/ publish_topic prefix (TRA-922).
+	Identifier string `json:"identifier"`
+	Role       string `json:"role"`
 }
 
 // SetCurrentOrgRequest for POST /users/me/current-org
