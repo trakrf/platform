@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/trakrf/platform/backend/internal/models/scanread"
+	"github.com/trakrf/platform/backend/internal/services/topicroute"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -33,18 +34,50 @@ type ReadPublisher interface {
 // Subscriber consumes MQTT reads and derives asset_scans (TRA-900). It is the
 // observable replacement for the silent process_tag_scans trigger.
 type Subscriber struct {
-	cfg    Config
-	store  *storage.Storage
-	eval   ReadEvaluator // optional; nil disables geofence evaluation
-	feed   ReadPublisher // optional; nil disables live-feed fan-out
-	log    zerolog.Logger
-	client mqtt.Client
+	cfg      Config
+	store    *storage.Storage
+	registry *topicroute.Registry // routing map + subscription set (TRA-922)
+	eval     ReadEvaluator        // optional; nil disables geofence evaluation
+	feed     ReadPublisher        // optional; nil disables live-feed fan-out
+	log      zerolog.Logger
+	client   mqtt.Client
 }
 
 // NewSubscriber builds a subscriber. It does not connect; call Start. eval and
-// feed may each be nil (no geofence evaluation / no live-feed fan-out).
-func NewSubscriber(cfg Config, store *storage.Storage, eval ReadEvaluator, feed ReadPublisher, log *zerolog.Logger) *Subscriber {
-	return &Subscriber{cfg: cfg, store: store, eval: eval, feed: feed, log: log.With().Str("component", "ingest").Logger()}
+// feed may each be nil (no geofence evaluation / no live-feed fan-out). The
+// subscriber registers itself as the registry's SubscriptionManager so CRUD and
+// the reconcile ticker drive its broker subscriptions (TRA-922).
+func NewSubscriber(cfg Config, store *storage.Storage, registry *topicroute.Registry, eval ReadEvaluator, feed ReadPublisher, log *zerolog.Logger) *Subscriber {
+	s := &Subscriber{cfg: cfg, store: store, registry: registry, eval: eval, feed: feed, log: log.With().Str("component", "ingest").Logger()}
+	registry.SetManager(s)
+	return s
+}
+
+// Subscribe adds a single topic to the live broker subscription (TRA-922).
+// Called by the registry when a scan device is created/updated. While
+// disconnected it is a no-op — OnConnect bulk-subscribes the full registry set
+// on every (re)connect, which is the source of truth.
+func (s *Subscriber) Subscribe(topic string) {
+	if s.client == nil || !s.client.IsConnected() {
+		return
+	}
+	if tok := s.client.Subscribe(topic, 1, s.handleMessage); tok.Wait() && tok.Error() != nil {
+		s.log.Error().Err(tok.Error()).Str("topic", topic).Msg("subscribe failed")
+		return
+	}
+	s.log.Info().Str("topic", topic).Msg("subscribed")
+}
+
+// Unsubscribe drops a single topic from the live broker subscription (TRA-922).
+func (s *Subscriber) Unsubscribe(topic string) {
+	if s.client == nil || !s.client.IsConnected() {
+		return
+	}
+	if tok := s.client.Unsubscribe(topic); tok.Wait() && tok.Error() != nil {
+		s.log.Error().Err(tok.Error()).Str("topic", topic).Msg("unsubscribe failed")
+		return
+	}
+	s.log.Info().Str("topic", topic).Msg("unsubscribed")
 }
 
 // Start begins connecting in the background and returns immediately — it never
@@ -66,11 +99,24 @@ func (s *Subscriber) Start() error {
 		SetConnectRetry(true).
 		SetConnectRetryInterval(5 * time.Second).
 		SetOnConnectHandler(func(c mqtt.Client) {
-			if tok := c.Subscribe(s.cfg.Topic, 1, s.handleMessage); tok.Wait() && tok.Error() != nil {
-				s.log.Error().Err(tok.Error()).Str("topic", s.cfg.Topic).Msg("subscribe failed")
+			// TRA-922: subscribe to exactly the registered publish_topics, not a
+			// static filter. Fires on initial connect AND every reconnect, so the
+			// full set is (re)subscribed for free. Add/remove between connects is
+			// handled incrementally by Subscribe/Unsubscribe via the registry.
+			topics := s.registry.Topics()
+			if len(topics) == 0 {
+				s.log.Info().Msg("connected; no registered topics to subscribe")
 				return
 			}
-			s.log.Info().Str("topic", s.cfg.Topic).Msg("subscribed")
+			filters := make(map[string]byte, len(topics))
+			for _, t := range topics {
+				filters[t] = 1
+			}
+			if tok := c.SubscribeMultiple(filters, s.handleMessage); tok.Wait() && tok.Error() != nil {
+				s.log.Error().Err(tok.Error()).Int("count", len(topics)).Msg("bulk subscribe failed")
+				return
+			}
+			s.log.Info().Int("count", len(topics)).Msg("subscribed to registered topics")
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 			s.log.Warn().Err(err).Msg("mqtt connection lost; auto-reconnecting")
@@ -82,7 +128,7 @@ func (s *Subscriber) Start() error {
 	// whenever the broker is down at boot. The connection is established
 	// asynchronously and self-heals.
 	s.client.Connect()
-	s.log.Info().Str("client_id", clientID).Str("topic", s.cfg.Topic).Msg("mqtt subscriber connecting")
+	s.log.Info().Str("client_id", clientID).Msg("mqtt subscriber connecting")
 	return nil
 }
 
@@ -120,12 +166,19 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 		return
 	}
 
-	// 2. Route topic -> org/device (SECURITY DEFINER; no org context yet).
-	route, found, err := s.store.ResolveScanTopic(ctx, topic)
-	if err != nil {
-		s.log.Error().Err(err).Str("topic", topic).Msg("topic resolution failed")
-		metricMessages.WithLabelValues("resolve_error").Inc()
-		return
+	// 2. Route topic -> org/device. Primary path is the in-memory registry (the
+	// same set we subscribe to). A miss should not normally happen — we only
+	// receive topics we subscribed to — so fall back to resolve_scan_topic
+	// (SECURITY DEFINER) defensively, covering any Subscribe/registry race.
+	route, found := s.registry.Lookup(topic)
+	if !found {
+		var err error
+		route, found, err = s.store.ResolveScanTopic(ctx, topic)
+		if err != nil {
+			s.log.Error().Err(err).Str("topic", topic).Msg("topic resolution failed")
+			metricMessages.WithLabelValues("resolve_error").Inc()
+			return
+		}
 	}
 	if !found {
 		s.log.Debug().Str("topic", topic).Msg("unregistered topic; audit kept, no derivation")

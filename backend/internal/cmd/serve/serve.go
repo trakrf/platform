@@ -35,6 +35,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
+	"github.com/trakrf/platform/backend/internal/services/topicroute"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -103,6 +104,15 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	readBroadcaster := readstreamsvc.New()
 	defer readBroadcaster.Stop()
 
+	// TRA-922: the topic registry owns the publish_topic→route map (message
+	// routing) and the broker subscription set. Constructed unconditionally so
+	// the scan-device CRUD handler can keep it current even when ingestion is off;
+	// the subscriber attaches as its SubscriptionManager when MQTT is enabled.
+	topicRegistry := topicroute.NewRegistry(store, *log)
+	if err := topicRegistry.Reconcile(ctx); err != nil {
+		log.Warn().Err(err).Msg("initial topic registry load failed; ticker will retry")
+	}
+
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
 	if mqttCfg.Enabled() {
@@ -120,13 +130,33 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 
-		subscriber := ingest.NewSubscriber(mqttCfg, store, geofenceEngine, readBroadcaster, log)
+		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, geofenceEngine, readBroadcaster, log)
 		if err := subscriber.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
 			return err
 		}
 		defer subscriber.Stop()
 		log.Info().Msg("MQTT subscriber started")
+
+		// TRA-922: periodic reconcile is the safety net for missed CRUD events,
+		// direct DB edits, and future multi-replica drift; CRUD reconciles inline
+		// and OnConnect bulk-subscribes, so this only catches the gaps.
+		reconcileStop := make(chan struct{})
+		go func() {
+			t := time.NewTicker(5 * time.Minute)
+			defer t.Stop()
+			for {
+				select {
+				case <-reconcileStop:
+					return
+				case <-t.C:
+					if err := topicRegistry.Reconcile(ctx); err != nil {
+						log.Warn().Err(err).Msg("topic registry reconcile failed")
+					}
+				}
+			}
+		}()
+		defer close(reconcileStop)
 	} else {
 		// No broker: http-only dispatcher (nil mqtt → mqtt devices error clearly).
 		alarmDispatcher = alarm.NewDispatcher(shellyClient, nil)

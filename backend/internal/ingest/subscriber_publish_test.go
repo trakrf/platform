@@ -7,6 +7,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/trakrf/platform/backend/internal/models/scanread"
+	"github.com/trakrf/platform/backend/internal/services/topicroute"
 )
 
 // handleMessage isn't unit-tested directly: it depends on the concrete
@@ -37,13 +38,14 @@ func TestNewSubscriber_AcceptsReadPublisher(t *testing.T) {
 	var _ ReadPublisher = (*fakePublisher)(nil)
 
 	log := zerolog.Nop()
-	sub := NewSubscriber(Config{}, nil, nil, &fakePublisher{}, &log)
+	reg := topicroute.NewRegistry(nil, log)
+	sub := NewSubscriber(Config{}, nil, reg, nil, &fakePublisher{}, &log)
 	if sub.feed == nil {
 		t.Fatal("expected feed publisher to be stored on the subscriber")
 	}
 
 	// nil feed must also be accepted (fan-out disabled).
-	subNil := NewSubscriber(Config{}, nil, nil, nil, &log)
+	subNil := NewSubscriber(Config{}, nil, topicroute.NewRegistry(nil, log), nil, nil, &log)
 	if subNil.feed != nil {
 		t.Fatal("expected nil feed when none provided")
 	}
