@@ -57,10 +57,13 @@ describe('useEntitlement', () => {
     expect(result.current.subscriptionExpiresAt).toBe('2026-01-01T00:00:00Z');
   });
 
-  it('treats authenticated with no current org as lapsed', () => {
+  it('fails open (unlocked) when authenticated but the org has not loaded yet', () => {
+    // currentOrg === null means the profile fetch is still in flight; do not flash
+    // grayed controls at entitled users. The backend enforces entitlement anyway.
     setAuth(true);
     setOrg(null);
     const { result } = renderHook(() => useEntitlement());
-    expect(result.current.state).toBe('lapsed');
+    expect(result.current.state).toBe('entitled');
+    expect(result.current.isLocked).toBe(false);
   });
 });

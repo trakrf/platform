@@ -23,7 +23,14 @@ export function useEntitlement(): Entitlement {
   if (!isAuthenticated) {
     return { state: 'logged-out', isEntitled: false, isLocked: true, subscriptionExpiresAt: null };
   }
-  if (currentOrg?.is_entitled) {
+  // Authenticated but the org/profile hasn't loaded yet (currentOrg === null): fail
+  // OPEN so entitled users don't see a flash of grayed controls on every page load.
+  // The backend enforces entitlement regardless, so optimistic-unlock is safe; we only
+  // ever show the locked treatment once we positively know is_entitled === false.
+  if (!currentOrg) {
+    return { state: 'entitled', isEntitled: true, isLocked: false, subscriptionExpiresAt: null };
+  }
+  if (currentOrg.is_entitled) {
     return {
       state: 'entitled',
       isEntitled: true,
@@ -35,6 +42,6 @@ export function useEntitlement(): Entitlement {
     state: 'lapsed',
     isEntitled: false,
     isLocked: true,
-    subscriptionExpiresAt: currentOrg?.subscription_expires_at ?? null,
+    subscriptionExpiresAt: currentOrg.subscription_expires_at ?? null,
   };
 }
