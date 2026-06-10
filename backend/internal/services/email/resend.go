@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/resend/resend-go/v2"
 	"github.com/rs/zerolog/log"
@@ -145,6 +146,50 @@ func (c *Client) SendInvitationEmail(toEmail, orgName, inviterName, role, token,
 
 	if err != nil {
 		return fmt.Errorf("failed to send invitation email: %w", err)
+	}
+
+	return nil
+}
+
+// SendTrialSignupNotification alerts a superadmin that a brand-new user
+// self-service-signed up and was put on a 1-month trial (TRA-967). It carries
+// the new org's name + identifier, the signing-up user's email, and the trial
+// expiry so an operator can reach out and qualify the account. trialExpiresAt
+// may be nil defensively.
+func (c *Client) SendTrialSignupNotification(toEmail, orgName, orgIdentifier, signupEmail string, trialExpiresAt *time.Time) error {
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "trial_signup_notification").
+			Str("org", orgName).
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
+
+	trialExpiry := "unknown"
+	if trialExpiresAt != nil {
+		trialExpiry = trialExpiresAt.UTC().Format("2006-01-02 15:04 UTC")
+	}
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    "TrakRF <noreply@trakrf.id>",
+		To:      []string{toEmail},
+		Subject: fmt.Sprintf("%s New trial signup: %s", getEmailPrefix(), orgName),
+		Html: fmt.Sprintf(`
+			<h2>New self-service trial signup</h2>
+			<p>A new user signed up and started a 1-month trial. Reach out to qualify the account.</p>
+			<ul>
+				<li><strong>Organization:</strong> %s (%s)</li>
+				<li><strong>User email:</strong> %s</li>
+				<li><strong>Trial expires:</strong> %s</li>
+			</ul>
+			%s
+		`, orgName, orgIdentifier, signupEmail, trialExpiry, getEnvironmentNotice()),
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send trial signup notification: %w", err)
 	}
 
 	return nil

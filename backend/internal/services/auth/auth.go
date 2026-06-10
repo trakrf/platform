@@ -79,12 +79,12 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 	orgQuery := `
 		INSERT INTO trakrf.organizations (name, identifier, subscription_expires_at)
 		VALUES ($1, $2, now() + interval '1 month')
-		RETURNING id, name, identifier, metadata, valid_from, valid_to, is_active, created_at, updated_at
+		RETURNING id, name, identifier, metadata, valid_from, valid_to, is_active, created_at, updated_at, subscription_expires_at
 	`
 	err = tx.QueryRow(ctx, orgQuery, orgName, orgIdentifier).Scan(
 		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive,
-		&org.CreatedAt, &org.UpdatedAt)
+		&org.CreatedAt, &org.UpdatedAt, &org.SubscriptionExpiresAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, fmt.Errorf("organization identifier already taken")
@@ -105,6 +105,12 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	// Notify superadmins of the new self-service trial signup (TRA-967).
+	// Fire-and-forget on a detached context so it never delays or fails the
+	// signup response; only this self-service path creates a trial org, so
+	// invitation-based signup and internal org creation do not reach here.
+	go s.notifyTrialSignup(context.Background(), org, usr.Email)
+
 	accessToken, refreshToken, expiresIn, err := s.MintTokenPair(ctx, usr.ID, usr.Email, &org.ID, userAgent, ip, generateJWT)
 	if err != nil {
 		return nil, err
@@ -116,6 +122,36 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 		ExpiresIn:    expiresIn,
 		User:         usr,
 	}, nil
+}
+
+// notifyTrialSignup emails every active superadmin that a new user self-service
+// signed up and started a 1-month trial (TRA-967), so an operator can reach out
+// and qualify the account. Best-effort: it is called fire-and-forget off the
+// signup success path, a lookup failure is logged not propagated, and a send
+// failure to one superadmin does not stop the others. Returns the number of
+// superadmins successfully notified (used by tests).
+func (s *Service) notifyTrialSignup(ctx context.Context, org organization.Organization, signupEmail string) int {
+	if s.emailClient == nil {
+		return 0
+	}
+
+	admins, err := s.storage.ListSuperadmins(ctx)
+	if err != nil {
+		fmt.Printf("warning: failed to list superadmins for trial signup notification: %v\n", err)
+		return 0
+	}
+
+	sent := 0
+	for _, admin := range admins {
+		if err := s.emailClient.SendTrialSignupNotification(
+			admin.Email, org.Name, org.Identifier, signupEmail, org.SubscriptionExpiresAt,
+		); err != nil {
+			fmt.Printf("warning: failed to send trial signup notification to %s: %v\n", admin.Email, err)
+			continue
+		}
+		sent++
+	}
+	return sent
 }
 
 // signupWithInvitation handles signup when user has an invitation token

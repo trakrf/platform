@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGetEmailPrefix(t *testing.T) {
@@ -125,5 +126,35 @@ func TestSendPasswordResetEmail_StubsReservedDomain(t *testing.T) {
 		"token-xyz",
 	); err != nil {
 		t.Fatalf("expected nil error for reserved recipient, got %v", err)
+	}
+}
+
+// TRA-967: the superadmin trial-signup notification must stub reserved test
+// recipients (so e2e/integration runs never burn Resend quota), and must
+// tolerate a nil trial expiry without panicking.
+func TestSendTrialSignupNotification_StubsReservedDomain(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "invalid-key-should-never-be-used")
+	c := NewClient()
+
+	expires := time.Now().Add(30 * 24 * time.Hour)
+	if err := c.SendTrialSignupNotification(
+		"admin@example.com",
+		"Acme Co",
+		"acme-co",
+		"newuser@example.com",
+		&expires,
+	); err != nil {
+		t.Fatalf("expected nil error for reserved recipient, got %v", err)
+	}
+
+	// A nil expiry (defensive) must not panic.
+	if err := c.SendTrialSignupNotification(
+		"admin@example.com",
+		"Acme Co",
+		"acme-co",
+		"newuser@example.com",
+		nil,
+	); err != nil {
+		t.Fatalf("expected nil error for nil expiry, got %v", err)
 	}
 }

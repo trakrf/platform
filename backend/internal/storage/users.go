@@ -48,6 +48,43 @@ func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User
 	return users, total, nil
 }
 
+// ListSuperadmins retrieves all active (non-deleted) superadmin users across
+// all orgs, ordered by email. Used for system-wide operator notifications
+// (e.g. self-service trial signup alerts, TRA-967). The users table is not
+// RLS-gated, so this returns every superadmin regardless of org context.
+func (s *Storage) ListSuperadmins(ctx context.Context) ([]user.User, error) {
+	query := `
+		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
+		       is_superadmin, last_org_id
+		FROM trakrf.users
+		WHERE is_superadmin = true AND deleted_at IS NULL
+		ORDER BY email ASC
+	`
+
+	rows, err := s.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query superadmins: %w", err)
+	}
+	defer rows.Close()
+
+	admins := []user.User{}
+	for rows.Next() {
+		var usr user.User
+		err := rows.Scan(&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
+			&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
+			&usr.IsSuperadmin, &usr.LastOrgID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan superadmin: %w", err)
+		}
+		admins = append(admins, usr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate superadmins: %w", err)
+	}
+
+	return admins, nil
+}
+
 // GetUserByID retrieves a single user by their ID.
 func (s *Storage) GetUserByID(ctx context.Context, id int) (*user.User, error) {
 	query := `
