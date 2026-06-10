@@ -10,6 +10,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/backend/internal/models/organization"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
@@ -17,10 +18,19 @@ import (
 // fakeStore records alarm_events writes and serves a fixed device list; either
 // call can be made to fail.
 type fakeStore struct {
-	rows      []storage.AlarmEventRow
-	devices   []outputdevice.OutputDevice
-	insertErr error
-	listErr   error
+	rows        []storage.AlarmEventRow
+	devices     []outputdevice.OutputDevice
+	orgDefaults organization.GeofenceDefaults
+	insertErr   error
+	listErr     error
+	defaultsErr error
+}
+
+func (s *fakeStore) GetOrgGeofenceDefaults(_ context.Context, _ int) (organization.GeofenceDefaults, error) {
+	if s.defaultsErr != nil {
+		return organization.GeofenceDefaults{}, s.defaultsErr
+	}
+	return s.orgDefaults, nil
 }
 
 func (s *fakeStore) InsertAlarmEvent(_ context.Context, _ int, ev storage.AlarmEventRow) error {
@@ -152,6 +162,57 @@ func TestEvaluate_PerOutputRSSIOverride(t *testing.T) {
 	}
 }
 
+func TestEvaluate_OrgDefaultRSSIAppliesWhenDeviceUnset(t *testing.T) {
+	// Code default -65 would let a -60 read fire; a stricter org default -55 (with
+	// no per-output override) must suppress it.
+	s := &fakeStore{
+		devices:     []outputdevice.OutputDevice{dev(11, nil)},
+		orgDefaults: organization.GeofenceDefaults{RSSIThreshold: ptr(-55)},
+	}
+	d := &fakeDriver{}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, d)
+	defer e.Stop()
+	e.Evaluate(context.Background(), 42, 1, time.Unix(1000, 0), []storage.ResolvedRead{read("EPC1", -60)})
+	if d.onCount() != 0 {
+		t.Fatalf("org-default -55 must suppress a -60 read on an un-overridden device, got %d", d.onCount())
+	}
+}
+
+func TestEvaluate_DeviceOverridesOrgDefault(t *testing.T) {
+	// Org default -55 would suppress -60, but a per-output override of -65 must win,
+	// so the -60 read fires.
+	s := &fakeStore{
+		devices:     []outputdevice.OutputDevice{dev(11, map[string]any{"rssi_threshold": float64(-65)})},
+		orgDefaults: organization.GeofenceDefaults{RSSIThreshold: ptr(-55)},
+	}
+	d := &fakeDriver{}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, d)
+	defer e.Stop()
+	e.Evaluate(context.Background(), 42, 1, time.Unix(1000, 0), []storage.ResolvedRead{read("EPC1", -60)})
+	if d.onCount() != 1 {
+		t.Fatalf("per-output -65 must override org-default -55 and fire a -60 read, got %d", d.onCount())
+	}
+}
+
+func TestEvaluate_OrgDefaultAgeOutShortensReArm(t *testing.T) {
+	// An org-default 10s age-out (no per-output override) should re-arm a 30s gap
+	// even though the code-default latch TTL is a minute.
+	s := &fakeStore{
+		devices:     []outputdevice.OutputDevice{dev(11, nil)},
+		orgDefaults: organization.GeofenceDefaults{AgeOutSeconds: ptr(10)},
+	}
+	d := &fakeDriver{}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, d)
+	defer e.Stop()
+
+	base := time.Unix(1000, 0)
+	e.Evaluate(context.Background(), 42, 1, base, []storage.ResolvedRead{read("EPC1", -50)})
+	e.Evaluate(context.Background(), 42, 2, base.Add(30*time.Second), []storage.ResolvedRead{read("EPC1", -50)})
+	if d.onCount() != 2 {
+		t.Fatalf("30s gap should re-arm a 10s org-default age-out, got %d", d.onCount())
+	}
+}
+
 func TestEvaluate_EgressLatchPerOutputThenReArm(t *testing.T) {
 	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, nil)}}
 	d := &fakeDriver{}
@@ -226,8 +287,6 @@ func TestEvaluate_ListErrorIsBestEffort(t *testing.T) {
 }
 
 func TestConfigFromEnv_Defaults(t *testing.T) {
-	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "")
-	t.Setenv("GEOFENCE_LATCH_TTL", "")
 	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "")
 	c := ConfigFromEnv()
 	if c != DefaultConfig() {
@@ -235,19 +294,27 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnv_Overrides(t *testing.T) {
-	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "-55")
-	t.Setenv("GEOFENCE_LATCH_TTL", "30s")
-	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "2m")
+func TestConfigFromEnv_SweepIntervalOnly(t *testing.T) {
+	// RSSI threshold and latch TTL were retired as env knobs (TRA-955): they are
+	// system/code defaults now, tuned per-org/per-output at runtime. Only the
+	// engine-global sweep interval remains env-configurable.
+	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "-10") // retired: must be ignored
+	t.Setenv("GEOFENCE_LATCH_TTL", "1s")       // retired: must be ignored
+	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "30s")
 	c := ConfigFromEnv()
-	if c.RSSIThreshold != -55 || c.LatchTTL != 30*time.Second || c.SweepInterval != 2*time.Minute {
-		t.Fatalf("env overrides not applied: %+v", c)
+	if c.RSSIThreshold != DefaultConfig().RSSIThreshold {
+		t.Fatalf("GEOFENCE_RSSI_THRESHOLD should be retired, got %d", c.RSSIThreshold)
+	}
+	if c.LatchTTL != DefaultConfig().LatchTTL {
+		t.Fatalf("GEOFENCE_LATCH_TTL should be retired, got %v", c.LatchTTL)
+	}
+	if c.SweepInterval != 30*time.Second {
+		t.Fatalf("sweep interval not applied: %v", c.SweepInterval)
 	}
 
-	// Malformed values fall back to defaults.
-	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "nope")
-	t.Setenv("GEOFENCE_LATCH_TTL", "nope")
-	if c := ConfigFromEnv(); c.RSSIThreshold != DefaultConfig().RSSIThreshold || c.LatchTTL != DefaultConfig().LatchTTL {
-		t.Fatalf("malformed env must fall back to defaults: %+v", c)
+	// Malformed sweep interval falls back to the default.
+	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "nope")
+	if c := ConfigFromEnv(); c.SweepInterval != DefaultConfig().SweepInterval {
+		t.Fatalf("malformed sweep interval must fall back to default: %v", c.SweepInterval)
 	}
 }

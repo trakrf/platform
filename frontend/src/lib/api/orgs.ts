@@ -8,6 +8,8 @@ import type {
   OrgMember,
   Invitation,
   AcceptInvitationResponse,
+  GeofenceDefaults,
+  GeofenceDefaultsView,
 } from '../../types/org';
 
 export interface MessageResponse {
@@ -69,4 +71,14 @@ export const orgsApi = {
   // Accept invitation (auth endpoint)
   acceptInvitation: (token: string) =>
     apiClient.post<{ data: AcceptInvitationResponse }>('/auth/accept-invite', { token }),
+
+  // Geofence tuning defaults (TRA-955), internal-only. Read by any member;
+  // write is admin-only.
+  getGeofenceDefaults: (orgId: number) =>
+    apiClient.get<{ data: GeofenceDefaultsView }>(`/orgs/${orgId}/geofence-defaults`),
+
+  updateGeofenceDefaults: (orgId: number, body: GeofenceDefaults) =>
+    apiClient.patch<{ data: GeofenceDefaultsView }>(`/orgs/${orgId}/geofence-defaults`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
 };

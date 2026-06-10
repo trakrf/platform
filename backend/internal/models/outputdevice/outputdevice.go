@@ -91,6 +91,32 @@ func (d OutputDevice) Mode() string {
 	return ModeEgress
 }
 
+// ModeOpt returns metadata.mode when explicitly set to a valid value, with
+// set-ness. ok=false lets the resolver fall through to a lower tier — unlike
+// Mode(), which hard-defaults unset/unknown to egress.
+func (d OutputDevice) ModeOpt() (string, bool) {
+	m, ok := d.Metadata.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	switch s, _ := m["mode"].(string); s {
+	case ModePresence, ModeEgress:
+		return s, true
+	}
+	return "", false
+}
+
+// AutoOffSecondsOpt returns metadata.auto_off_seconds with set-ness (>= 0), so the
+// resolver can distinguish "unset" (fall through) from an explicit 0. Mirrors the
+// clamp in AutoOffSeconds.
+func (d OutputDevice) AutoOffSecondsOpt() (int, bool) {
+	v, ok := d.metaInt("auto_off_seconds")
+	if !ok || v < 0 {
+		return 0, false
+	}
+	return v, true
+}
+
 // AgeOutSeconds returns the per-output age-out override from
 // metadata.age_out_seconds. ok is false (caller falls back to the global TTL)
 // when unset, non-numeric, or <= 0. Egress: re-arm window. Presence: departure
