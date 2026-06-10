@@ -232,9 +232,19 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 		s.eval.Evaluate(ctx, route.OrgID, tagScanID, receivedAt, res.Resolved)
 	}
 
-	s.log.Info().
-		Str("topic", topic).Int("org_id", route.OrgID).
-		Int("parsed", len(reads)).Int("inserted", res.Inserted).
+	s.logMessageProcessed(topic, route.OrgID, res, len(reads))
+}
+
+// logMessageProcessed emits the per-message processing summary. It is Debug, not
+// Info, by design (TRA-974): at real read volume (~1-2 msg/sec/topic across many
+// readers) an Info line per message is a log firehose — pure cost and noise.
+// Silent in normal operation, recoverable via LOG_LEVEL=debug when troubleshooting.
+// No observability is lost: the parsed/inserted/dropped counts are exported as
+// Prometheus metrics (metricReadsParsed, metricAssetScansInserted, metricReadsDropped).
+func (s *Subscriber) logMessageProcessed(topic string, orgID int, res storage.PersistResult, parsed int) {
+	s.log.Debug().
+		Str("topic", topic).Int("org_id", orgID).
+		Int("parsed", parsed).Int("inserted", res.Inserted).
 		Interface("dropped", res.Dropped).
 		Msg("ingest message processed")
 }
