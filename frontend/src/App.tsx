@@ -34,8 +34,9 @@ const AcceptInviteScreen = lazyWithRetry(() => import('@/components/AcceptInvite
 const APIKeysScreen = lazyWithRetry(() => import('@/components/APIKeysScreen'));
 const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
+const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/SuperadminOrgsScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -215,6 +216,7 @@ export default function App() {
       reports: ReportsScreen,
       'reports-history': ReportsHistoryScreen,
       'api-keys': APIKeysScreen,
+      'admin-orgs': SuperadminOrgsScreen,
     };
 
     const loadingScreens: Record<string, React.ComponentType> = {
@@ -241,6 +243,7 @@ export default function App() {
       reports: LoadingScreen,
       'reports-history': LoadingScreen,
       'api-keys': LoadingScreen,
+      'admin-orgs': LoadingScreen,
     };
 
     const Component = tabComponents[activeTab] || HomeScreen;
