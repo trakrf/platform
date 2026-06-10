@@ -87,7 +87,7 @@ func TestStream_OrgFilteredFramingSurvivesWriteTimeout(t *testing.T) {
 			t.Fatal("received another org's read — org filtering broken")
 		}
 		if strings.HasPrefix(line, "data:") && strings.Contains(line, "EPC-1") {
-			if !strings.Contains(line, `"readerKey":"dock-9"`) {
+			if !strings.Contains(line, `"readerKey":"trakrf.id/dock-9/reads"`) {
 				t.Fatalf("data frame missing readerKey: %s", line)
 			}
 			return // success
