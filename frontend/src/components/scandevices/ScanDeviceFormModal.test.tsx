@@ -162,8 +162,8 @@ describe('ScanDeviceFormModal', () => {
       <ScanDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
     );
 
-    // publish_topic is trakrf.id/dock_reader_1/reads → key dock_reader_1.
-    expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:dock_reader_1');
+    // publish_topic is the reader key verbatim (TRA-922: no parsing).
+    expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:trakrf.id/dock_reader_1/reads');
   });
 
   it('does not show the commissioning sections in create mode', () => {
@@ -191,7 +191,7 @@ describe('ScanDeviceFormModal', () => {
       ).toBeInTheDocument();
       // …along with the scoped commissioning sections…
       expect(screen.getByTestId('reader-points')).toHaveTextContent('points:csl_cs463');
-      expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:dock_reader_1');
+      expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:trakrf.id/dock_reader_1/reads');
       // …but the modal chrome (backdrop close button + title bar) is gone.
       expect(screen.queryByLabelText('Close modal')).not.toBeInTheDocument();
       expect(
@@ -223,7 +223,7 @@ describe('ScanDeviceFormModal', () => {
       expect(
         screen.getByRole('button', { name: /Update Scan Device/i })
       ).toBeInTheDocument();
-      expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:dock_reader_1');
+      expect(screen.getByTestId('scoped-feed')).toHaveTextContent('feed:trakrf.id/dock_reader_1/reads');
       expect(screen.queryByLabelText('Close modal')).not.toBeInTheDocument();
     });
   });

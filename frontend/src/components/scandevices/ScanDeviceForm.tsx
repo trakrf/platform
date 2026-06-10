@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { validateName } from '@/lib/location/validators';
+import { useOrgStore } from '@/stores/orgStore';
 import type {
   ScanDevice,
   ScanDeviceType,
@@ -67,6 +68,10 @@ export function ScanDeviceForm({
   const [formData, setFormData] = useState<ScanDeviceFormData>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
+  // TRA-922: every publish_topic must start with {org_slug}/. Pre-fill the
+  // create form with that prefix so operators only type the device-specific tail.
+  const orgSlug = useOrgStore((s) => s.currentOrg?.identifier ?? '');
+
   useEffect(() => {
     if (mode === 'edit' && device) {
       setFormData({
@@ -80,9 +85,9 @@ export function ScanDeviceForm({
         is_active: device.is_active,
       });
     } else if (mode === 'create') {
-      setFormData(EMPTY_FORM);
+      setFormData({ ...EMPTY_FORM, publish_topic: orgSlug ? `${orgSlug}/` : '' });
     }
-  }, [mode, device]);
+  }, [mode, device, orgSlug]);
 
   const validateForm = (): boolean => {
     const errors: FieldErrors = {};
@@ -233,13 +238,18 @@ export function ScanDeviceForm({
           onChange={(e) => handleChange('publish_topic', e.target.value)}
           disabled={loading}
           className={inputClass(!!fieldErrors.publish_topic)}
-          placeholder="e.g., trakrf.id/dock-reader-1/reads"
+          placeholder={orgSlug ? `e.g., ${orgSlug}/dock-reader-1/reads` : 'e.g., your-org/dock-reader-1/reads'}
         />
         {fieldErrors.publish_topic && (
           <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.publish_topic}</p>
         )}
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           The MQTT topic this device publishes reads on — the routing key that ties wire traffic to this reader.
+          {orgSlug && (
+            <>
+              {' '}Must start with <code className="font-mono">{orgSlug}/</code>.
+            </>
+          )}
         </p>
       </div>
 

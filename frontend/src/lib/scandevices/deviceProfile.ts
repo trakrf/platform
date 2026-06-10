@@ -29,26 +29,14 @@ export function deviceProfile(device: Pick<ScanDevice, 'type' | 'transport'>): D
   return 'single_point';
 }
 
-const TOPIC_RE = /^trakrf\.id\/([^/]+)\/reads$/;
-
 /**
- * Extract the reader key from a `trakrf.id/{key}/reads` topic, mirroring the
- * backend's readerKeyFromTopic (broadcaster.go). Non-matching topics fall back
- * to the full string so the key is never empty.
- */
-export function readerKeyFromTopic(topic: string): string {
-  const m = TOPIC_RE.exec(topic);
-  return m ? m[1] : topic;
-}
-
-/**
- * The reader key the live feed tags this device's reads with. The backend
- * derives readerKey from the topic a device publishes on, so we derive the same
- * key from publish_topic. A device with no publish_topic has no live-feed key.
+ * The reader key the live feed tags this device's reads with. TRA-922: routing
+ * is a direct topic→device match (no parsing), so the reader key is simply the
+ * device's publish_topic used verbatim — the same string the backend keys reads
+ * by. A device with no publish_topic has no live-feed key.
  */
 export function readerKeyForDevice(
   device: Pick<ScanDevice, 'publish_topic'>
 ): string {
-  const topic = device.publish_topic?.trim();
-  return topic ? readerKeyFromTopic(topic) : '';
+  return device.publish_topic?.trim() ?? '';
 }

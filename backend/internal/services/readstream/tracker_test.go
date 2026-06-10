@@ -114,7 +114,7 @@ func TestTracker_PublishDeliversUpsert(t *testing.T) {
 	if err := json.Unmarshal(ev.Data, &ts); err != nil {
 		t.Fatalf("bad upsert json: %v", err)
 	}
-	if ts.EPC != "EPC2" || ts.ReaderKey != "dock-9" || ts.AntennaPort != 3 {
+	if ts.EPC != "EPC2" || ts.ReaderKey != "trakrf.id/dock-9/reads" || ts.AntennaPort != 3 {
 		t.Fatalf("unexpected upsert tag: %+v", ts)
 	}
 }
@@ -185,7 +185,7 @@ func TestTracker_ScopedSubscriberOnlySeesItsReader(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7, "dock-1") // scoped to dock-1
+	ch, cancel := tr.Subscribe(7, "trakrf.id/dock-1/reads") // scoped to dock-1's topic
 	defer cancel()
 	recv(t, ch, time.Second) // seed
 
@@ -200,7 +200,7 @@ func TestTracker_ScopedSubscriberOnlySeesItsReader(t *testing.T) {
 	if err := json.Unmarshal(ev.Data, &ts); err != nil {
 		t.Fatalf("bad upsert json: %v", err)
 	}
-	if ev.Type != eventUpsert || ts.EPC != "MINE" || ts.ReaderKey != "dock-1" {
+	if ev.Type != eventUpsert || ts.EPC != "MINE" || ts.ReaderKey != "trakrf.id/dock-1/reads" {
 		t.Fatalf("scoped session should see only dock-1's read, got %s %+v", ev.Type, ts)
 	}
 }

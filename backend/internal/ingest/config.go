@@ -6,23 +6,21 @@ import "os"
 // (keeps local dev, tests, and pre-cutover prod inert).
 type Config struct {
 	URL      string // mqtts://user:pass@host:port  (MQTT_URL)
-	Topic    string // subscription filter (MQTT_TOPIC), e.g. trakrf.id/# or $share/grp/trakrf.id/#
 	ClientID string // base client id (MQTT_CLIENT_ID); subscriber appends a per-process suffix
 }
 
 // Enabled reports whether the subscriber should start.
 func (c Config) Enabled() bool { return c.URL != "" }
 
-// ConfigFromEnv reads the MQTT subscriber config from the environment, applying
-// defaults for the topic filter and client id.
+// ConfigFromEnv reads the MQTT subscriber config from the environment.
+//
+// TRA-922: MQTT_TOPIC is retired. The subscriber no longer uses a static
+// subscription filter — it subscribes to exactly the registered publish_topics
+// (data-driven, via the topicroute registry), so there is no topic to configure.
 func ConfigFromEnv() Config {
 	c := Config{
 		URL:      os.Getenv("MQTT_URL"),
-		Topic:    os.Getenv("MQTT_TOPIC"),
 		ClientID: os.Getenv("MQTT_CLIENT_ID"),
-	}
-	if c.Topic == "" {
-		c.Topic = "trakrf.id/#"
 	}
 	if c.ClientID == "" {
 		c.ClientID = "trakrf-subscriber"
