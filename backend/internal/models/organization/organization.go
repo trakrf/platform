@@ -50,6 +50,11 @@ type UserOrgWithRole struct {
 	// can pre-fill the required {org_slug}/ publish_topic prefix (TRA-922).
 	Identifier string `json:"identifier"`
 	Role       string `json:"role"`
+	// TRA-947 entitlement: is_entitled is computed server-side; the raw fields
+	// are surfaced for display (renew prompts / trial countdown).
+	IsEntitled            bool       `json:"is_entitled"`
+	SubscriptionEnabled   bool       `json:"subscription_enabled"`
+	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
 }
 
 // SetCurrentOrgRequest for POST /users/me/current-org

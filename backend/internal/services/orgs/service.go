@@ -144,8 +144,14 @@ func (s *Service) GetUserProfile(ctx context.Context, userID int) (*organization
 					// TRA-922: include the org slug so the UI can pre-fill the
 					// required {org_slug}/ publish_topic prefix. Best-effort — a
 					// lookup miss leaves Identifier empty rather than failing /me.
+					// TRA-947: also populate raw subscription fields for display.
 					if full, ferr := s.storage.GetOrganizationByID(ctx, currentOrgID); ferr == nil && full != nil {
 						cur.Identifier = full.Identifier
+						cur.SubscriptionEnabled = full.SubscriptionEnabled
+						cur.SubscriptionExpiresAt = full.SubscriptionExpiresAt
+					}
+					if entitled, eerr := s.storage.OrgIsEntitled(ctx, currentOrgID); eerr == nil {
+						cur.IsEntitled = entitled
 					}
 					profile.CurrentOrg = cur
 					break
