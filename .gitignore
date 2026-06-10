@@ -183,6 +183,11 @@ openapitools.json
 # Superpowers brainstorm / visual companion session data
 .superpowers/
 
+# Superpowers design specs + implementation plans: generated per-session as
+# working artifacts, not kept in the repo. The brainstorming / writing-plans
+# skills recreate this directory on demand.
+docs/superpowers/
+
 # Written by sync-preview CI on the preview branch only; read by docker-build
 # to embed the merged-PR list into the version string (TRA-851). Never commit
 # from a developer branch.
