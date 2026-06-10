@@ -288,10 +288,19 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 	member := middleware.RequireOrgMember(store)
 	admin := middleware.RequireOrgAdmin(store)
+	superadmin := middleware.RequireSuperadmin(store)
 
 	// Public routes (any authenticated user)
 	r.Get("/api/v1/orgs", h.List)
 	r.Post("/api/v1/orgs", h.Create)
+
+	// Superadmin-only cross-org surfaces (TRA-949). Gated strictly on
+	// is_superadmin — these bypass the member-of-org scope so an operator can
+	// reach ANY org. NOT behind the entitlement 402 gate (paidGate is threaded
+	// only into the paid-mutation handlers), so a superadmin can re-enable a
+	// lapsed org.
+	r.With(superadmin).Get("/api/v1/admin/orgs", h.ListAllOrgs)
+	r.With(superadmin).Patch("/api/v1/orgs/{id}/entitlement", h.UpdateEntitlement)
 
 	// Protected routes (require org membership/admin)
 	r.With(member).Get("/api/v1/orgs/{id}", h.Get)

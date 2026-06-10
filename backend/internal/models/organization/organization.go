@@ -29,6 +29,27 @@ type CreateOrganizationRequest struct {
 	Name string `json:"name" validate:"required,min=1,max=255"`
 }
 
+// AdminOrgListItem is a row in the superadmin all-orgs list (TRA-949). It
+// surfaces just enough for an operator to scan entitlement state across every
+// org and drill into one: name, the raw entitlement fields, and a member count.
+type AdminOrgListItem struct {
+	ID                    int        `json:"id"`
+	Name                  string     `json:"name"`
+	Identifier            string     `json:"identifier"`
+	SubscriptionEnabled   bool       `json:"subscription_enabled"`
+	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
+	MemberCount           int        `json:"member_count"`
+}
+
+// UpdateEntitlementRequest is the superadmin entitlement edit payload (TRA-949).
+// subscription_enabled is required (a missing field is rejected — a bare PATCH
+// must not silently flip the kill switch off). subscription_expires_at is
+// nullable: a null/omitted value clears the expiry (NULL = never expires).
+type UpdateEntitlementRequest struct {
+	SubscriptionEnabled   *bool      `json:"subscription_enabled" validate:"required"`
+	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at"`
+}
+
 // UpdateOrganizationRequest for PUT /api/v1/orgs/:id
 type UpdateOrganizationRequest struct {
 	Name *string `json:"name" validate:"omitempty,min=1,max=255"`

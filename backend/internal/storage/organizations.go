@@ -39,6 +39,71 @@ func (s *Storage) ListUserOrgs(ctx context.Context, userID int) ([]organization.
 	return orgs, nil
 }
 
+// ListAllOrgs returns every non-deleted organization (TRA-949), regardless of
+// membership, for the superadmin all-orgs list. This deliberately does NOT join
+// org_users to restrict by membership — caller authorization is enforced by the
+// RequireSuperadmin middleware. The member count is a left-join aggregate so
+// member-less orgs still appear (count 0).
+func (s *Storage) ListAllOrgs(ctx context.Context) ([]organization.AdminOrgListItem, error) {
+	query := `
+		SELECT o.id, o.name, o.identifier,
+		       o.subscription_enabled, o.subscription_expires_at,
+		       COUNT(ou.user_id) FILTER (WHERE ou.deleted_at IS NULL) AS member_count
+		FROM trakrf.organizations o
+		LEFT JOIN trakrf.org_users ou ON ou.org_id = o.id
+		WHERE o.deleted_at IS NULL
+		GROUP BY o.id, o.name, o.identifier, o.subscription_enabled, o.subscription_expires_at
+		ORDER BY o.name ASC
+	`
+	rows, err := s.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list all orgs: %w", err)
+	}
+	defer rows.Close()
+
+	orgs := []organization.AdminOrgListItem{}
+	for rows.Next() {
+		var o organization.AdminOrgListItem
+		if err := rows.Scan(&o.ID, &o.Name, &o.Identifier,
+			&o.SubscriptionEnabled, &o.SubscriptionExpiresAt, &o.MemberCount); err != nil {
+			return nil, fmt.Errorf("failed to scan admin org: %w", err)
+		}
+		orgs = append(orgs, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate admin orgs: %w", err)
+	}
+	return orgs, nil
+}
+
+// UpdateOrgEntitlement sets the manual entitlement kill switch and expiry
+// (TRA-949). expiresAt nil persists NULL (never expires). Returns the updated
+// org, or (nil, nil) when no active org matches (no-rows convention, matching
+// GetOrganizationByID). Caller authorization is enforced by RequireSuperadmin.
+func (s *Storage) UpdateOrgEntitlement(ctx context.Context, id int, enabled bool, expiresAt *time.Time) (*organization.Organization, error) {
+	query := `
+		UPDATE trakrf.organizations
+		SET subscription_enabled = $2, subscription_expires_at = $3, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING id, name, identifier, metadata,
+		          valid_from, valid_to, is_active, created_at, updated_at,
+		          subscription_enabled, subscription_expires_at
+	`
+	var org organization.Organization
+	err := s.pool.QueryRow(ctx, query, id, enabled, expiresAt).Scan(
+		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
+		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
+		&org.SubscriptionEnabled, &org.SubscriptionExpiresAt)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to update org entitlement: %w", err)
+	}
+	return &org, nil
+}
+
 // GetOrganizationByID retrieves a single organization by its ID.
 func (s *Storage) GetOrganizationByID(ctx context.Context, id int) (*organization.Organization, error) {
 	query := `
