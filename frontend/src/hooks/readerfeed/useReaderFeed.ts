@@ -16,6 +16,7 @@ import {
 import { openReadStream } from '@/lib/readerfeed/stream';
 import { API_BASE_URL } from '@/lib/api/client';
 import { useAuthStore } from '@/stores/authStore';
+import { useOrgStore } from '@/stores/orgStore';
 import type { ReaderFeedStatus, TagState } from '@/types/readerfeed';
 
 const BACKSTOP_TICK_MS = 1000;
@@ -43,9 +44,21 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   const [error, setError] = useState<string | null>(null);
   const [readRate, setReadRate] = useState(0);
 
+  // The active org scopes the stream server-side (the JWT bearer carries the
+  // org_id claim). Switching orgs mints a new token, so the stream must tear
+  // down and reopen on the new context — otherwise the old connection keeps
+  // delivering the previous org's reads until a page refresh (TRA-964).
+  const activeOrgId = useOrgStore((s) => s.currentOrg?.id);
+
   // SSE stream lifecycle. The reader scope is applied server-side (the backend
-  // only streams/tracks that reader for this session), so changing it reconnects.
+  // only streams/tracks that reader for this session), so changing it — or the
+  // active org — reconnects. Resetting here clears the previous context's reads
+  // so the list never shows stale rows across the switch.
   useEffect(() => {
+    setTagMap(new Map());
+    setReadRate(0);
+    setStatus('connecting');
+
     const handle = openReadStream({
       baseURL: API_BASE_URL,
       readerKey: filterReaderKey,
@@ -80,7 +93,7 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
       },
     });
     return () => handle.close();
-  }, [filterReaderKey]);
+  }, [filterReaderKey, activeOrgId]);
 
   // Backstop expiry tick — only catches a LEAVE dropped during a reconnect.
   useEffect(() => {
