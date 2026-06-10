@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deviceProfile, readerKeyFromTopic, readerKeyForDevice } from './deviceProfile';
+import { deviceProfile, readerKeyForDevice } from './deviceProfile';
 import type { ScanDevice } from '@/types/scandevices';
 
 function device(overrides: Partial<ScanDevice>): ScanDevice {
@@ -46,25 +46,13 @@ describe('deviceProfile', () => {
   });
 });
 
-describe('readerKeyFromTopic', () => {
-  it('extracts the {key} segment from a grandfathered trakrf.id topic', () => {
-    expect(readerKeyFromTopic('trakrf.id/dock-7/reads')).toBe('dock-7');
-  });
-
-  it('extracts the {key} segment from a new {org_slug}/ topic (TRA-922)', () => {
-    expect(readerKeyFromTopic('organized-chaos/dock-7/reads')).toBe('dock-7');
-  });
-
-  it('falls back to the full topic for non-matching strings', () => {
-    expect(readerKeyFromTopic('weird/topic')).toBe('weird/topic');
-  });
-});
-
 describe('readerKeyForDevice', () => {
-  it('derives the key from publish_topic when present', () => {
+  // TRA-922: the reader key is the publish_topic verbatim (direct topic→device
+  // match; nothing is parsed out of it), matching how the backend keys reads.
+  it('uses the publish_topic verbatim as the key', () => {
     expect(
-      readerKeyForDevice(device({ publish_topic: 'trakrf.id/custom-key/reads' }))
-    ).toBe('custom-key');
+      readerKeyForDevice(device({ publish_topic: 'organized-chaos/custom-key/reads' }))
+    ).toBe('organized-chaos/custom-key/reads');
   });
 
   // TRA-956: external_key is gone — a device with no publish_topic has no

@@ -22,7 +22,6 @@ package readstream
 
 import (
 	"encoding/json"
-	"regexp"
 	"sync"
 	"time"
 
@@ -224,7 +223,11 @@ func (t *Tracker) Publish(orgID int, topic string, reads []scanread.Read) {
 	if len(reads) == 0 {
 		return
 	}
-	key := readerKeyFromTopic(topic)
+	// TRA-922: the publish_topic is the reader key, used verbatim. Routing is a
+	// direct topic→device match (resolve_scan_topic), so there is nothing to
+	// parse out of the topic — one topic is one device is one reader. The
+	// frontend derives the same key from device.publish_topic for ?reader=.
+	key := topic
 	now := t.now()
 
 	t.mu.Lock()
@@ -335,19 +338,4 @@ func marshalEvent(oe orgEvent) (Event, bool) {
 	default:
 		return Event{}, false
 	}
-}
-
-// TRA-922: the first segment is the org-slug prefix (was the fixed "trakrf.id"
-// root); accept any first segment so both new {org_slug}/{key}/reads topics and
-// grandfathered trakrf.id/{key}/reads topics yield the same middle key.
-var topicRe = regexp.MustCompile(`^[^/]+/([^/]+)/reads$`)
-
-// readerKeyFromTopic extracts the reader key from a `{prefix}/{key}/reads`
-// topic, mirroring the frontend. Non-matching topics fall back to the full topic
-// string so the key is never empty.
-func readerKeyFromTopic(topic string) string {
-	if m := topicRe.FindStringSubmatch(topic); m != nil {
-		return m[1]
-	}
-	return topic
 }
