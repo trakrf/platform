@@ -18,6 +18,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/backend/internal/models/organization"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
@@ -27,6 +28,7 @@ import (
 type engineStore interface {
 	InsertAlarmEvent(ctx context.Context, orgID int, ev storage.AlarmEventRow) error
 	ListOutputDevicesForLocation(ctx context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error)
+	GetOrgGeofenceDefaults(ctx context.Context, orgID int) (organization.GeofenceDefaults, error)
 }
 
 // outputDriver drives one output device on/off via its transport;
@@ -82,6 +84,16 @@ func (e *Engine) Stop() {
 // and applies each device's mode. receivedAt (server time) is both the
 // dedup/presence timestamp and the alarm's FiredAt.
 func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []storage.ResolvedRead) {
+	// Org-default tuning tier (TRA-955). Fetched once per message — cheaper than
+	// the per-read device lookup below, and runtime-fresh (UI edits take effect on
+	// the next message, no restart). Best-effort: a lookup error falls back to the
+	// system/code defaults rather than dropping the message.
+	orgDefaults, err := e.store.GetOrgGeofenceDefaults(ctx, orgID)
+	if err != nil {
+		e.log.Warn().Err(err).Int("org_id", orgID).Msg("org geofence defaults lookup failed; using system defaults")
+		orgDefaults = organization.GeofenceDefaults{}
+	}
+
 	for _, rd := range reads {
 		metricEvaluated.Inc()
 
@@ -107,21 +119,18 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 
 		firedAny := false
 		for _, dev := range devices {
-			threshold := e.cfg.RSSIThreshold
-			if t, ok := dev.RSSIThreshold(); ok {
-				threshold = t
-			}
-			if rd.RSSI < threshold {
+			// Collapse the three tuning tiers (system/code -> org default ->
+			// per-output override) for this device (TRA-955).
+			tuning := Resolve(e.cfg, orgDefaults, dev)
+
+			if rd.RSSI < tuning.RSSIThreshold {
 				metricSuppressed.WithLabelValues("rssi_below_threshold").Inc()
 				continue
 			}
 
-			ttl := e.cfg.LatchTTL
-			if s, ok := dev.AgeOutSeconds(); ok {
-				ttl = time.Duration(s) * time.Second
-			}
+			ttl := time.Duration(tuning.AgeOutSeconds) * time.Second
 
-			if dev.Mode() == outputdevice.ModePresence {
+			if tuning.Mode == outputdevice.ModePresence {
 				// Presence: ON on the 0->1 edge; OFF fires from the output's age-out
 				// timer when no member is read for age-out. auto_off is ignored
 				// (the engine owns the OFF edge).
@@ -132,13 +141,13 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 				continue
 			}
 
-			// Egress: fire ON, then latch for the per-output re-arm window.
+			// Egress: fire ON, then latch for the re-arm window.
 			if !e.latch.admit(latchKey(orgID, dev.ID, rd.EPC), receivedAt, ttl) {
 				metricSuppressed.WithLabelValues("latched").Inc()
 				continue
 			}
 			firedAny = true
-			e.drive(ctx, orgID, dev, true, dev.AutoOffSeconds())
+			e.drive(ctx, orgID, dev, true, tuning.AutoOffSeconds)
 		}
 
 		if firedAny {
