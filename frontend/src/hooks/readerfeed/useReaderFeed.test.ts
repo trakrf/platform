@@ -68,4 +68,23 @@ describe('useReaderFeed', () => {
     // ...and the stale org-1 reads are gone (no page refresh needed).
     expect(result.current.tags).toHaveLength(0);
   });
+
+  it('reconnect() tears down the stream, clears the list, and reopens', () => {
+    const { result } = renderHook(() => useReaderFeed());
+    expect(opened).toHaveLength(1);
+
+    act(() => {
+      opened[0].callbacks.onEvents([
+        { type: 'snapshot', data: { tags: [tag()], uniqueTags: 1, readRate: 3 } },
+      ]);
+    });
+    expect(result.current.tags).toHaveLength(1);
+
+    // Clear ≈ reconnect: a fresh server session zeroes the per-session counts.
+    act(() => result.current.reconnect());
+
+    expect(opened[0].handle.close).toHaveBeenCalledTimes(1);
+    expect(opened).toHaveLength(2);
+    expect(result.current.tags).toHaveLength(0);
+  });
 });
