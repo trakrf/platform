@@ -310,6 +310,49 @@ describe('OutputDeviceFormModal', () => {
     });
   });
 
+  describe('de-duplication in edit mode (TRA-940)', () => {
+    it('create mode renders name, switch ID, location, and active fields', () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+      expect(screen.getByLabelText(/^name/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/switch id/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^location/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Active')).toBeInTheDocument();
+    });
+
+    it('edit mode hides name, switch ID, location, and active (now inline in the row)', () => {
+      render(
+        <OutputDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
+      );
+      expect(screen.queryByLabelText(/^name/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/switch id/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/^location/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Active')).not.toBeInTheDocument();
+    });
+
+    it('edit mode keeps the cascade + rule fields', () => {
+      render(
+        <OutputDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
+      );
+      expect(screen.getByLabelText(/transport/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/base url/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^mode/i)).toBeInTheDocument();
+    });
+
+    it('edit submit omits name, switch_id, location_id, and is_active', async () => {
+      render(
+        <OutputDeviceFormModal isOpen={true} mode="edit" device={mockDevice} onClose={mockOnClose} />
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Update Output Device/i }));
+      await waitFor(() => expect(outputDevicesApi.update).toHaveBeenCalledTimes(1));
+      const [, payload] = (outputDevicesApi.update as any).mock.calls[0];
+      expect(payload).not.toHaveProperty('name');
+      expect(payload).not.toHaveProperty('switch_id');
+      expect(payload).not.toHaveProperty('location_id');
+      expect(payload).not.toHaveProperty('is_active');
+      expect(payload).toMatchObject({ type: 'shelly_gen4', transport: 'http' });
+    });
+  });
+
   describe('OutputDeviceEditPanel', () => {
     it('renders the inline edit surface with test-fire / reset for the device', () => {
       render(<OutputDeviceEditPanel device={mockDevice} onClose={mockOnClose} />);

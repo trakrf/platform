@@ -17,10 +17,15 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
+
+// passThrough is a no-op paid-gate middleware for tests (entitlement is
+// enforced elsewhere; these tests exercise the handler logic).
+func passThrough(next http.Handler) http.Handler { return next }
 
 func withOrg(req *http.Request, orgID int) *http.Request {
 	claims := &jwt.Claims{UserID: 1, Email: "tra903@t.com", CurrentOrgID: &orgID}
@@ -38,7 +43,7 @@ type fakeDriver struct {
 	failURL string
 }
 
-func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool) error {
+func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool, _ int) error {
 	d.calls = append(d.calls, setCall{dev.BaseURL, dev.SwitchID, on})
 	if dev.BaseURL == d.failURL {
 		return errors.New("device unreachable")
@@ -52,8 +57,8 @@ func newTestServer(t *testing.T, drv *fakeDriver) (*chi.Mux, int) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	// testPulse 0: no blocking sleep in tests.
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r)
+	// testPulse 0: no blocking sleep in tests. Pass-through paid gate.
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
 	return r, orgID
 }
 
@@ -113,6 +118,68 @@ func TestOutputDevicesHandler_RoundTrip(t *testing.T) {
 	// Get after delete -> 404.
 	rec = do(http.MethodGet, "/api/v1/output-devices/"+itoa(id), nil)
 	require.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TRA-940: an explicit `location_id: null` in a PATCH detaches the location;
+// omitting the field leaves it unchanged.
+func TestOutputDevicesHandler_ClearLocation(t *testing.T) {
+	drv := &fakeDriver{}
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+
+	loc, err := db.Store.CreateLocation(context.Background(), location.Location{
+		OrgID: orgID, ExternalKey: "dock-1", Name: "Dock 1",
+	})
+	require.NoError(t, err)
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		var buf bytes.Buffer
+		if body != nil {
+			require.NoError(t, json.NewEncoder(&buf).Encode(body))
+		}
+		req := httptest.NewRequest(method, path, &buf)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, withOrg(req, orgID))
+		return rec
+	}
+
+	type locResp struct {
+		Data struct {
+			ID         int  `json:"id"`
+			LocationID *int `json:"location_id"`
+		} `json:"data"`
+	}
+
+	// Create an output device bound to the location.
+	rec := do(http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Bound Strobe", "base_url": "http://192.168.50.66", "location_id": loc.ID,
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var created locResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+	require.NotNil(t, created.Data.LocationID)
+	require.Equal(t, loc.ID, *created.Data.LocationID)
+	id := created.Data.ID
+
+	// PATCH omitting location_id leaves it attached.
+	rec = do(http.MethodPatch, "/api/v1/output-devices/"+itoa(id), map[string]any{"name": "Renamed"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var kept locResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &kept))
+	require.NotNil(t, kept.Data.LocationID, "omitting location_id leaves the binding")
+
+	// PATCH with an explicit null detaches the location.
+	rec = do(http.MethodPatch, "/api/v1/output-devices/"+itoa(id), map[string]any{"location_id": nil})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var cleared locResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cleared))
+	require.Nil(t, cleared.Data.LocationID, "explicit location_id:null detaches the location")
 }
 
 func TestOutputDevicesHandler_CreateValidation(t *testing.T) {

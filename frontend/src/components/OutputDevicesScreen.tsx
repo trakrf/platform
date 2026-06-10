@@ -5,10 +5,11 @@ import { useOutputDevices, useOutputDeviceMutations } from '@/hooks/outputdevice
 import { useLocations } from '@/hooks/locations';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
-import { ConfirmModal } from '@/components/shared';
+import { ConfirmModal, InlineEditCell } from '@/components/shared';
 import { OutputDeviceFormModal, OutputDeviceEditPanel } from '@/components/outputdevices';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PaidGate } from '@/components/entitlement';
+import { validateName } from '@/lib/location/validators';
 import type { OutputDevice } from '@/types/outputdevices';
 
 // Editing happens inline via a single-open row expander (TRA-938): the config
@@ -20,8 +21,16 @@ export default function OutputDevicesScreen() {
 
   const { outputDevices, isLoading } = useOutputDevices();
   const { locations } = useLocations();
-  const { delete: deleteOutputDevice } = useOutputDeviceMutations();
+  const { delete: deleteOutputDevice, update: updateOutputDevice } = useOutputDeviceMutations();
   const { setActiveTab } = useUIStore();
+
+  const locationOptions = [
+    { value: '', label: '— None —' },
+    ...locations.map((l) => ({ value: String(l.id), label: l.name })),
+  ];
+
+  const validateSwitchId = (raw: string) =>
+    /^\d+$/.test(raw.trim()) ? null : 'Switch ID must be a non-negative integer';
 
   const toggleExpanded = (id: number) =>
     setExpandedId((current) => (current === id ? null : id));
@@ -105,15 +114,73 @@ export default function OutputDevicesScreen() {
                             )}
                           </button>
                         </td>
-                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
+                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">
+                          <PaidGate surface="outputs-crud" silentImpression>
+                            <InlineEditCell
+                              variant="text"
+                              value={device.name}
+                              ariaLabel={`Edit name for ${device.name}`}
+                              validate={validateName}
+                              onSave={(name) =>
+                                updateOutputDevice({ id: device.id, updates: { name } }).then(
+                                  () => undefined
+                                )
+                              }
+                            />
+                          </PaidGate>
+                        </td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
                         <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
                           {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
                         </td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.switch_id}</td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">
+                          <PaidGate surface="outputs-crud" silentImpression>
+                            <InlineEditCell
+                              variant="number"
+                              value={device.switch_id}
+                              ariaLabel={`Edit switch ID for ${device.name}`}
+                              validate={validateSwitchId}
+                              onSave={(raw) =>
+                                updateOutputDevice({
+                                  id: device.id,
+                                  updates: { switch_id: parseInt(raw, 10) },
+                                }).then(() => undefined)
+                              }
+                            />
+                          </PaidGate>
+                        </td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">
+                          <PaidGate surface="outputs-crud" silentImpression>
+                            <InlineEditCell
+                              variant="select"
+                              value={device.location_id != null ? String(device.location_id) : ''}
+                              ariaLabel={`Edit location for ${device.name}`}
+                              options={locationOptions}
+                              display={(v) => locationName(v ? Number(v) : null)}
+                              onSave={(raw) =>
+                                updateOutputDevice({
+                                  id: device.id,
+                                  updates: { location_id: raw === '' ? null : parseInt(raw, 10) },
+                                }).then(() => undefined)
+                              }
+                            />
+                          </PaidGate>
+                        </td>
+                        <td className="px-3 text-gray-700 dark:text-gray-300">
+                          <PaidGate surface="outputs-crud" silentImpression>
+                            <InlineEditCell
+                              variant="toggle"
+                              value={device.is_active}
+                              ariaLabel={`Toggle active for ${device.name}`}
+                              onSave={(is_active) =>
+                                updateOutputDevice({ id: device.id, updates: { is_active } }).then(
+                                  () => undefined
+                                )
+                              }
+                            />
+                          </PaidGate>
+                        </td>
                         <td className="px-3 text-right whitespace-nowrap">
                           <PaidGate surface="outputs-crud" silentImpression>
                             <button

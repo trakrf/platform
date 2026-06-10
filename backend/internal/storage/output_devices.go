@@ -178,7 +178,9 @@ func (s *Storage) UpdateOutputDevice(ctx context.Context, orgID, id int, req out
 	if req.SwitchID != nil {
 		add("switch_id", *req.SwitchID)
 	}
-	if req.LocationID != nil {
+	if req.ClearLocationID {
+		setClauses = append(setClauses, "location_id = NULL")
+	} else if req.LocationID != nil {
 		add("location_id", *req.LocationID)
 	}
 	if req.IsActive != nil {

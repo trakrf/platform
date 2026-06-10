@@ -227,9 +227,16 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req outputdevice.UpdateOutputDeviceRequest
-	if err := httputil.DecodeJSONStrict(r, &req); err != nil {
+	// location_id is writable, so it stays out of the decoder's drop set; the
+	// nulls map lets us tell an explicit `location_id: null` (detach the location)
+	// from an omitted field (leave it unchanged) — TRA-931 / TRA-940.
+	nulls, _, err := httputil.DecodeJSONStrictWithNullsTolerantAndPresence(r, &req, nil)
+	if err != nil {
 		httputil.RespondDecodeError(w, r, err, reqID)
 		return
+	}
+	if _, ok := nulls["location_id"]; ok {
+		req.ClearLocationID = true
 	}
 	if err := validate.Struct(req); err != nil {
 		httputil.RespondValidationError(w, r, err, reqID)

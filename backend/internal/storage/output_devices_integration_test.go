@@ -127,6 +127,40 @@ func TestOutputDevice_ListForLocation(t *testing.T) {
 	require.Empty(t, none)
 }
 
+func TestOutputDevice_ClearLocation(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	loc, err := db.Store.CreateLocation(ctx, location.Location{
+		OrgID: orgID, ExternalKey: "dock-1", Name: "Dock 1",
+	})
+	require.NoError(t, err)
+
+	dev, err := db.Store.CreateOutputDevice(ctx, orgID, outputdevice.CreateOutputDeviceRequest{
+		Name: "Bound Strobe", BaseURL: "http://192.168.50.66", LocationID: &loc.ID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, dev.LocationID)
+	require.Equal(t, loc.ID, *dev.LocationID)
+
+	// An update that omits location_id leaves it attached.
+	newName := "Renamed"
+	kept, err := db.Store.UpdateOutputDevice(ctx, orgID, dev.ID, outputdevice.UpdateOutputDeviceRequest{
+		Name: &newName,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, kept.LocationID, "omitting location_id leaves the binding unchanged")
+	require.Equal(t, loc.ID, *kept.LocationID)
+
+	// ClearLocationID detaches the location (sets the column NULL).
+	cleared, err := db.Store.UpdateOutputDevice(ctx, orgID, dev.ID, outputdevice.UpdateOutputDeviceRequest{
+		ClearLocationID: true,
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.LocationID, "ClearLocationID detaches the location")
+}
+
 func TestOutputDevice_OrgIsolation(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()

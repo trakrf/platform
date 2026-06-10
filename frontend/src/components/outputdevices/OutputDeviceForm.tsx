@@ -127,8 +127,11 @@ export function OutputDeviceForm({
   const validateForm = (): boolean => {
     const errors: FieldErrors = {};
 
-    const nameError = validateName(formData.name);
-    if (nameError) errors.name = nameError;
+    // In edit mode, name / switch_id / location are owned by the inline row cells.
+    if (mode === 'create') {
+      const nameError = validateName(formData.name);
+      if (nameError) errors.name = nameError;
+    }
 
     if (formData.transport === 'http') {
       const urlError = validateBaseURL(formData.base_url);
@@ -137,7 +140,7 @@ export function OutputDeviceForm({
       errors.command_topic = 'Command topic is required for MQTT transport';
     }
 
-    if (formData.switch_id.trim() !== '' && !/^\d+$/.test(formData.switch_id.trim())) {
+    if (mode === 'create' && formData.switch_id.trim() !== '' && !/^\d+$/.test(formData.switch_id.trim())) {
       errors.switch_id = 'Switch ID must be a non-negative integer';
     }
 
@@ -166,10 +169,6 @@ export function OutputDeviceForm({
     e.preventDefault();
     if (!validateForm()) return;
 
-    const switch_id = formData.switch_id.trim() === '' ? 0 : parseInt(formData.switch_id.trim(), 10);
-    const location_id =
-      formData.location_id.trim() === '' ? null : parseInt(formData.location_id.trim(), 10);
-
     // Only submit the field that applies to the selected transport. Sending a
     // stale/empty base_url for mqtt trips the backend's url validation and is
     // an unrecoverable dead end since the field isn't shown (TRA-928).
@@ -184,13 +183,11 @@ export function OutputDeviceForm({
     if (formData.mode === 'egress' && formData.auto_off_seconds.trim() !== '')
       metadata.auto_off_seconds = parseInt(formData.auto_off_seconds.trim(), 10);
 
-    const common = {
-      name: formData.name,
+    // Cascade-coupled fields the expander form always owns (transport + its
+    // target field, type, and the rule-config metadata).
+    const base = {
       type: formData.type,
       transport: formData.transport,
-      switch_id,
-      location_id,
-      is_active: formData.is_active,
       metadata,
       ...(formData.transport === 'http'
         ? { base_url: formData.base_url.trim() }
@@ -198,9 +195,20 @@ export function OutputDeviceForm({
     };
 
     if (mode === 'create') {
-      onSubmit(common as CreateOutputDeviceRequest);
+      const switch_id = formData.switch_id.trim() === '' ? 0 : parseInt(formData.switch_id.trim(), 10);
+      const location_id =
+        formData.location_id.trim() === '' ? null : parseInt(formData.location_id.trim(), 10);
+      onSubmit({
+        ...base,
+        name: formData.name,
+        switch_id,
+        location_id,
+        is_active: formData.is_active,
+      } as CreateOutputDeviceRequest);
     } else {
-      onSubmit(common as UpdateOutputDeviceRequest);
+      // TRA-940: name / switch_id / location_id / is_active are owned by the
+      // inline row cells, so the expander PATCH omits them to avoid clobbering.
+      onSubmit(base as UpdateOutputDeviceRequest);
     }
   };
 
@@ -220,21 +228,24 @@ export function OutputDeviceForm({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id="name"
-            value={formData.name}
-            onChange={(e) => handleChange('name', e.target.value)}
-            disabled={loading}
-            className={inputClass(!!fieldErrors.name)}
-            placeholder="e.g., Dock Door Strobe"
-          />
-          {fieldErrors.name && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.name}</p>}
-        </div>
+        {/* TRA-940: name is edited inline in the list row; keep it only for create. */}
+        {mode === 'create' && (
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="name"
+              value={formData.name}
+              onChange={(e) => handleChange('name', e.target.value)}
+              disabled={loading}
+              className={inputClass(!!fieldErrors.name)}
+              placeholder="e.g., Dock Door Strobe"
+            />
+            {fieldErrors.name && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.name}</p>}
+          </div>
+        )}
 
         <div>
           <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -321,53 +332,57 @@ export function OutputDeviceForm({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label htmlFor="switch_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Switch ID
-          </label>
-          <input
-            type="number"
-            id="switch_id"
-            min={0}
-            value={formData.switch_id}
-            onChange={(e) => handleChange('switch_id', e.target.value)}
-            disabled={loading}
-            className={inputClass(!!fieldErrors.switch_id)}
-            placeholder="0"
-          />
-          {fieldErrors.switch_id && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.switch_id}</p>
-          )}
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Shelly relay channel (usually 0).</p>
-        </div>
+      {/* TRA-940: switch ID and location are edited inline in the list row;
+          keep them in the form only for create. */}
+      {mode === 'create' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="switch_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Switch ID
+            </label>
+            <input
+              type="number"
+              id="switch_id"
+              min={0}
+              value={formData.switch_id}
+              onChange={(e) => handleChange('switch_id', e.target.value)}
+              disabled={loading}
+              className={inputClass(!!fieldErrors.switch_id)}
+              placeholder="0"
+            />
+            {fieldErrors.switch_id && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.switch_id}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Shelly relay channel (usually 0).</p>
+          </div>
 
-        <div>
-          <label
-            htmlFor="location_id"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
-            Location
-          </label>
-          <select
-            id="location_id"
-            value={formData.location_id}
-            onChange={(e) => handleChange('location_id', e.target.value)}
-            disabled={loading}
-            className={inputClass(false)}
-          >
-            <option value="">— None —</option>
-            {locations.map((loc) => (
-              <option key={loc.id} value={String(loc.id)}>
-                {loc.name}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Fires when an asset is seen at this location (any reader/antenna). Leave blank to manage manually.
-          </p>
+          <div>
+            <label
+              htmlFor="location_id"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            >
+              Location
+            </label>
+            <select
+              id="location_id"
+              value={formData.location_id}
+              onChange={(e) => handleChange('location_id', e.target.value)}
+              disabled={loading}
+              className={inputClass(false)}
+            >
+              <option value="">— None —</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={String(loc.id)}>
+                  {loc.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Fires when an asset is seen at this location (any reader/antenna). Leave blank to manage manually.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
@@ -470,19 +485,22 @@ export function OutputDeviceForm({
         </div>
       </div>
 
-      <div className="flex items-center">
-        <input
-          type="checkbox"
-          id="is_active"
-          checked={formData.is_active}
-          onChange={(e) => handleChange('is_active', e.target.checked)}
-          disabled={loading}
-          className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
-        />
-        <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          Active
-        </label>
-      </div>
+      {/* TRA-940: Active is toggled inline in the list row in edit mode. */}
+      {mode === 'create' && (
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="is_active"
+            checked={formData.is_active}
+            onChange={(e) => handleChange('is_active', e.target.checked)}
+            disabled={loading}
+            className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
+          />
+          <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            Active
+          </label>
+        </div>
+      )}
 
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <button
