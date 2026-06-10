@@ -34,11 +34,11 @@ export default function LiveReadsScreen() {
           </p>
         </div>
 
-        <PaidGate surface="live-reads" panel className="flex-1 min-h-0">
-          <div className="h-full">
+        <div className="flex-1 min-h-0">
+          <PaidGate surface="live-reads" panel className="h-full">
             <LiveReadsFeed />
-          </div>
-        </PaidGate>
+          </PaidGate>
+        </div>
       </div>
     </ProtectedRoute>
   );

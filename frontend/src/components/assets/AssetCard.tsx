@@ -268,7 +268,7 @@ export function AssetCard({
               variant="button"
             />
             <PaidGate surface="assets-crud" silentImpression className="flex-1">
-              <div className="flex gap-1.5 sm:gap-2 w-full">
+              <div className="flex gap-1.5 sm:gap-2 flex-1">
                 <button
                   onClick={handleEdit}
                   className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-lg transition-colors"
