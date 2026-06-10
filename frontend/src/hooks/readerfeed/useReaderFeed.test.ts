@@ -1,5 +1,5 @@
-import { renderHook, act } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { renderHook, act, cleanup } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useReaderFeed } from './useReaderFeed';
 import { openReadStream } from '@/lib/readerfeed/stream';
 import { useOrgStore } from '@/stores/orgStore';
@@ -45,6 +45,10 @@ describe('useReaderFeed', () => {
     });
     setActiveOrg(1);
   });
+
+  // Unmount the hook between tests; otherwise a still-mounted instance reacts to
+  // the next test's org reset and opens a stray stream.
+  afterEach(() => cleanup());
 
   it('clears the read list and reopens the stream when the active org changes', () => {
     const { result } = renderHook(() => useReaderFeed());
