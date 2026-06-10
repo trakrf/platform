@@ -226,8 +226,6 @@ func TestEvaluate_ListErrorIsBestEffort(t *testing.T) {
 }
 
 func TestConfigFromEnv_Defaults(t *testing.T) {
-	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "")
-	t.Setenv("GEOFENCE_LATCH_TTL", "")
 	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "")
 	c := ConfigFromEnv()
 	if c != DefaultConfig() {
@@ -235,19 +233,27 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnv_Overrides(t *testing.T) {
-	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "-55")
-	t.Setenv("GEOFENCE_LATCH_TTL", "30s")
-	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "2m")
+func TestConfigFromEnv_SweepIntervalOnly(t *testing.T) {
+	// RSSI threshold and latch TTL were retired as env knobs (TRA-955): they are
+	// system/code defaults now, tuned per-org/per-output at runtime. Only the
+	// engine-global sweep interval remains env-configurable.
+	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "-10") // retired: must be ignored
+	t.Setenv("GEOFENCE_LATCH_TTL", "1s")       // retired: must be ignored
+	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "30s")
 	c := ConfigFromEnv()
-	if c.RSSIThreshold != -55 || c.LatchTTL != 30*time.Second || c.SweepInterval != 2*time.Minute {
-		t.Fatalf("env overrides not applied: %+v", c)
+	if c.RSSIThreshold != DefaultConfig().RSSIThreshold {
+		t.Fatalf("GEOFENCE_RSSI_THRESHOLD should be retired, got %d", c.RSSIThreshold)
+	}
+	if c.LatchTTL != DefaultConfig().LatchTTL {
+		t.Fatalf("GEOFENCE_LATCH_TTL should be retired, got %v", c.LatchTTL)
+	}
+	if c.SweepInterval != 30*time.Second {
+		t.Fatalf("sweep interval not applied: %v", c.SweepInterval)
 	}
 
-	// Malformed values fall back to defaults.
-	t.Setenv("GEOFENCE_RSSI_THRESHOLD", "nope")
-	t.Setenv("GEOFENCE_LATCH_TTL", "nope")
-	if c := ConfigFromEnv(); c.RSSIThreshold != DefaultConfig().RSSIThreshold || c.LatchTTL != DefaultConfig().LatchTTL {
-		t.Fatalf("malformed env must fall back to defaults: %+v", c)
+	// Malformed sweep interval falls back to the default.
+	t.Setenv("GEOFENCE_SWEEP_INTERVAL", "nope")
+	if c := ConfigFromEnv(); c.SweepInterval != DefaultConfig().SweepInterval {
+		t.Fatalf("malformed sweep interval must fall back to default: %v", c.SweepInterval)
 	}
 }
