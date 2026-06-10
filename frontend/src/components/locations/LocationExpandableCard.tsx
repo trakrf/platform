@@ -1,6 +1,7 @@
 import { ChevronRight, ChevronDown, Building2, MapPin, Pencil, ArrowRightLeft, Trash2, Plus } from 'lucide-react';
 import { useLocationStore } from '@/stores/locations/locationStore';
 import { LocationBreadcrumb } from './LocationBreadcrumb';
+import { PaidGate } from '@/components/entitlement';
 import type { Location } from '@/types/locations';
 
 export interface LocationExpandableCardProps {
@@ -199,6 +200,7 @@ export function LocationExpandableCard({
             )}
 
             {/* Action buttons - 2 column grid for better mobile layout */}
+            <PaidGate surface="locations-crud" silentImpression panel>
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={handleEdit}
@@ -231,6 +233,7 @@ export function LocationExpandableCard({
                 </button>
               )}
             </div>
+            </PaidGate>
           </div>
 
           {/* Children cards */}

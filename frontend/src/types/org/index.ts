@@ -23,6 +23,12 @@ export interface UserOrgWithRole {
   /** Globally-unique URL-safe slug; used to pre-fill the {org_slug}/ publish_topic prefix (TRA-922). */
   identifier: string;
   role: OrgRole;
+  /** TRA-947 entitlement: computed server-side; single source of truth for paid access. */
+  is_entitled: boolean;
+  /** Raw subscription flag, surfaced for display. */
+  subscription_enabled: boolean;
+  /** RFC3339; surfaced for renew/countdown copy. Absent when never subscribed. */
+  subscription_expires_at?: string | null;
 }
 
 /**

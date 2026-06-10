@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { useUIStore } from '@/stores';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { LiveReadsFeed } from '@/components/readerfeed/LiveReadsFeed';
+import { PaidGate } from '@/components/entitlement';
 
 export default function LiveReadsScreen() {
   const { setActiveTab } = useUIStore();
@@ -34,7 +35,9 @@ export default function LiveReadsScreen() {
         </div>
 
         <div className="flex-1 min-h-0">
-          <LiveReadsFeed />
+          <PaidGate surface="live-reads" panel className="h-full">
+            <LiveReadsFeed />
+          </PaidGate>
         </div>
       </div>
     </ProtectedRoute>

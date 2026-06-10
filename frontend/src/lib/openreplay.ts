@@ -86,6 +86,16 @@ export function getZustandPlugin(): unknown {
   return zustandPlugin;
 }
 
+/** Forward a custom event to OpenReplay when the tracker is active; no-op otherwise. */
+export function orEvent(name: string, payload: Record<string, unknown>): void {
+  if (!tracker) return;
+  try {
+    tracker.event(name, payload);
+  } catch (error) {
+    console.error('OpenReplay event failed:', error);
+  }
+}
+
 export function trackRFIDOperation(
   operation: 'connect' | 'disconnect' | 'inventory_start' | 'inventory_stop' | 'tag_read' | 'error',
   details?: Record<string, unknown>

@@ -7,6 +7,7 @@ import type {
   UpdateOutputDeviceRequest,
 } from '@/types/outputdevices';
 import { OutputDeviceForm } from './OutputDeviceForm';
+import { PaidGate } from '@/components/entitlement';
 import { useOutputDeviceMutations } from '@/hooks/outputdevices';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
@@ -124,28 +125,30 @@ function OutputDeviceFormModalBody({
           <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
             Test
           </h3>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => runDeviceAction('test')}
-              disabled={busy}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-40"
-              aria-label={`Test-fire output device ${device.name}`}
-            >
-              <Zap className="w-4 h-4" />
-              Test-fire
-            </button>
-            <button
-              type="button"
-              onClick={() => runDeviceAction('reset')}
-              disabled={busy}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors disabled:opacity-40"
-              aria-label={`Reset output device ${device.name}`}
-            >
-              <Power className="w-4 h-4" />
-              Reset (off)
-            </button>
-          </div>
+          <PaidGate surface="outputs-crud" silentImpression>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => runDeviceAction('test')}
+                disabled={busy}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-40"
+                aria-label={`Test-fire output device ${device.name}`}
+              >
+                <Zap className="w-4 h-4" />
+                Test-fire
+              </button>
+              <button
+                type="button"
+                onClick={() => runDeviceAction('reset')}
+                disabled={busy}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors disabled:opacity-40"
+                aria-label={`Reset output device ${device.name}`}
+              >
+                <Power className="w-4 h-4" />
+                Reset (off)
+              </button>
+            </div>
+          </PaidGate>
         </section>
       )}
     </>

@@ -4,6 +4,7 @@ import type { Location } from '@/types/locations';
 import type { Tag } from '@/types/shared';
 import { useLocationStore } from '@/stores';
 import { TagCountBadge, TagsModal, LocateTagPopover } from '@/components/assets';
+import { PaidGate } from '@/components/entitlement';
 
 interface LocationCardProps {
   location: Location;
@@ -143,20 +144,24 @@ export function LocationCard({
                   isActive={location.is_active}
                   variant="icon"
                 />
-                <button
-                  onClick={handleEdit}
-                  className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
-                  aria-label={`Edit ${location.external_key}`}
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
-                  aria-label={`Delete ${location.external_key}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <PaidGate surface="locations-crud" silentImpression>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <button
+                      onClick={handleEdit}
+                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
+                      aria-label={`Edit ${location.external_key}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
+                      aria-label={`Delete ${location.external_key}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </PaidGate>
               </div>
             )}
           </td>

@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { validateName } from '@/lib/location/validators';
 import { useLocations } from '@/hooks/locations';
+import { PaidGate } from '@/components/entitlement';
 import type {
   OutputDevice,
   OutputDeviceType,
@@ -492,13 +493,15 @@ export function OutputDeviceForm({
         >
           Cancel
         </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
-        >
-          {loading ? 'Saving...' : mode === 'create' ? 'Create Output Device' : 'Update Output Device'}
-        </button>
+        <PaidGate surface="outputs-crud" silentImpression>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+          >
+            {loading ? 'Saving...' : mode === 'create' ? 'Create Output Device' : 'Update Output Device'}
+          </button>
+        </PaidGate>
       </div>
     </form>
   );

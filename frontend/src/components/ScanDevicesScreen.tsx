@@ -7,6 +7,7 @@ import { useUIStore } from '@/stores';
 import { ConfirmModal } from '@/components/shared';
 import { ScanDeviceFormModal, ScanDeviceEditPanel } from '@/components/scandevices';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { PaidGate } from '@/components/entitlement';
 import type { ScanDevice } from '@/types/scandevices';
 
 // The reader list is flat (TRA-931): scan_devices only, no scan_point tree.
@@ -46,14 +47,16 @@ export default function ScanDevicesScreen() {
       <div className="h-full flex flex-col p-2">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Scan Devices</h1>
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Scan Device
-          </button>
+          <PaidGate surface="readers-crud">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Scan Device
+            </button>
+          </PaidGate>
         </div>
 
         <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -107,14 +110,16 @@ export default function ScanDevicesScreen() {
                           {device.is_active ? 'Yes' : 'No'}
                         </td>
                         <td className="px-3 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setDeletingDevice(device)}
-                            className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                            aria-label={`Delete scan device ${device.name}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <PaidGate surface="readers-crud" silentImpression>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingDevice(device)}
+                              className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                              aria-label={`Delete scan device ${device.name}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </PaidGate>
                         </td>
                       </tr>
                       {isExpanded && (
