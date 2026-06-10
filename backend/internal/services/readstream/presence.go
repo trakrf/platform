@@ -1,6 +1,7 @@
 package readstream
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/trakrf/platform/backend/internal/models/scanread"
@@ -29,7 +30,7 @@ type TagState struct {
 	ReaderKey   string `json:"readerKey"`
 	EPC         string `json:"epc"`
 	Alias       string `json:"alias,omitempty"` // optional; asset-name resolution is a follow-up
-	AntennaPort int    `json:"antennaPort"`     // most recent
+	AntennaPort int    `json:"antennaPort"`     // part of the row identity (TRA-937)
 	FirstSeenMs int64  `json:"firstSeen"`
 	LastSeenMs  int64  `json:"lastSeen"`
 	ReadCount   int64  `json:"readCount"`
@@ -71,12 +72,18 @@ func newStore(ttl, coalesce time.Duration) *store {
 	return &store{ttl: ttl, coalesce: coalesce, orgs: make(map[int]map[string]*tagAgg)}
 }
 
-func tagKey(readerKey, epc string) string { return readerKey + "\x00" + epc }
+// tagKey identifies a presence row by reader, EPC, and antenna port. Antenna is
+// part of the identity (TRA-937): the same tag read on two antennas is two rows
+// so the client can compare per-antenna sensitivity, and aggregates them back to
+// one "overall" row by default.
+func tagKey(readerKey, epc string, antennaPort int) string {
+	return readerKey + "\x00" + epc + "\x00" + strconv.Itoa(antennaPort)
+}
 
-// ingest records one read. On the first sight of a (reader,epc) it inserts the
-// tag and returns an upsert immediately; on a re-sight it folds the read into the
-// aggregates and returns nil — the (coalesced) upsert is emitted later by flush,
-// so a continuously-present tag does not firehose the stream.
+// ingest records one read. On the first sight of a (reader,epc,antenna) it
+// inserts the tag and returns an upsert immediately; on a re-sight it folds the
+// read into the aggregates and returns nil — the (coalesced) upsert is emitted
+// later by flush, so a continuously-present tag does not firehose the stream.
 func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Time) []orgEvent {
 	om := s.orgs[orgID]
 	if om == nil {
@@ -84,7 +91,7 @@ func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Ti
 		s.orgs[orgID] = om
 	}
 
-	key := tagKey(readerKey, r.EPC)
+	key := tagKey(readerKey, r.EPC, r.AntennaPort)
 	nowMs := now.UnixMilli()
 
 	a := om[key]
@@ -119,7 +126,7 @@ func (s *store) ingest(orgID int, readerKey string, r scanread.Read, now time.Ti
 		a.state.RSSIMax = r.RSSI
 	}
 	a.state.RSSIAvg = int(a.rssiSum / a.state.ReadCount)
-	a.state.AntennaPort = r.AntennaPort
+	// AntennaPort is fixed by the key — no need to reassign on re-sight.
 	a.state.LastSeenMs = nowMs
 	a.dirty = true
 	return nil
@@ -155,7 +162,7 @@ func (s *store) sweep(now time.Time) []orgEvent {
 				out = append(out, orgEvent{
 					orgID: orgID,
 					typ:   eventLeave,
-					tag:   TagState{ReaderKey: a.state.ReaderKey, EPC: a.state.EPC},
+					tag:   TagState{ReaderKey: a.state.ReaderKey, EPC: a.state.EPC, AntennaPort: a.state.AntennaPort},
 				})
 			}
 		}

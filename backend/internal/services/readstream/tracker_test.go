@@ -96,6 +96,23 @@ func TestTracker_PerSessionCountsIndependent(t *testing.T) {
 	}
 }
 
+func TestMarshalEvent_LeaveIncludesAntenna(t *testing.T) {
+	oe := orgEvent{orgID: 7, typ: eventLeave, tag: TagState{ReaderKey: "dock-1", EPC: "EPC1", AntennaPort: 3}}
+	ev, ok := marshalEvent(oe)
+	if !ok || ev.Type != eventLeave {
+		t.Fatalf("want a leave event, got ok=%v type=%s", ok, ev.Type)
+	}
+	var p leavePayload
+	if err := json.Unmarshal(ev.Data, &p); err != nil {
+		t.Fatalf("bad leave json: %v", err)
+	}
+	// The client keys its map by (reader,epc,antenna), so the LEAVE must carry the
+	// antenna or it can't delete the right split-view row (TRA-937).
+	if p.ReaderKey != "dock-1" || p.EPC != "EPC1" || p.AntennaPort != 3 {
+		t.Fatalf("leave payload must carry antenna, got %+v", p)
+	}
+}
+
 func TestTracker_PublishDeliversUpsert(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()

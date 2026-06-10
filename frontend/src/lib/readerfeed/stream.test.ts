@@ -43,10 +43,13 @@ describe('parseSSEChunk (named presence events)', () => {
     expect(evs[0].data).toMatchObject({ uniqueTags: 1, readRate: 4.5 });
   });
 
-  it('parses a leave frame', () => {
+  it('parses a leave frame (antenna included for the split-view row)', () => {
     const st: SSEParseState = { buffer: '' };
-    const evs = parseSSEChunk(st, frame('leave', { readerKey: 'dock-9', epc: 'E1' }));
-    expect(evs[0]).toMatchObject({ type: 'leave', data: { readerKey: 'dock-9', epc: 'E1' } });
+    const evs = parseSSEChunk(st, frame('leave', { readerKey: 'dock-9', epc: 'E1', antennaPort: 2 }));
+    expect(evs[0]).toMatchObject({
+      type: 'leave',
+      data: { readerKey: 'dock-9', epc: 'E1', antennaPort: 2 },
+    });
   });
 
   it('ignores comment/heartbeat frames', () => {

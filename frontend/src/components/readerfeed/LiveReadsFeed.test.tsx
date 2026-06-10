@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { LiveReadsFeed } from './LiveReadsFeed';
 import { useReaderFeed, type ReaderFeedState } from '@/hooks/readerfeed/useReaderFeed';
 import type { TagState } from '@/types/readerfeed';
@@ -28,6 +28,7 @@ function mockFeed(state: Partial<ReaderFeedState>) {
     error: null,
     readerCount: 0,
     readRate: 0,
+    reconnect: vi.fn(),
     ...state,
   });
 }
@@ -95,5 +96,70 @@ describe('LiveReadsFeed', () => {
     expect(screen.queryByText('Max')).not.toBeInTheDocument();
     // The shared coverage stats remain.
     expect(screen.getByText('Tags in view')).toBeInTheDocument();
+  });
+
+  it('filters rows by an EPC/alias substring', () => {
+    mockFeed({ tags: [tag({ epc: 'ABC' }), tag({ epc: 'XYZ' })] });
+    render(<LiveReadsFeed />);
+    expect(screen.getByText('ABC')).toBeInTheDocument();
+    expect(screen.getByText('XYZ')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/filter/i), { target: { value: 'abc' } });
+
+    expect(screen.getByText('ABC')).toBeInTheDocument();
+    expect(screen.queryByText('XYZ')).not.toBeInTheDocument();
+  });
+
+  it('aggregates antennas into one row by default and splits on toggle', () => {
+    mockFeed({
+      tags: [tag({ epc: 'TAG', antennaPort: 1 }), tag({ epc: 'TAG', antennaPort: 2 })],
+    });
+    render(<LiveReadsFeed />);
+
+    // Default "overall" view: one row, antenna label lists the contributing ports.
+    expect(screen.getAllByText('TAG')).toHaveLength(1);
+    expect(screen.getByText('1,2')).toBeInTheDocument();
+
+    // Toggle split: one row per antenna.
+    fireEvent.click(screen.getByLabelText(/split by antenna/i));
+    expect(screen.getAllByText('TAG')).toHaveLength(2);
+    expect(screen.queryByText('1,2')).not.toBeInTheDocument();
+  });
+
+  it('sorts by a column when its header is clicked', () => {
+    mockFeed({ tags: [tag({ epc: 'A', readCount: 1 }), tag({ epc: 'B', readCount: 9 })] });
+    render(<LiveReadsFeed />);
+
+    fireEvent.click(screen.getByRole('button', { name: /reads/i }));
+
+    const bodyRows = screen.getAllByRole('row').slice(1); // drop the header row
+    expect(bodyRows[0]).toHaveTextContent('B'); // highest read count first (desc)
+    expect(bodyRows[1]).toHaveTextContent('A');
+  });
+
+  it('pause freezes the rendered rows; resume re-applies live deltas', () => {
+    mockFeed({ tags: [tag({ epc: 'A' })] });
+    const { rerender } = render(<LiveReadsFeed />);
+    expect(screen.getByText('A')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /pause/i }));
+
+    // A new delta arrives while paused — it must not reach the table.
+    mockFeed({ tags: [tag({ epc: 'A' }), tag({ epc: 'B' })] });
+    rerender(<LiveReadsFeed />);
+    expect(screen.queryByText('B')).not.toBeInTheDocument();
+
+    // Resume re-syncs to the live feed.
+    fireEvent.click(screen.getByRole('button', { name: /resume/i }));
+    expect(screen.getByText('B')).toBeInTheDocument();
+  });
+
+  it('clear reconnects the stream (zeroing the per-session counts)', () => {
+    const reconnect = vi.fn();
+    mockFeed({ tags: [tag()], reconnect });
+    render(<LiveReadsFeed />);
+
+    fireEvent.click(screen.getByRole('button', { name: /clear/i }));
+    expect(reconnect).toHaveBeenCalledTimes(1);
   });
 });

@@ -6,7 +6,7 @@
 // hearing about (a LEAVE missed across a reconnect), but the server owns normal
 // eviction.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   applyEvent,
   expireStale,
@@ -30,6 +30,12 @@ export interface ReaderFeedState {
   readerCount: number;
   /** Server-reported reads/sec (whole-org; footer stat). */
   readRate: number;
+  /**
+   * Drop the local map and reopen the stream. A fresh server session starts its
+   * presence (and per-session read counts) from zero, so this is how "Clear"
+   * resets the counts — there is no per-row baseline to subtract (TRA-937).
+   */
+  reconnect: () => void;
 }
 
 /**
@@ -49,6 +55,11 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   // down and reopen on the new context — otherwise the old connection keeps
   // delivering the previous org's reads until a page refresh (TRA-964).
   const activeOrgId = useOrgStore((s) => s.currentOrg?.id);
+
+  // Bumping this forces the stream effect to tear down and reopen — the
+  // mechanism behind reconnect()/Clear.
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  const reconnect = useCallback(() => setReconnectNonce((n) => n + 1), []);
 
   // SSE stream lifecycle. The reader scope is applied server-side (the backend
   // only streams/tracks that reader for this session), so changing it — or the
@@ -93,7 +104,7 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
       },
     });
     return () => handle.close();
-  }, [filterReaderKey, activeOrgId]);
+  }, [filterReaderKey, activeOrgId, reconnectNonce]);
 
   // Backstop expiry tick — only catches a LEAVE dropped during a reconnect.
   useEffect(() => {
@@ -109,5 +120,5 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   );
   const readerCount = useMemo(() => new Set(tags.map((t) => t.readerKey)).size, [tags]);
 
-  return { tags, status, error, readerCount, readRate };
+  return { tags, status, error, readerCount, readRate, reconnect };
 }

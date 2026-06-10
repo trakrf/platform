@@ -8,17 +8,19 @@
 // reads itself.
 
 /**
- * One tag's presence record, keyed server-side by (reader, epc). This is the
- * ItemTest Inventory row. `firstSeen`/`lastSeen` are server epoch-ms (immune to
- * reader clock skew); the staleness gradient and "time since last seen" derive
- * from `lastSeen` on a local tick — no network traffic animates the fade.
+ * One tag's presence record, keyed server-side by (reader, epc, antenna). This
+ * is the ItemTest Inventory row at its finest granularity — the client
+ * aggregates per-antenna rows back to one (reader, epc) "overall" row by default
+ * (TRA-937). `firstSeen`/`lastSeen` are server epoch-ms (immune to reader clock
+ * skew); the staleness gradient and "time since last seen" derive from
+ * `lastSeen` on a local tick — no network traffic animates the fade.
  */
 export interface TagState {
   readerKey: string;
   epc: string;
   /** Resolved asset name, when known. Optional — asset-name resolution is a follow-up. */
   alias?: string;
-  /** Most recent antenna port. */
+  /** Antenna port — part of the row identity server-side. */
   antennaPort: number;
   /** Server epoch-ms of first sight. */
   firstSeen: number;
@@ -38,10 +40,12 @@ export interface SnapshotPayload {
   readRate: number;
 }
 
-/** Leave payload: identifies the evicted tag. */
+/** Leave payload: identifies the evicted tag, antenna included so the reducer
+ *  deletes the right (reader,epc,antenna) row (TRA-937). */
 export interface LeavePayload {
   readerKey: string;
   epc: string;
+  antennaPort: number;
 }
 
 /**
@@ -55,3 +59,33 @@ export type PresenceEvent =
   | { type: 'leave'; data: LeavePayload };
 
 export type ReaderFeedStatus = 'connecting' | 'connected' | 'error' | 'closed';
+
+/**
+ * A row as rendered in the inventory table. The feed reduces deltas at the
+ * finest (reader,epc,antenna) granularity; `toDisplayRows` turns that map into
+ * rows for the current view — either one per antenna (split) or one aggregated
+ * (reader,epc) row (the default "overall" view). `rowKey` is its stable identity
+ * within the current view; `antennaLabel` is the port number, or a sorted
+ * comma-joined list (e.g. `1,2,3`) when several antennas fold into one row.
+ */
+export interface DisplayRow extends TagState {
+  rowKey: string;
+  antennaLabel: string;
+}
+
+/** Columns the inventory table can sort by (header click). */
+export type SortKey =
+  | 'epc'
+  | 'readerKey'
+  | 'antennaPort'
+  | 'readCount'
+  | 'lastRssi'
+  | 'rssiAvg'
+  | 'rssiMin'
+  | 'rssiMax'
+  | 'lastSeen';
+
+export interface SortState {
+  key: SortKey;
+  dir: 'asc' | 'desc';
+}
