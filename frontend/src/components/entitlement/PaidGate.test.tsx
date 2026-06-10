@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PaidGate } from './PaidGate';
 import { useAuthStore } from '@/stores/authStore';
@@ -34,20 +34,21 @@ describe('PaidGate', () => {
   it('entitled: renders children as an interactive pass-through, no prompt event', () => {
     setState('entitled');
     const onClick = vi.fn();
-    render(
+    const { container } = render(
       <PaidGate surface="assets-crud">
         <button onClick={onClick}>Add</button>
       </PaidGate>
     );
-    fireEvent.click(screen.getByText('Add'));
+    fireEvent.click(within(container).getByText('Add'));
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(trackEvent).not.toHaveBeenCalled();
+    expect(within(container).queryByTestId('paid-gate-overlay')).toBeNull();
   });
 
   it('locked: emits prompt_shown on mount and gates the child click', () => {
     setState('lapsed');
     const onClick = vi.fn();
-    render(
+    const { container } = render(
       <PaidGate surface="assets-crud">
         <button onClick={onClick}>Add</button>
       </PaidGate>
@@ -56,24 +57,41 @@ describe('PaidGate', () => {
       surface: 'assets-crud',
       state: 'lapsed',
     });
-    fireEvent.click(screen.getByTestId('paid-gate-overlay'));
+    fireEvent.click(within(container).getByTestId('paid-gate-overlay'));
     expect(onClick).not.toHaveBeenCalled();
     expect(trackEvent).toHaveBeenCalledWith('paid_gate_click', {
       surface: 'assets-crud',
       state: 'lapsed',
     });
-    expect(screen.getByRole('dialog').textContent).toMatch(/renew to edit/i);
+    expect(within(container).getByRole('dialog').textContent).toMatch(/renew to edit/i);
+  });
+
+  it('silentImpression suppresses prompt_shown but still gates the click', () => {
+    setState('lapsed');
+    const onClick = vi.fn();
+    const { container } = render(
+      <PaidGate surface="assets-crud" silentImpression>
+        <button onClick={onClick}>Edit</button>
+      </PaidGate>
+    );
+    expect(trackEvent).not.toHaveBeenCalledWith('paid_gate_prompt_shown', expect.anything());
+    fireEvent.click(within(container).getByTestId('paid-gate-overlay'));
+    expect(onClick).not.toHaveBeenCalled();
+    expect(trackEvent).toHaveBeenCalledWith('paid_gate_click', {
+      surface: 'assets-crud',
+      state: 'lapsed',
+    });
   });
 
   it('logged-out CTA fires cta_click and redirects to signup', () => {
     setState('logged-out');
-    render(
+    const { container } = render(
       <PaidGate surface="inventory-save">
         <button>Save</button>
       </PaidGate>
     );
-    fireEvent.click(screen.getByTestId('paid-gate-overlay'));
-    fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+    fireEvent.click(within(container).getByTestId('paid-gate-overlay'));
+    fireEvent.click(within(container).getByRole('button', { name: 'Start free trial' }));
     expect(trackEvent).toHaveBeenCalledWith('paid_gate_cta_click', {
       surface: 'inventory-save',
       state: 'logged-out',
