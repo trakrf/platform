@@ -18,6 +18,10 @@ type Organization struct {
 	CreatedAt  time.Time              `json:"created_at"`
 	UpdatedAt  time.Time              `json:"updated_at"`
 	DeletedAt  *time.Time             `json:"deleted_at,omitempty"`
+	// TRA-947 lite entitlement (manual gate). The plan/billing reference columns
+	// in the schema are not surfaced here until TRA-135/TRA-198 need them.
+	SubscriptionEnabled   bool       `json:"subscription_enabled"`
+	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
 }
 
 // CreateOrganizationRequest for POST /api/v1/orgs
@@ -99,6 +103,11 @@ type UserOrgWithRole struct {
 	// can pre-fill the required {org_slug}/ publish_topic prefix (TRA-922).
 	Identifier string `json:"identifier"`
 	Role       string `json:"role"`
+	// TRA-947 entitlement: is_entitled is computed server-side; the raw fields
+	// are surfaced for display (renew prompts / trial countdown).
+	IsEntitled            bool       `json:"is_entitled"`
+	SubscriptionEnabled   bool       `json:"subscription_enabled"`
+	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
 }
 
 // SetCurrentOrgRequest for POST /users/me/current-org

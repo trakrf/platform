@@ -31,10 +31,11 @@ func NewHandler(storage *storage.Storage) *Handler {
 }
 
 // RegisterRoutes mounts by-id scan-point routes. Mount in the session-auth group.
-func (h *Handler) RegisterRoutes(r chi.Router) {
+func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
+	// TRA-947: scan-point mutations are paid; the Get stays open.
 	r.Get("/api/v1/scan-points/{scan_point_id}", h.Get)
-	r.Patch("/api/v1/scan-points/{scan_point_id}", h.Update)
-	r.Delete("/api/v1/scan-points/{scan_point_id}", h.Delete)
+	r.With(paidGate).Patch("/api/v1/scan-points/{scan_point_id}", h.Update)
+	r.With(paidGate).Delete("/api/v1/scan-points/{scan_point_id}", h.Delete)
 }
 
 // @Summary  Get a scan point

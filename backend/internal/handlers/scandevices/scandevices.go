@@ -78,14 +78,15 @@ func derefOr(p *string, fallback string) string {
 
 // RegisterRoutes wires the scan-device routes (and the device-nested scan-point
 // list/create) onto r. Mount inside the session-auth (middleware.Auth) group.
-func (h *Handler) RegisterRoutes(r chi.Router) {
+func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
+	// TRA-947: scan-device mutations are paid; List/Get GETs stay open.
 	r.Get("/api/v1/scan-devices", h.List)
-	r.Post("/api/v1/scan-devices", h.Create)
+	r.With(paidGate).Post("/api/v1/scan-devices", h.Create)
 	r.Get("/api/v1/scan-devices/{scan_device_id}", h.Get)
-	r.Patch("/api/v1/scan-devices/{scan_device_id}", h.Update)
-	r.Delete("/api/v1/scan-devices/{scan_device_id}", h.Delete)
+	r.With(paidGate).Patch("/api/v1/scan-devices/{scan_device_id}", h.Update)
+	r.With(paidGate).Delete("/api/v1/scan-devices/{scan_device_id}", h.Delete)
 	r.Get("/api/v1/scan-devices/{scan_device_id}/scan-points", h.ListPoints)
-	r.Post("/api/v1/scan-devices/{scan_device_id}/scan-points", h.CreatePoint)
+	r.With(paidGate).Post("/api/v1/scan-devices/{scan_device_id}/scan-points", h.CreatePoint)
 }
 
 func parseListLimitOffset(r *http.Request) (limit, offset int) {
