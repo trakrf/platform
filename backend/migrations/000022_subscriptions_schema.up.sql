@@ -51,8 +51,6 @@ CREATE TABLE subscription_plans (
 );
 
 CREATE INDEX idx_subscription_plans_owner   ON subscription_plans(owner_org_id);
-CREATE INDEX idx_subscription_plans_standard ON subscription_plans(id)
-    WHERE owner_org_id IS NULL AND is_active;
 
 CREATE TRIGGER generate_subscription_plan_id_trigger
     BEFORE INSERT ON subscription_plans
@@ -86,7 +84,9 @@ CREATE TABLE subscriptions (
     canceled_at            TIMESTAMPTZ
 );
 
-CREATE INDEX idx_subscriptions_org ON subscriptions(org_id);
+CREATE INDEX idx_subscriptions_org      ON subscriptions(org_id);
+CREATE INDEX idx_subscriptions_plan     ON subscriptions(plan_id);
+CREATE INDEX idx_subscriptions_reseller ON subscriptions(reseller_id);
 -- At most one active subscription per org.
 CREATE UNIQUE INDEX idx_subscriptions_one_active_per_org
     ON subscriptions(org_id) WHERE status = 'active';
@@ -118,10 +118,6 @@ ALTER TABLE organizations
 COMMENT ON COLUMN organizations.subscription_enabled    IS 'TRA-947: manual entitlement kill switch.';
 COMMENT ON COLUMN organizations.subscription_expires_at IS 'TRA-947: manual entitlement expiry; NULL = perpetual (comp/partner/internal). Set to now()+1mo only on self-service signup.';
 COMMENT ON COLUMN organizations.partner_id              IS 'TRA-947: dormant forward-hook for ThingsBoard-style partner tenancy / whitelabel. No behavior attached yet.';
-
--- All existing orgs entitled in perpetuity (defensive; ADD COLUMN already
--- backfilled enabled=true / expires_at NULL, but be explicit for intent).
-UPDATE organizations SET subscription_enabled = true, subscription_expires_at = NULL;
 
 -- ── seed standard tiers (shared rows; prices/limits land with TRA-337/Stripe) ─
 INSERT INTO subscription_plans (name, owner_org_id, features) VALUES
