@@ -34,6 +34,30 @@ func TestRespond401_SetsWWWAuthenticateAndNormalizedTitle(t *testing.T) {
 	}
 }
 
+func TestRespond402PaymentRequired(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/api/v1/assets", nil)
+
+	httputil.Respond402PaymentRequired(w, r, "Organization subscription is not active", "req-123")
+
+	if w.Code != 402 {
+		t.Fatalf("status = %d, want 402", w.Code)
+	}
+	var resp apierrors.ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Error.Type != "payment_required" {
+		t.Errorf("type = %q, want payment_required", resp.Error.Type)
+	}
+	if resp.Error.Title != "Payment required" {
+		t.Errorf("title = %q, want 'Payment required'", resp.Error.Title)
+	}
+	if resp.Error.Status != 402 {
+		t.Errorf("status field = %d, want 402", resp.Error.Status)
+	}
+}
+
 func TestRespond404_FixedTitleAndCallerDetail(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/assets/bogus", nil)
