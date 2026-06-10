@@ -54,6 +54,32 @@ export interface Organization {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /** TRA-947 manual entitlement kill switch. */
+  subscription_enabled: boolean;
+  /** RFC3339; null/absent = never expires. */
+  subscription_expires_at?: string | null;
+}
+
+/**
+ * A row in the superadmin all-orgs list (TRA-949). Mirrors the backend
+ * organization.AdminOrgListItem.
+ */
+export interface AdminOrgListItem {
+  id: number;
+  name: string;
+  identifier: string;
+  subscription_enabled: boolean;
+  subscription_expires_at?: string | null;
+  member_count: number;
+}
+
+/**
+ * Superadmin entitlement edit payload (TRA-949). subscription_expires_at null
+ * clears the expiry (never expires).
+ */
+export interface UpdateEntitlementRequest {
+  subscription_enabled: boolean;
+  subscription_expires_at: string | null;
 }
 
 /**

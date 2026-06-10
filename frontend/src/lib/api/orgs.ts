@@ -10,6 +10,8 @@ import type {
   AcceptInvitationResponse,
   GeofenceDefaults,
   GeofenceDefaultsView,
+  AdminOrgListItem,
+  UpdateEntitlementRequest,
 } from '../../types/org';
 
 export interface MessageResponse {
@@ -79,6 +81,16 @@ export const orgsApi = {
 
   updateGeofenceDefaults: (orgId: number, body: GeofenceDefaults) =>
     apiClient.patch<{ data: GeofenceDefaultsView }>(`/orgs/${orgId}/geofence-defaults`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+
+  // Superadmin-only cross-org controls (TRA-949). Backend gates these strictly
+  // on is_superadmin; a non-superadmin gets 403.
+  listAllOrgs: () =>
+    apiClient.get<{ data: AdminOrgListItem[] }>('/admin/orgs'),
+
+  updateEntitlement: (orgId: number, body: UpdateEntitlementRequest) =>
+    apiClient.patch<{ data: Organization }>(`/orgs/${orgId}/entitlement`, body, {
       headers: { 'Content-Type': 'application/json' },
     }),
 };

@@ -117,6 +117,62 @@ func RequireOrgMember(store OrgRoleStore) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireSuperadmin gates a route strictly on the caller's users.is_superadmin
+// flag (TRA-949). Unlike RequireOrgMember/RequireOrgAdmin, it takes no org from
+// the URL and grants no org role — it is for cross-org operator surfaces (the
+// all-orgs list, entitlement edits) that must reject every regular user,
+// including org admins. A non-superadmin gets 403; an unauthenticated caller
+// gets 401.
+func RequireSuperadmin(store OrgRoleStore) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			requestID := GetRequestID(ctx)
+
+			claims := GetUserClaims(r)
+			if claims == nil {
+				httputil.Respond401(w, r, "Session authentication required", requestID)
+				return
+			}
+
+			isSuperadmin, err := store.IsUserSuperadmin(ctx, claims.UserID)
+			if err != nil {
+				logger.Get().Error().
+					Err(err).
+					Int("user_id", claims.UserID).
+					Str("request_id", requestID).
+					Msg("Failed to check superadmin status")
+				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
+					errors.ErrInternal, "Failed to check permissions", requestID)
+
+				return
+			}
+
+			if !isSuperadmin {
+				logger.Get().Warn().
+					Int("user_id", claims.UserID).
+					Str("path", r.URL.Path).
+					Str("method", r.Method).
+					Str("request_id", requestID).
+					Msg("Superadmin access denied")
+				httputil.WriteJSONError(w, r, http.StatusForbidden,
+					errors.ErrForbidden, "Superadmin privileges required", requestID)
+
+				return
+			}
+
+			// Audit successful superadmin access to a cross-org surface.
+			logger.Get().Warn().
+				Int("user_id", claims.UserID).
+				Str("path", r.URL.Path).
+				Str("method", r.Method).
+				Str("request_id", requestID).
+				Msg("Superadmin cross-org access")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequireOrgRole checks that the user has at least the specified role
 func RequireOrgRole(store OrgRoleStore, minRole models.OrgRole) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

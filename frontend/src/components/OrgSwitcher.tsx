@@ -4,8 +4,8 @@
 
 import { useState } from 'react';
 import { Menu } from '@headlessui/react';
-import { ChevronDown, Plus, Check, Settings, Users, Key, LogOut } from 'lucide-react';
-import { useOrgStore } from '@/stores';
+import { ChevronDown, Plus, Check, Settings, Users, Key, LogOut, Building2 } from 'lucide-react';
+import { useOrgStore, useAuthStore } from '@/stores';
 import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { RoleBadge } from './RoleBadge';
 import { OrgModal } from './OrgModal';
@@ -23,6 +23,7 @@ function getFirstLetter(email: string): string {
 
 export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
   const { currentOrg, currentRole, orgs, isLoading } = useOrgStore();
+  const isSuperadmin = useAuthStore((s) => s.profile?.is_superadmin ?? false);
   const { switchOrg } = useOrgSwitch();
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>('manage');
@@ -122,6 +123,25 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
             )}
           </Menu.Item>
         </div>
+        {isSuperadmin && (
+          <div className="p-1">
+            <Menu.Item>
+              {({ active }) => (
+                <button
+                  onClick={() => {
+                    window.location.hash = '#admin-orgs';
+                  }}
+                  className={`${
+                    active ? 'bg-gray-100 dark:bg-gray-700' : ''
+                  } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
+                >
+                  <Building2 className="w-4 h-4" />
+                  All Organizations
+                </button>
+              )}
+            </Menu.Item>
+          </div>
+        )}
         {currentRole && ['owner', 'admin'].includes(currentRole) && (
           <div className="p-1">
             <Menu.Item>

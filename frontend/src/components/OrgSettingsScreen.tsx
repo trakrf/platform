@@ -13,12 +13,62 @@ import { orgsApi } from '@/lib/api/orgs';
 import { refreshOrgToken } from '@/lib/auth/orgContext';
 import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import { DeleteOrgModal } from './DeleteOrgModal';
+import { OrgEntitlementSection } from './OrgEntitlementSection';
+import type { Organization } from '@/types/org';
 import toast from 'react-hot-toast';
+
+// Reads the optional ?org=<id> target from the hash (e.g.
+// "#org-settings?org=42"). A superadmin reaches a non-member org's edit screen
+// this way from the all-orgs list (TRA-949).
+function parseOrgParam(): number | null {
+  const hash = window.location.hash.slice(1);
+  const q = hash.indexOf('?');
+  if (q === -1) return null;
+  const raw = new URLSearchParams(hash.slice(q + 1)).get('org');
+  if (!raw) return null;
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
 
 export default function OrgSettingsScreen() {
   const { currentOrg, currentRole } = useOrgStore();
-  const { fetchProfile } = useAuthStore();
+  const { fetchProfile, profile } = useAuthStore();
   const queryClient = useQueryClient();
+  const isSuperadmin = profile?.is_superadmin ?? false;
+
+  // Superadmin cross-org mode: when ?org= names an org other than the current
+  // one, load it directly (the backend allows superadmins to fetch any org) and
+  // expose only the entitlement controls. Member/api-key/delete actions stay
+  // bound to the current org and are intentionally not offered cross-org.
+  const orgParam = parseOrgParam();
+  const isForeign = isSuperadmin && orgParam !== null && orgParam !== currentOrg?.id;
+  const [foreignOrg, setForeignOrg] = useState<Organization | null>(null);
+  const [foreignLoading, setForeignLoading] = useState(false);
+  const [foreignError, setForeignError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isForeign || orgParam === null) {
+      setForeignOrg(null);
+      return;
+    }
+    let active = true;
+    setForeignLoading(true);
+    setForeignError(null);
+    orgsApi
+      .get(orgParam)
+      .then((res) => {
+        if (active) setForeignOrg(res.data.data);
+      })
+      .catch((err: unknown) => {
+        if (active) setForeignError(extractErrorMessage(err, 'Failed to load organization'));
+      })
+      .finally(() => {
+        if (active) setForeignLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isForeign, orgParam]);
   const [name, setName] = useState('');
   const [originalName, setOriginalName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -84,6 +134,63 @@ export default function OrgSettingsScreen() {
       setIsDeleting(false);
     }
   };
+
+  // Superadmin cross-org view: a foreign org's edit screen (entitlement only).
+  if (isForeign) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md">
+          <div className="flex items-center gap-4 mb-6">
+            <a
+              href="#admin-orgs"
+              className="text-gray-400 hover:text-gray-300 transition-colors"
+              aria-label="Back to all organizations"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </a>
+            <h1 className="text-2xl font-semibold text-white">Organization Settings</h1>
+          </div>
+
+          {foreignError && (
+            <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-6">
+              <p className="text-red-400 text-sm">{foreignError}</p>
+            </div>
+          )}
+
+          {foreignLoading && !foreignOrg && (
+            <p className="text-gray-400">Loading organization…</p>
+          )}
+
+          {foreignOrg && (
+            <>
+              <div>
+                <span className="block text-sm font-medium text-gray-300 mb-1">
+                  Organization Name
+                </span>
+                <p className="text-lg text-white">{foreignOrg.name}</p>
+              </div>
+              <OrgEntitlementSection
+                orgId={foreignOrg.id}
+                initialEnabled={foreignOrg.subscription_enabled}
+                initialExpiresAt={foreignOrg.subscription_expires_at}
+                onSaved={(enabled, expiresAt) =>
+                  setForeignOrg((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          subscription_enabled: enabled,
+                          subscription_expires_at: expiresAt,
+                        }
+                      : prev
+                  )
+                }
+              />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // No org selected
   if (!currentOrg) {
@@ -187,6 +294,15 @@ export default function OrgSettingsScreen() {
               Manage API keys →
             </button>
           </section>
+        )}
+
+        {/* Entitlement (superadmin only) */}
+        {isSuperadmin && (
+          <OrgEntitlementSection
+            orgId={currentOrg.id}
+            initialEnabled={currentOrg.subscription_enabled}
+            initialExpiresAt={currentOrg.subscription_expires_at}
+          />
         )}
 
         {/* Danger Zone */}
