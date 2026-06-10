@@ -93,9 +93,12 @@ export function ScanDeviceForm({
   const validateForm = (): boolean => {
     const errors: FieldErrors = {};
 
-    const nameError = validateName(formData.name);
-    if (nameError) {
-      errors.name = nameError;
+    // In edit mode the name is owned by the inline row cell, not this form.
+    if (mode === 'create') {
+      const nameError = validateName(formData.name);
+      if (nameError) {
+        errors.name = nameError;
+      }
     }
 
     // publish_topic is the MQTT routing key (TRA-956) — required for an mqtt
@@ -143,15 +146,15 @@ export function ScanDeviceForm({
       };
       onSubmit(submitData);
     } else {
+      // TRA-940: name and is_active are owned by the inline row cells, so the
+      // expander form omits them from its PATCH to avoid clobbering an inline edit.
       const submitData: UpdateScanDeviceRequest = {
-        name: formData.name,
         type: formData.type,
         transport: formData.transport,
         publish_topic,
         serial_number,
         model,
         description,
-        is_active: formData.is_active,
       };
       onSubmit(submitData);
     }
@@ -173,21 +176,25 @@ export function ScanDeviceForm({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id="name"
-            value={formData.name}
-            onChange={(e) => handleChange('name', e.target.value)}
-            disabled={loading}
-            className={inputClass(!!fieldErrors.name)}
-            placeholder="e.g., Dock Door Reader 1"
-          />
-          {fieldErrors.name && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.name}</p>}
-        </div>
+        {/* TRA-940: name is edited inline in the list row. The expander form keeps
+            it only for create, where there's no row to edit. */}
+        {mode === 'create' && (
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="name"
+              value={formData.name}
+              onChange={(e) => handleChange('name', e.target.value)}
+              disabled={loading}
+              className={inputClass(!!fieldErrors.name)}
+              placeholder="e.g., Dock Door Reader 1"
+            />
+            {fieldErrors.name && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.name}</p>}
+          </div>
+        )}
 
         <div>
           <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -301,19 +308,22 @@ export function ScanDeviceForm({
         />
       </div>
 
-      <div className="flex items-center">
-        <input
-          type="checkbox"
-          id="is_active"
-          checked={formData.is_active}
-          onChange={(e) => handleChange('is_active', e.target.checked)}
-          disabled={loading}
-          className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
-        />
-        <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          Active
-        </label>
-      </div>
+      {/* TRA-940: Active is toggled inline in the list row in edit mode. */}
+      {mode === 'create' && (
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="is_active"
+            checked={formData.is_active}
+            onChange={(e) => handleChange('is_active', e.target.checked)}
+            disabled={loading}
+            className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
+          />
+          <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            Active
+          </label>
+        </div>
+      )}
 
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <button

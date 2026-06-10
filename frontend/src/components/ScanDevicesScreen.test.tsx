@@ -86,6 +86,43 @@ describe('ScanDevicesScreen flat list', () => {
   });
 });
 
+describe('ScanDevicesScreen inline cell edits (TRA-940)', () => {
+  let update: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ isAuthenticated: true });
+    update = vi.fn().mockResolvedValue(undefined);
+    (useScanDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      scanDevices: [device({ id: 7, name: 'Dock Reader 1', is_active: true })],
+      isLoading: false,
+    });
+    (useScanDeviceMutations as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      delete: vi.fn(),
+      update,
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('persists a name edit via the update mutation with only the name field', async () => {
+    render(<ScanDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Edit name for Dock Reader 1'));
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Renamed Reader' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: 7, updates: { name: 'Renamed Reader' } })
+    );
+  });
+
+  it('toggles is_active via the update mutation', async () => {
+    render(<ScanDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Toggle active for Dock Reader 1'));
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: 7, updates: { is_active: false } })
+    );
+  });
+});
+
 describe('ScanDevicesScreen row expander (TRA-938)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

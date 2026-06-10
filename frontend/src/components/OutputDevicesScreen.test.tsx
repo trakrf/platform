@@ -85,6 +85,63 @@ describe('OutputDevicesScreen', () => {
   });
 });
 
+describe('OutputDevicesScreen inline cell edits (TRA-940)', () => {
+  let update: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ isAuthenticated: true });
+    update = vi.fn().mockResolvedValue(undefined);
+    (useOutputDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      outputDevices: [device({ id: 9, name: 'Dock Strobe', switch_id: 0, location_id: null })],
+      isLoading: false,
+    });
+    (useOutputDeviceMutations as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      delete: vi.fn(),
+      test: vi.fn(),
+      reset: vi.fn(),
+      update,
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('persists a name edit with only the name field', async () => {
+    render(<OutputDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Edit name for Dock Strobe'));
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Bay Strobe' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: 9, updates: { name: 'Bay Strobe' } })
+    );
+  });
+
+  it('persists a switch_id edit coerced to a number', async () => {
+    render(<OutputDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Edit switch ID for Dock Strobe'));
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '3' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ id: 9, updates: { switch_id: 3 } }));
+  });
+
+  it('persists a location select as a numeric location_id', async () => {
+    render(<OutputDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Edit location for Dock Strobe'));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } });
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: 9, updates: { location_id: 5 } })
+    );
+  });
+
+  it('toggles is_active', async () => {
+    render(<OutputDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Toggle active for Dock Strobe'));
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: 9, updates: { is_active: false } })
+    );
+  });
+});
+
 describe('OutputDevicesScreen row expander (TRA-938)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

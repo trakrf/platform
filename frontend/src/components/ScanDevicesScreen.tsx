@@ -4,10 +4,11 @@ import toast from 'react-hot-toast';
 import { useScanDevices, useScanDeviceMutations } from '@/hooks/scandevices';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
-import { ConfirmModal } from '@/components/shared';
+import { ConfirmModal, InlineEditCell } from '@/components/shared';
 import { ScanDeviceFormModal, ScanDeviceEditPanel } from '@/components/scandevices';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PaidGate } from '@/components/entitlement';
+import { validateName } from '@/lib/location/validators';
 import type { ScanDevice } from '@/types/scandevices';
 
 // The reader list is flat (TRA-931): scan_devices only, no scan_point tree.
@@ -23,7 +24,7 @@ export default function ScanDevicesScreen() {
     setExpandedId((current) => (current === id ? null : id));
 
   const { scanDevices, isLoading } = useScanDevices();
-  const { delete: deleteScanDevice } = useScanDeviceMutations();
+  const { delete: deleteScanDevice, update: updateScanDevice } = useScanDeviceMutations();
   const { setActiveTab } = useUIStore();
 
   useEffect(() => {
@@ -100,14 +101,39 @@ export default function ScanDevicesScreen() {
                             )}
                           </button>
                         </td>
-                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{device.name}</td>
+                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">
+                          <PaidGate surface="readers-crud" silentImpression>
+                            <InlineEditCell
+                              variant="text"
+                              value={device.name}
+                              ariaLabel={`Edit name for ${device.name}`}
+                              validate={validateName}
+                              onSave={(name) =>
+                                updateScanDevice({ id: device.id, updates: { name } }).then(
+                                  () => undefined
+                                )
+                              }
+                            />
+                          </PaidGate>
+                        </td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
                         <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
                           {device.publish_topic || '—'}
                         </td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">
-                          {device.is_active ? 'Yes' : 'No'}
+                          <PaidGate surface="readers-crud" silentImpression>
+                            <InlineEditCell
+                              variant="toggle"
+                              value={device.is_active}
+                              ariaLabel={`Toggle active for ${device.name}`}
+                              onSave={(is_active) =>
+                                updateScanDevice({ id: device.id, updates: { is_active } }).then(
+                                  () => undefined
+                                )
+                              }
+                            />
+                          </PaidGate>
                         </td>
                         <td className="px-3 text-right whitespace-nowrap">
                           <PaidGate surface="readers-crud" silentImpression>
