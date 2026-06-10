@@ -15,6 +15,10 @@ type Organization struct {
 	CreatedAt  time.Time              `json:"created_at"`
 	UpdatedAt  time.Time              `json:"updated_at"`
 	DeletedAt  *time.Time             `json:"deleted_at,omitempty"`
+	// TRA-947 lite entitlement (manual gate). The plan/billing reference columns
+	// in the schema are not surfaced here until TRA-135/TRA-198 need them.
+	SubscriptionEnabled   bool       `json:"subscription_enabled"`
+	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
 }
 
 // CreateOrganizationRequest for POST /api/v1/orgs

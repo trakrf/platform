@@ -42,14 +42,16 @@ func (s *Storage) ListUserOrgs(ctx context.Context, userID int) ([]organization.
 func (s *Storage) GetOrganizationByID(ctx context.Context, id int) (*organization.Organization, error) {
 	query := `
 		SELECT id, name, identifier, metadata,
-		       valid_from, valid_to, is_active, created_at, updated_at
+		       valid_from, valid_to, is_active, created_at, updated_at,
+		       subscription_enabled, subscription_expires_at
 		FROM trakrf.organizations
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	var org organization.Organization
 	err := s.pool.QueryRow(ctx, query, id).Scan(
 		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
-		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
+		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
+		&org.SubscriptionEnabled, &org.SubscriptionExpiresAt)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -66,14 +68,16 @@ func (s *Storage) GetOrganizationByID(ctx context.Context, id int) (*organizatio
 func (s *Storage) GetOrganizationByIdentifier(ctx context.Context, identifier string) (*organization.Organization, error) {
 	query := `
 		SELECT id, name, identifier, metadata,
-		       valid_from, valid_to, is_active, created_at, updated_at
+		       valid_from, valid_to, is_active, created_at, updated_at,
+		       subscription_enabled, subscription_expires_at
 		FROM trakrf.organizations
 		WHERE identifier = $1 AND deleted_at IS NULL
 	`
 	var org organization.Organization
 	err := s.pool.QueryRow(ctx, query, identifier).Scan(
 		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
-		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
+		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
+		&org.SubscriptionEnabled, &org.SubscriptionExpiresAt)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -91,12 +95,14 @@ func (s *Storage) CreateOrganization(ctx context.Context, name, identifier strin
 		INSERT INTO trakrf.organizations (name, identifier)
 		VALUES ($1, $2)
 		RETURNING id, name, identifier, metadata,
-		          valid_from, valid_to, is_active, created_at, updated_at
+		          valid_from, valid_to, is_active, created_at, updated_at,
+		          subscription_enabled, subscription_expires_at
 	`
 	var org organization.Organization
 	err := s.pool.QueryRow(ctx, query, name, identifier).Scan(
 		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
-		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
+		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
+		&org.SubscriptionEnabled, &org.SubscriptionExpiresAt)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
@@ -118,12 +124,14 @@ func (s *Storage) UpdateOrganization(ctx context.Context, id int, request organi
 		SET name = $2, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING id, name, identifier, metadata,
-		          valid_from, valid_to, is_active, created_at, updated_at
+		          valid_from, valid_to, is_active, created_at, updated_at,
+		          subscription_enabled, subscription_expires_at
 	`
 	var org organization.Organization
 	err := s.pool.QueryRow(ctx, query, id, *request.Name).Scan(
 		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
-		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt)
+		&org.ValidFrom, &org.ValidTo, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
+		&org.SubscriptionEnabled, &org.SubscriptionExpiresAt)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
