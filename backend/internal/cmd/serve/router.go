@@ -135,6 +135,12 @@ func setupRouter(
 		authHandler.RegisterRoutes(r, middleware.Auth)
 	})
 
+	// TRA-947: build the entitlement gate once; thread it into the handlers
+	// that register paid mutations inside the internal session group so we can
+	// gate exactly those routes (this group also carries must-stay-open writes:
+	// org/user/api-key mgmt, current-org switch, output test/reset).
+	paidGate := middleware.SubscriptionRequired(store)
+
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 		r.Use(middleware.SentryContext)
@@ -143,14 +149,14 @@ func setupRouter(
 		orgsHandler.RegisterRoutes(r, store)
 		orgsHandler.RegisterMeRoutes(r)
 		usersHandler.RegisterRoutes(r)
-		assetsHandler.RegisterRoutes(r)
+		assetsHandler.RegisterRoutes(r, paidGate)
 		inventoryHandler.RegisterRoutes(r)
 		reportsHandler.RegisterRoutes(r)
 		// Internal-only scan device/point management (not public API).
-		scanDevicesHandler.RegisterRoutes(r)
-		scanPointsHandler.RegisterRoutes(r)
+		scanDevicesHandler.RegisterRoutes(r, paidGate)
+		scanPointsHandler.RegisterRoutes(r, paidGate)
 		// Internal-only output device management (not public API).
-		outputDevicesHandler.RegisterRoutes(r)
+		outputDevicesHandler.RegisterRoutes(r, paidGate)
 		lookupHandler.RegisterRoutes(r)
 		// TRA-924: org-enforced Live Reads SSE stream (session-auth, internal).
 		readstreamHandler.RegisterRoutes(r)
@@ -221,6 +227,7 @@ func setupRouter(
 		r.Use(middleware.DefaultRateLimitHeaders(rl))
 		r.Use(middleware.EitherAuth(store))
 		r.Use(middleware.WriteAudit)
+		r.Use(middleware.SubscriptionRequired(store)) // TRA-947: 402 on not-entitled paid mutation
 		r.Use(middleware.RateLimit(rl, allowTestRateLimitBypass))
 		r.Use(middleware.SentryContext)
 		r.Use(middleware.ContentType)
