@@ -185,12 +185,24 @@ describe('toDisplayRows', () => {
     expect(r.lastSeen).toBe(200); // most recent
     expect(r.firstSeen).toBe(50); // earliest
     expect(r.lastRssi).toBe(-40); // from the most-recent antenna
-    expect(r.antennaLabel).toBe('multi'); // more than one antenna contributed
+    expect(r.antennaLabel).toBe('1,2'); // sorted, comma-joined list of contributing antennas
   });
 
   it('aggregate view labels a single-antenna tag with its port number', () => {
     const rows = toDisplayRows([ant1], true);
     expect(rows[0].antennaLabel).toBe('1');
+  });
+
+  it('aggregate view lists antennas sorted and de-duplicated', () => {
+    const rows = toDisplayRows(
+      [
+        tag({ epc: 'TAG', antennaPort: 3 }),
+        tag({ epc: 'TAG', antennaPort: 1 }),
+        tag({ epc: 'TAG', antennaPort: 3 }),
+      ],
+      true,
+    );
+    expect(rows[0].antennaLabel).toBe('1,3');
   });
 
   it('aggregate view keeps tags at different readers separate', () => {

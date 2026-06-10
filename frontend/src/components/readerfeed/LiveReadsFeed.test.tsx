@@ -116,14 +116,14 @@ describe('LiveReadsFeed', () => {
     });
     render(<LiveReadsFeed />);
 
-    // Default "overall" view: one row, antenna label collapses to "multi".
+    // Default "overall" view: one row, antenna label lists the contributing ports.
     expect(screen.getAllByText('TAG')).toHaveLength(1);
-    expect(screen.getByText('multi')).toBeInTheDocument();
+    expect(screen.getByText('1,2')).toBeInTheDocument();
 
     // Toggle split: one row per antenna.
     fireEvent.click(screen.getByLabelText(/split by antenna/i));
     expect(screen.getAllByText('TAG')).toHaveLength(2);
-    expect(screen.queryByText('multi')).not.toBeInTheDocument();
+    expect(screen.queryByText('1,2')).not.toBeInTheDocument();
   });
 
   it('sorts by a column when its header is clicked', () => {

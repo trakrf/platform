@@ -65,8 +65,8 @@ export type ReaderFeedStatus = 'connecting' | 'connected' | 'error' | 'closed';
  * finest (reader,epc,antenna) granularity; `toDisplayRows` turns that map into
  * rows for the current view — either one per antenna (split) or one aggregated
  * (reader,epc) row (the default "overall" view). `rowKey` is its stable identity
- * within the current view; `antennaLabel` is the port number, or `multi` when
- * more than one antenna folded into an aggregate row.
+ * within the current view; `antennaLabel` is the port number, or a sorted
+ * comma-joined list (e.g. `1,2,3`) when several antennas fold into one row.
  */
 export interface DisplayRow extends TagState {
   rowKey: string;
