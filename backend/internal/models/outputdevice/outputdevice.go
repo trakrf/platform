@@ -166,6 +166,11 @@ type UpdateOutputDeviceRequest struct {
 	LocationID   *int            `json:"location_id,omitempty"`
 	IsActive     *bool           `json:"is_active,omitempty"`
 	Metadata     *map[string]any `json:"metadata,omitempty"`
+	// ClearLocationID is set by the PATCH handler on an explicit JSON null for
+	// location_id, requesting a column-clear (detach the location). An omitted
+	// location_id leaves the binding unchanged; a present null clears it. Not
+	// decoded directly (mirrors scanpoint.UpdateScanPointRequest, TRA-931).
+	ClearLocationID bool `json:"-"`
 }
 
 // OutputDeviceResponse is the single-resource envelope.

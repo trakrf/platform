@@ -140,6 +140,19 @@ describe('OutputDevicesScreen inline cell edits (TRA-940)', () => {
       expect(update).toHaveBeenCalledWith({ id: 9, updates: { is_active: false } })
     );
   });
+
+  it('clears location to None via an explicit null location_id', async () => {
+    (useOutputDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      outputDevices: [device({ id: 9, name: 'Dock Strobe', location_id: 5 })],
+      isLoading: false,
+    });
+    render(<OutputDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Edit location for Dock Strobe'));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } });
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: 9, updates: { location_id: null } })
+    );
+  });
 });
 
 describe('OutputDevicesScreen row expander (TRA-938)', () => {
