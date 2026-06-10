@@ -11,3 +11,5 @@ export * from './loaders';
 export * from './pagination';
 
 export * from './modals';
+
+export { InlineEditCell } from './InlineEditCell';
