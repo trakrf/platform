@@ -17,6 +17,7 @@ const (
 	ErrMethodNotAllowed  ErrorType = "method_not_allowed"
 	ErrUnsupportedMedia  ErrorType = "unsupported_media_type"
 	ErrMissingOrgContext ErrorType = "missing_org_context"
+	ErrPaymentRequired   ErrorType = "payment_required"
 )
 
 // FieldError describes a single field-level validation failure.
@@ -76,7 +77,7 @@ type FieldError struct {
 // independently-importable schema name (e.g. ErrorEnvelope rather than
 // openapi-generator-cli's `ErrorResponseError`).
 type ErrorEnvelope struct {
-	Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error,method_not_allowed,unsupported_media_type,missing_org_context" extensions:"x-extensible-enum=true"`
+	Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error,method_not_allowed,unsupported_media_type,missing_org_context,payment_required" extensions:"x-extensible-enum=true"`
 	Title     string       `json:"title"`
 	Status    int          `json:"status"`
 	Detail    string       `json:"detail"`
@@ -122,6 +123,8 @@ func TitleForType(t ErrorType) string {
 		return "Unsupported media type"
 	case ErrMissingOrgContext:
 		return "Missing org context"
+	case ErrPaymentRequired:
+		return "Payment required"
 	}
 	return "Error"
 }

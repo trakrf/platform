@@ -31,3 +31,12 @@ func Respond404(w http.ResponseWriter, r *http.Request, detail, requestID string
 	WriteJSONError(w, r, http.StatusNotFound, apierrors.ErrNotFound,
 		detail, requestID)
 }
+
+// Respond402PaymentRequired writes a normalized 402 for a not-entitled org
+// (TRA-947 subscriptions lite). Distinct type/title from 401 (auth) and 403
+// (RBAC) so the frontend branches to a renew/contact prompt rather than a
+// login or permission prompt.
+func Respond402PaymentRequired(w http.ResponseWriter, r *http.Request, detail, requestID string) {
+	WriteJSONError(w, r, http.StatusPaymentRequired, apierrors.ErrPaymentRequired,
+		detail, requestID)
+}

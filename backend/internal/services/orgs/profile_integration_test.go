@@ -36,3 +36,27 @@ func TestGetUserProfile_IncludesCurrentOrgIdentifier(t *testing.T) {
 	assert.Equal(t, orgID, profile.CurrentOrg.ID)
 	assert.Equal(t, "test-org", profile.CurrentOrg.Identifier)
 }
+
+// TRA-947: /users/me must surface is_entitled + raw subscription fields so the
+// UI can show renew prompts and trial countdowns.
+func TestGetUserProfile_IncludesEntitlement(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	var userID int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.users (email, name, password_hash, is_superadmin) VALUES ('tra947@t.com', 'TRA947', 'x', false) RETURNING id`,
+	).Scan(&userID))
+	_, err := db.AdminPool.Exec(ctx,
+		`INSERT INTO trakrf.org_users (org_id, user_id, role, status) VALUES ($1, $2, 'admin', 'active')`,
+		orgID, userID)
+	require.NoError(t, err)
+
+	svc := orgsservice.NewService(db.AdminPool, db.Store, nil)
+	profile, err := svc.GetUserProfile(ctx, userID)
+	require.NoError(t, err)
+	require.NotNil(t, profile.CurrentOrg)
+	assert.True(t, profile.CurrentOrg.IsEntitled, "fresh org must be entitled")
+	assert.True(t, profile.CurrentOrg.SubscriptionEnabled, "fresh org must have subscription_enabled=true")
+}

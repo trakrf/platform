@@ -72,11 +72,13 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Create organization with user-provided name
+	// Create organization with user-provided name and a 1-month trial expiry.
+	// Invitation-based signup (signupWithInvitation) and internal CreateOrgWithAdmin
+	// leave subscription_expires_at NULL (perpetual). Only this self-service path sets it.
 	var org organization.Organization
 	orgQuery := `
-		INSERT INTO trakrf.organizations (name, identifier)
-		VALUES ($1, $2)
+		INSERT INTO trakrf.organizations (name, identifier, subscription_expires_at)
+		VALUES ($1, $2, now() + interval '1 month')
 		RETURNING id, name, identifier, metadata, valid_from, valid_to, is_active, created_at, updated_at
 	`
 	err = tx.QueryRow(ctx, orgQuery, orgName, orgIdentifier).Scan(

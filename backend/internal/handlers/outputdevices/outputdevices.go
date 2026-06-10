@@ -50,12 +50,14 @@ func NewHandler(storage *storage.Storage, act actuator, testPulse time.Duration)
 
 // RegisterRoutes wires output-device routes onto r. Mount inside the session-auth
 // (middleware.Auth) group.
-func (h *Handler) RegisterRoutes(r chi.Router) {
+func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
+	// TRA-947: output-device config mutations (create/update/delete) are paid;
+	// GETs and the operational test/reset actions stay open.
 	r.Get("/api/v1/output-devices", h.List)
-	r.Post("/api/v1/output-devices", h.Create)
+	r.With(paidGate).Post("/api/v1/output-devices", h.Create)
 	r.Get("/api/v1/output-devices/{output_device_id}", h.Get)
-	r.Patch("/api/v1/output-devices/{output_device_id}", h.Update)
-	r.Delete("/api/v1/output-devices/{output_device_id}", h.Delete)
+	r.With(paidGate).Patch("/api/v1/output-devices/{output_device_id}", h.Update)
+	r.With(paidGate).Delete("/api/v1/output-devices/{output_device_id}", h.Delete)
 	r.Post("/api/v1/output-devices/{output_device_id}/test", h.Test)
 	r.Post("/api/v1/output-devices/{output_device_id}/reset", h.Reset)
 }

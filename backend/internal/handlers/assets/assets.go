@@ -999,7 +999,9 @@ func (handler *Handler) parseAndVerifyAssetID(w http.ResponseWriter, req *http.R
 // RegisterRoutes keeps only session-only surface (bulk CSV). Public read,
 // write, and lookup routes are registered directly in
 // internal/cmd/serve/router.go under EitherAuth.
-func (handler *Handler) RegisterRoutes(r chi.Router) {
-	r.Post("/api/v1/assets/bulk", handler.UploadCSV)
+func (handler *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
+	// TRA-947: bulk CSV upload is a paid mutation — gate it. The job-status GET
+	// stays open (the gate self-skips non-mutating methods anyway).
+	r.With(paidGate).Post("/api/v1/assets/bulk", handler.UploadCSV)
 	r.Get("/api/v1/assets/bulk/{jobId}", handler.GetJobStatus)
 }
