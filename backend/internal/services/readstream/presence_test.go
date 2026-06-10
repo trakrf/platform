@@ -15,7 +15,7 @@ func read(epc string, rssi, antenna int) scanread.Read {
 func byKey(evs []orgEvent) map[string]orgEvent {
 	m := make(map[string]orgEvent, len(evs))
 	for _, e := range evs {
-		m[e.tag.ReaderKey+"|"+e.tag.EPC] = e
+		m[tagKey(e.tag.ReaderKey, e.tag.EPC, e.tag.AntennaPort)] = e
 	}
 	return m
 }
@@ -53,11 +53,12 @@ func TestIngest_ResightAggregatesAndCoalesces(t *testing.T) {
 	t0 := time.UnixMilli(1_000_000)
 	s.ingest(7, "dock-1", read("EPC1", -50, 1), t0)
 
-	// re-sight 100ms later with a stronger then weaker reading
-	if evs := s.ingest(7, "dock-1", read("EPC1", -40, 3), t0.Add(100*time.Millisecond)); evs != nil {
+	// re-sight 100ms later with a stronger then weaker reading (same antenna, so
+	// these fold into one row — antenna is part of the key as of TRA-937).
+	if evs := s.ingest(7, "dock-1", read("EPC1", -40, 1), t0.Add(100*time.Millisecond)); evs != nil {
 		t.Fatalf("re-sight must not emit immediately (coalesced), got %d events", len(evs))
 	}
-	s.ingest(7, "dock-1", read("EPC1", -60, 3), t0.Add(200*time.Millisecond))
+	s.ingest(7, "dock-1", read("EPC1", -60, 1), t0.Add(200*time.Millisecond))
 
 	snap := s.snapshot(7)
 	if len(snap) != 1 {
@@ -76,8 +77,8 @@ func TestIngest_ResightAggregatesAndCoalesces(t *testing.T) {
 	if ts.RSSIAvg != -50 { // (-50 + -40 + -60)/3
 		t.Fatalf("want RSSIAvg -50, got %d", ts.RSSIAvg)
 	}
-	if ts.AntennaPort != 3 || ts.LastSeenMs != t0.Add(200*time.Millisecond).UnixMilli() {
-		t.Fatalf("want last antenna 3 and refreshed lastSeen, got %+v", ts)
+	if ts.AntennaPort != 1 || ts.LastSeenMs != t0.Add(200*time.Millisecond).UnixMilli() {
+		t.Fatalf("want antenna 1 and refreshed lastSeen, got %+v", ts)
 	}
 }
 
@@ -108,7 +109,7 @@ func TestFlush_EmitsCoalescedUpdateAfterInterval(t *testing.T) {
 func TestSweep_ExpiresAndEmitsLeave(t *testing.T) {
 	s := newStore(30*time.Second, time.Second)
 	t0 := time.UnixMilli(1_000_000)
-	s.ingest(7, "dock-1", read("EPC1", -50, 1), t0)
+	s.ingest(7, "dock-1", read("EPC1", -50, 4), t0)
 	s.ingest(7, "dock-1", read("EPC2", -50, 1), t0)
 	// refresh EPC2 so only EPC1 ages out
 	s.ingest(7, "dock-1", read("EPC2", -50, 1), t0.Add(20*time.Second))
@@ -117,8 +118,10 @@ func TestSweep_ExpiresAndEmitsLeave(t *testing.T) {
 	if len(evs) != 1 {
 		t.Fatalf("want exactly one LEAVE, got %d", len(evs))
 	}
-	if evs[0].typ != eventLeave || evs[0].tag.EPC != "EPC1" {
-		t.Fatalf("want LEAVE for EPC1, got %v %s", evs[0].typ, evs[0].tag.EPC)
+	// The LEAVE must identify the evicted row fully — including its antenna, since
+	// (reader,epc,antenna) is the row identity (TRA-937).
+	if evs[0].typ != eventLeave || evs[0].tag.EPC != "EPC1" || evs[0].tag.AntennaPort != 4 {
+		t.Fatalf("want LEAVE for EPC1 antenna 4, got %v %s ant=%d", evs[0].typ, evs[0].tag.EPC, evs[0].tag.AntennaPort)
 	}
 	snap := s.snapshot(7)
 	if len(snap) != 1 || snap[0].EPC != "EPC2" {
@@ -136,6 +139,21 @@ func TestKeying_SameEPCDifferentReadersAreDistinct(t *testing.T) {
 	}
 	if len(s.snapshot(7)) != 2 {
 		t.Fatalf("want 2 distinct (reader,epc) tags, got %d", len(s.snapshot(7)))
+	}
+}
+
+func TestKeying_SameEPCSameReaderDifferentAntennaAreDistinct(t *testing.T) {
+	s := newStore(30*time.Second, time.Second)
+	t0 := time.UnixMilli(1_000_000)
+	s.ingest(7, "dock-1", read("EPC1", -50, 1), t0)
+	// Same tag at the same reader but a different antenna port is a distinct row:
+	// the split view exists precisely to compare per-antenna sensitivity (TRA-937).
+	evs := s.ingest(7, "dock-1", read("EPC1", -55, 2), t0)
+	if len(evs) != 1 || evs[0].typ != eventUpsert {
+		t.Fatalf("same EPC at a second antenna must ENTER as a distinct row, got %v", evs)
+	}
+	if len(s.snapshot(7)) != 2 {
+		t.Fatalf("want 2 distinct (reader,epc,antenna) rows, got %d", len(s.snapshot(7)))
 	}
 }
 

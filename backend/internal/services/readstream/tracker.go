@@ -55,10 +55,12 @@ type snapshotPayload struct {
 	ReadRate   float64    `json:"readRate"`
 }
 
-// leavePayload identifies an evicted tag.
+// leavePayload identifies an evicted tag. Antenna is part of the row identity
+// (TRA-937), so the client needs it to delete the right split-view row.
 type leavePayload struct {
-	ReaderKey string `json:"readerKey"`
-	EPC       string `json:"epc"`
+	ReaderKey   string `json:"readerKey"`
+	EPC         string `json:"epc"`
+	AntennaPort int    `json:"antennaPort"`
 }
 
 // subscriber is one browser session: its own presence store and read-rate
@@ -330,7 +332,7 @@ func marshalEvent(oe orgEvent) (Event, bool) {
 		}
 		return Event{Type: oe.typ, Data: data}, true
 	case eventLeave:
-		data, err := json.Marshal(leavePayload{ReaderKey: oe.tag.ReaderKey, EPC: oe.tag.EPC})
+		data, err := json.Marshal(leavePayload{ReaderKey: oe.tag.ReaderKey, EPC: oe.tag.EPC, AntennaPort: oe.tag.AntennaPort})
 		if err != nil {
 			return Event{}, false
 		}
