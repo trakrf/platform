@@ -7,6 +7,7 @@ import { X, Users, Settings, Trash2 } from 'lucide-react';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { RoleBadge } from './RoleBadge';
 import InvitationsSection from './InvitationsSection';
+import { OrgEntitlementStatus } from './OrgEntitlementStatus';
 import { useOrgModal, ROLES, type ModalMode, type TabType } from './useOrgModal';
 import type { OrgRole } from '@/types/org';
 
@@ -262,6 +263,15 @@ export function OrgModal({ isOpen, onClose, mode = 'manage', defaultTab = 'membe
                     <p className="text-red-400 text-sm">{settingsError}</p>
                   </div>
                 )}
+
+                {/* Read-only subscription status (TRA-975). Editing entitlement
+                    stays superadmin-only on the standalone settings screen. */}
+                <div className="mb-6">
+                  <OrgEntitlementStatus
+                    isEntitled={currentOrg.is_entitled}
+                    subscriptionExpiresAt={currentOrg.subscription_expires_at}
+                  />
+                </div>
 
                 <form onSubmit={handleSaveSettings} className="space-y-6">
                   <div>
