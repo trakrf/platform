@@ -103,3 +103,34 @@ export interface AcceptInvitationResponse {
   org_name: string;
   role: string;
 }
+
+/**
+ * Org-tier geofence tuning overrides (TRA-955). A null/absent field means
+ * "unset" — the engine falls back to the system/code default. Precedence is
+ * per-output override > org default > system default.
+ */
+export interface GeofenceDefaults {
+  rssi_threshold?: number | null;
+  age_out_seconds?: number | null;
+  auto_off_seconds?: number | null;
+  mode?: 'egress' | 'presence' | null;
+}
+
+/**
+ * Fully-resolved system/code-tier tuning, returned alongside the org overrides
+ * so the UI can show system values as placeholders.
+ */
+export interface GeofenceTuning {
+  rssi_threshold: number;
+  age_out_seconds: number;
+  auto_off_seconds: number;
+  mode: 'egress' | 'presence';
+}
+
+/**
+ * GET/PATCH /orgs/{id}/geofence-defaults payload.
+ */
+export interface GeofenceDefaultsView {
+  defaults: GeofenceDefaults;
+  system_defaults: GeofenceTuning;
+}

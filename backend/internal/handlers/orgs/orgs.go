@@ -298,6 +298,11 @@ func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 	r.With(admin).Put("/api/v1/orgs/{id}", h.Update)
 	r.With(admin).Delete("/api/v1/orgs/{id}", h.Delete)
 
+	// Geofence tuning defaults (TRA-955), internal-only. Read by any member;
+	// write is admin-only (org-wide blast radius, same tier as PUT /orgs/{id}).
+	r.With(member).Get("/api/v1/orgs/{id}/geofence-defaults", h.GetGeofenceDefaults)
+	r.With(admin).Patch("/api/v1/orgs/{id}/geofence-defaults", h.PatchGeofenceDefaults)
+
 	// Member management routes
 	r.With(member).Get("/api/v1/orgs/{id}/members", h.ListMembers)
 	r.With(admin).Put("/api/v1/orgs/{id}/members/{userId}", h.UpdateMemberRole)

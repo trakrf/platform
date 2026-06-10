@@ -1,6 +1,9 @@
 package organization
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Organization represents an application customer identity and tenant root.
 // This model matches the schema defined in database/migrations/000002_organizations.up.sql
@@ -25,6 +28,56 @@ type CreateOrganizationRequest struct {
 // UpdateOrganizationRequest for PUT /api/v1/orgs/:id
 type UpdateOrganizationRequest struct {
 	Name *string `json:"name" validate:"omitempty,min=1,max=255"`
+}
+
+// GeofenceDefaults is the org-level geofence tuning tier (TRA-955), stored under
+// organizations.metadata.geofence_defaults. A nil field means "unset" — the
+// geofence resolver falls through to the system/code default. Precedence is
+// per-output override > org default > system/code default.
+type GeofenceDefaults struct {
+	RSSIThreshold  *int    `json:"rssi_threshold,omitempty"`
+	AgeOutSeconds  *int    `json:"age_out_seconds,omitempty"`
+	AutoOffSeconds *int    `json:"auto_off_seconds,omitempty"`
+	Mode           *string `json:"mode,omitempty"`
+}
+
+// metaDefaultsInt reads sub[key] as an int pointer, tolerating the jsonb numeric
+// shapes (float64 from map decode, json.Number, plain int/int64). Returns nil when
+// absent or non-numeric.
+func metaDefaultsInt(sub map[string]any, key string) *int {
+	switch n := sub[key].(type) {
+	case float64:
+		v := int(n)
+		return &v
+	case int:
+		return &n
+	case int64:
+		v := int(n)
+		return &v
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			v := int(i)
+			return &v
+		}
+	}
+	return nil
+}
+
+// ParseGeofenceDefaults extracts the geofence_defaults sub-object from org
+// metadata. Missing keys (and a blank mode) yield nil fields.
+func ParseGeofenceDefaults(metadata map[string]any) GeofenceDefaults {
+	var d GeofenceDefaults
+	sub, ok := metadata["geofence_defaults"].(map[string]any)
+	if !ok {
+		return d
+	}
+	d.RSSIThreshold = metaDefaultsInt(sub, "rssi_threshold")
+	d.AgeOutSeconds = metaDefaultsInt(sub, "age_out_seconds")
+	d.AutoOffSeconds = metaDefaultsInt(sub, "auto_off_seconds")
+	if s, ok := sub["mode"].(string); ok && s != "" {
+		d.Mode = &s
+	}
+	return d
 }
 
 // DeleteOrganizationRequest for DELETE /api/v1/orgs/:id (GitHub-style confirmation)

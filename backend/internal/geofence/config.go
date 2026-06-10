@@ -2,21 +2,23 @@ package geofence
 
 import (
 	"os"
-	"strconv"
 	"time"
 )
 
 // Config tunes the geofence engine. Defaults make it safe to run with no
 // configuration; the engine only runs at all when the MQTT subscriber is enabled.
 type Config struct {
-	// RSSIThreshold is the global trip line in dBm: a boundary read fires only
-	// when its RSSI >= threshold. Stronger signals are closer to 0 (e.g. -50 is
-	// stronger than -70), so a higher threshold means a tighter portal. A
-	// per-scan-point override (metadata.rssi_threshold) takes precedence.
+	// RSSIThreshold is the system/code-default trip line in dBm: a boundary read
+	// fires only when its RSSI >= threshold. Stronger signals are closer to 0
+	// (e.g. -50 is stronger than -70), so a higher threshold means a tighter
+	// portal. This is the lowest tier — an org default (org
+	// metadata.geofence_defaults) and a per-output override
+	// (output_device.metadata.rssi_threshold) take precedence (TRA-955).
 	RSSIThreshold int
-	// LatchTTL is the absence window: once a tag fires at a boundary, repeat
-	// reads are suppressed until it has been silent this long, after which a
-	// re-entry fires again.
+	// LatchTTL is the system/code-default absence window: once a tag fires at a
+	// boundary, repeat reads are suppressed until it has been silent this long,
+	// after which a re-entry fires again. Overridable per-org and per-output via
+	// age_out_seconds (TRA-955).
 	LatchTTL time.Duration
 	// SweepInterval is how often the latch GCs aged-out entries (memory hygiene;
 	// expiry is also enforced on access, so this does not affect correctness).
@@ -33,21 +35,15 @@ func DefaultConfig() Config {
 	}
 }
 
-// ConfigFromEnv reads GEOFENCE_RSSI_THRESHOLD, GEOFENCE_LATCH_TTL, and
-// GEOFENCE_SWEEP_INTERVAL, falling back to DefaultConfig for anything unset or
+// ConfigFromEnv reads GEOFENCE_SWEEP_INTERVAL only. The RSSI threshold and latch
+// TTL were retired as env knobs (TRA-955): they are now system/code defaults
+// (DefaultConfig), overridable per-org (org metadata.geofence_defaults) and
+// per-output (output_device.metadata) at runtime via the UI — no redeploy needed.
+// Sweep interval is engine-global housekeeping (latch GC cadence), not per-portal
+// tuning, so it stays env-configurable, falling back to the default when unset or
 // unparseable.
 func ConfigFromEnv() Config {
 	c := DefaultConfig()
-	if v := os.Getenv("GEOFENCE_RSSI_THRESHOLD"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			c.RSSIThreshold = n
-		}
-	}
-	if v := os.Getenv("GEOFENCE_LATCH_TTL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			c.LatchTTL = d
-		}
-	}
 	if v := os.Getenv("GEOFENCE_SWEEP_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			c.SweepInterval = d
