@@ -110,7 +110,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	org, err := h.service.CreateOrgWithAdmin(r.Context(), request.Name, claims.UserID)
+	org, err := h.service.CreateOrgWithAdmin(r.Context(), request.Name, claims.UserID, claims.Email)
 	if err != nil {
 		if err.Error() == "organization identifier already taken" {
 			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
@@ -239,6 +239,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/orgs/{id} [delete]
 // Delete soft-deletes an organization after confirming the name matches.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetUserClaims(r)
+	if claims == nil {
+		httputil.Respond401(w, r, "Session authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+
 	id, err := httputil.ParseSurrogateID("id", chi.URLParam(r, "id"))
 	if err != nil {
 		httputil.RespondPathParamError(w, r, err, middleware.GetRequestID(r.Context()))
@@ -253,7 +259,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.service.DeleteOrgWithConfirmation(r.Context(), id, request.ConfirmName)
+	err = h.service.DeleteOrgWithConfirmation(r.Context(), id, request.ConfirmName, claims.Email)
 	if err != nil {
 		if err.Error() == "organization name does not match" {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,

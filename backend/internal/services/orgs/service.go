@@ -26,7 +26,8 @@ func NewService(db *pgxpool.Pool, storage *storage.Storage, emailClient *email.C
 }
 
 // CreateOrgWithAdmin creates a new team org and makes the creator an admin.
-func (s *Service) CreateOrgWithAdmin(ctx context.Context, name string, creatorUserID int) (*organization.Organization, error) {
+// creatorEmail is used only for the best-effort superadmin notification (TRA-977).
+func (s *Service) CreateOrgWithAdmin(ctx context.Context, name string, creatorUserID int, creatorEmail string) (*organization.Organization, error) {
 	identifier := slugifyOrgName(name)
 
 	tx, err := s.db.Begin(ctx)
@@ -64,12 +65,18 @@ func (s *Service) CreateOrgWithAdmin(ctx context.Context, name string, creatorUs
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	// Notify superadmins of the new org (TRA-977). Fire-and-forget on a detached
+	// context so it never delays or fails the create. Internal creates leave
+	// subscription_expires_at NULL (perpetual).
+	go s.notifyOrgCreated(context.Background(), org, creatorEmail)
+
 	return &org, nil
 }
 
 // DeleteOrgWithConfirmation deletes an org if the confirmation name matches (case-insensitive).
 // It mangles the name and identifier to free them for reuse while preserving audit trail.
-func (s *Service) DeleteOrgWithConfirmation(ctx context.Context, orgID int, confirmName string) error {
+// actorEmail is used only for the best-effort superadmin churn notification (TRA-977).
+func (s *Service) DeleteOrgWithConfirmation(ctx context.Context, orgID int, confirmName, actorEmail string) error {
 	org, err := s.storage.GetOrganizationByID(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("failed to get organization: %w", err)
@@ -83,13 +90,66 @@ func (s *Service) DeleteOrgWithConfirmation(ctx context.Context, orgID int, conf
 		return fmt.Errorf("organization name does not match")
 	}
 
+	// Capture the real name/identifier before mangling, for the notification.
+	origName, origIdentifier := org.Name, org.Identifier
+
 	// Mangle name and identifier to free them for reuse
 	deletedAt := time.Now().UTC()
 	prefix := fmt.Sprintf("*** DELETED %s *** ", deletedAt.Format(time.RFC3339))
 	mangledName := prefix + org.Name
 	mangledIdentifier := prefix + org.Identifier
 
-	return s.storage.SoftDeleteOrganizationWithMangle(ctx, orgID, mangledName, mangledIdentifier, deletedAt)
+	if err := s.storage.SoftDeleteOrganizationWithMangle(ctx, orgID, mangledName, mangledIdentifier, deletedAt); err != nil {
+		return err
+	}
+
+	// Notify superadmins of the churn (TRA-977). Fire-and-forget on a detached
+	// context so it never delays or fails the delete response.
+	go s.notifyOrgDeleted(context.Background(), origName, origIdentifier, actorEmail, deletedAt)
+
+	return nil
+}
+
+// notifySuperadmins lists every active superadmin and invokes send for each.
+// Best-effort: a lookup failure is logged not returned, and a send failure to
+// one superadmin does not stop the others. Returns the number successfully
+// notified (used by tests). Shared by the org create/delete notifications.
+func (s *Service) notifySuperadmins(ctx context.Context, send func(adminEmail string) error) int {
+	if s.emailClient == nil {
+		return 0
+	}
+
+	admins, err := s.storage.ListSuperadmins(ctx)
+	if err != nil {
+		fmt.Printf("warning: failed to list superadmins for org notification: %v\n", err)
+		return 0
+	}
+
+	sent := 0
+	for _, admin := range admins {
+		if err := send(admin.Email); err != nil {
+			fmt.Printf("warning: failed to send org notification to %s: %v\n", admin.Email, err)
+			continue
+		}
+		sent++
+	}
+	return sent
+}
+
+// notifyOrgCreated emails every superadmin that a new org was created (TRA-977).
+func (s *Service) notifyOrgCreated(ctx context.Context, org organization.Organization, creatorEmail string) int {
+	return s.notifySuperadmins(ctx, func(adminEmail string) error {
+		return s.emailClient.SendOrgCreatedNotification(
+			adminEmail, org.Name, org.Identifier, creatorEmail, org.SubscriptionExpiresAt)
+	})
+}
+
+// notifyOrgDeleted emails every superadmin that an org was deleted (TRA-977).
+func (s *Service) notifyOrgDeleted(ctx context.Context, orgName, orgIdentifier, actorEmail string, deletedAt time.Time) int {
+	return s.notifySuperadmins(ctx, func(adminEmail string) error {
+		return s.emailClient.SendOrgDeletedNotification(
+			adminEmail, orgName, orgIdentifier, actorEmail, deletedAt)
+	})
 }
 
 // GetUserProfile builds the enhanced /users/me response.
