@@ -194,3 +194,86 @@ func (c *Client) SendTrialSignupNotification(toEmail, orgName, orgIdentifier, si
 
 	return nil
 }
+
+// SendOrgCreatedNotification alerts a superadmin that a new org was created via
+// an internal/admin create (POST /api/v1/orgs), not the self-service signup
+// path (that has its own SendTrialSignupNotification). It carries the org name +
+// identifier, the creating user's email, and the entitlement window: a non-nil
+// trialExpiresAt means a trial expiry, nil means perpetual (the default for
+// internal creates). Part of tracking what drives signups (TRA-977).
+func (c *Client) SendOrgCreatedNotification(toEmail, orgName, orgIdentifier, creatorEmail string, trialExpiresAt *time.Time) error {
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "org_created_notification").
+			Str("org", orgName).
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
+
+	entitlement := "perpetual (no expiry)"
+	if trialExpiresAt != nil {
+		entitlement = "trial, expires " + trialExpiresAt.UTC().Format("2006-01-02 15:04 UTC")
+	}
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    "TrakRF <noreply@trakrf.id>",
+		To:      []string{toEmail},
+		Subject: fmt.Sprintf("%s New org created: %s", getEmailPrefix(), orgName),
+		Html: fmt.Sprintf(`
+			<h2>New organization created</h2>
+			<p>A new organization was created. Follow up to track what's driving signups.</p>
+			<ul>
+				<li><strong>Organization:</strong> %s (%s)</li>
+				<li><strong>Created by:</strong> %s</li>
+				<li><strong>Entitlement:</strong> %s</li>
+			</ul>
+			%s
+		`, orgName, orgIdentifier, creatorEmail, entitlement, getEnvironmentNotice()),
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send org created notification: %w", err)
+	}
+
+	return nil
+}
+
+// SendOrgDeletedNotification alerts a superadmin that an org was soft-deleted, so
+// an operator can follow up on churn and run a postmortem on why they quit
+// (TRA-977). It carries the org name + identifier (pre-mangle), the user who
+// deleted it, and when.
+func (c *Client) SendOrgDeletedNotification(toEmail, orgName, orgIdentifier, actorEmail string, deletedAt time.Time) error {
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "org_deleted_notification").
+			Str("org", orgName).
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    "TrakRF <noreply@trakrf.id>",
+		To:      []string{toEmail},
+		Subject: fmt.Sprintf("%s Org deleted: %s", getEmailPrefix(), orgName),
+		Html: fmt.Sprintf(`
+			<h2>Organization deleted</h2>
+			<p>An organization was deleted. Follow up for a churn postmortem — find out why they quit.</p>
+			<ul>
+				<li><strong>Organization:</strong> %s (%s)</li>
+				<li><strong>Deleted by:</strong> %s</li>
+				<li><strong>Deleted at:</strong> %s</li>
+			</ul>
+			%s
+		`, orgName, orgIdentifier, actorEmail, deletedAt.UTC().Format("2006-01-02 15:04 UTC"), getEnvironmentNotice()),
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send org deleted notification: %w", err)
+	}
+
+	return nil
+}

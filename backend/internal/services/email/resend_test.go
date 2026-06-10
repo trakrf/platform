@@ -158,3 +158,49 @@ func TestSendTrialSignupNotification_StubsReservedDomain(t *testing.T) {
 		t.Fatalf("expected nil error for nil expiry, got %v", err)
 	}
 }
+
+// TRA-977: the generic org-created notification must stub reserved recipients
+// and handle both a perpetual org (nil expiry) and a trial org (non-nil expiry).
+func TestSendOrgCreatedNotification_StubsReservedDomain(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "invalid-key-should-never-be-used")
+	c := NewClient()
+
+	// Perpetual (internal create) — nil expiry.
+	if err := c.SendOrgCreatedNotification(
+		"admin@example.com",
+		"Acme Co",
+		"acme-co",
+		"creator@example.com",
+		nil,
+	); err != nil {
+		t.Fatalf("expected nil error for perpetual org, got %v", err)
+	}
+
+	// Trial — non-nil expiry.
+	expires := time.Now().Add(30 * 24 * time.Hour)
+	if err := c.SendOrgCreatedNotification(
+		"admin@example.com",
+		"Acme Co",
+		"acme-co",
+		"creator@example.com",
+		&expires,
+	); err != nil {
+		t.Fatalf("expected nil error for trial org, got %v", err)
+	}
+}
+
+// TRA-977: the org-deleted (churn) notification must stub reserved recipients.
+func TestSendOrgDeletedNotification_StubsReservedDomain(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "invalid-key-should-never-be-used")
+	c := NewClient()
+
+	if err := c.SendOrgDeletedNotification(
+		"admin@example.com",
+		"Acme Co",
+		"acme-co",
+		"actor@example.com",
+		time.Now(),
+	); err != nil {
+		t.Fatalf("expected nil error for reserved recipient, got %v", err)
+	}
+}
