@@ -60,10 +60,13 @@ id              BIGINT PRIMARY KEY,                       -- Feistel id trigger
 name            VARCHAR(100) NOT NULL,
 owner_org_id    BIGINT REFERENCES organizations(id),      -- NULL = standard/shared; set = custom
 stripe_price_id VARCHAR(255),                             -- NULL until Stripe (TRA-135)
-max_users       INT,                                      -- NULL = unlimited (data-only this pass)
-max_assets      INT,                                      -- NULL = unlimited
-max_locations   INT,                                      -- NULL = unlimited
-features        JSONB NOT NULL DEFAULT '{}',
+max_users        INT,                                     -- NULL = unlimited (data-only this pass)
+max_assets       INT,                                     -- NULL = unlimited
+max_locations    INT,                                     -- NULL = unlimited
+max_scan_devices INT,                                     -- NULL = unlimited; fixed-reader cap (locations
+                                                          --   are a poor proxy — handhelds have many
+                                                          --   locations but ~0 registered scan_devices)
+features         JSONB NOT NULL DEFAULT '{}',
 is_active       BOOLEAN NOT NULL DEFAULT true,            -- false = retired but still pinnable
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()

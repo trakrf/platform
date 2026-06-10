@@ -41,10 +41,11 @@ CREATE TABLE subscription_plans (
     name            VARCHAR(100) NOT NULL,
     owner_org_id    BIGINT REFERENCES organizations(id),  -- NULL = standard/shared; set = custom
     stripe_price_id VARCHAR(255),
-    max_users       INT,
-    max_assets      INT,
-    max_locations   INT,
-    features        JSONB NOT NULL DEFAULT '{}',
+    max_users         INT,
+    max_assets        INT,
+    max_locations     INT,
+    max_scan_devices  INT,   -- fixed-reader cap; locations are a poor proxy (handhelds: many locations, ~0 devices)
+    features          JSONB NOT NULL DEFAULT '{}',
     is_active       BOOLEAN NOT NULL DEFAULT true,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
