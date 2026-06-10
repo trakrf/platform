@@ -8,6 +8,7 @@ import { useUIStore } from '@/stores';
 import { ConfirmModal } from '@/components/shared';
 import { OutputDeviceFormModal, OutputDeviceEditPanel } from '@/components/outputdevices';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { PaidGate } from '@/components/entitlement';
 import type { OutputDevice } from '@/types/outputdevices';
 
 // Editing happens inline via a single-open row expander (TRA-938): the config
@@ -49,14 +50,16 @@ export default function OutputDevicesScreen() {
       <div className="h-full flex flex-col p-2">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Output Devices</h1>
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Output Device
-          </button>
+          <PaidGate surface="outputs-crud">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Output Device
+            </button>
+          </PaidGate>
         </div>
 
         <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -112,14 +115,16 @@ export default function OutputDevicesScreen() {
                         <td className="px-3 text-gray-700 dark:text-gray-300">{locationName(device.location_id)}</td>
                         <td className="px-3 text-gray-700 dark:text-gray-300">{device.is_active ? 'Yes' : 'No'}</td>
                         <td className="px-3 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setDeletingDevice(device)}
-                            className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                            aria-label={`Delete output device ${device.name}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <PaidGate surface="outputs-crud" silentImpression>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingDevice(device)}
+                              className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                              aria-label={`Delete output device ${device.name}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </PaidGate>
                         </td>
                       </tr>
                       {isExpanded && (

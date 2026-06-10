@@ -6,7 +6,8 @@ import { useLocationStore } from '@/stores/locations/locationStore';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { FloatingActionButton, ConfirmModal } from '@/components/shared';
+import { ConfirmModal } from '@/components/shared';
+import { GatedFab } from '@/components/entitlement';
 import {
   LocationStats,
   LocationSearchSort,
@@ -147,7 +148,8 @@ export default function LocationsScreen() {
           </>
         )}
 
-        <FloatingActionButton
+        <GatedFab
+          surface="locations-crud"
           icon={Plus}
           onClick={handleCreateClick}
           ariaLabel="Create new location"

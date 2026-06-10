@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 import { useAssets, useAssetMutations } from '@/hooks/assets';
 import { useAssetStore } from '@/stores';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
-import { FloatingActionButton, EmptyState, NoResults, ConfirmModal } from '@/components/shared';
+import { EmptyState, NoResults, ConfirmModal } from '@/components/shared';
+import { GatedFab, PaidGate } from '@/components/entitlement';
 import { AssetStats } from '@/components/assets/AssetStats';
 import { AssetSearchSort } from '@/components/assets/AssetSearchSort';
 import { AssetTable } from '@/components/assets/AssetTable';
@@ -128,15 +129,17 @@ export default function AssetsScreen() {
               <div className="flex-1">
                 <AssetSearchSort />
               </div>
-              <button
-                type="button"
-                onClick={() => setIsBulkUploadOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                aria-label="Import assets from CSV or XLSX"
-              >
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Import</span>
-              </button>
+              <PaidGate surface="assets-crud" silentImpression>
+                <button
+                  type="button"
+                  onClick={() => setIsBulkUploadOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  aria-label="Import assets from CSV or XLSX"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span className="hidden sm:inline">Import</span>
+                </button>
+              </PaidGate>
               <ShareButton
                 onFormatSelect={openExport}
                 disabled={filteredAssets.length === 0}
@@ -193,7 +196,8 @@ export default function AssetsScreen() {
         </div>
         <AssetStats className="mt-6" />
 
-        <FloatingActionButton
+        <GatedFab
+          surface="assets-crud"
           icon={Plus}
           onClick={handleCreateClick}
           ariaLabel="Create new asset"

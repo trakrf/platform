@@ -7,6 +7,7 @@ import { useAssetLocations } from '@/hooks/reports';
 import { TagCountBadge } from './TagCountBadge';
 import { TagsModal } from './TagsModal';
 import { LocateTagPopover } from './LocateTagPopover';
+import { PaidGate } from '@/components/entitlement';
 
 interface AssetCardProps {
   asset: Asset;
@@ -163,20 +164,24 @@ export function AssetCard({
                   isActive={asset.is_active}
                   variant="icon"
                 />
-                <button
-                  onClick={handleEdit}
-                  className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
-                  aria-label={`Edit ${asset.external_key}`}
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
-                  aria-label={`Delete ${asset.external_key}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <PaidGate surface="assets-crud" silentImpression>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <button
+                      onClick={handleEdit}
+                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900/20 rounded transition-colors"
+                      aria-label={`Edit ${asset.external_key}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors"
+                      aria-label={`Delete ${asset.external_key}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </PaidGate>
               </div>
             )}
           </td>
@@ -262,20 +267,24 @@ export function AssetCard({
               isActive={asset.is_active}
               variant="button"
             />
-            <button
-              onClick={handleEdit}
-              className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-lg transition-colors"
-            >
-              <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Edit</span>
-            </button>
-            <button
-              onClick={handleDelete}
-              className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg transition-colors"
-            >
-              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Delete</span>
-            </button>
+            <PaidGate surface="assets-crud" silentImpression className="flex-1">
+              <div className="flex gap-1.5 sm:gap-2 w-full">
+                <button
+                  onClick={handleEdit}
+                  className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-lg transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline">Edit</span>
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline">Delete</span>
+                </button>
+              </div>
+            </PaidGate>
           </div>
         )}
       </div>
