@@ -155,6 +155,19 @@ func (s *Storage) SoftDeleteOrganization(ctx context.Context, id int) error {
 	return nil
 }
 
+// OrgIsEntitled reports whether the org may perform paid mutations. It calls
+// the SECURITY DEFINER function trakrf.org_is_entitled, which encodes the full
+// formula (manual booleans OR active subscription) and runs with no org context
+// required — so this is safe to call from request middleware before WithOrgTx.
+func (s *Storage) OrgIsEntitled(ctx context.Context, orgID int) (bool, error) {
+	var entitled bool
+	err := s.pool.QueryRow(ctx, `SELECT trakrf.org_is_entitled($1)`, orgID).Scan(&entitled)
+	if err != nil {
+		return false, fmt.Errorf("failed to check org entitlement: %w", err)
+	}
+	return entitled, nil
+}
+
 // SoftDeleteOrganizationWithMangle marks an organization as deleted and mangles name/identifier
 // to free them for reuse. The mangled format preserves the original values for audit purposes.
 func (s *Storage) SoftDeleteOrganizationWithMangle(ctx context.Context, id int, mangledName, mangledIdentifier string, deletedAt time.Time) error {
