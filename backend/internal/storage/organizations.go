@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -132,6 +133,58 @@ func (s *Storage) UpdateOrganization(ctx context.Context, id int, request organi
 		return nil, fmt.Errorf("failed to update organization: %w", err)
 	}
 	return &org, nil
+}
+
+// GetOrgGeofenceDefaults returns the org-tier geofence tuning overrides (TRA-955)
+// parsed from organizations.metadata.geofence_defaults. Unset keys are nil. A
+// missing org yields empty defaults (the geofence engine treats this tier as
+// best-effort and falls back to the system/code default).
+func (s *Storage) GetOrgGeofenceDefaults(ctx context.Context, orgID int) (organization.GeofenceDefaults, error) {
+	org, err := s.GetOrganizationByID(ctx, orgID)
+	if err != nil {
+		return organization.GeofenceDefaults{}, err
+	}
+	if org == nil {
+		return organization.GeofenceDefaults{}, nil
+	}
+	return organization.ParseGeofenceDefaults(org.Metadata), nil
+}
+
+// UpdateOrgGeofenceDefaults replaces metadata.geofence_defaults with d (TRA-955).
+// Full-replace: nil fields are omitted from the written object so they fall back
+// to the system tier. Other metadata keys are preserved via jsonb_set.
+func (s *Storage) UpdateOrgGeofenceDefaults(ctx context.Context, orgID int, d organization.GeofenceDefaults) error {
+	sub := map[string]any{}
+	if d.RSSIThreshold != nil {
+		sub["rssi_threshold"] = *d.RSSIThreshold
+	}
+	if d.AgeOutSeconds != nil {
+		sub["age_out_seconds"] = *d.AgeOutSeconds
+	}
+	if d.AutoOffSeconds != nil {
+		sub["auto_off_seconds"] = *d.AutoOffSeconds
+	}
+	if d.Mode != nil {
+		sub["mode"] = *d.Mode
+	}
+	blob, err := json.Marshal(sub)
+	if err != nil {
+		return fmt.Errorf("failed to marshal geofence defaults: %w", err)
+	}
+	query := `
+		UPDATE trakrf.organizations
+		SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{geofence_defaults}', $2::jsonb, true),
+		    updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	result, err := s.pool.Exec(ctx, query, orgID, blob)
+	if err != nil {
+		return fmt.Errorf("failed to update geofence defaults: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("organization not found")
+	}
+	return nil
 }
 
 // SoftDeleteOrganization marks an organization as deleted.
