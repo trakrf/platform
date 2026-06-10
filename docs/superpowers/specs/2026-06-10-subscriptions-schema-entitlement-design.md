@@ -175,19 +175,36 @@ in `GetMe` (`backend/internal/handlers/orgs/me.go`) with:
     (`owner_org_id` NULL, `stripe_price_id` NULL until pricing/Stripe land). Limits left as
     placeholder/NULL pending TRA-337; they are data-only this pass.
   - `down.sql` drops in reverse (columns, tables, enums).
-- **Signup default** (Go org-create — both the personal-org-on-signup path and any explicit
-  org-create path): set `subscription_enabled = true` and
-  `subscription_expires_at = now() + interval '1 month'` (trial). This lives in
-  `CreateOrganization`, distinct from the migration backfill (existing orgs = perpetual; new
-  orgs = 1-month trial).
+- **Column defaults:** `subscription_enabled` defaults `true`; `subscription_expires_at` defaults
+  **NULL** (perpetual). There is intentionally **no blanket trial default** — a column default of
+  `now() + 1 month` would silently expire the customer orgs trakrf creates internally
+  (current workflow = trakrf-creates-org-then-invites-contacts). The trial is a property of
+  self-service signup, not of org-creation in general.
+
+### Entitlement at creation
+
+- **Self-service signup** — `auth.Signup`, standard personal-org branch (a new user, no
+  invitation, no human in the loop) **explicitly** sets `subscription_expires_at = now() + 1 month`.
+  This is the **only** path that hardcodes a trial.
+- **Invitation-based signup** (`auth.signupWithInvitation`) — joins an existing org, creates no
+  trial org, sets nothing.
+- **Internal / explicit org create** (`POST /api/v1/orgs` → `orgs.CreateOrgWithAdmin`) — lands
+  **perpetual** (`expires_at` NULL) by default. A superadmin then either enters committed-paid
+  details or applies a trial **via the TRA-949 controls** (which extend from org-edit to cover
+  the moment of create). That trial-vs-paid judgment is a human decision, not a hardcoded path
+  behavior — so this pass adds no trial logic to the explicit-create path.
+- **Superadmin notification** on a self-service trial signup is split out to **TRA-967** (4th
+  child of TRA-946) — out of scope here; it only has a live trigger once self-service signup is
+  surfaced (TRA-948).
 
 ## Out of scope (explicitly deferred)
 
 - Stripe webhooks / checkout / customer + subscription sync → **TRA-135**.
 - Plan-limit enforcement (`max_users` / `max_assets` / `max_locations`) + the "get current-org
   plan + limits" endpoint → **TRA-198 remainder** (ticket stays open).
-- Superadmin entitlement controls in org edit → **TRA-949**.
+- Superadmin entitlement controls in org edit (and the create-time trial-vs-paid choice) → **TRA-949**.
 - Three-state gating UX (logged-out / entitled / lapsed) → **TRA-948**.
+- Superadmin notification on self-service trial signup → **TRA-967**.
 - Full ThingsBoard 3-tier hierarchy, partner tenant-management, whitelabel → future
   (the `partners` table + `organizations.partner_id` hook are the seeds).
 
@@ -199,7 +216,8 @@ in `GetMe` (`backend/internal/handlers/orgs/me.go`) with:
   enabled+past (lapsed), disabled; plus the active-subscription branch.
 - **Enforcement (integration):** a lapsed org's GETs succeed; paid POST/PUT/PATCH/DELETE return
   the distinct **402** envelope on both UI and public API routes; an entitled org passes.
-- **Signup:** a newly created org has `subscription_expires_at` ~one month out.
+- **Signup:** a self-service signup org has `subscription_expires_at` ~one month out; an
+  invitation-based signup and an explicit `POST /api/v1/orgs` create leave it NULL (perpetual).
 - **Session payload:** `is_entitled` + raw fields present and correct for entitled vs lapsed orgs.
 
 ## Ticket / PR mapping
